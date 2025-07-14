@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 228 67% 97%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 231 48% 48%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 231 48% 88%;
+    --secondary-foreground: 231 48% 28%;
+    --muted: 231 48% 94%;
+    --muted-foreground: 231 48% 40%;
+    --accent: 187 100% 42%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 231 48% 88%;
+    --input: 0 0% 100%;
+    --ring: 231 48% 48%;
+    --radius: 0.5rem;
+    --chart-1: 231 48% 48%;
+    --chart-2: 187 100% 42%;
+    --chart-3: 231 48% 68%;
+    --chart-4: 187 100% 62%;
+    --chart-5: 231 48% 88%;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 0 0% 98%;
+    --card: 222 47% 14%;
+    --card-foreground: 0 0% 98%;
+    --popover: 222 47% 11%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 231 48% 68%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 222 47% 20%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 222 47% 25%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 187 100% 52%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 222 47% 20%;
+    --input: 222 47% 20%;
+    --ring: 231 48% 68%;
+    --chart-1: 231 48% 68%;
+    --chart-2: 187 100% 52%;
+    --chart-3: 231 48% 48%;
+    --chart-4: 187 100% 32%;
+    --chart-5: 231 48% 28%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* Basic scrollbar styling for Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  /* Hide default number input spinners */
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+/* More advanced scrollbar styling for WebKit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 9999px;
+}

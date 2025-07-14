@@ -1,0 +1,21 @@
+# See https://www.robotstxt.org/robotstxt.html for documentation on how to use the robots.txt file
+#
+# To ban all spiders from the entire site uncomment the following two lines:
+User-agent: *
+Disallow: /
+
+# Specifically block AI and other bots
+User-agent: anthropic-ai
+Disallow: /
+User-agent: Claude-Web
+Disallow: /
+User-agent: CCBot
+Disallow: /
+User-agent: FacebookBot
+Disallow: /
+User-agent: Google-Extended
+Disallow: /
+User-agent: GPTBot
+Disallow: /
+User-agent: PiplBot
+Disallow: /

@@ -1,0 +1,36 @@
+services:
+  traefik:
+    container_name: "traefik"
+    image: "traefik:3"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./letsencrypt:/letsencrypt"
+      - "./dynamic.yaml:/etc/traefik/dynamic.yaml"
+    command:
+      - "--api=true"
+      - "--providers.docker=true"
+      - "--providers.docker.network=traefik-net"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.filename=/etc/traefik/dynamic.yaml"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=letsencrypt@example.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=INFO"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+    restart: "unless-stopped"
+    networks:
+      - "traefik-net"
+
+networks:
+  traefik-net:
+    name: "traefik-net"
+    driver: "bridge"

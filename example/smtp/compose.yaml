@@ -1,0 +1,24 @@
+services:
+  smtp:
+    container_name: "smtp"
+    image: "mwader/postfix-relay"
+    volumes:
+      - "./smtp:/etc/opendkim/keys"
+    environment:
+#      - "POSTFIX_myhostname=DOMAIN.EXAMPLE"
+#      - "OPENDKIM_DOMAINS=DOMAIN1.EXAMPLE=example-mail DOMAIN2.EXAMPLE=example-mail"
+      - "POSTFIX_myhostname=example.com"
+      - "OPENDKIM_DOMAINS=example.com=example-mail"
+      - "TZ=Europe/Berlin"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+    restart: "unless-stopped"
+    networks:
+      - "smtp"
+
+networks:
+  smtp:
+    name: "smtp"
+    driver: "bridge"

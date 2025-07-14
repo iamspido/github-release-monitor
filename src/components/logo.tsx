@@ -1,0 +1,35 @@
+export function Logo() {
+  return (
+    <svg
+      viewBox="0 0 120 120"
+      xmlns="http://www.w3.org/2000/svg"
+      className="size-8 shrink-0"
+    >
+      <defs>
+        <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{ stopColor: "#8B9FE8", stopOpacity: 1 }} />
+          <stop offset="100%" style={{ stopColor: "#6B7FD6", stopOpacity: 1 }} />
+        </linearGradient>
+        <linearGradient id="eyeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{ stopColor: "#2C3E50", stopOpacity: 1 }} />
+          <stop offset="100%" style={{ stopColor: "#1A252F", stopOpacity: 1 }} />
+        </linearGradient>
+      </defs>
+      <rect
+        x="0"
+        y="0"
+        width="120"
+        height="120"
+        rx="26"
+        ry="26"
+        fill="url(#bgGradient)"
+      />
+      <path
+        d="M60 25 C35 25, 15 40, 15 60 C15 80, 35 95, 60 95 C85 95, 105 80, 105 60 C105 40, 85 25, 60 25 Z"
+        fill="url(#eyeGradient)"
+      />
+      <circle cx="60" cy="60" r="12" fill="#34495E" />
+      <circle cx="64" cy="55" r="4" fill="#ECF0F1" opacity="0.8" />
+    </svg>
+  );
+}

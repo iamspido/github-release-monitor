@@ -1,0 +1,53 @@
+{
+  "name": "github-release-monitor",
+  "version": "1.0.0",
+  "description": "An application to monitor GitHub repository releases.",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "author": "Timo Hohmann",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@radix-ui/react-alert-dialog": "^1.1.6",
+    "@radix-ui/react-checkbox": "^1.1.1",
+    "@radix-ui/react-dropdown-menu": "^2.1.1",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-radio-group": "^1.2.0",
+    "@radix-ui/react-select": "^2.1.1",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-toast": "^1.2.6",
+    "@radix-ui/react-tooltip": "^1.1.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^3.6.0",
+    "iron-session": "^8.0.2",
+    "lucide-react": "^0.475.0",
+    "next": "^15.3.4",
+    "next-intl": "^3.26.5",
+    "nodemailer": "^6.9.14",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^9.0.1",
+    "remark": "^15.0.1",
+    "remark-gemoji": "^8.0.0",
+    "remark-gfm": "^4.0.0",
+    "remark-html": "^16.0.1",
+    "tailwind-merge": "^3.0.1",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.13",
+    "@types/node": "^20",
+    "@types/nodemailer": "^6.4.15",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
+  }
+}

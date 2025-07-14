@@ -1,0 +1,50 @@
+services:
+  github-release-monitor:
+    container_name: "github-release-monitor"
+    image: "ghcr.io/iamspido/github-release-monitor:latest"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-net"
+      # HTTP Router
+      - "traefik.http.routers.github-release-monitor.rule=Host(`github-release-monitor.example.com`)"
+      - "traefik.http.routers.github-release-monitor.entrypoints=web"
+      - "traefik.http.routers.github-release-monitor.service=github-release-monitor-service"
+      - "traefik.http.routers.github-release-monitor.middlewares=github-release-monitor-redirect@docker"
+      # HTTPS Router
+      - "traefik.http.routers.github-release-monitor-secured.rule=Host(`github-release-monitor.example.com`)"
+      - "traefik.http.routers.github-release-monitor-secured.entrypoints=websecure"
+      - "traefik.http.routers.github-release-monitor-secured.service=github-release-monitor-service"
+      - "traefik.http.routers.github-release-monitor-secured.tls=true"
+      - "traefik.http.routers.github-release-monitor-secured.tls.certresolver=letsencrypt"
+      # Middleware for redirecting HTTP to HTTPS
+      - "traefik.http.middlewares.github-release-monitor-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.github-release-monitor-redirect.redirectscheme.permanent=true"
+      # Explicitly define the service and tell Traefik which port to use.
+      - "traefik.http.services.github-release-monitor-service.loadbalancer.server.port=3000"
+    volumes:
+      - "./data:/app/data"
+  #  The 'ports' section is removed as Traefik will manage external access.
+  #  The application inside the container still listens on port 3000 by default.
+  #  If no reverse proxy (like Traefik) is used, uncomment the 'ports' section
+  #  to expose the app on localhost:8080 (host port 8080 → container port 3000).
+  #  Then the application will be available at http://localhost:8080.
+  #  ports:
+  #    - "8080:3000"
+    env_file:
+      - ".env"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+    restart: "unless-stopped"
+    networks:
+      - "traefik-net"
+      - "smtp"
+
+networks:
+  traefik-net:
+    name: traefik-net
+    external: true
+  smtp:
+    name: smtp
+    external: true

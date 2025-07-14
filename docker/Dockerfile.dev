@@ -1,0 +1,38 @@
+
+# Use Node.js Alpine image for development
+FROM node:24-alpine
+WORKDIR /app
+
+# Disable Next.js telemetry
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S nextjs -u 1001
+
+# Install dependencies as root, then switch to non-root user
+COPY package*.json ./
+RUN npm ci && npm cache clean --force
+
+# Change ownership of app directory to nextjs user
+RUN chown -R nextjs:nodejs /app
+
+# Switch to non-root user
+USER nextjs
+
+# Copy configuration files
+COPY components.json ./
+COPY next.config.mjs ./
+COPY postcss.config.mjs ./
+COPY tailwind.config.ts ./
+COPY tsconfig.json ./
+
+# Copy source code and public assets
+COPY public/ ./public/
+COPY src/ ./src/
+
+# Expose development port
+EXPOSE 3000
+
+# Start application in development mode
+CMD ["npm", "run", "dev"]
