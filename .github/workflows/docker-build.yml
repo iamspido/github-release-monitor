@@ -43,7 +43,8 @@ jobs:
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
           type=semver,pattern={{major}}
-          type=sha,prefix={{branch}}-
+          type=sha,prefix=main-,enable={{is_default_branch}}
+          type=sha,prefix=develop-,enable=${{ github.ref == 'refs/heads/develop' }}
           type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
           type=raw,value=dev,enable=${{ github.ref == 'refs/heads/develop' }}
 
