@@ -1,12 +1,9 @@
 name: Build and Push Docker Image
 
 on:
-  # Trigger on push to branches (without version number)
+  # Trigger on push to branches (without version number) and release tags (with version number)
   push:
     branches: [ main, develop ]
-
-  # Trigger on release tags (with version number)  
-  push:
     tags: [ 'v*.*.*' ]
 
   # Trigger on pull requests
