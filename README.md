@@ -306,4 +306,14 @@ Here is a complete list of all environment variables used by the application.
 | `MAIL_TO_ADDRESS`     | The email address that will receive the notifications.                                                  | Yes, for email        | -                          |
 | `TZ`                  | The timezone for the container (e.g., `Europe/Berlin`). Affects log timestamps and date formatting.     | No                    | System default             |
 
-    
+## Star History
+
+## Star History
+
+<a href="https://www.star-history.com/#iamspido/github-release-monitor&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=iamspido/github-release-monitor&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=iamspido/github-release-monitor&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=iamspido/github-release-monitor&type=Date" />
+ </picture>
+</a>
