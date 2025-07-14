@@ -20,6 +20,17 @@ A powerful, self-hostable application to automatically monitor GitHub repository
 - **System Diagnostics**: A built-in test page to verify GitHub API connectivity and email (SMTP) configuration.
 - **Secure Authentication**: Protects the application with a simple username/password login system powered by `iron-session`.
 
+<table>
+  <tr>
+    <td><img width="2558" height="1277" alt="Image" src="https://github.com/user-attachments/assets/b541ef9c-dc10-4e20-97a8-75ecc7ed763a" /></td>
+    <td><img width="2558" height="1277" alt="Image" src="https://github.com/user-attachments/assets/53671406-a0bc-43d4-8aa4-b77889170f98" /></td>
+  </tr>
+  <tr>
+    <td><img width="2558" height="1276" alt="Image" src="https://github.com/user-attachments/assets/5e28e95f-6089-4a1e-8971-cacb04aba751" /></td>
+    <td><img width="2558" height="1275" alt="Image" src="https://github.com/user-attachments/assets/c5e1b82b-84e4-4378-adee-f460da589c79" /></td>
+  </tr>
+</table>
+
 ## 🛠️ Tech Stack
 
 - **Framework**: [Next.js](https://nextjs.org/) (App Router)
@@ -305,8 +316,6 @@ Here is a complete list of all environment variables used by the application.
 | `MAIL_FROM_NAME`      | The display name for the "from" address.                                                                | No                    | `GitHub Release Monitor`   |
 | `MAIL_TO_ADDRESS`     | The email address that will receive the notifications.                                                  | Yes, for email        | -                          |
 | `TZ`                  | The timezone for the container (e.g., `Europe/Berlin`). Affects log timestamps and date formatting.     | No                    | System default             |
-
-## Star History
 
 ## Star History
 
