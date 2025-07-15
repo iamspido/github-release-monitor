@@ -165,7 +165,9 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
   const repoHasCustomSettings =
     (repoSettings?.releaseChannels && repoSettings.releaseChannels.length > 0) ||
     (repoSettings?.preReleaseSubChannels && repoSettings.preReleaseSubChannels.length > 0) ||
-    (repoSettings?.releasesPerPage !== null && typeof repoSettings?.releasesPerPage === 'number');
+    (repoSettings?.releasesPerPage !== null && typeof repoSettings?.releasesPerPage === 'number') ||
+    repoSettings?.includeRegex ||
+    repoSettings?.excludeRegex;
 
 
   if (error) {
@@ -290,7 +292,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
                   </a>
               </div>
               <div className="flex flex-col items-end gap-1.5 shrink-0">
-                <Badge variant="secondary">{release.tag_name}</Badge>
+                <Badge variant="secondary" className="px-3 py-1 text-base">{release.tag_name}</Badge>
                 <div className="flex items-center gap-2">
                   {repoHasCustomSettings && (
                      <TooltipProvider delayDuration={100}>
