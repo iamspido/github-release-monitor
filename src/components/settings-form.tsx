@@ -61,6 +61,7 @@ function minutesToDhms(totalMinutes: number) {
 type SaveStatus = 'idle' | 'waiting' | 'saving' | 'success' | 'error';
 type IntervalValidationError = 'too_low' | 'too_high' | null;
 type ReleasesPerPageError = 'too_low' | 'too_high' | null;
+type RegexError = 'invalid' | null;
 
 function SaveStatusIndicator({ status }: { status: SaveStatus }) {
     const t = useTranslations('SettingsForm');
@@ -109,6 +110,8 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
   const [preReleaseSubChannels, setPreReleaseSubChannels] = React.useState<PreReleaseChannelType[]>(currentSettings.preReleaseSubChannels || allPreReleaseTypes);
   const [showAcknowledge, setShowAcknowledge] = React.useState<boolean>(currentSettings.showAcknowledge ?? true);
   const [showMarkAsNew, setShowMarkAsNew] = React.useState<boolean>(currentSettings.showMarkAsNew ?? true);
+  const [includeRegex, setIncludeRegex] = React.useState(currentSettings.includeRegex ?? '');
+  const [excludeRegex, setExcludeRegex] = React.useState(currentSettings.excludeRegex ?? '');
   
   const [days, setDays] = React.useState(() => String(minutesToDhms(currentSettings.refreshInterval).d));
   const [hours, setHours] = React.useState(() => String(minutesToDhms(currentSettings.refreshInterval).h));
@@ -122,6 +125,9 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
   const [intervalError, setIntervalError] = React.useState<IntervalValidationError>(null);
   const [releasesPerPageError, setReleasesPerPageError] = React.useState<ReleasesPerPageError>(null);
   const [isCacheInvalid, setIsCacheInvalid] = React.useState(false);
+  const [includeRegexError, setIncludeRegexError] = React.useState<RegexError>(null);
+  const [excludeRegexError, setExcludeRegexError] = React.useState<RegexError>(null);
+
 
   // Autosave State
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>('idle');
@@ -152,8 +158,10 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
       preReleaseSubChannels,
       showAcknowledge,
       showMarkAsNew,
+      includeRegex: includeRegex,
+      excludeRegex: excludeRegex,
     };
-  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, timeFormat, locale, channels, preReleaseSubChannels, showAcknowledge, showMarkAsNew]);
+  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, timeFormat, locale, channels, preReleaseSubChannels, showAcknowledge, showMarkAsNew, includeRegex, excludeRegex]);
   
   // Effect for validation
   React.useEffect(() => {
@@ -185,6 +193,20 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
     } else {
         setReleasesPerPageError(null);
     }
+
+    try {
+        if (includeRegex.trim()) new RegExp(includeRegex);
+        setIncludeRegexError(null);
+    } catch (e) {
+        setIncludeRegexError('invalid');
+    }
+
+    try {
+        if (excludeRegex.trim()) new RegExp(excludeRegex);
+        setExcludeRegexError(null);
+    } catch (e) {
+        setExcludeRegexError('invalid');
+    }
     
 
     // Rule 2: Cache interval must not be greater than refresh interval (if cache > 0)
@@ -192,7 +214,7 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
     const cacheIsLarger = newSettings.cacheInterval > newSettings.refreshInterval;
     setIsCacheInvalid(refreshFieldsFilled && cacheFieldsFilled && isCacheEnabled && cacheIsLarger);
     
-  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, newSettings.refreshInterval, newSettings.cacheInterval]);
+  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, newSettings.refreshInterval, newSettings.cacheInterval, includeRegex, excludeRegex]);
 
 
   // Effect for debounced autosaving
@@ -203,7 +225,7 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
     }
 
     const hasEmptyFields = [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage].some(val => val === '');
-    if (hasEmptyFields || intervalError || isCacheInvalid || releasesPerPageError) {
+    if (hasEmptyFields || intervalError || isCacheInvalid || releasesPerPageError || includeRegexError || excludeRegexError) {
         setSaveStatus('idle');
         return; // Don't proceed to save if fields are empty or invalid
     }
@@ -238,7 +260,7 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
         clearTimeout(handler);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newSettings, days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, intervalError, isCacheInvalid, releasesPerPageError]);
+  }, [newSettings, days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, intervalError, isCacheInvalid, releasesPerPageError, includeRegexError, excludeRegexError]);
 
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -369,8 +391,11 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
           <CardTitle>{t('release_channel_title')}</CardTitle>
           <CardDescription>{t('release_channel_description')}</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
+        <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <h3 className="font-medium">{t('release_channel_types_title')}</h3>
+              <p className="text-sm text-muted-foreground">{t('release_channel_description_global')}</p>
+            </div>
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="stable"
@@ -425,7 +450,35 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
               />
               <Label htmlFor="draft" className="font-normal cursor-pointer">{t('release_channel_draft')}</Label>
             </div>
-          </div>
+            
+            <div className="space-y-2 pt-4">
+                <h3 className="font-medium">{t('regex_filter_title')}</h3>
+                <p className="text-sm text-muted-foreground">{t('regex_filter_description')}</p>
+            </div>
+            <div className="space-y-2">
+                <Label htmlFor="include-regex">{t('include_regex_label')}</Label>
+                <Input
+                    id="include-regex"
+                    value={includeRegex}
+                    onChange={(e) => setIncludeRegex(e.target.value)}
+                    placeholder={t('regex_placeholder')}
+                    disabled={saveStatus === 'saving'}
+                    className={cn(!!includeRegexError && 'border-destructive focus-visible:ring-destructive')}
+                />
+                {includeRegexError && <p className="text-sm text-destructive">{t('regex_error_invalid')}</p>}
+            </div>
+            <div className="space-y-2">
+                <Label htmlFor="exclude-regex">{t('exclude_regex_label')}</Label>
+                <Input
+                    id="exclude-regex"
+                    value={excludeRegex}
+                    onChange={(e) => setExcludeRegex(e.target.value)}
+                    placeholder={t('regex_placeholder')}
+                    disabled={saveStatus === 'saving'}
+                    className={cn(!!excludeRegexError && 'border-destructive focus-visible:ring-destructive')}
+                />
+                {excludeRegexError && <p className="text-sm text-destructive">{t('regex_error_invalid')}</p>}
+            </div>
         </CardContent>
       </Card>
 

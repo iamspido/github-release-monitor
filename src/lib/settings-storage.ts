@@ -18,6 +18,8 @@ const defaultSettings: AppSettings = {
   preReleaseSubChannels: allPreReleaseTypes,
   showAcknowledge: true,
   showMarkAsNew: true,
+  includeRegex: undefined,
+  excludeRegex: undefined,
 };
 
 async function ensureDataFileExists() {

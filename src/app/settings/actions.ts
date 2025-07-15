@@ -24,6 +24,8 @@ export async function updateSettingsAction(newSettings: AppSettings) {
     const settingsToSave = {
         ...newSettings,
         refreshInterval: Math.max(1, newSettings.refreshInterval),
+        includeRegex: newSettings.includeRegex?.trim() || undefined,
+        excludeRegex: newSettings.excludeRegex?.trim() || undefined,
     };
 
 

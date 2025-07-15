@@ -8,7 +8,9 @@ export type Repository = {
   // Empty arrays/undefined mean "use global setting"
   releaseChannels?: ReleaseChannel[];
   preReleaseSubChannels?: PreReleaseChannelType[];
-  releasesPerPage?: number;
+  releasesPerPage?: number | null;
+  includeRegex?: string;
+  excludeRegex?: string;
 };
 
 export type GithubRelease = {
@@ -37,7 +39,9 @@ export type EnrichedRelease = {
   repoSettings?: {
     releaseChannels?: ReleaseChannel[];
     preReleaseSubChannels?: PreReleaseChannelType[];
-    releasesPerPage?: number;
+    releasesPerPage?: number | null;
+    includeRegex?: string;
+    excludeRegex?: string;
   }
 };
 
@@ -90,6 +94,8 @@ export type AppSettings = {
   preReleaseSubChannels?: PreReleaseChannelType[];
   showAcknowledge?: boolean;
   showMarkAsNew?: boolean;
+  includeRegex?: string;
+  excludeRegex?: string;
 };
 
 // Session Data
@@ -97,4 +103,3 @@ export type SessionData = {
     isLoggedIn?: boolean;
     username?: string;
 };
-

@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -42,6 +43,7 @@ import {
 
 type SaveStatus = 'idle' | 'waiting' | 'saving' | 'success' | 'error';
 type ReleasesPerPageError = 'too_low' | 'too_high' | null;
+type RegexError = 'invalid' | null;
 
 
 function SaveStatusIndicator({ status }: { status: SaveStatus }) {
@@ -72,7 +74,7 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
     const current = messages[status];
 
     return (
-        <div className={cn("flex items-center gap-2 text-sm transition-colors", current.className)}>
+        <div className={cn("flex items-center justify-end gap-2 text-sm transition-colors", current.className)}>
             {current.icon}
             <span>{current.text}</span>
         </div>
@@ -83,7 +85,7 @@ interface RepoSettingsDialogProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   repoId: string;
-  currentRepoSettings?: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage'>;
+  currentRepoSettings?: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex'>;
   globalSettings: AppSettings;
 }
 
@@ -98,22 +100,31 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     currentRepoSettings?.preReleaseSubChannels ?? []
   );
   const [releasesPerPage, setReleasesPerPage] = React.useState<string | number>(currentRepoSettings?.releasesPerPage ?? '');
+  const [includeRegex, setIncludeRegex] = React.useState(currentRepoSettings?.includeRegex ?? '');
+  const [excludeRegex, setExcludeRegex] = React.useState(currentRepoSettings?.excludeRegex ?? '');
+  
+  // Validation state
   const [releasesPerPageError, setReleasesPerPageError] = React.useState<ReleasesPerPageError>(null);
+  const [includeRegexError, setIncludeRegexError] = React.useState<RegexError>(null);
+  const [excludeRegexError, setExcludeRegexError] = React.useState<RegexError>(null);
   
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>('idle');
   const [hasChanged, setHasChanged] = React.useState(false);
 
-  // Determine if repo settings override global channel settings.
-  // An empty array in repo settings means "use global".
+  // Determine if repo settings override global settings.
+  // An empty array/string means "use global".
   const useGlobalChannels = channels.length === 0;
   const useGlobalSubChannels = preReleaseSubChannels.length === 0;
   const useGlobalReleasesPerPage = String(releasesPerPage).trim() === '';
+  const useGlobalIncludeRegex = includeRegex.trim() === '';
+  const useGlobalExcludeRegex = excludeRegex.trim() === '';
+
 
   // This will be used to disable the "Reset All" button.
-  const isUsingAllGlobalSettings = useGlobalChannels && useGlobalReleasesPerPage;
+  const isUsingAllGlobalSettings = useGlobalChannels && useGlobalReleasesPerPage && useGlobalIncludeRegex && useGlobalExcludeRegex;
 
 
-  const newSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage'> = React.useMemo(() => {
+  const newSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex'> = React.useMemo(() => {
     let finalReleasesPerPage: number | null = null;
     const releasesPerPageStr = String(releasesPerPage).trim();
 
@@ -128,8 +139,10 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
       releaseChannels: channels,
       preReleaseSubChannels,
       releasesPerPage: finalReleasesPerPage,
+      includeRegex: includeRegex.trim() || undefined,
+      excludeRegex: excludeRegex.trim() || undefined,
     };
-  }, [channels, preReleaseSubChannels, releasesPerPage]);
+  }, [channels, preReleaseSubChannels, releasesPerPage, includeRegex, excludeRegex]);
   
   // Ref to store the previous settings for comparison
   const prevSettingsRef = React.useRef(newSettings);
@@ -141,10 +154,15 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
         releaseChannels: currentRepoSettings?.releaseChannels ?? [],
         preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels ?? [],
         releasesPerPage: currentRepoSettings?.releasesPerPage ?? null,
+        includeRegex: currentRepoSettings?.includeRegex ?? undefined,
+        excludeRegex: currentRepoSettings?.excludeRegex ?? undefined,
       };
       setChannels(initialSettings.releaseChannels);
       setPreReleaseSubChannels(initialSettings.preReleaseSubChannels);
       setReleasesPerPage(initialSettings.releasesPerPage ?? '');
+      setIncludeRegex(initialSettings.includeRegex ?? '');
+      setExcludeRegex(initialSettings.excludeRegex ?? '');
+      
       setSaveStatus('idle');
       setHasChanged(false);
       
@@ -157,13 +175,12 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
 
   // Validation Effect
   React.useEffect(() => {
+    // Releases per page
     if (String(releasesPerPage).trim() !== '') {
       const numReleases = parseInt(String(releasesPerPage), 10);
       if (isNaN(numReleases)) {
         setReleasesPerPageError(null);
-        return;
-      }
-      if (numReleases < 1) {
+      } else if (numReleases < 1) {
           setReleasesPerPageError('too_low');
       } else if (numReleases > 100) {
           setReleasesPerPageError('too_high');
@@ -173,7 +190,24 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     } else {
         setReleasesPerPageError(null);
     }
-  }, [releasesPerPage]);
+    
+    // Include Regex
+    try {
+        if (includeRegex.trim()) new RegExp(includeRegex);
+        setIncludeRegexError(null);
+    } catch (e) {
+        setIncludeRegexError('invalid');
+    }
+
+    // Exclude Regex
+    try {
+        if (excludeRegex.trim()) new RegExp(excludeRegex);
+        setExcludeRegexError(null);
+    } catch (e) {
+        setExcludeRegexError('invalid');
+    }
+
+  }, [releasesPerPage, includeRegex, excludeRegex]);
 
 
   // Effect for debounced autosaving
@@ -185,7 +219,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
         return; // No actual change, so don't trigger save.
     }
 
-    if (releasesPerPageError) {
+    if (releasesPerPageError || includeRegexError || excludeRegexError) {
       setSaveStatus('idle');
       return;
     }
@@ -212,7 +246,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     }, 1500); // 1.5-second debounce delay
 
     return () => clearTimeout(handler);
-  }, [newSettings, repoId, isOpen, releasesPerPageError, toast]);
+  }, [newSettings, repoId, isOpen, releasesPerPageError, includeRegexError, excludeRegexError, toast]);
 
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -263,19 +297,20 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     }
   }
 
-  const handleResetChannels = () => {
+  const handleResetAll = () => {
     setChannels([]);
     setPreReleaseSubChannels([]);
-  }
-
-  const handleResetReleasesPerPage = () => {
     setReleasesPerPage('');
+    setIncludeRegex('');
+    setExcludeRegex('');
   }
 
-  const handleResetAll = () => {
-    handleResetChannels();
-    handleResetReleasesPerPage();
-  }
+  const handleResetFilters = () => {
+    setChannels([]);
+    setPreReleaseSubChannels([]);
+    setIncludeRegex('');
+    setExcludeRegex('');
+  };
 
   const isStableChecked = useGlobalChannels
     ? globalSettings.releaseChannels.includes('stable')
@@ -308,14 +343,14 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-4 pt-4">
+        <div className="space-y-6 pt-4 max-h-[70vh] overflow-y-auto pr-2 -mr-4">
           <div className="space-y-4 p-4 border rounded-md">
             <div className="flex justify-between items-center">
               <h4 className="font-semibold text-base">{tGlobal('release_channel_title')}</h4>
               <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handleResetChannels} className="size-8 shrink-0">
+                        <Button variant="ghost" size="icon" onClick={handleResetFilters} className="size-8 shrink-0">
                           <RotateCcw className="size-4" />
                           <span className="sr-only">{t('reset_to_global_button')}</span>
                         </Button>
@@ -326,9 +361,12 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                   </Tooltip>
               </TooltipProvider>
             </div>
-              <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {useGlobalChannels ? t('channels_hint_global') : t('channels_hint_individual')}
-              </p>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {tGlobal('release_channel_description_repo')}
+            </p>
             
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -380,6 +418,35 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
               />
               <Label htmlFor="draft-repo" className="font-normal cursor-pointer">{tGlobal('release_channel_draft')}</Label>
             </div>
+            
+            <div className="space-y-2 pt-4">
+                <h4 className="font-medium text-base">{tGlobal('regex_filter_title')}</h4>
+                 <p className="text-xs text-muted-foreground">
+                    {tGlobal('regex_filter_description_repo')}
+                </p>
+            </div>
+            <div className="space-y-2">
+                <Label htmlFor="include-regex-repo">{tGlobal('include_regex_label')}</Label>
+                <Input
+                    id="include-regex-repo"
+                    value={includeRegex}
+                    onChange={(e) => setIncludeRegex(e.target.value)}
+                    placeholder={globalSettings.includeRegex || tGlobal('regex_placeholder')}
+                    className={cn(!!includeRegexError && 'border-destructive focus-visible:ring-destructive')}
+                />
+                {includeRegexError && <p className="text-sm text-destructive">{tGlobal('regex_error_invalid')}</p>}
+            </div>
+            <div className="space-y-2">
+                <Label htmlFor="exclude-regex-repo">{tGlobal('exclude_regex_label')}</Label>
+                <Input
+                    id="exclude-regex-repo"
+                    value={excludeRegex}
+                    onChange={(e) => setExcludeRegex(e.target.value)}
+                    placeholder={globalSettings.excludeRegex || tGlobal('regex_placeholder')}
+                    className={cn(!!excludeRegexError && 'border-destructive focus-visible:ring-destructive')}
+                />
+                 {excludeRegexError && <p className="text-sm text-destructive">{tGlobal('regex_error_invalid')}</p>}
+            </div>
           </div>
 
           <div className="space-y-4 p-4 border rounded-md">
@@ -403,7 +470,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handleResetReleasesPerPage} className="size-8 shrink-0">
+                        <Button variant="ghost" size="icon" onClick={() => setReleasesPerPage('')} className="size-8 shrink-0">
                           <RotateCcw className="size-4" />
                           <span className="sr-only">{t('reset_to_global_button')}</span>
                         </Button>
@@ -420,11 +487,11 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                 <p className="mt-2 text-sm text-destructive">{tGlobal('releases_per_page_error_max')}</p>
             ) : null }
           </div>
-
-          <div className="pt-2 space-y-2">
+        </div>
+        <div className="pt-2">
             <AlertDialog>
-                <AlertDialogTrigger asChild disabled={isUsingAllGlobalSettings}>
-                <Button variant="outline" className="w-full">
+                <AlertDialogTrigger asChild>
+                <Button variant="outline" className="w-full" disabled={isUsingAllGlobalSettings}>
                     <RotateCcw className="mr-2 size-4" />
                     {t('reset_all_button_text')}
                 </Button>
@@ -442,11 +509,10 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                 </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-            <div className="flex h-5 items-center justify-end">
-                <SaveStatusIndicator status={saveStatus} />
-            </div>
-          </div>
         </div>
+        <DialogFooter className="pt-4">
+            <SaveStatusIndicator status={saveStatus} />
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

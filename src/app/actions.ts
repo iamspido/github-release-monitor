@@ -174,7 +174,7 @@ ${jsCodeExample}
 async function fetchLatestRelease(
   owner: string,
   repo: string,
-  repoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage'>,
+  repoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex'>,
   globalSettings: AppSettings,
   locale: string
 ): Promise<{ release: GithubRelease | null; error: FetchError | null }> {
@@ -192,6 +192,10 @@ async function fetchLatestRelease(
   const releasesToFetch = (typeof repoSettings.releasesPerPage === 'number' && repoSettings.releasesPerPage >= 1 && repoSettings.releasesPerPage <= 100)
     ? repoSettings.releasesPerPage
     : globalSettings.releasesPerPage;
+  
+  // Regex settings: repository settings override global settings.
+  const effectiveIncludeRegex = repoSettings.includeRegex ?? globalSettings.includeRegex;
+  const effectiveExcludeRegex = repoSettings.excludeRegex ?? globalSettings.excludeRegex;
   // ---
 
   const GITHUB_API_URL = `https://api.github.com/repos/${owner}/${repo}/releases?per_page=${releasesToFetch}`;
@@ -250,6 +254,27 @@ async function fetchLatestRelease(
     }
 
     const filteredReleases = releases.filter(r => {
+      // --- New Regex Filtering Logic ---
+      try {
+        // 1. Exclude filter has highest priority. If tag matches, it's always excluded.
+        if (effectiveExcludeRegex) {
+          const exclude = new RegExp(effectiveExcludeRegex, 'i');
+          if (exclude.test(r.tag_name)) {
+            return false;
+          }
+        }
+        // 2. If include filter is present, tag MUST match it. This overrides channel filters.
+        if (effectiveIncludeRegex) {
+          const include = new RegExp(effectiveIncludeRegex, 'i');
+          return include.test(r.tag_name);
+        }
+      } catch (e) {
+        console.error(`Invalid regex for repo ${owner}/${repo}. Regex filters will be ignored. Error:`, e);
+        // If regex is invalid, we ignore it and proceed to channel filtering.
+      }
+      // --- End of Regex Filtering ---
+
+      // --- Original Channel Filtering Logic (runs if no includeRegex is active) ---
       // Rule 1: Handle Drafts first, as they are a distinct category.
       if (r.draft) {
         return effectiveReleaseChannels.includes('draft');
@@ -328,7 +353,7 @@ async function fetchLatestRelease(
 async function fetchLatestReleaseWithCache(
   owner: string,
   repo: string,
-  repoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage'>,
+  repoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex'>,
   globalSettings: AppSettings,
   locale: string,
   options?: { skipCache?: boolean }
@@ -382,6 +407,8 @@ export async function getLatestReleasesForRepos(
         releaseChannels: repo.releaseChannels,
         preReleaseSubChannels: repo.preReleaseSubChannels,
         releasesPerPage: repo.releasesPerPage,
+        includeRegex: repo.includeRegex,
+        excludeRegex: repo.excludeRegex,
       };
 
       const { release: latestRelease, error } = await fetchLatestReleaseWithCache(
@@ -534,6 +561,8 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
         releaseChannels: importedRepo.releaseChannels,
         preReleaseSubChannels: importedRepo.preReleaseSubChannels,
         releasesPerPage: importedRepo.releasesPerPage,
+        includeRegex: importedRepo.includeRegex,
+        excludeRegex: importedRepo.excludeRegex,
       };
 
       currentReposMap.set(importedRepo.id, repoToSave);
@@ -925,7 +954,7 @@ export async function getRepositoriesForExport(): Promise<{ success: boolean; da
 
 export async function updateRepositorySettingsAction(
   repoId: string,
-  settings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage'>
+  settings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex'>
 ): Promise<{ success: boolean; error?: string }> {
   // Security: Validate input
   if (!isValidRepoId(repoId)) {
@@ -949,6 +978,8 @@ export async function updateRepositorySettingsAction(
       releaseChannels: settings.releaseChannels,
       preReleaseSubChannels: settings.preReleaseSubChannels,
       releasesPerPage: settings.releasesPerPage,
+      includeRegex: settings.includeRegex,
+      excludeRegex: settings.excludeRegex,
     };
 
     await saveRepositories(currentRepos);
@@ -963,5 +994,3 @@ export async function updateRepositorySettingsAction(
 export async function revalidateReleasesAction() {
   revalidateTag('github-releases');
 }
-
-    
