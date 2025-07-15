@@ -23,12 +23,13 @@ A powerful, self-hostable application to automatically monitor GitHub repository
 
 <table>
   <tr>
-    <td><img width="2558" height="1277" alt="Image" src="https://github.com/user-attachments/assets/b541ef9c-dc10-4e20-97a8-75ecc7ed763a" /></td>
-    <td><img width="2558" height="1277" alt="Image" src="https://github.com/user-attachments/assets/53671406-a0bc-43d4-8aa4-b77889170f98" /></td>
+    <td><img width="1872" height="1277" alt="brave_screenshot_github-release-monitor timo-hohmann de" src="https://github.com/user-attachments/assets/febdf1de-db54-46ba-8614-c0fde118d8f9" /></td>
+    <td><img width="1734" height="1275" alt="brave_screenshot_github-release-monitor timo-hohmann de 2" src="https://github.com/user-attachments/assets/41c5f4df-205e-4572-90d8-e30133f15764" /></td>
   </tr>
   <tr>
-    <td><img width="2558" height="1276" alt="Image" src="https://github.com/user-attachments/assets/5e28e95f-6089-4a1e-8971-cacb04aba751" /></td>
-    <td><img width="2558" height="1275" alt="Image" src="https://github.com/user-attachments/assets/c5e1b82b-84e4-4378-adee-f460da589c79" /></td>
+    <td><img width="1847" height="1202" alt="brave_screenshot_github-release-monitor timo-hohmann de 3" src="https://github.com/user-attachments/assets/baa2c9c5-6efb-4d7b-a338-e15d7a2767bc" /></td>
+    <td><img width="1738" height="1275" alt="brave_screenshot_github-release-monitor timo-hohmann de 4" src="https://github.com/user-attachments/assets/142f354d-99da-4e95-bb3c-ab016a60d2cb" /></td>
+
   </tr>
 </table>
 
