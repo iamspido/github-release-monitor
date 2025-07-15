@@ -8,8 +8,9 @@ A powerful, self-hostable application to automatically monitor GitHub repository
 - **Automated Release Monitoring**: Add public GitHub repositories and let the app automatically check for new releases in the background.
 - **Email Notifications**: Configure SMTP settings to receive detailed email notifications the moment a new release is detected.
 - **Flexible Release Filtering**:
-    - **Global Settings**: Define which release types (stable, pre-release, draft) to monitor application-wide.
+    - **Global Settings**: Define application-wide rules for which release types (stable, pre-release, draft) to monitor.
     - **Per-Repository Overrides**: Customize filtering rules for individual repositories.
+    - **Regex-Powered Precision**: Use "Include" and "Exclude" regular expression patterns for fine-grained control over release tags. The "Include" pattern overrides the standard channel filters, giving you ultimate control.
     - **Pre-release Granularity**: Select specific pre-release tags to watch (e.g., `alpha`, `beta`, `rc`).
 - **Modern & Responsive UI**:
     - Clean, intuitive interface built with ShadCN UI and Tailwind CSS.
@@ -164,12 +165,17 @@ After a few moments, your application should be accessible at `https://github-re
 
 ---
 
-## 🐳 Deployment (Docker Run)
+## 🐳 Docker Run Setup
 
 If you prefer not to use Docker Compose, you can run the application using a single Docker command.
 
-### 1. Prepare Data Directory and Run Container
-Create a host directory for the application data and set the correct permissions before running the container.
+### 1. Configure Environment
+Before running the container, you must create a `.env` file in the same directory where you will run the `docker run` command. The container will read its configuration from this file.
+
+Copy the required variables from the manual setup guide's [environment configuration section](#4-configure-environment-variables) into a new file named `.env`.
+
+### 2. Prepare Data Directory and Run Container
+Create a host directory for the application data and set the correct permissions.
 ```bash
 # Create the data directory
 mkdir -p data
