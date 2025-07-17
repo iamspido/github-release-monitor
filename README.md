@@ -23,12 +23,12 @@ A powerful, self-hostable application to automatically monitor GitHub repository
 
 <table>
   <tr>
-    <td><img width="1872" height="1277" alt="brave_screenshot_github-release-monitor timo-hohmann de" src="https://github.com/user-attachments/assets/febdf1de-db54-46ba-8614-c0fde118d8f9" /></td>
-    <td><img width="1734" height="1275" alt="brave_screenshot_github-release-monitor timo-hohmann de 2" src="https://github.com/user-attachments/assets/41c5f4df-205e-4572-90d8-e30133f15764" /></td>
+    <td><img width="1872" height="1277" alt="Image" src="https://github.com/user-attachments/assets/febdf1de-db54-46ba-8614-c0fde118d8f9" /></td>
+    <td><img width="1734" height="1275" alt="Image" src="https://github.com/user-attachments/assets/41c5f4df-205e-4572-90d8-e30133f15764" /></td>
   </tr>
   <tr>
-    <td><img width="1847" height="1202" alt="brave_screenshot_github-release-monitor timo-hohmann de 3" src="https://github.com/user-attachments/assets/baa2c9c5-6efb-4d7b-a338-e15d7a2767bc" /></td>
-    <td><img width="1738" height="1275" alt="brave_screenshot_github-release-monitor timo-hohmann de 4" src="https://github.com/user-attachments/assets/142f354d-99da-4e95-bb3c-ab016a60d2cb" /></td>
+    <td><img width="1847" height="1202" alt="Image" src="https://github.com/user-attachments/assets/baa2c9c5-6efb-4d7b-a338-e15d7a2767bc" /></td>
+    <td><img width="1738" height="1275" alt="Image" src="https://github.com/user-attachments/assets/142f354d-99da-4e95-bb3c-ab016a60d2cb" /></td>
 
   </tr>
 </table>
@@ -74,6 +74,14 @@ Navigate to the `example/` directory. You will need to configure the environment
    # The username and password for logging into the application.
    AUTH_USERNAME=admin
    AUTH_PASSWORD=your_secure_password
+   ```
+
+   **Protocol (HTTP/HTTPS)**
+   By default, the application runs in secure (HTTPS) mode. If you are not using a reverse proxy and need to run the app on plain HTTP, you must set this variable.
+   ```env
+   # Set to 'false' only if running without SSL/TLS (e.g., direct HTTP access).
+   # This makes session cookies insecure. Recommended to leave as 'true' for production.
+   HTTPS=true
    ```
 
    **GitHub API (Recommended)**
@@ -173,7 +181,12 @@ If you prefer not to use Docker Compose, you can run the application using a sin
 ### 1. Configure Environment
 Before running the container, you must create a `.env` file in the same directory where you will run the `docker run` command. The container will read its configuration from this file.
 
-Copy the required variables from the manual setup guide's [environment configuration section](#4-configure-environment-variables) into a new file named `.env`.
+Copy the required variables from the manual setup guide's [environment configuration section](#4-configure-environment-variables) into a new file named `.env`. For a direct HTTP setup without a proxy, you must add `HTTPS=false`.
+
+```env
+# ... other variables
+HTTPS=false
+```
 
 ### 2. Prepare Data Directory and Run Container
 Create a host directory for the application data and set the correct permissions.
@@ -254,6 +267,16 @@ AUTH_USERNAME=admin
 AUTH_PASSWORD=your_secure_password
 ```
 
+#### **Protocol (HTTP/HTTPS)**
+
+This variable controls whether the application runs in secure (HTTPS) or insecure (HTTP) mode. It affects session cookies and security headers.
+
+```env
+# Set to 'false' if running without a reverse proxy or SSL certificate (e.g., direct HTTP).
+# Defaults to 'true' for secure HTTPS operation.
+HTTPS=true
+```
+
 #### **GitHub API (Recommended)**
 
 To avoid being rate-limited by the GitHub API, it is highly recommended to create a [Personal Access Token](https://github.com/settings/personal-access-tokens) with **no scopes** (public repository access is sufficient and more secure).
@@ -314,6 +337,7 @@ Here is a complete list of all environment variables used by the application.
 | `AUTH_SECRET`         | A secret key (at least 32 characters) for encrypting user sessions.                                     | **Yes**               | -                          |
 | `AUTH_USERNAME`       | The username for logging into the application.                                                          | **Yes**               | -                          |
 | `AUTH_PASSWORD`       | The password for logging into the application.                                                          | **Yes**               | -                          |
+| `HTTPS`               | Set to `false` to run in HTTP mode. Defaults to `true` for secure operation.                            | No                    | `true`                     |
 | `GITHUB_ACCESS_TOKEN` | A GitHub Personal Access Token to increase the API rate limit. A token with no scopes is sufficient.      | No (but recommended)  | -                          |
 | `MAIL_HOST`           | The hostname or IP address of your SMTP server.                                                         | Yes, for email        | -                          |
 | `MAIL_PORT`           | The port for your SMTP server (e.g., 587 or 465).                                                       | Yes, for email        | -                          |
