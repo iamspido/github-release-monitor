@@ -1,20 +1,26 @@
 # Build Stage
 FROM node:24-alpine AS builder
+
 WORKDIR /app
 
-# Disable Next.js telemetry
+# Environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Install dependencies and build application
+# Copy package files
 COPY package*.json ./
+
+# Install all dependencies (including devDependencies for build)
 RUN npm ci
 
-# Copy source files for building
-COPY components.json ./
-COPY next.config.mjs ./
-COPY postcss.config.mjs ./
-COPY tailwind.config.ts ./
-COPY tsconfig.json ./
+# Copy configuration files
+COPY components.json \
+     next.config.mjs \
+     postcss.config.mjs \
+     tailwind.config.ts \
+     tsconfig.json \
+     ./
+
+# Copy source files
 COPY public/ ./public/
 COPY src/ ./src/
 
@@ -25,24 +31,20 @@ RUN npm run build
 FROM node:24-alpine AS runner
 WORKDIR /app
 
-# Disable Next.js telemetry in production
-ENV NEXT_TELEMETRY_DISABLED=1
+# Production environment variables
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    NODE_ENV=production \
+    HOSTNAME="0.0.0.0" \
+    PORT=3000
 
 # Create non-root user for security
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nextjs -u 1001
-
-# Install only production dependencies
-COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
 
 # Copy built application from builder stage
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/next.config.mjs ./
-COPY --from=builder /app/public ./public
-
-# Change ownership of app directory to nextjs user (including .next cache)
-RUN chown -R nextjs:nodejs /app
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 # Switch to non-root user
 USER nextjs
@@ -51,4 +53,4 @@ USER nextjs
 EXPOSE 3000
 
 # Start the application
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
