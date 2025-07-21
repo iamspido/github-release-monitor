@@ -28,7 +28,7 @@ A powerful, self-hostable application to automatically monitor GitHub repository
     <td><img width="1734" height="1275" alt="Image" src="https://github.com/user-attachments/assets/41c5f4df-205e-4572-90d8-e30133f15764" /></td>
   </tr>
   <tr>
-    <td><img width="1847" height="1202" alt="Image" src="https://github.com/user-attachments/assets/baa2c9c5-6efb-4d7b-a338-e15d7a2767bc" /></td>
+    <td><img width="1542" height="1068" alt="Image" src="https://github.com/user-attachments/assets/1848e60d-ecc1-46bb-a9f3-371983c71153" /></td>
     <td><img width="1738" height="1275" alt="Image" src="https://github.com/user-attachments/assets/142f354d-99da-4e95-bb3c-ab016a60d2cb" /></td>
 
   </tr>
