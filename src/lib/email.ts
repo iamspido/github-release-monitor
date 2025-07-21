@@ -288,3 +288,10 @@ ${t('text_view_on_github_label')}: ${release.html_url}
     throw new Error(t('error_send_failed', { details: error.message }));
   }
 }
+
+export async function sendTestEmail(repository: Repository, release: GithubRelease, locale: string, timeFormat: TimeFormat, toAddress?: string) {
+  const t = await getTranslations({locale, namespace: 'Email'});
+  const recipient = toAddress || process.env.MAIL_TO_ADDRESS;
+  console.log(`Sending test email to ${recipient}...`);
+  return sendNewReleaseEmail(repository, release, locale, timeFormat, recipient);
+}

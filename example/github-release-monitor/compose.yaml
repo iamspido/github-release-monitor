@@ -38,10 +38,55 @@ services:
         max-size: "50m"
     restart: "unless-stopped"
     networks:
+      - "apprise-api"
+      - "traefik-net"
+      - "smtp"
+
+  apprise:
+    container_name: "apprise"
+    image: "caronc/apprise:latest"
+  #  Enabel the labels if you need the Apprise webinterface
+#    labels:
+#      - "traefik.enable=true"
+#      - "traefik.docker.network=traefik-net"
+      # Explicitly define the service and tell Traefik which port to use.
+#      - "traefik.http.services.apprise-service.loadbalancer.server.port=8000"
+      # HTTP Router
+#      - "traefik.http.routers.apprise.rule=Host(`apprise.example.com`)"
+#      - "traefik.http.routers.apprise.entrypoints=web"
+#      - "traefik.http.routers.apprise.service=apprise-service"
+#      - "traefik.http.routers.apprise.middlewares=apprise-redirect@docker"
+      # HTTPS Router
+#      - "traefik.http.routers.apprise-secured.rule=Host(`apprise.example.com`)"
+#      - "traefik.http.routers.apprise-secured.entrypoints=websecure"
+#      - "traefik.http.routers.apprise-secured.service=apprise-service"
+#      - "traefik.http.routers.apprise-secured.tls=true"
+#      - "traefik.http.routers.apprise-secured.tls.certresolver=letsencrypt"
+      # Middleware for redirecting HTTP to HTTPS
+#      - "traefik.http.middlewares.apprise-redirect.redirectscheme.scheme=https"
+#      - "traefik.http.middlewares.apprise-redirect.redirectscheme.permanent=true"
+#      - "traefik.http.routers.apprise.middlewares=apprise-auth@docker"
+      # To create user:password pair, it's possible to use this command:
+      # echo $(htpasswd -nB admin) | sed -e s/\\$/\\$\\$/g
+#      - "traefik.http.middlewares.apprise-auth.basicauth.users=admin:<hash>"
+
+#    ports:
+#      - "8000:8000"
+    environment:
+      - "APPRISE_STATELESS_URLS=mailto://smtp:25?from=no-reply@example.com&name=GitHub%20Release%20Monitor&to=example@example.com,discord://{WebhookID}/{WebhookToken}/,tgram://{bot_token}/{chat_id}/"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+    restart: "unless-stopped"
+    networks:
+      - "apprise-api"
       - "traefik-net"
       - "smtp"
 
 networks:
+  apprise-api:
+    driver: "bridge"
   traefik-net:
     name: traefik-net
     external: true

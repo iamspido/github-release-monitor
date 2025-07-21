@@ -67,12 +67,19 @@ export type RateLimitResult = {
   error?: 'invalid_token' | 'api_error';
 };
 
-export type MailConfig = {
-  isConfigured: boolean;
+export type NotificationConfig = {
+  isSmtpConfigured: boolean;
+  isAppriseConfigured: boolean;
   variables: {
     [key: string]: string | null;
   };
 };
+
+export type AppriseStatus = {
+  status: 'ok' | 'error' | 'not_configured';
+  error?: string;
+};
+
 
 // App Settings
 export type Locale = 'en' | 'de';
@@ -96,6 +103,7 @@ export type AppSettings = {
   showMarkAsNew?: boolean;
   includeRegex?: string;
   excludeRegex?: string;
+  appriseMaxCharacters?: number;
 };
 
 // Session Data

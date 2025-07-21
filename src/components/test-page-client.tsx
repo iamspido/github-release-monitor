@@ -15,11 +15,13 @@ import {
   Zap,
   PackagePlus,
   RefreshCw,
+  Bell,
+  XCircle,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-import type { RateLimitResult, MailConfig } from '@/types';
-import { sendTestEmailAction, setupTestRepositoryAction, triggerReleaseCheckAction } from '@/app/actions';
+import type { RateLimitResult, NotificationConfig, AppriseStatus } from '@/types';
+import { sendTestEmailAction, setupTestRepositoryAction, triggerReleaseCheckAction, sendTestAppriseAction, checkAppriseStatusAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -37,18 +39,30 @@ import { Label } from '@/components/ui/label';
 interface TestPageClientProps {
   rateLimitResult: RateLimitResult;
   isTokenSet: boolean;
-  mailConfig: MailConfig;
+  notificationConfig: NotificationConfig;
+  appriseStatus: AppriseStatus;
 }
 
 function StatusIndicator({
-  isSuccess,
+  status,
   text,
 }: {
-  isSuccess: boolean;
+  status: 'success' | 'warning' | 'error';
   text: string;
 }) {
-  const Icon = isSuccess ? CheckCircle2 : AlertTriangle;
-  const color = isSuccess ? 'text-green-500' : 'text-yellow-500';
+  const icons = {
+    success: CheckCircle2,
+    warning: AlertTriangle,
+    error: XCircle,
+  };
+  const colors = {
+    success: 'text-green-500',
+    warning: 'text-yellow-500',
+    error: 'text-destructive',
+  };
+
+  const Icon = icons[status];
+  const color = colors[status];
 
   return (
     <div className="flex items-center gap-2">
@@ -61,18 +75,22 @@ function StatusIndicator({
 export function TestPageClient({
   rateLimitResult,
   isTokenSet,
-  mailConfig,
+  notificationConfig,
+  appriseStatus: initialAppriseStatus,
 }: TestPageClientProps) {
   const t = useTranslations('TestPage');
   const [isSendingMail, startMailTransition] = React.useTransition();
   const [isSettingUpRepo, startSetupRepoTransition] = React.useTransition();
   const [isTriggeringCheck, startTriggerCheckTransition] = React.useTransition();
+  const [isSendingApprise, startAppriseTransition] = React.useTransition();
+  const [isCheckingApprise, startAppriseCheckTransition] = React.useTransition();
 
   const { toast } = useToast();
   const [resetTime, setResetTime] = React.useState(t('not_available'));
   const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
   const [customEmail, setCustomEmail] = React.useState('');
   const [isEmailInvalid, setIsEmailInvalid] = React.useState(false);
+  const [appriseStatus, setAppriseStatus] = React.useState(initialAppriseStatus);
 
   const rateLimitData = rateLimitResult.data;
   const rateLimitError = rateLimitResult.error;
@@ -121,6 +139,24 @@ export function TestPageClient({
       }
     });
   };
+  
+  const handleSendTestApprise = () => {
+    startAppriseTransition(async () => {
+        const result = await sendTestAppriseAction();
+        if (result.success) {
+            toast({
+                title: t('toast_apprise_success_title'),
+                description: t('toast_apprise_success_description'),
+            });
+        } else {
+            toast({
+                title: t('toast_apprise_error_title'),
+                description: result.error,
+                variant: 'destructive',
+            });
+        }
+    });
+  };
 
   const handleSetupTestRepo = () => {
     startSetupRepoTransition(async () => {
@@ -142,25 +178,32 @@ export function TestPageClient({
         variant: result.success ? 'default' : 'destructive',
       });
     });
+  };
+
+  const handleRefreshAppriseStatus = () => {
+    startAppriseCheckTransition(async () => {
+      const status = await checkAppriseStatusAction();
+      setAppriseStatus(status);
+    });
   }
 
   return (
-    <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-             <Github className="size-8 text-muted-foreground" />
-             <div>
+            <Github className="size-8 text-muted-foreground" />
+            <div>
                 <CardTitle>{t('github_card_title')}</CardTitle>
                 <CardDescription>
                 {t('github_card_description')}
                 </CardDescription>
-             </div>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <StatusIndicator
-            isSuccess={isTokenSet}
+            status={isTokenSet ? 'success' : 'warning'}
             text={
               isTokenSet
                 ? t('token_set')
@@ -174,28 +217,28 @@ export function TestPageClient({
           )}
 
           {rateLimitData ? (
-             <div>
-                 <StatusIndicator
-                    isSuccess={isRateLimitHigh}
+            <div>
+                <StatusIndicator
+                    status={isRateLimitHigh ? 'success' : 'warning'}
                     text={
                         isRateLimitHigh
                         ? t('auth_access_confirmed')
                         : t('unauth_access')
                     }
-                 />
-                 <div className="mt-2 pl-7 text-sm text-muted-foreground space-y-1">
+                />
+                <div className="mt-2 pl-7 text-sm text-muted-foreground space-y-1">
                     <p>{t('api_limit', { limit: rateLimit?.limit })}</p>
                     <p>{t('api_remaining', { remaining: rateLimit?.remaining })}</p>
                     <p>{t('api_resets', { time: resetTime })}</p>
-                 </div>
-             </div>
+                </div>
+            </div>
           ) : (
-             <StatusIndicator
-                isSuccess={false}
+            <StatusIndicator
+                status='error'
                 text={t(rateLimitError === 'invalid_token' ? 'invalid_token_error' : 'rate_limit_fail')}
               />
           )}
-           {isTokenSet && rateLimitError === 'invalid_token' && (
+          {isTokenSet && rateLimitError === 'invalid_token' && (
               <p className="text-sm text-muted-foreground pl-7">
                   {t('invalid_token_advice')}
               </p>
@@ -203,6 +246,58 @@ export function TestPageClient({
         </CardContent>
       </Card>
       
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <Bell className="size-8 text-muted-foreground" />
+            <div>
+              <CardTitle>{t('apprise_card_title')}</CardTitle>
+              <CardDescription>{t('apprise_card_description')}</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {appriseStatus.status === 'not_configured' ? (
+            <StatusIndicator status="warning" text={t('apprise_not_configured')} />
+          ) : appriseStatus.status === 'ok' ? (
+            <StatusIndicator status="success" text={t('apprise_ok')} />
+          ) : (
+            <div>
+              <StatusIndicator status="error" text={t('apprise_error')} />
+              <p className="pl-7 text-sm text-muted-foreground">{appriseStatus.error}</p>
+            </div>
+          )}
+          
+          <p className="text-sm text-muted-foreground font-mono break-all pl-7">
+              <span className="font-semibold text-foreground">APPRISE_URL=</span>
+              {notificationConfig.variables.APPRISE_URL ? (
+                <span>{notificationConfig.variables.APPRISE_URL}</span>
+              ) : (
+                <span className="italic">{t('email_not_set')}</span>
+              )}
+          </p>
+          <div className="flex flex-col items-start gap-4 pt-2">
+            <Button
+              onClick={handleRefreshAppriseStatus}
+              disabled={isCheckingApprise || appriseStatus.status === 'not_configured'}
+              variant="outline"
+              size="sm"
+            >
+              {isCheckingApprise ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+              <span>{t('apprise_refresh_status_button')}</span>
+            </Button>
+            <Button
+              onClick={handleSendTestApprise}
+              disabled={isSendingApprise || appriseStatus.status !== 'ok'}
+              size="sm"
+            >
+              {isSendingApprise ? <Loader2 className="animate-spin" /> : <Bell />}
+              <span>{t('send_test_apprise_button')}</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
             <div className="flex items-center gap-3">
@@ -217,9 +312,9 @@ export function TestPageClient({
         </CardHeader>
         <CardContent className="space-y-4">
             <StatusIndicator
-                isSuccess={mailConfig.isConfigured}
+                status={notificationConfig.isSmtpConfigured ? 'success' : 'warning'}
                 text={
-                mailConfig.isConfigured
+                notificationConfig.isSmtpConfigured
                     ? t('email_configured')
                     : t('email_not_configured')
                 }
@@ -228,14 +323,15 @@ export function TestPageClient({
             <div className="pl-7 pt-4 border-t space-y-3">
               <h4 className="font-semibold text-sm">{t('email_all_variables_title')}</h4>
 
-              {mailConfig.variables['MAIL_PASSWORD'] && (
+              {notificationConfig.variables['MAIL_PASSWORD'] && (
                   <div className="flex items-center gap-2 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-300">
                       <AlertTriangle className="size-5 shrink-0" />
                       <p>{t('email_password_warning')}</p>
                   </div>
               )}
               <div className="text-sm text-muted-foreground font-mono space-y-2 break-all">
-                  {Object.entries(mailConfig.variables).map(([key, value]) => {
+                  {Object.entries(notificationConfig.variables).map(([key, value]) => {
+                    if (key === 'APPRISE_URL') return null; // Handled in its own card
                     const isRequired = requiredMailVars.includes(key);
                     const isMissingAndRequired = isRequired && !value;
                     
@@ -269,9 +365,9 @@ export function TestPageClient({
                   })}
               </div>
             </div>
-           
+          
             <div className="pt-4 space-y-4">
-                 <div className="space-y-2">
+                <div className="space-y-2">
                     <Label htmlFor="test-email-recipient">{t('email_recipient_label')}</Label>
                     <Input
                         id="test-email-recipient"
@@ -279,13 +375,13 @@ export function TestPageClient({
                         placeholder={t('email_recipient_placeholder')}
                         value={customEmail}
                         onChange={handleEmailChange}
-                        disabled={isSendingMail || !mailConfig.isConfigured}
+                        disabled={isSendingMail || !notificationConfig.isSmtpConfigured}
                         className={cn(isEmailInvalid && 'border-destructive focus-visible:ring-destructive')}
                     />
                     {isEmailInvalid && <p className="text-sm text-destructive">{t('invalid_email_format')}</p>}
-                 </div>
-                 <div>
-                    <Button onClick={handleSendTestEmail} disabled={isSendingMail || !mailConfig.isConfigured || isEmailInvalid}>
+                </div>
+                <div>
+                    <Button onClick={handleSendTestEmail} disabled={isSendingMail || !notificationConfig.isSmtpConfigured || isEmailInvalid}>
                         {isSendingMail ? (
                             <Loader2 className="mr-2 animate-spin" />
                         ) : (
@@ -293,64 +389,66 @@ export function TestPageClient({
                         )}
                         {t('send_test_email_button')}
                     </Button>
-                    {!mailConfig.isConfigured && (
+                    {!notificationConfig.isSmtpConfigured && (
                         <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                             <AlertTriangle className="size-4 shrink-0" />
                             <span>{t('email_config_required_tooltip')}</span>
                         </p>
                     )}
-                 </div>
+                </div>
             </div>
         </CardContent>
       </Card>
       
-      <Card className="md:col-span-2">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-             <Beaker className="size-8 text-muted-foreground" />
-             <div>
-                <CardTitle>{t('notification_card_title')}</CardTitle>
-                <CardDescription>
-                    {t('notification_card_description')}
-                </CardDescription>
-             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-            <div className="space-y-3">
-                <h4 className="font-semibold">{t('e2e_step1_title')}</h4>
-                <p className="text-sm text-muted-foreground">{t('e2e_step1_description')}</p>
-                 <Button onClick={handleSetupTestRepo} disabled={isSettingUpRepo}>
-                    {isSettingUpRepo ? (
-                        <Loader2 className="mr-2 animate-spin" />
-                    ) : (
-                        <PackagePlus className="mr-2" />
-                    )}
-                    {t('setup_test_repo_button')}
-                 </Button>
+      <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+                <Beaker className="size-8 text-muted-foreground" />
+                <div>
+                    <CardTitle>{t('notification_card_title')}</CardTitle>
+                    <CardDescription>
+                        {t('notification_card_description')}
+                    </CardDescription>
+                </div>
             </div>
-            <div className="space-y-3">
-                <h4 className="font-semibold">{t('e2e_step2_title')}</h4>
-                <p className="text-sm text-muted-foreground">{t('e2e_step2_description')}</p>
-                 <div>
-                    <Button onClick={handleTriggerReleaseCheck} disabled={isTriggeringCheck || !mailConfig.isConfigured}>
-                        {isTriggeringCheck ? (
+          </CardHeader>
+          <CardContent className="space-y-6">
+              <div className="space-y-3">
+                  <h4 className="font-semibold">{t('e2e_step1_title')}</h4>
+                  <p className="text-sm text-muted-foreground">{t('e2e_step1_description')}</p>
+                    <Button onClick={handleSetupTestRepo} disabled={isSettingUpRepo}>
+                        {isSettingUpRepo ? (
                             <Loader2 className="mr-2 animate-spin" />
                         ) : (
-                            <RefreshCw className="mr-2" />
+                            <PackagePlus className="mr-2" />
                         )}
-                        {t('trigger_check_button')}
+                        {t('setup_test_repo_button')}
                     </Button>
-                    {!mailConfig.isConfigured && (
-                        <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-                            <AlertTriangle className="size-4 shrink-0" />
-                            <span>{t('email_config_required_tooltip')}</span>
-                        </p>
-                    )}
-                 </div>
-            </div>
-        </CardContent>
+              </div>
+              <div className="space-y-3">
+                  <h4 className="font-semibold">{t('e2e_step2_title')}</h4>
+                  <p className="text-sm text-muted-foreground">{t('e2e_step2_description')}</p>
+                    <div>
+                        <Button onClick={handleTriggerReleaseCheck} disabled={isTriggeringCheck || (!notificationConfig.isSmtpConfigured && !notificationConfig.isAppriseConfigured)}>
+                            {isTriggeringCheck ? (
+                                <Loader2 className="mr-2 animate-spin" />
+                            ) : (
+                                <RefreshCw className="mr-2" />
+                            )}
+                            {t('trigger_check_button')}
+                        </Button>
+                        {!notificationConfig.isSmtpConfigured && !notificationConfig.isAppriseConfigured && (
+                            <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                                <AlertTriangle className="size-4 shrink-0" />
+                                <span>{t('notification_config_required_tooltip')}</span>
+                            </p>
+                        )}
+                    </div>
+              </div>
+          </CardContent>
       </Card>
     </div>
   );
 }
+
+    

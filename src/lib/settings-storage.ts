@@ -1,3 +1,4 @@
+
 'use server';
 
 import { promises as fs } from 'fs';
@@ -20,6 +21,7 @@ const defaultSettings: AppSettings = {
   showMarkAsNew: true,
   includeRegex: undefined,
   excludeRegex: undefined,
+  appriseMaxCharacters: 1800,
 };
 
 async function ensureDataFileExists() {

@@ -7,12 +7,12 @@ import type {
   EnrichedRelease,
   RateLimitResult,
   AppSettings,
-  MailConfig,
   PreReleaseChannelType,
   FetchError,
+  AppriseStatus,
 } from '@/types';
 import { allPreReleaseTypes } from '@/types';
-import {sendNewReleaseEmail} from '@/lib/email';
+import {sendNotification, sendTestAppriseNotification} from '@/lib/notifications';
 import {getRepositories, saveRepositories} from '@/lib/repository-storage';
 import {revalidatePath, revalidateTag, unstable_cache} from 'next/cache';
 import { getSettings } from '@/lib/settings-storage';
@@ -20,6 +20,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
+import { sendTestEmail } from '@/lib/email';
 
 
 function parseGitHubUrl(url: string): {owner: string; repo: string; id: string} | null {
@@ -132,12 +133,9 @@ ${t('footnotes_text_1')}[^1]. ${t('footnotes_text_2')}[^2].
 
 ---
 
-## ${t('section_links_images')}
+## ${t('section_links')}
 
-${t('links_images_text_1')} [${t('links_images_text_2')}](https://www.markdownguide.org).
-
-${t('links_images_text_3')}
-![${t('placeholder_alt_text')}](https://placehold.co/400x200.png)
+${t('links_text_1')} [${t('links_text_2')}](https://www.markdownguide.org).
 
 ---
 
@@ -693,11 +691,10 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
             `New release detected for ${repo.id}: ${newTag} (previously ${repo.lastSeenReleaseTag})`
           );
           try {
-            // Send email notification using the effective locale and time format
-            await sendNewReleaseEmail(repo, enrichedRelease.release, effectiveLocale, settings.timeFormat);
+            await sendNotification(repo, enrichedRelease.release, effectiveLocale, settings);
             notificationsSent++;
 
-            // If email is sent successfully, THEN update the tag.
+            // If notification is sent successfully, THEN update the tag.
             const shouldHighlight = settings.showAcknowledge ?? true;
             updatedRepos[repoIndex] = {...repo, lastSeenReleaseTag: newTag, isNew: shouldHighlight};
             changed = true;
@@ -806,15 +803,16 @@ export async function setupTestRepositoryAction(): Promise<{ success: boolean; m
 export async function triggerReleaseCheckAction(): Promise<{ success: boolean; message: string; }> {
   const locale = await getLocale();
   const t = await getTranslations({locale, namespace: 'TestPage'});
-  const tEmail = await getTranslations({locale, namespace: 'Email'});
+  
+  // At least one notification service must be configured
+  const {MAIL_HOST, MAIL_PORT, MAIL_FROM_ADDRESS, MAIL_TO_ADDRESS, APPRISE_URL} = process.env;
+  const isSmtpConfigured = !!(MAIL_HOST && MAIL_PORT && MAIL_FROM_ADDRESS && MAIL_TO_ADDRESS);
+  const isAppriseConfigured = !!APPRISE_URL;
 
-  // Check if mail is configured
-  const {MAIL_HOST, MAIL_PORT, MAIL_FROM_ADDRESS, MAIL_TO_ADDRESS} =
-    process.env;
-  if (!MAIL_HOST || !MAIL_PORT || !MAIL_FROM_ADDRESS || !MAIL_TO_ADDRESS) {
+  if (!isSmtpConfigured && !isAppriseConfigured) {
     return {
       success: false,
-      message: tEmail('error_config_incomplete'),
+      message: t('toast_no_notification_service_configured'),
     };
   }
 
@@ -918,13 +916,104 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
 
   try {
     const settings = await getSettings();
-    await sendNewReleaseEmail(testRepo, testRelease, locale, settings.timeFormat, recipient);
+    await sendTestEmail(testRepo, testRelease, locale, settings.timeFormat, recipient);
     return {success: true};
   } catch (error: any) {
     console.error('sendTestEmailAction failed:', error);
     return {
       success: false,
       error: error.message || t('toast_email_error_description'),
+    };
+  }
+}
+
+export async function sendTestAppriseAction(): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const locale = await getLocale();
+  const t = await getTranslations({locale, namespace: 'TestPage'});
+
+  const { APPRISE_URL } = process.env;
+  if (!APPRISE_URL) {
+      return {
+          success: false,
+          error: t('toast_apprise_not_configured_error'),
+      };
+  }
+  
+  const testRepo: Repository = {
+    id: 'test/test',
+    url: 'https://github.com/test/test',
+  };
+  
+  const { title, body } = await getComprehensiveMarkdownBody(locale);
+  
+  const testRelease: GithubRelease = {
+    id: 12345,
+    html_url: 'https://github.com/test/test/releases/tag/v1.0.0',
+    tag_name: 'v1.0.0-test',
+    name: title,
+    body: body,
+    created_at: new Date().toISOString(),
+    published_at: new Date().toISOString(),
+    prerelease: false,
+    draft: false,
+  };
+
+  try {
+    const settings = await getSettings();
+    await sendTestAppriseNotification(testRepo, testRelease, locale, settings);
+    return { success: true };
+  } catch (error: any) {
+    console.error(`sendTestAppriseAction failed: ${error instanceof Error ? error.message : String(error)}`);
+    // Pass the specific error message to the UI.
+    // If it's not an Error object, convert it to a string.
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
+  const { APPRISE_URL } = process.env;
+  if (!APPRISE_URL) {
+    return { status: 'not_configured' };
+  }
+
+  const locale = await getLocale();
+  const t = await getTranslations({ locale, namespace: 'TestPage' });
+
+  // Apprise URLs can be comma-separated. We only need to check the base of the first one.
+  const firstUrl = APPRISE_URL.split(',')[0].trim();
+  
+  try {
+    // Construct the status URL. We need to handle URLs that might have paths/tags.
+    const urlObject = new URL(firstUrl);
+    const statusUrl = `${urlObject.protocol}//${urlObject.host}/status`;
+    
+    const response = await fetch(statusUrl, {
+      headers: {
+        'Accept': 'application/json'
+      },
+      cache: 'no-store'
+    });
+
+    if (response.ok) {
+      return { status: 'ok' };
+    } else {
+      return { 
+        status: 'error',
+        error: t('apprise_connection_error_status', {status: response.status}),
+      };
+    }
+  } catch (error) {
+    // This will catch network errors like ENOTFOUND, ECONNREFUSED etc.
+    // The structured response is sufficient to inform the UI.
+    return {
+      status: 'error',
+      error: t('apprise_connection_error_fetch')
     };
   }
 }
@@ -994,3 +1083,5 @@ export async function updateRepositorySettingsAction(
 export async function revalidateReleasesAction() {
   revalidateTag('github-releases');
 }
+
+    

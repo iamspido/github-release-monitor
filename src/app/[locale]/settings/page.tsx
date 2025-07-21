@@ -10,6 +10,7 @@ export default async function SettingsPage({params}: {params: Promise<{locale: s
   const { locale } = await params;
   const t = await getTranslations({locale: locale, namespace: 'SettingsPage'});
   const currentSettings: AppSettings = await getSettings();
+  const isAppriseConfigured = !!process.env.APPRISE_URL;
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
@@ -17,7 +18,10 @@ export default async function SettingsPage({params}: {params: Promise<{locale: s
       <main className="container mx-auto px-4 py-8 md:px-6">
         <div className="mx-auto max-w-2xl">
             <h2 className="mb-8 text-3xl font-bold tracking-tight break-words">{t('title')}</h2>
-            <SettingsForm currentSettings={currentSettings} />
+            <SettingsForm
+              currentSettings={currentSettings}
+              isAppriseConfigured={isAppriseConfigured}
+            />
         </div>
       </main>
     </div>

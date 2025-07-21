@@ -94,9 +94,10 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
 
 interface SettingsFormProps {
   currentSettings: AppSettings;
+  isAppriseConfigured: boolean;
 }
 
-export function SettingsForm({ currentSettings }: SettingsFormProps) {
+export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsFormProps) {
   const t = useTranslations('SettingsForm');
   const router = useRouter();
   const pathname = usePathname();
@@ -112,6 +113,7 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
   const [showMarkAsNew, setShowMarkAsNew] = React.useState<boolean>(currentSettings.showMarkAsNew ?? true);
   const [includeRegex, setIncludeRegex] = React.useState(currentSettings.includeRegex ?? '');
   const [excludeRegex, setExcludeRegex] = React.useState(currentSettings.excludeRegex ?? '');
+  const [appriseMaxCharacters, setAppriseMaxCharacters] = React.useState(String(currentSettings.appriseMaxCharacters ?? 1800));
   
   const [days, setDays] = React.useState(() => String(minutesToDhms(currentSettings.refreshInterval).d));
   const [hours, setHours] = React.useState(() => String(minutesToDhms(currentSettings.refreshInterval).h));
@@ -147,6 +149,8 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
     const hCache = parseInt(cacheHours, 10) || 0;
     const mCache = parseInt(cacheMinutes, 10) || 0;
     const totalCacheMinutes = (dCache * MINUTES_IN_DAY) + (hCache * MINUTES_IN_HOUR) + mCache;
+
+    const parsedAppriseChars = parseInt(appriseMaxCharacters, 10);
     
     return {
       timeFormat,
@@ -160,8 +164,11 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
       showMarkAsNew,
       includeRegex: includeRegex,
       excludeRegex: excludeRegex,
+      // Handle the case where parsing results in NaN (e.g., empty string)
+      // and explicitly check for it. This allows `0` to be a valid value.
+      appriseMaxCharacters: isNaN(parsedAppriseChars) ? 1800 : parsedAppriseChars,
     };
-  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, timeFormat, locale, channels, preReleaseSubChannels, showAcknowledge, showMarkAsNew, includeRegex, excludeRegex]);
+  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, timeFormat, locale, channels, preReleaseSubChannels, showAcknowledge, showMarkAsNew, includeRegex, excludeRegex, appriseMaxCharacters]);
   
   // Effect for validation
   React.useEffect(() => {
@@ -224,7 +231,7 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
         return;
     }
 
-    const hasEmptyFields = [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage].some(val => val === '');
+    const hasEmptyFields = [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, appriseMaxCharacters].some(val => val === '');
     if (hasEmptyFields || intervalError || isCacheInvalid || releasesPerPageError || includeRegexError || excludeRegexError) {
         setSaveStatus('idle');
         return; // Don't proceed to save if fields are empty or invalid
@@ -260,7 +267,7 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
         clearTimeout(handler);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newSettings, days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, intervalError, isCacheInvalid, releasesPerPageError, includeRegexError, excludeRegexError]);
+  }, [newSettings, days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, intervalError, isCacheInvalid, releasesPerPageError, includeRegexError, excludeRegexError, appriseMaxCharacters]);
 
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -557,6 +564,23 @@ export function SettingsForm({ currentSettings }: SettingsFormProps) {
                 <p className="mt-2 text-sm text-destructive">{t('releases_per_page_error_max')}</p>
             ) : (
                 <p className="mt-2 text-xs text-muted-foreground">{t('releases_per_page_hint')}</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="apprise-max-chars">{t('apprise_max_chars_label')}</Label>
+            <Input
+              id="apprise-max-chars"
+              type="number"
+              value={appriseMaxCharacters}
+              onChange={(e) => setAppriseMaxCharacters(e.target.value)}
+              min={0}
+              disabled={saveStatus === 'saving' || !isAppriseConfigured}
+              className="mt-2 w-full sm:w-48"
+            />
+            {isAppriseConfigured ? (
+              <p className="mt-2 text-xs text-muted-foreground">{t('apprise_max_chars_hint')}</p>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">{t('apprise_max_chars_disabled_hint')}</p>
             )}
           </div>
         </CardContent>

@@ -1,12 +1,13 @@
-
 # GitHub Release Monitor
 
-A powerful, self-hostable application to automatically monitor GitHub repository releases and receive instant email notifications. Keep track of your favorite projects without manually checking for updates.
+A powerful, self-hostable application to automatically monitor GitHub repository releases and receive instant email or Apprise notifications. Keep track of your favorite projects without manually checking for updates.
 
 ## ✨ Key Features
 
 - **Automated Release Monitoring**: Add public GitHub repositories and let the app automatically check for new releases in the background.
-- **Email Notifications**: Configure SMTP settings to receive detailed email notifications the moment a new release is detected.
+- **Flexible Notifications**:
+  - **Email**: Configure SMTP settings to receive detailed email notifications.
+  - **Apprise**: Integrate with [Apprise](https://github.com/caronc/apprise) to send notifications to over 70 services like Discord, Telegram, Slack, and more.
 - **Flexible Release Filtering**:
     - **Global Settings**: Define application-wide rules for which release types (stable, pre-release, draft) to monitor.
     - **Per-Repository Overrides**: Customize filtering rules for individual repositories.
@@ -18,7 +19,7 @@ A powerful, self-hostable application to automatically monitor GitHub repository
     - Responsive design for both desktop and mobile use.
 - **Internationalization (i18n)**: Supports English and German out of the box.
 - **Data Management**: Easily import or export your list of monitored repositories via JSON.
-- **System Diagnostics**: A built-in test page to verify GitHub API connectivity and email (SMTP) configuration.
+- **System Diagnostics**: A built-in test page to verify GitHub API connectivity and notification service (SMTP, Apprise) configuration.
 - **Secure Authentication**: Protects the application with a simple username/password login system powered by `iron-session`.
 
 <table>
@@ -39,7 +40,7 @@ A powerful, self-hostable application to automatically monitor GitHub repository
 - **UI**: [React](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Tailwind CSS](https://tailwindcss.com/), [ShadCN UI](https://ui.shadcn.com/)
 - **Internationalization**: [next-intl](https://next-intl.dev/)
 - **Authentication**: [iron-session](https://github.com/vvo/iron-session)
-- **Email**: [Nodemailer](https://nodemailer.com/)
+- **Notifications**: [Nodemailer](https://nodemailer.com/), [Apprise](https://github.com/caronc/apprise)
 
 ## 📜 License
 
@@ -101,6 +102,19 @@ Navigate to the `example/` directory. You will need to configure the environment
    MAIL_TO_ADDRESS=your-personal-email@example.com
    ```
    **Important**: For this Docker setup, `MAIL_HOST` is correctly set to `smtp` and `MAIL_PORT` to `25`. You do not need a `MAIL_USERNAME` or `MAIL_PASSWORD` for the local relay.
+   
+   **Apprise Configuration (Optional)**
+   Connect to an Apprise service for multi-platform notifications.
+   ```env
+   # The URL to your Apprise API service (e.g., the container running Apprise).
+   # This URL should point to the base of the Apprise service, not a specific notification URL.
+   # Example: APPRISE_URL=http://apprise:8000
+   # 
+   # IMPORTANT: The configuration of the actual notification services (e.g., Telegram bots,
+   # Discord webhooks) is done within the Apprise application itself, by setting up your
+   # notification URLs there. This application only needs to know how to reach your Apprise service.
+   APPRISE_URL=
+   ```
 
 3. Edit `compose.yaml`.
 4. Update the Traefik router rule to use your domain name:
@@ -289,7 +303,7 @@ GITHUB_ACCESS_TOKEN=your_github_pat_here
 
 #### **Email (SMTP) Configuration (Optional)**
 
-These variables are required if you want to receive email notifications for new releases.
+These variables are required if you want to receive email notifications.
 
 ```env
 # Your SMTP server details.
@@ -302,6 +316,20 @@ MAIL_PASSWORD=your_email_password_or_app_token
 MAIL_FROM_ADDRESS=notifications@your-domain.com
 MAIL_FROM_NAME=GitHub Release Monitor
 MAIL_TO_ADDRESS=your-personal-email@example.com
+```
+
+#### **Apprise Configuration (Optional)**
+
+Connect to an Apprise service for multi-platform notifications.
+```env
+# The URL to your Apprise API service (e.g., the container running Apprise).
+# This URL should point to the base of the Apprise service, not a specific notification URL.
+# Example: APPRISE_URL=http://localhost:8000
+# 
+# IMPORTANT: The configuration of the actual notification services (e.g., Telegram bots,
+# Discord webhooks) is done within the Apprise application itself, by setting up your
+# notification URLs there. This application only needs to know how to reach your Apprise service.
+APPRISE_URL=
 ```
 
 ### 5. Running the Application
@@ -346,6 +374,7 @@ Here is a complete list of all environment variables used by the application.
 | `MAIL_FROM_ADDRESS`   | The email address that notifications will be sent from.                                                 | Yes, for email        | -                          |
 | `MAIL_FROM_NAME`      | The display name for the "from" address.                                                                | No                    | `GitHub Release Monitor`   |
 | `MAIL_TO_ADDRESS`     | The email address that will receive the notifications.                                                  | Yes, for email        | -                          |
+| `APPRISE_URL`         | URL of your Apprise service. This points to the Apprise API, not a specific notification URL.             | No                    | -                          |
 | `TZ`                  | The timezone for the container (e.g., `Europe/Berlin`). Affects log timestamps and date formatting.     | No                    | System default             |
 
 ## Star History
