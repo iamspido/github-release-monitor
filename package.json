@@ -1,7 +1,7 @@
 
 {
   "name": "github-release-monitor",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "An application to monitor GitHub repository releases.",
   "private": true,
   "license": "AGPL-3.0-only",

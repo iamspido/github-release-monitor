@@ -355,7 +355,14 @@
     "table_row3_notes": "Ausgerichtete Spalten",
     "table_row4_feature": "Test mit langer URL",
     "table_row4_support": "Ja",
-    "table_row4_notes": "https://diese.ist.eine.sehr.lange.url.die.korrekt.umgebrochen.oder.getrennt.werden.sollte.in.der.ui/und/sollte/nicht/das/layout/der/karte/zerstören.com"
+    "table_row4_notes": "https://diese.ist.eine.sehr.lange.url.die.korrekt.umgebrochen.oder.getrennt.werden.sollte.in.der.ui/und/sollte/nicht/das/layout/der/karte/zerstören.com",
+    "apprise_basic_test_notification_title": "Apprise-Testbenachrichtigung",
+    "apprise_basic_test_title": "Dies ist ein einfacher Apprise-Test",
+    "apprise_basic_item_bold": "**Fetter Text** wird unterstützt.",
+    "apprise_basic_item_italic": "*Kursiver Text* wird unterstützt.",
+    "apprise_basic_item_code": "`Inline-Code` wird unterstützt.",
+    "apprise_basic_blockquote": "Zitatblöcke werden unterstützt.",
+    "apprise_basic_link_text": "Links werden ebenfalls unterstützt!"
   },
   "Apprise": {
     "title": "🚀 Neue Version: {repoId} {tagName}",

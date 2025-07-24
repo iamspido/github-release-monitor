@@ -355,7 +355,14 @@
     "table_row3_notes": "Aligned columns",
     "table_row4_feature": "Long URL Test",
     "table_row4_support": "Yes",
-    "table_row4_notes": "https://this.is.a.very.long.url.that.should.be.wrapped.or.broken.correctly.in.the.ui/and/should/not/break/the/layout/of/the/card.com"
+    "table_row4_notes": "https://this.is.a.very.long.url.that.should.be.wrapped.or.broken.correctly.in.the.ui/and/should/not/break/the/layout/of/the/card.com",
+    "apprise_basic_test_notification_title": "Apprise Test Notification",
+    "apprise_basic_test_title": "This is a basic Apprise test",
+    "apprise_basic_item_bold": "**Bold text** is supported.",
+    "apprise_basic_item_italic": "*Italic text* is supported.",
+    "apprise_basic_item_code": "`Inline code` is supported.",
+    "apprise_basic_blockquote": "Blockquotes are supported.",
+    "apprise_basic_link_text": "Links are also supported!"
   },
   "Apprise": {
     "title": "🚀 New Release: {repoId} {tagName}",

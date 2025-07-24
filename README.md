@@ -71,7 +71,7 @@ Navigate to the `example/` directory. You will need to configure the environment
    # A long, random string (at least 32 characters) used to encrypt session cookies.
    # You can generate one using: openssl rand -base64 32
    AUTH_SECRET=your_super_secret_session_password_here
-   
+
    # The username and password for logging into the application.
    AUTH_USERNAME=admin
    AUTH_PASSWORD=your_secure_password
@@ -102,17 +102,23 @@ Navigate to the `example/` directory. You will need to configure the environment
    MAIL_TO_ADDRESS=your-personal-email@example.com
    ```
    **Important**: For this Docker setup, `MAIL_HOST` is correctly set to `smtp` and `MAIL_PORT` to `25`. You do not need a `MAIL_USERNAME` or `MAIL_PASSWORD` for the local relay.
-   
+
    **Apprise Configuration (Optional)**
    Connect to an Apprise service for multi-platform notifications.
    ```env
-   # The URL to your Apprise API service (e.g., the container running Apprise).
-   # This URL should point to the base of the Apprise service, not a specific notification URL.
-   # Example: APPRISE_URL=http://apprise:8000
-   # 
+   # This URL points to your Apprise service's notification endpoint.
+   #
+   # Case 1: For stateless notifications via `APPRISE_STATELESS_URLS` in Apprise,
+   # use the general notify endpoint.
+   # APPRISE_URL=http://apprise:8000/notify
+   #
+   # Case 2: For notifications configured via the Apprise web UI, include the
+   # specific configuration key in the path.
+   # APPRISE_URL=http://apprise:8000/notify/your_key
+   #
    # IMPORTANT: The configuration of the actual notification services (e.g., Telegram bots,
-   # Discord webhooks) is done within the Apprise application itself, by setting up your
-   # notification URLs there. This application only needs to know how to reach your Apprise service.
+   # Discord webhooks) is done within the Apprise application itself, either via environment
+   # variables or its web UI.
    APPRISE_URL=
    ```
 
@@ -322,13 +328,19 @@ MAIL_TO_ADDRESS=your-personal-email@example.com
 
 Connect to an Apprise service for multi-platform notifications.
 ```env
-# The URL to your Apprise API service (e.g., the container running Apprise).
-# This URL should point to the base of the Apprise service, not a specific notification URL.
-# Example: APPRISE_URL=http://localhost:8000
-# 
+# This URL points to your Apprise service's notification endpoint.
+#
+# Case 1: For stateless notifications via `APPRISE_STATELESS_URLS` in Apprise,
+# use the general notify endpoint.
+# APPRISE_URL=http://localhost:8000/notify
+#
+# Case 2: For notifications configured via the Apprise web UI, include the
+# specific configuration key in the path.
+# APPRISE_URL=http://localhost:8000/notify/your_key
+#
 # IMPORTANT: The configuration of the actual notification services (e.g., Telegram bots,
-# Discord webhooks) is done within the Apprise application itself, by setting up your
-# notification URLs there. This application only needs to know how to reach your Apprise service.
+# Discord webhooks) is done within the Apprise application itself, either via environment
+# variables or its web UI.
 APPRISE_URL=
 ```
 
@@ -374,7 +386,7 @@ Here is a complete list of all environment variables used by the application.
 | `MAIL_FROM_ADDRESS`   | The email address that notifications will be sent from.                                                 | Yes, for email        | -                          |
 | `MAIL_FROM_NAME`      | The display name for the "from" address.                                                                | No                    | `GitHub Release Monitor`   |
 | `MAIL_TO_ADDRESS`     | The email address that will receive the notifications.                                                  | Yes, for email        | -                          |
-| `APPRISE_URL`         | URL of your Apprise service. This points to the Apprise API, not a specific notification URL.             | No                    | -                          |
+| `APPRISE_URL`         | URL of your Apprise service's notification endpoint (e.g., http://host/notify or http://host/notify/key). | No                    | -                          |
 | `TZ`                  | The timezone for the container (e.g., `Europe/Berlin`). Affects log timestamps and date formatting.     | No                    | System default             |
 
 ## Star History

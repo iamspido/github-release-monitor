@@ -44,7 +44,16 @@ async function sendAppriseNotification(repository: Repository, release: GithubRe
     }
 
     try {
-        const response = await fetch(`${APPRISE_URL}/notify`, {
+        // Determine the final notification URL.
+        // If APPRISE_URL already contains `/notify`, use it directly.
+        // Otherwise, append `/notify` for backward compatibility.
+        const normalizedAppriseUrl = APPRISE_URL.replace(/\/+$/, '');
+
+        const notifyUrl = /\/notify(\/|$)/.test(normalizedAppriseUrl)
+            ? normalizedAppriseUrl
+            : `${normalizedAppriseUrl}/notify`;
+        
+        const response = await fetch(notifyUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

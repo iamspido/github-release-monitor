@@ -169,6 +169,26 @@ ${jsCodeExample}
   }
 }
 
+async function getBasicMarkdownBodyForApprise(locale: string): Promise<{ title: string; body: string }> {
+  const t = await getTranslations({ locale, namespace: 'TestRelease' });
+
+  const body = `**${t('apprise_basic_test_title')}**
+  
+  - ${t('apprise_basic_item_bold')}
+  - ${t('apprise_basic_item_italic')}
+  - \`${t('apprise_basic_item_code')}\`
+  
+  > ${t('apprise_basic_blockquote')}
+  
+  [${t('apprise_basic_link_text')}](https://github.com/iamspido/github-release-monitor)`;
+
+  return {
+    title: t('apprise_basic_test_notification_title'),
+    body: body,
+  };
+}
+
+
 async function fetchLatestRelease(
   owner: string,
   repo: string,
@@ -656,9 +676,7 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
     `[${new Date().toISOString()}] Running check for new releases...`
   );
   const settings = await getSettings();
-  // Use the override locale if provided (for manual triggers), otherwise use the one from settings
   const effectiveLocale = options?.overrideLocale || settings.locale;
-  const t = await getTranslations({locale: effectiveLocale, namespace: 'Email'});
 
   const repos = await getRepositories();
   if (repos.length === 0) {
@@ -670,7 +688,7 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
     repos, 
     settings, 
     effectiveLocale, 
-    { skipCache: options?.skipCache } // Pass down the skipCache option
+    { skipCache: options?.skipCache }
   );
 
   let updatedRepos = [...repos];
@@ -685,24 +703,25 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
       if (repoIndex !== -1) {
         const repo = updatedRepos[repoIndex];
         const newTag = enrichedRelease.release.tag_name;
+        const isNewRelease = repo.lastSeenReleaseTag && repo.lastSeenReleaseTag !== newTag;
 
-        if (repo.lastSeenReleaseTag && repo.lastSeenReleaseTag !== newTag) {
+        if (isNewRelease) {
           console.log(
             `New release detected for ${repo.id}: ${newTag} (previously ${repo.lastSeenReleaseTag})`
           );
+          
+          const shouldHighlight = settings.showAcknowledge ?? true;
+          // Always update tag and 'isNew' status, regardless of notification success
+          updatedRepos[repoIndex] = {...repo, lastSeenReleaseTag: newTag, isNew: shouldHighlight};
+          changed = true;
+          
           try {
-            await sendNotification(repo, enrichedRelease.release, effectiveLocale, settings);
-            notificationsSent++;
-
-            // If notification is sent successfully, THEN update the tag.
-            const shouldHighlight = settings.showAcknowledge ?? true;
-            updatedRepos[repoIndex] = {...repo, lastSeenReleaseTag: newTag, isNew: shouldHighlight};
-            changed = true;
-
+              await sendNotification(repo, enrichedRelease.release, effectiveLocale, settings);
+              notificationsSent++;
           } catch(e: any) {
-            // If sending fails, we log the error but DO NOT update the tag.
-            // The next run of checkForNewReleases will try again.
-            console.error(`Failed to send notification for ${repo.id}. The release tag will not be updated, and the system will try again on the next check. Error: ${e.message}`);
+            // If sending fails, we log the error but DO NOT revert the tag update.
+            // The notification failure should not block the app from recognizing future releases.
+            console.error(`Failed to send notification for ${repo.id}. The release tag HAS been updated to prevent repeated failures for the same release. Error: ${e.message}`);
           }
         } else if (!repo.lastSeenReleaseTag) {
           console.log(
@@ -723,6 +742,7 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
   }
    return { notificationsSent, checked: repos.length };
 }
+
 
 // --- Dynamic Background Polling ---
 
@@ -947,7 +967,7 @@ export async function sendTestAppriseAction(): Promise<{
     url: 'https://github.com/test/test',
   };
   
-  const { title, body } = await getComprehensiveMarkdownBody(locale);
+  const { title, body } = await getBasicMarkdownBodyForApprise(locale);
   
   const testRelease: GithubRelease = {
     id: 12345,
@@ -966,9 +986,7 @@ export async function sendTestAppriseAction(): Promise<{
     await sendTestAppriseNotification(testRepo, testRelease, locale, settings);
     return { success: true };
   } catch (error: any) {
-    console.error(`sendTestAppriseAction failed: ${error instanceof Error ? error.message : String(error)}`);
-    // Pass the specific error message to the UI.
-    // If it's not an Error object, convert it to a string.
+    // We log the detailed error in sendAppriseNotification. Here, we pass it up.
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),
@@ -984,13 +1002,11 @@ export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
 
   const locale = await getLocale();
   const t = await getTranslations({ locale, namespace: 'TestPage' });
-
-  // Apprise URLs can be comma-separated. We only need to check the base of the first one.
-  const firstUrl = APPRISE_URL.split(',')[0].trim();
   
   try {
-    // Construct the status URL. We need to handle URLs that might have paths/tags.
-    const urlObject = new URL(firstUrl);
+    // The base URL for the status check is derived by removing any path from the provided URL.
+    // This allows the user to provide http://host/notify/key while we still check http://host/status.
+    const urlObject = new URL(APPRISE_URL);
     const statusUrl = `${urlObject.protocol}//${urlObject.host}/status`;
     
     const response = await fetch(statusUrl, {
@@ -1009,8 +1025,6 @@ export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
       };
     }
   } catch (error) {
-    // This will catch network errors like ENOTFOUND, ECONNREFUSED etc.
-    // The structured response is sufficient to inform the UI.
     return {
       status: 'error',
       error: t('apprise_connection_error_fetch')
