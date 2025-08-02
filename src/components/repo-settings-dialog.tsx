@@ -85,7 +85,7 @@ interface RepoSettingsDialogProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   repoId: string;
-  currentRepoSettings?: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex'>;
+  currentRepoSettings?: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags'>;
   globalSettings: AppSettings;
 }
 
@@ -102,6 +102,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const [releasesPerPage, setReleasesPerPage] = React.useState<string | number>(currentRepoSettings?.releasesPerPage ?? '');
   const [includeRegex, setIncludeRegex] = React.useState(currentRepoSettings?.includeRegex ?? '');
   const [excludeRegex, setExcludeRegex] = React.useState(currentRepoSettings?.excludeRegex ?? '');
+  const [appriseTags, setAppriseTags] = React.useState(currentRepoSettings?.appriseTags ?? '');
   
   // Validation state
   const [releasesPerPageError, setReleasesPerPageError] = React.useState<ReleasesPerPageError>(null);
@@ -118,13 +119,14 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const useGlobalReleasesPerPage = String(releasesPerPage).trim() === '';
   const useGlobalIncludeRegex = includeRegex.trim() === '';
   const useGlobalExcludeRegex = excludeRegex.trim() === '';
+  const useGlobalAppriseTags = appriseTags.trim() === '';
 
 
   // This will be used to disable the "Reset All" button.
-  const isUsingAllGlobalSettings = useGlobalChannels && useGlobalReleasesPerPage && useGlobalIncludeRegex && useGlobalExcludeRegex;
+  const isUsingAllGlobalSettings = useGlobalChannels && useGlobalReleasesPerPage && useGlobalIncludeRegex && useGlobalExcludeRegex && useGlobalAppriseTags;
 
 
-  const newSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex'> = React.useMemo(() => {
+  const newSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags'> = React.useMemo(() => {
     let finalReleasesPerPage: number | null = null;
     const releasesPerPageStr = String(releasesPerPage).trim();
 
@@ -141,8 +143,9 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
       releasesPerPage: finalReleasesPerPage,
       includeRegex: includeRegex.trim() || undefined,
       excludeRegex: excludeRegex.trim() || undefined,
+      appriseTags: appriseTags.trim() || undefined,
     };
-  }, [channels, preReleaseSubChannels, releasesPerPage, includeRegex, excludeRegex]);
+  }, [channels, preReleaseSubChannels, releasesPerPage, includeRegex, excludeRegex, appriseTags]);
   
   // Ref to store the previous settings for comparison
   const prevSettingsRef = React.useRef(newSettings);
@@ -156,12 +159,14 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
         releasesPerPage: currentRepoSettings?.releasesPerPage ?? null,
         includeRegex: currentRepoSettings?.includeRegex ?? undefined,
         excludeRegex: currentRepoSettings?.excludeRegex ?? undefined,
+        appriseTags: currentRepoSettings?.appriseTags ?? undefined,
       };
       setChannels(initialSettings.releaseChannels);
       setPreReleaseSubChannels(initialSettings.preReleaseSubChannels);
       setReleasesPerPage(initialSettings.releasesPerPage ?? '');
       setIncludeRegex(initialSettings.includeRegex ?? '');
       setExcludeRegex(initialSettings.excludeRegex ?? '');
+      setAppriseTags(initialSettings.appriseTags ?? '');
       
       setSaveStatus('idle');
       setHasChanged(false);
@@ -303,6 +308,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     setReleasesPerPage('');
     setIncludeRegex('');
     setExcludeRegex('');
+    setAppriseTags('');
   }
 
   const handleResetFilters = () => {
@@ -327,6 +333,8 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const effectivePreReleaseSubChannels = useGlobalSubChannels
     ? (globalSettings.preReleaseSubChannels || allPreReleaseTypes)
     : preReleaseSubChannels;
+
+  const isAppriseConfigured = !!globalSettings.appriseMaxCharacters;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -486,6 +494,41 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
             ) : releasesPerPageError === 'too_high' ? (
                 <p className="mt-2 text-sm text-destructive">{tGlobal('releases_per_page_error_max')}</p>
             ) : null }
+          </div>
+
+          <div className="space-y-4 p-4 border rounded-md">
+            <div className="flex justify-between items-center">
+              <h4 className="font-semibold text-base">{t('apprise_tags_label')}</h4>
+            </div>
+             <p className="text-xs text-muted-foreground">
+              {useGlobalAppriseTags ? t('apprise_tags_hint_global') : t('apprise_tags_hint_individual')}
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                id="apprise-tags-repo"
+                type="text"
+                value={appriseTags}
+                onChange={(e) => setAppriseTags(e.target.value)}
+                placeholder={t('apprise_tags_placeholder', { tags: globalSettings.appriseTags || '...' })}
+                disabled={!isAppriseConfigured}
+              />
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" onClick={() => setAppriseTags('')} className="size-8 shrink-0">
+                        <RotateCcw className="size-4" />
+                        <span className="sr-only">{t('reset_to_global_button')}</span>
+                      </Button>
+                  </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{t('reset_to_global_tooltip')}</p>
+                    </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            {!isAppriseConfigured && (
+              <p className="mt-2 text-xs text-muted-foreground">{tGlobal('apprise_tags_disabled_hint')}</p>
+            )}
           </div>
         </div>
         <div className="pt-2">

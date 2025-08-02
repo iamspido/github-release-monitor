@@ -43,6 +43,19 @@ async function sendAppriseNotification(repository: Repository, release: GithubRe
         body = `${body}${footerSeparator}${viewOnGithubText}`;
     }
 
+    // Determine which tags to use: repository-specific tags override global tags.
+    const tags = repository.appriseTags ?? settings.appriseTags;
+
+    const payload: { title: string; body: string; format: 'markdown'; tag?: string } = {
+        title: title,
+        body: body,
+        format: 'markdown',
+    };
+
+    if (tags) {
+        payload.tag = tags;
+    }
+
     try {
         // Determine the final notification URL.
         // If APPRISE_URL already contains `/notify`, use it directly.
@@ -58,11 +71,7 @@ async function sendAppriseNotification(repository: Repository, release: GithubRe
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                title: title,
-                body: body,
-                format: 'markdown',
-            }),
+            body: JSON.stringify(payload),
         });
 
         if (!response.ok) {

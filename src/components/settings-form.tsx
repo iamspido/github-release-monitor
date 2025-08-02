@@ -114,6 +114,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
   const [includeRegex, setIncludeRegex] = React.useState(currentSettings.includeRegex ?? '');
   const [excludeRegex, setExcludeRegex] = React.useState(currentSettings.excludeRegex ?? '');
   const [appriseMaxCharacters, setAppriseMaxCharacters] = React.useState(String(currentSettings.appriseMaxCharacters ?? 1800));
+  const [appriseTags, setAppriseTags] = React.useState(currentSettings.appriseTags ?? '');
   
   const [days, setDays] = React.useState(() => String(minutesToDhms(currentSettings.refreshInterval).d));
   const [hours, setHours] = React.useState(() => String(minutesToDhms(currentSettings.refreshInterval).h));
@@ -167,8 +168,9 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
       // Handle the case where parsing results in NaN (e.g., empty string)
       // and explicitly check for it. This allows `0` to be a valid value.
       appriseMaxCharacters: isNaN(parsedAppriseChars) ? 1800 : parsedAppriseChars,
+      appriseTags,
     };
-  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, timeFormat, locale, channels, preReleaseSubChannels, showAcknowledge, showMarkAsNew, includeRegex, excludeRegex, appriseMaxCharacters]);
+  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, timeFormat, locale, channels, preReleaseSubChannels, showAcknowledge, showMarkAsNew, includeRegex, excludeRegex, appriseMaxCharacters, appriseTags]);
   
   // Effect for validation
   React.useEffect(() => {
@@ -267,7 +269,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
         clearTimeout(handler);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newSettings, days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, intervalError, isCacheInvalid, releasesPerPageError, includeRegexError, excludeRegexError, appriseMaxCharacters]);
+  }, [newSettings, days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, intervalError, isCacheInvalid, releasesPerPageError, includeRegexError, excludeRegexError, appriseMaxCharacters, appriseTags]);
 
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -581,6 +583,23 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
               <p className="mt-2 text-xs text-muted-foreground">{t('apprise_max_chars_hint')}</p>
             ) : (
               <p className="mt-2 text-xs text-muted-foreground">{t('apprise_max_chars_disabled_hint')}</p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="apprise-tags">{t('apprise_tags_label')}</Label>
+            <Input
+              id="apprise-tags"
+              type="text"
+              value={appriseTags}
+              onChange={(e) => setAppriseTags(e.target.value)}
+              disabled={saveStatus === 'saving' || !isAppriseConfigured}
+              className="mt-2 w-full"
+              placeholder={t('apprise_tags_placeholder')}
+            />
+            {isAppriseConfigured ? (
+                <p className="mt-2 text-xs text-muted-foreground">{t('apprise_tags_hint')}</p>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">{t('apprise_tags_disabled_hint')}</p>
             )}
           </div>
         </CardContent>

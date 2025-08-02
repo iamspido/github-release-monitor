@@ -26,6 +26,7 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         refreshInterval: Math.max(1, newSettings.refreshInterval),
         includeRegex: newSettings.includeRegex?.trim() || undefined,
         excludeRegex: newSettings.excludeRegex?.trim() || undefined,
+        appriseTags: newSettings.appriseTags?.trim() || undefined,
     };
 
 

@@ -124,6 +124,10 @@
     "apprise_max_chars_label": "Max characters for Apprise messages",
     "apprise_max_chars_hint": "Set to 0 to disable the limit. Useful for services like Discord (limit ~2000).",
     "apprise_max_chars_disabled_hint": "This option is disabled because the Apprise URL is not configured.",
+    "apprise_tags_label": "Global Apprise Tags",
+    "apprise_tags_hint": "Comma-separated list of tags to send to Apprise.",
+    "apprise_tags_placeholder": "e.g., tag1,tag2",
+    "apprise_tags_disabled_hint": "This option is disabled because the Apprise URL is not configured.",
     "cache_settings_title": "Cache Settings",
     "cache_settings_description": "Configure how long release data is cached on the server to reduce API calls. Set to 0 to disable cache.",
     "cache_validation_error": "Cache duration cannot be longer than the refresh interval.",
@@ -188,7 +192,11 @@
     "autosave_saving": "Saving...",
     "autosave_success": "All changes saved",
     "autosave_success_short": "Saved",
-    "autosave_error": "Error"
+    "autosave_error": "Error",
+    "apprise_tags_label": "Apprise Tags",
+    "apprise_tags_placeholder": "Global: {tags}",
+    "apprise_tags_hint_global": "Using global setting.",
+    "apprise_tags_hint_individual": "Using individual setting. Leave blank to use global."
   },
   "TestPage": {
     "title": "System Configuration Test",

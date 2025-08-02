@@ -427,6 +427,7 @@ export async function getLatestReleasesForRepos(
         releasesPerPage: repo.releasesPerPage,
         includeRegex: repo.includeRegex,
         excludeRegex: repo.excludeRegex,
+        appriseTags: repo.appriseTags,
       };
 
       const { release: latestRelease, error } = await fetchLatestReleaseWithCache(
@@ -581,13 +582,14 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
         releasesPerPage: importedRepo.releasesPerPage,
         includeRegex: importedRepo.includeRegex,
         excludeRegex: importedRepo.excludeRegex,
+        appriseTags: importedRepo.appriseTags,
       };
 
       currentReposMap.set(importedRepo.id, repoToSave);
     }
 
-    const finalRepoList = Array.from(currentReposMap.values());
-    await saveRepositories(finalRepoList);
+    const finalList = Array.from(currentReposMap.values());
+    await saveRepositories(finalList);
     revalidatePath('/');
 
     return {
@@ -1057,7 +1059,7 @@ export async function getRepositoriesForExport(): Promise<{ success: boolean; da
 
 export async function updateRepositorySettingsAction(
   repoId: string,
-  settings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex'>
+  settings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags'>
 ): Promise<{ success: boolean; error?: string }> {
   // Security: Validate input
   if (!isValidRepoId(repoId)) {
@@ -1083,6 +1085,7 @@ export async function updateRepositorySettingsAction(
       releasesPerPage: settings.releasesPerPage,
       includeRegex: settings.includeRegex,
       excludeRegex: settings.excludeRegex,
+      appriseTags: settings.appriseTags,
     };
 
     await saveRepositories(currentRepos);
@@ -1097,5 +1100,3 @@ export async function updateRepositorySettingsAction(
 export async function revalidateReleasesAction() {
   revalidateTag('github-releases');
 }
-
-    

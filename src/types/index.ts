@@ -11,6 +11,7 @@ export type Repository = {
   releasesPerPage?: number | null;
   includeRegex?: string;
   excludeRegex?: string;
+  appriseTags?: string;
 };
 
 export type GithubRelease = {
@@ -42,6 +43,7 @@ export type EnrichedRelease = {
     releasesPerPage?: number | null;
     includeRegex?: string;
     excludeRegex?: string;
+    appriseTags?: string;
   }
 };
 
@@ -104,6 +106,7 @@ export type AppSettings = {
   includeRegex?: string;
   excludeRegex?: string;
   appriseMaxCharacters?: number;
+  appriseTags?: string;
 };
 
 // Session Data

@@ -124,6 +124,10 @@
     "apprise_max_chars_label": "Max. Zeichen für Apprise-Nachrichten",
     "apprise_max_chars_hint": "Auf 0 setzen, um das Limit zu deaktivieren. Nützlich für Dienste wie Discord (Limit ~2000).",
     "apprise_max_chars_disabled_hint": "Diese Option ist deaktiviert, da die Apprise-URL nicht konfiguriert ist.",
+    "apprise_tags_label": "Globale Apprise-Tags",
+    "apprise_tags_hint": "Komma-getrennte Liste von Tags, die an Apprise gesendet werden sollen.",
+    "apprise_tags_placeholder": "z.B. tag1,tag2",
+    "apprise_tags_disabled_hint": "Diese Option ist deaktiviert, da die Apprise-URL nicht konfiguriert ist.",
     "cache_settings_title": "Cache-Einstellungen",
     "cache_settings_description": "Konfigurieren Sie, wie lange Release-Daten auf dem Server zwischengespeichert werden, um API-Aufrufe zu reduzieren. Auf 0 setzen, um den Cache zu deaktivieren.",
     "cache_validation_error": "Die Cache-Dauer darf nicht länger als das Aktualisierungsintervall sein.",
@@ -188,7 +192,11 @@
     "autosave_saving": "Speichern...",
     "autosave_success": "Alle Änderungen gespeichert",
     "autosave_success_short": "Gespeichert",
-    "autosave_error": "Fehler"
+    "autosave_error": "Fehler",
+    "apprise_tags_label": "Apprise Tags",
+    "apprise_tags_placeholder": "Global: {tags}",
+    "apprise_tags_hint_global": "Globale Einstellung wird verwendet.",
+    "apprise_tags_hint_individual": "Individuelle Einstellung aktiv. Leer lassen, um global zu verwenden."
   },
   "TestPage": {
     "title": "Systemkonfigurationstest",
