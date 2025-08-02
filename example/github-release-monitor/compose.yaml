@@ -38,7 +38,7 @@ services:
         max-size: "50m"
     restart: "unless-stopped"
     networks:
-      - "apprise-api"
+      - "apprise"
       - "traefik-net"
       - "smtp"
 
@@ -80,12 +80,12 @@ services:
         max-size: "50m"
     restart: "unless-stopped"
     networks:
-      - "apprise-api"
+      - "apprise"
       - "traefik-net"
       - "smtp"
 
 networks:
-  apprise-api:
+  apprise:
     driver: "bridge"
   traefik-net:
     name: traefik-net
