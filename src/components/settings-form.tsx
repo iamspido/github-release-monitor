@@ -47,10 +47,8 @@ import {
 
 const MINUTES_IN_DAY = 24 * 60;
 const MINUTES_IN_HOUR = 60;
-// Security: Prevents unrealistically high values (approx. 10 years)
 const MAX_INTERVAL_MINUTES = 5256000;
 
-// Helper to convert total minutes into days, hours, minutes
 function minutesToDhms(totalMinutes: number) {
     const d = Math.floor(totalMinutes / MINUTES_IN_DAY);
     const h = Math.floor((totalMinutes % MINUTES_IN_DAY) / MINUTES_IN_HOUR);
@@ -103,7 +101,6 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
   const pathname = usePathname();
   const { toast } = useToast();
 
-  // Component State
   const [timeFormat, setTimeFormat] = React.useState<TimeFormat>(currentSettings.timeFormat);
   const [locale, setLocale] = React.useState<Locale>(currentSettings.locale);
   const [releasesPerPage, setReleasesPerPage] = React.useState(String(currentSettings.releasesPerPage || 30));
@@ -125,22 +122,17 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
   const [cacheHours, setCacheHours] = React.useState(() => String(minutesToDhms(currentSettings.cacheInterval).h));
   const [cacheMinutes, setCacheMinutes] = React.useState(() => String(minutesToDhms(currentSettings.cacheInterval).m));
 
-  // Validation State
   const [intervalError, setIntervalError] = React.useState<IntervalValidationError>(null);
   const [releasesPerPageError, setReleasesPerPageError] = React.useState<ReleasesPerPageError>(null);
   const [isCacheInvalid, setIsCacheInvalid] = React.useState(false);
   const [includeRegexError, setIncludeRegexError] = React.useState<RegexError>(null);
   const [excludeRegexError, setExcludeRegexError] = React.useState<RegexError>(null);
 
-
-  // Autosave State
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>('idle');
   const isInitialMount = React.useRef(true);
   
-  // Deletion State
   const [isDeleting, startDeleteTransition] = React.useTransition();
 
-  // Derived state for the settings object
   const newSettings: AppSettings = React.useMemo(() => {
     const d = parseInt(days, 10) || 0;
     const h = parseInt(hours, 10) || 0;
@@ -166,15 +158,12 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
       showMarkAsNew,
       includeRegex: includeRegex,
       excludeRegex: excludeRegex,
-      // Handle the case where parsing results in NaN (e.g., empty string)
-      // and explicitly check for it. This allows `0` to be a valid value.
       appriseMaxCharacters: isNaN(parsedAppriseChars) ? 1800 : parsedAppriseChars,
       appriseTags,
       appriseFormat,
     };
   }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, timeFormat, locale, channels, preReleaseSubChannels, showAcknowledge, showMarkAsNew, includeRegex, excludeRegex, appriseMaxCharacters, appriseTags, appriseFormat]);
   
-  // Effect for validation
   React.useEffect(() => {
     const refreshFieldsFilled = days !== '' && hours !== '' && minutes !== '';
     const cacheFieldsFilled = cacheDays !== '' && cacheHours !== '' && cacheMinutes !== '';
@@ -196,7 +185,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
         const numReleases = parseInt(releasesPerPage, 10);
         if (numReleases < 1) {
             setReleasesPerPageError('too_low');
-        } else if (numReleases > 100) {
+        } else if (numReleases > 1000) {
             setReleasesPerPageError('too_high');
         } else {
             setReleasesPerPageError(null);
@@ -219,8 +208,6 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
         setExcludeRegexError('invalid');
     }
     
-
-    // Rule 2: Cache interval must not be greater than refresh interval (if cache > 0)
     const isCacheEnabled = newSettings.cacheInterval > 0;
     const cacheIsLarger = newSettings.cacheInterval > newSettings.refreshInterval;
     setIsCacheInvalid(refreshFieldsFilled && cacheFieldsFilled && isCacheEnabled && cacheIsLarger);
@@ -228,7 +215,6 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
   }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, newSettings.refreshInterval, newSettings.cacheInterval, includeRegex, excludeRegex]);
 
 
-  // Effect for debounced autosaving
   React.useEffect(() => {
     if (isInitialMount.current) {
         isInitialMount.current = false;
@@ -238,10 +224,9 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
     const hasEmptyFields = [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, appriseMaxCharacters].some(val => val === '');
     if (hasEmptyFields || intervalError || isCacheInvalid || releasesPerPageError || includeRegexError || excludeRegexError) {
         setSaveStatus('idle');
-        return; // Don't proceed to save if fields are empty or invalid
+        return;
     }
 
-    // Settings have changed, waiting to save.
     setSaveStatus('waiting');
     
     const handler = setTimeout(async () => {
@@ -265,7 +250,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
               variant: 'destructive',
             });
         }
-    }, 1500); // 1.5-second debounce delay
+    }, 1500);
 
     return () => {
         clearTimeout(handler);
@@ -289,7 +274,6 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
     }
     setChannels(newChannels);
     
-    // If 'prerelease' is newly checked, enable all sub-channels by default.
     if (channel === 'prerelease' && newChannels.includes('prerelease')) {
       setPreReleaseSubChannels(allPreReleaseTypes);
     }
@@ -417,7 +401,6 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
               <Label htmlFor="stable" className="font-normal cursor-pointer">{t('release_channel_stable')}</Label>
             </div>
 
-            {/* Pre-release Section with sub-options */}
             <div>
                 <div className="flex items-center space-x-2">
                     <Checkbox
@@ -609,17 +592,18 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
               value={releasesPerPage}
               onChange={(e) => setReleasesPerPage(e.target.value)}
               min={1}
-              max={100}
+              max={1000}
               disabled={saveStatus === 'saving'}
               className={cn("mt-2 w-full sm:w-48", !!releasesPerPageError && 'border-destructive focus-visible:ring-destructive')}
             />
              {releasesPerPageError === 'too_low' ? (
                 <p className="mt-2 text-sm text-destructive">{t('releases_per_page_error_min')}</p>
             ) : releasesPerPageError === 'too_high' ? (
-                <p className="mt-2 text-sm text-destructive">{t('releases_per_page_error_max')}</p>
+                <p className="mt-2 text-sm text-destructive">{t('releases_per_page_error_max_1000')}</p>
             ) : (
-                <p className="mt-2 text-xs text-muted-foreground">{t('releases_per_page_hint')}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{t('releases_per_page_hint_1000')}</p>
             )}
+             <p className="mt-2 text-xs text-muted-foreground">{t('releases_per_page_api_call_hint')}</p>
           </div>
         </CardContent>
       </Card>

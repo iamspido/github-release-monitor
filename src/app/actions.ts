@@ -207,16 +207,12 @@ async function fetchLatestRelease(
     ? repoSettings.preReleaseSubChannels
     : globalSettings.preReleaseSubChannels || allPreReleaseTypes;
 
-  const releasesToFetch = (typeof repoSettings.releasesPerPage === 'number' && repoSettings.releasesPerPage >= 1 && repoSettings.releasesPerPage <= 100)
+  const totalReleasesToFetch = (typeof repoSettings.releasesPerPage === 'number' && repoSettings.releasesPerPage >= 1 && repoSettings.releasesPerPage <= 1000)
     ? repoSettings.releasesPerPage
     : globalSettings.releasesPerPage;
   
-  // Regex settings: repository settings override global settings.
   const effectiveIncludeRegex = repoSettings.includeRegex ?? globalSettings.includeRegex;
   const effectiveExcludeRegex = repoSettings.excludeRegex ?? globalSettings.excludeRegex;
-  // ---
-
-  const GITHUB_API_URL = `https://api.github.com/repos/${owner}/${repo}/releases?per_page=${releasesToFetch}`;
 
   // --- Special handling for the virtual test repository ---
   if (owner === 'test' && repo === 'test') {
@@ -235,93 +231,86 @@ async function fetchLatestRelease(
     };
     return { release, error: null };
   }
-  // --- End of special handling ---
+
+  // --- GitHub API Fetching with Pagination ---
+  const GITHUB_API_BASE_URL = `https://api.github.com/repos/${owner}/${repo}/releases`;
+  const MAX_PER_PAGE = 100;
+  const pagesToFetch = Math.ceil(totalReleasesToFetch / MAX_PER_PAGE);
+  let allReleases: GithubRelease[] = [];
 
   const headers: HeadersInit = {
     Accept: 'application/vnd.github.v3+json',
     'User-Agent': 'GitHubReleaseMonitorApp',
     'X-GitHub-Api-Version': '2022-11-28',
   };
-
   if (process.env.GITHUB_ACCESS_TOKEN) {
     headers['Authorization'] = `token ${process.env.GITHUB_ACCESS_TOKEN}`;
   }
-
   const fetchOptions: RequestInit = { headers, cache: 'no-store' };
 
   try {
-    const response = await fetch(GITHUB_API_URL, fetchOptions);
+    for (let page = 1; page <= pagesToFetch; page++) {
+      const releasesOnThisPage = Math.min(MAX_PER_PAGE, totalReleasesToFetch - allReleases.length);
+      if (releasesOnThisPage <= 0) break;
 
-    if (!response.ok) {
+      const url = `${GITHUB_API_BASE_URL}?per_page=${releasesOnThisPage}&page=${page}`;
+      const response = await fetch(url, fetchOptions);
+
+      if (!response.ok) {
         if (response.status === 404) {
-            console.error(`GitHub API error for ${owner}/${repo}: Not Found (404). The repository may not exist or is private.`);
-            return { release: null, error: { type: 'repo_not_found' } };
+          console.error(`GitHub API error for ${owner}/${repo}: Not Found (404). The repository may not exist or is private.`);
+          return { release: null, error: { type: 'repo_not_found' } };
         }
         if (response.status === 403) {
-            console.error('GitHub API rate limit likely exceeded. Please add a GITHUB_ACCESS_TOKEN to your .env file.');
-            return { release: null, error: { type: 'rate_limit' } };
+          console.error('GitHub API rate limit likely exceeded. Please add a GITHUB_ACCESS_TOKEN to your .env file.');
+          return { release: null, error: { type: 'rate_limit' } };
         }
         console.error(`GitHub API error for ${owner}/${repo}: ${response.status} ${response.statusText}`);
         return { release: null, error: { type: 'api_error' } };
+      }
+
+      const pageReleases: GithubRelease[] = await response.json();
+      allReleases = [...allReleases, ...pageReleases];
+
+      // If we receive fewer releases than we asked for, we've reached the end.
+      if (pageReleases.length < releasesOnThisPage) {
+        break;
+      }
     }
 
-    const releases: GithubRelease[] = await response.json();
-    if (releases.length === 0) {
-      // The API returned an empty array, which means the repo exists but has no releases at all.
+    if (allReleases.length === 0) {
       return { release: null, error: { type: 'no_releases_found' } };
     }
 
-    const filteredReleases = releases.filter(r => {
-      // --- New Regex Filtering Logic ---
+    const filteredReleases = allReleases.filter(r => {
       try {
-        // 1. Exclude filter has highest priority. If tag matches, it's always excluded.
         if (effectiveExcludeRegex) {
           const exclude = new RegExp(effectiveExcludeRegex, 'i');
-          if (exclude.test(r.tag_name)) {
-            return false;
-          }
+          if (exclude.test(r.tag_name)) return false;
         }
-        // 2. If include filter is present, tag MUST match it. This overrides channel filters.
         if (effectiveIncludeRegex) {
           const include = new RegExp(effectiveIncludeRegex, 'i');
           return include.test(r.tag_name);
         }
       } catch (e) {
         console.error(`Invalid regex for repo ${owner}/${repo}. Regex filters will be ignored. Error:`, e);
-        // If regex is invalid, we ignore it and proceed to channel filtering.
       }
-      // --- End of Regex Filtering ---
 
-      // --- Original Channel Filtering Logic (runs if no includeRegex is active) ---
-      // Rule 1: Handle Drafts first, as they are a distinct category.
       if (r.draft) {
         return effectiveReleaseChannels.includes('draft');
       }
-
-      // At this point, r.draft is false.
       
-      // Rule 2: Determine if the release is fundamentally a pre-release.
-      // A release is considered a pre-release if GitHub says so OR if its tag matches any known pre-release identifier.
       const isConsideredPreRelease = r.prerelease || isPreReleaseByTagName(r.tag_name, allPreReleaseTypes);
       
       if (isConsideredPreRelease) {
-        // It's a pre-release.
-        // It's only included if the user wants pre-releases AND it matches their specific sub-channel selection.
-        if (!effectiveReleaseChannels.includes('prerelease')) {
-          return false; // User doesn't want any pre-releases.
-        }
-        // User wants pre-releases, now check if THIS one matches their sub-filter.
-        // The check uses the user's selected sub-channels.
+        if (!effectiveReleaseChannels.includes('prerelease')) return false;
         return isPreReleaseByTagName(r.tag_name, effectivePreReleaseSubChannels);
       } else {
-        // It's not a pre-release, so it's classified as stable.
-        // It's included only if the user wants stable releases.
         return effectiveReleaseChannels.includes('stable');
       }
     });
 
     if (filteredReleases.length === 0) {
-      // We fetched releases, but none matched the user's filters.
       return { release: null, error: { type: 'no_matching_releases' } };
     }
 
@@ -329,16 +318,9 @@ async function fetchLatestRelease(
 
     if (!latestRelease.body || latestRelease.body.trim() === '') {
         console.log(`Release body for ${owner}/${repo} tag ${latestRelease.tag_name} is empty. Attempting to fetch commit message.`);
-        
         const commitApiUrl = `https://api.github.com/repos/${owner}/${repo}/commits/${latestRelease.tag_name}`;
-        
         try {
-            const commitResponse = await fetch(commitApiUrl, {
-                headers,
-                // The cache options from the main request should apply here too
-                ...fetchOptions,
-            });
-
+            const commitResponse = await fetch(commitApiUrl, { headers, ...fetchOptions });
             if (commitResponse.ok) {
                 const commitData = await commitResponse.json();
                 if (commitData.commit && commitData.commit.message) {
@@ -376,15 +358,13 @@ async function fetchLatestReleaseWithCache(
   locale: string,
   options?: { skipCache?: boolean }
 ): Promise<{ release: GithubRelease | null; error: FetchError | null }> {
-  // If cache is disabled in settings OR if explicitly skipped, fetch directly.
   if (globalSettings.cacheInterval <= 0 || options?.skipCache) {
     return fetchLatestRelease(owner, repo, repoSettings, globalSettings, locale);
   }
 
   const cacheIntervalSeconds = globalSettings.cacheInterval * 60;
 
-  // Determine the effective releasesPerPage for the cache key
-  const effectiveReleasesPerPage = (typeof repoSettings.releasesPerPage === 'number' && repoSettings.releasesPerPage >= 1 && repoSettings.releasesPerPage <= 100)
+  const effectiveReleasesPerPage = (typeof repoSettings.releasesPerPage === 'number' && repoSettings.releasesPerPage >= 1 && repoSettings.releasesPerPage <= 1000)
     ? repoSettings.releasesPerPage
     : globalSettings.releasesPerPage;
 
@@ -437,7 +417,7 @@ export async function getLatestReleasesForRepos(
         repoSettings,
         settings,
         locale,
-        options // Pass options down
+        options
       );
 
       if (error) {
@@ -451,8 +431,6 @@ export async function getLatestReleasesForRepos(
       }
 
       if (!latestRelease) {
-        // This case should ideally not be reached if fetchLatestRelease always returns an error object,
-        // but it's a safe fallback.
         return {
           repoId: repo.id,
           repoUrl: repo.url,
@@ -534,7 +512,6 @@ export async function addRepositoriesAction(
     };
   } catch (error: any) {
     console.error('Failed to add repositories:', error);
-    // Security: Do not leak raw error messages to the client
     return {
       success: false,
       error: t('toast_save_error_generic'),
@@ -573,7 +550,7 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
       }
       
       const repoToSave: Repository = {
-        ...currentReposMap.get(importedRepo.id), // Preserve existing unknown fields
+        ...currentReposMap.get(importedRepo.id),
         id: importedRepo.id,
         url: importedRepo.url,
         lastSeenReleaseTag: importedRepo.lastSeenReleaseTag,
@@ -612,7 +589,6 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
 }
 
 export async function removeRepositoryAction(repoId: string) {
-  // Security: Validate input
   if (!isValidRepoId(repoId)) {
     console.error('Invalid repoId format for removal:', repoId);
     return;
@@ -624,7 +600,6 @@ export async function removeRepositoryAction(repoId: string) {
 }
 
 export async function acknowledgeNewReleaseAction(repoId: string): Promise<{ success: boolean; error?: string }> {
-  // Security: Validate input
   if (!isValidRepoId(repoId)) {
     return { success: false, error: 'Invalid repository ID format.' };
   }
@@ -650,7 +625,6 @@ export async function acknowledgeNewReleaseAction(repoId: string): Promise<{ suc
 }
 
 export async function markAsNewAction(repoId: string): Promise<{ success: boolean; error?: string }> {
-  // Security: Validate input
   if (!isValidRepoId(repoId)) {
     return { success: false, error: 'Invalid repository ID format.' };
   }
@@ -715,7 +689,6 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
           );
           
           const shouldHighlight = settings.showAcknowledge ?? true;
-          // Always update tag and 'isNew' status, regardless of notification success
           updatedRepos[repoIndex] = {...repo, lastSeenReleaseTag: newTag, isNew: shouldHighlight};
           changed = true;
           
@@ -723,8 +696,6 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
               await sendNotification(repo, enrichedRelease.release, effectiveLocale, settings);
               notificationsSent++;
           } catch(e: any) {
-            // If sending fails, we log the error but DO NOT revert the tag update.
-            // The notification failure should not block the app from recognizing future releases.
             console.error(`Failed to send notification for ${repo.id}. The release tag HAS been updated to prevent repeated failures for the same release. Error: ${e.message}`);
           }
         } else if (!repo.lastSeenReleaseTag) {
@@ -747,17 +718,12 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
    return { notificationsSent, checked: repos.length };
 }
 
-
-// --- Dynamic Background Polling ---
-
 async function backgroundPollingLoop() {
   try {
-    // Explicitly tell the check to skip caching
     await checkForNewReleases({ skipCache: true });
   } catch (error) {
     console.error("Error during background check for new releases:", error);
   } finally {
-    // Schedule the next run, regardless of success or failure.
     const settings = await getSettings();
     let pollingIntervalMinutes = settings.refreshInterval;
 
@@ -773,21 +739,14 @@ async function backgroundPollingLoop() {
   }
 }
 
-// This block sets up the background polling.
-// It's designed for a long-running server environment like Docker.
 if (
   process.env.NODE_ENV === 'production' &&
   !process.env.BACKGROUND_POLLING_INITIALIZED
 ) {
   console.log("Initializing dynamic background polling.");
-  // Mark as initialized to prevent multiple loops in development hot-reloading.
   process.env.BACKGROUND_POLLING_INITIALIZED = 'true';
-  // Start the first check after a short delay to allow the server to boot.
   setTimeout(backgroundPollingLoop, 5000);
 }
-
-
-// --- Test Page Actions ---
 
 const TEST_REPO_ID = 'test/test';
 
@@ -800,11 +759,9 @@ export async function setupTestRepositoryAction(): Promise<{ success: boolean; m
     const testRepoIndex = currentRepos.findIndex(r => r.id === TEST_REPO_ID);
     
     if (testRepoIndex > -1) {
-      // If it exists, reset its tag to an "old" version
       currentRepos[testRepoIndex].lastSeenReleaseTag = 'v0.9.0-reset';
       currentRepos[testRepoIndex].isNew = false;
     } else {
-      // If it doesn't exist, add it with an "old" version tag
       currentRepos.push({
         id: TEST_REPO_ID,
         url: `https://github.com/${TEST_REPO_ID}`,
@@ -814,7 +771,7 @@ export async function setupTestRepositoryAction(): Promise<{ success: boolean; m
     }
 
     await saveRepositories(currentRepos);
-    revalidatePath('/'); // To show the repo on the main page
+    revalidatePath('/');
     revalidatePath('/test');
     revalidateTag('github-releases');
     return { success: true, message: t('toast_setup_test_repo_success') };
@@ -828,7 +785,6 @@ export async function triggerReleaseCheckAction(): Promise<{ success: boolean; m
   const locale = await getLocale();
   const t = await getTranslations({locale, namespace: 'TestPage'});
   
-  // At least one notification service must be configured
   const {MAIL_HOST, MAIL_PORT, MAIL_FROM_ADDRESS, MAIL_TO_ADDRESS, APPRISE_URL} = process.env;
   const isSmtpConfigured = !!(MAIL_HOST && MAIL_PORT && MAIL_FROM_ADDRESS && MAIL_TO_ADDRESS);
   const isAppriseConfigured = !!APPRISE_URL;
@@ -841,7 +797,6 @@ export async function triggerReleaseCheckAction(): Promise<{ success: boolean; m
   }
 
   try {
-    // Pass the current user's locale to the check function and skip cache
     const result = await checkForNewReleases({ overrideLocale: locale, skipCache: true });
     
     if (result && result.notificationsSent > 0) {
@@ -870,7 +825,7 @@ export async function getGitHubRateLimit(): Promise<RateLimitResult> {
   try {
     const response = await fetch(GITHUB_API_URL, {
       headers,
-      cache: 'no-store', // Always get the latest rate limit
+      cache: 'no-store',
     });
 
     if (!response.ok) {
@@ -901,7 +856,6 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
   const trimmedEmail = customEmail.trim();
   const recipient = trimmedEmail || process.env.MAIL_TO_ADDRESS;
 
-  // Check if mail is configured
   const {MAIL_HOST, MAIL_PORT, MAIL_FROM_ADDRESS} =
     process.env;
   if (!MAIL_HOST || !MAIL_PORT || !MAIL_FROM_ADDRESS || !recipient) {
@@ -990,7 +944,6 @@ export async function sendTestAppriseAction(): Promise<{
     await sendTestAppriseNotification(testRepo, testRelease, locale, settings);
     return { success: true };
   } catch (error: any) {
-    // We log the detailed error in sendAppriseNotification. Here, we pass it up.
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),
@@ -1008,8 +961,6 @@ export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
   const t = await getTranslations({ locale, namespace: 'TestPage' });
   
   try {
-    // The base URL for the status check is derived by removing any path from the provided URL.
-    // This allows the user to provide http://host/notify/key while we still check http://host/status.
     const urlObject = new URL(APPRISE_URL);
     const statusUrl = `${urlObject.protocol}//${urlObject.host}/status`;
     
@@ -1063,7 +1014,6 @@ export async function updateRepositorySettingsAction(
   repoId: string,
   settings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags' | 'appriseFormat'>
 ): Promise<{ success: boolean; error?: string }> {
-  // Security: Validate input
   if (!isValidRepoId(repoId)) {
     return { success: false, error: 'Invalid repository ID format.' };
   }
@@ -1079,7 +1029,6 @@ export async function updateRepositorySettingsAction(
       return { success: false, error: t('toast_error_not_found') };
     }
 
-    // Update the settings for the specific repository
     currentRepos[repoIndex] = {
       ...currentRepos[repoIndex],
       releaseChannels: settings.releaseChannels,
@@ -1094,7 +1043,8 @@ export async function updateRepositorySettingsAction(
     await saveRepositories(currentRepos);
     return { success: true };
 
-  } catch (error: any) {
+  } catch (error: any)
+  {
     console.error(`Failed to update settings for ${repoId}:`, error);
     return { success: false, error: error.message || t('toast_error_generic') };
   }

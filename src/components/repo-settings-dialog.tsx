@@ -101,7 +101,6 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const tGlobal = useTranslations('SettingsForm');
   const { toast } = useToast();
 
-  // State
   const [channels, setChannels] = React.useState<ReleaseChannel[]>(currentRepoSettings?.releaseChannels ?? []);
   const [preReleaseSubChannels, setPreReleaseSubChannels] = React.useState<PreReleaseChannelType[]>(
     currentRepoSettings?.preReleaseSubChannels ?? []
@@ -112,7 +111,6 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const [appriseTags, setAppriseTags] = React.useState(currentRepoSettings?.appriseTags ?? '');
   const [appriseFormat, setAppriseFormat] = React.useState<AppriseFormat | ''>(currentRepoSettings?.appriseFormat ?? '');
   
-  // Validation state
   const [releasesPerPageError, setReleasesPerPageError] = React.useState<ReleasesPerPageError>(null);
   const [includeRegexError, setIncludeRegexError] = React.useState<RegexError>(null);
   const [excludeRegexError, setExcludeRegexError] = React.useState<RegexError>(null);
@@ -120,8 +118,6 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>('idle');
   const [hasChanged, setHasChanged] = React.useState(false);
 
-  // Determine if repo settings override global settings.
-  // An empty array/string means "use global".
   const useGlobalChannels = channels.length === 0;
   const useGlobalSubChannels = preReleaseSubChannels.length === 0;
   const useGlobalReleasesPerPage = String(releasesPerPage).trim() === '';
@@ -130,10 +126,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const useGlobalAppriseTags = appriseTags.trim() === '';
   const useGlobalAppriseFormat = appriseFormat === '';
 
-
-  // This will be used to disable the "Reset All" button.
   const isUsingAllGlobalSettings = useGlobalChannels && useGlobalReleasesPerPage && useGlobalIncludeRegex && useGlobalExcludeRegex && useGlobalAppriseTags && useGlobalAppriseFormat;
-
 
   const newSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags' | 'appriseFormat'> = React.useMemo(() => {
     let finalReleasesPerPage: number | null = null;
@@ -157,10 +150,8 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     };
   }, [channels, preReleaseSubChannels, releasesPerPage, includeRegex, excludeRegex, appriseTags, appriseFormat]);
   
-  // Ref to store the previous settings for comparison
   const prevSettingsRef = React.useRef(newSettings);
 
-  // Sync state with props when dialog opens or closes
   React.useEffect(() => {
     if (isOpen) {
       const initialSettings = {
@@ -190,16 +181,14 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     }
   }, [isOpen, currentRepoSettings]);
 
-  // Validation Effect
   React.useEffect(() => {
-    // Releases per page
     if (String(releasesPerPage).trim() !== '') {
       const numReleases = parseInt(String(releasesPerPage), 10);
       if (isNaN(numReleases)) {
         setReleasesPerPageError(null);
       } else if (numReleases < 1) {
           setReleasesPerPageError('too_low');
-      } else if (numReleases > 100) {
+      } else if (numReleases > 1000) {
           setReleasesPerPageError('too_high');
       } else {
           setReleasesPerPageError(null);
@@ -208,7 +197,6 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
         setReleasesPerPageError(null);
     }
     
-    // Include Regex
     try {
         if (includeRegex.trim()) new RegExp(includeRegex);
         setIncludeRegexError(null);
@@ -216,7 +204,6 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
         setIncludeRegexError('invalid');
     }
 
-    // Exclude Regex
     try {
         if (excludeRegex.trim()) new RegExp(excludeRegex);
         setExcludeRegexError(null);
@@ -226,14 +213,11 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
 
   }, [releasesPerPage, includeRegex, excludeRegex]);
 
-
-  // Effect for debounced autosaving
   React.useEffect(() => {
     if (!isOpen) return;
 
-    // Compare current settings with the previously saved ones.
     if (JSON.stringify(newSettings) === JSON.stringify(prevSettingsRef.current)) {
-        return; // No actual change, so don't trigger save.
+        return;
     }
 
     if (releasesPerPageError || includeRegexError || excludeRegexError) {
@@ -250,7 +234,6 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
 
         if (result.success) {
             setSaveStatus('success');
-            // Update the ref to the newly saved settings.
             prevSettingsRef.current = newSettings;
         } else {
             setSaveStatus('error');
@@ -260,15 +243,13 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
               variant: 'destructive',
             });
         }
-    }, 1500); // 1.5-second debounce delay
+    }, 1500);
 
     return () => clearTimeout(handler);
   }, [newSettings, repoId, isOpen, releasesPerPageError, includeRegexError, excludeRegexError, toast]);
 
 
   const handleChannelChange = (channel: ReleaseChannel) => {
-    // If we're currently using global settings, the first change
-    // should copy the global state to be the new local state.
     const baseChannels = useGlobalChannels ? globalSettings.releaseChannels : channels;
 
     const newChannels = baseChannels.includes(channel)
@@ -286,16 +267,12 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     
     setChannels(newChannels);
     
-    // If we are inheriting global channels and the user just checked 'prerelease',
-    // also inherit the global pre-release sub-channel settings.
     if (useGlobalChannels && useGlobalSubChannels && channel === 'prerelease' && newChannels.includes('prerelease')) {
       setPreReleaseSubChannels(globalSettings.preReleaseSubChannels || allPreReleaseTypes);
     }
   };
 
   const handlePreReleaseSubChannelChange = (subChannel: PreReleaseChannelType) => {
-    // If we're currently using global sub-channel settings, the first change
-    // should copy the global state to be the new local state.
     const baseSubChannels = useGlobalSubChannels 
         ? (globalSettings.preReleaseSubChannels || allPreReleaseTypes) 
         : preReleaseSubChannels;
@@ -309,7 +286,6 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (!open && hasChanged) {
-        // Trigger revalidation only when dialog closes and there were changes
         revalidateReleasesAction();
     }
   }
@@ -484,7 +460,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                 value={releasesPerPage}
                 onChange={(e) => setReleasesPerPage(e.target.value)}
                 min={1}
-                max={100}
+                max={1000}
                 placeholder={t('releases_per_page_placeholder', { count: globalSettings.releasesPerPage })}
                 className={cn(!!releasesPerPageError && 'border-destructive focus-visible:ring-destructive')}
               />
@@ -505,8 +481,11 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
             {releasesPerPageError === 'too_low' ? (
                 <p className="mt-2 text-sm text-destructive">{tGlobal('releases_per_page_error_min')}</p>
             ) : releasesPerPageError === 'too_high' ? (
-                <p className="mt-2 text-sm text-destructive">{tGlobal('releases_per_page_error_max')}</p>
-            ) : null }
+                <p className="mt-2 text-sm text-destructive">{tGlobal('releases_per_page_error_max_1000')}</p>
+            ) : (
+                <p className="mt-2 text-xs text-muted-foreground">{tGlobal('releases_per_page_hint_1000')}</p>
+            )}
+             <p className="mt-2 text-xs text-muted-foreground">{tGlobal('releases_per_page_api_call_hint')}</p>
           </div>
 
           <div className="space-y-4 p-4 border rounded-md">
@@ -576,10 +555,10 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                     </TooltipTrigger>
                       <TooltipContent>
                           <p>{t('reset_to_global_tooltip')}</p>
-                      </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
+                        </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
               {!isAppriseConfigured && (
                 <p className="mt-2 text-xs text-muted-foreground">{tGlobal('apprise_tags_disabled_hint')}</p>
               )}
@@ -617,3 +596,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     </Dialog>
   );
 }
+
+    
+
+    

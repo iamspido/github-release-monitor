@@ -118,9 +118,10 @@
     "refresh_interval_error_min": "Das Aktualisierungsintervall muss mindestens 1 Minute betragen.",
     "refresh_interval_error_max": "Das Aktualisierungsintervall überschreitet das Maximum von ca. 10 Jahren.",
     "releases_per_page_label": "Anzahl der pro Repository abzurufenden Releases",
-    "releases_per_page_hint": "GitHub API-Limit: 1-100.",
+    "releases_per_page_hint_1000": "GitHub API-Limit: 1-1000.",
+    "releases_per_page_api_call_hint": "Jede Seite mit 100 Releases kostet einen API-Aufruf.",
     "releases_per_page_error_min": "Die Anzahl muss mindestens 1 sein.",
-    "releases_per_page_error_max": "Die Anzahl darf 100 nicht überschreiten.",
+    "releases_per_page_error_max_1000": "Die Anzahl darf 1000 nicht überschreiten.",
     "apprise_settings_title": "Apprise-Einstellungen",
     "apprise_settings_description": "Konfigurieren Sie, wie Benachrichtigungen an Apprise gesendet werden.",
     "apprise_max_chars_label": "Max. Zeichen für Apprise-Nachrichten",
@@ -235,7 +236,7 @@
     "toast_error_title": "Fehler",
     "toast_email_success_title": "Erfolg!",
     "toast_email_success_description": "Test-E-Mail gesendet. Bitte überprüfen Sie Ihren Posteingang.",
-    "toast_email_error_title": "Fehler",
+    "toast_email_error_title": "Fehler beim E-Mail-Versand",
     "toast_email_error_description": "E-Mail konnte nicht gesendet werden. Überprüfen Sie die Server-Protokolle.",
     "email_all_variables_title": "Erkannte Umgebungsvariablen",
     "email_var_set": "Gesetzt",
@@ -389,6 +390,6 @@
     "truncated_message": "_(Nachricht gekürzt)_",
     "error_send_failed": "Apprise-Benachrichtigung konnte nicht gesendet werden.",
     "error_send_failed_detailed": "Apprise-Fehler ({status}): {details}",
-    "error_not_configured": "Apprise URL ist nicht konfiguriert."
+    "error_not_configured": "Apprise URL ist nicht in den Umgebungsvariablen gesetzt."
   }
 }
