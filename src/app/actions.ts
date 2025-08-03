@@ -233,7 +233,7 @@ async function fetchLatestRelease(
   }
 
   // --- GitHub API Fetching with Pagination ---
-  const GITHUB_API_BASE_URL = `https://api.github.com/repos/${owner}/${repo}/releases`;
+  const GITHUB_API_BASE_URL = `https://api.github.com/repos/${owner}/${repo}`;
   const MAX_PER_PAGE = 100;
   const pagesToFetch = Math.ceil(totalReleasesToFetch / MAX_PER_PAGE);
   let allReleases: GithubRelease[] = [];
@@ -253,7 +253,7 @@ async function fetchLatestRelease(
       const releasesOnThisPage = Math.min(MAX_PER_PAGE, totalReleasesToFetch - allReleases.length);
       if (releasesOnThisPage <= 0) break;
 
-      const url = `${GITHUB_API_BASE_URL}?per_page=${releasesOnThisPage}&page=${page}`;
+      const url = `${GITHUB_API_BASE_URL}/releases?per_page=${releasesOnThisPage}&page=${page}`;
       const response = await fetch(url, fetchOptions);
 
       if (!response.ok) {
@@ -272,14 +272,79 @@ async function fetchLatestRelease(
       const pageReleases: GithubRelease[] = await response.json();
       allReleases = [...allReleases, ...pageReleases];
 
-      // If we receive fewer releases than we asked for, we've reached the end.
       if (pageReleases.length < releasesOnThisPage) {
         break;
       }
     }
 
     if (allReleases.length === 0) {
-      return { release: null, error: { type: 'no_releases_found' } };
+      console.log(`No formal releases found for ${owner}/${repo}. Falling back to tags.`);
+      const tagsResponse = await fetch(`${GITHUB_API_BASE_URL}/tags?per_page=1`, fetchOptions);
+      
+      if (!tagsResponse.ok) {
+          console.error(`Failed to fetch tags for ${owner}/${repo} after failing to find releases.`);
+          return { release: null, error: { type: 'no_releases_found' } };
+      }
+
+      const tags: {name: string, commit: {sha: string}}[] = await tagsResponse.json();
+      if (!tags || tags.length === 0) {
+          console.log(`No tags found for ${owner}/${repo}.`);
+          return { release: null, error: { type: 'no_releases_found' } };
+      }
+
+      const latestTag = tags[0];
+      const t = await getTranslations({ locale, namespace: 'Actions' });
+      
+      let bodyContent = '';
+      let publicationDate = new Date().toISOString();
+
+      try {
+        const refResponse = await fetch(`${GITHUB_API_BASE_URL}/git/ref/tags/${latestTag.name}`, fetchOptions);
+
+        if (refResponse.ok) {
+            const refData = await refResponse.json();
+            // If it's an annotated tag, the object type is 'tag'.
+            if (refData.object.type === 'tag') {
+                const annotatedTagResponse = await fetch(refData.object.url, fetchOptions);
+                if (annotatedTagResponse.ok) {
+                    const annotatedTagData = await annotatedTagResponse.json();
+                    if (annotatedTagData.message) {
+                        bodyContent = `### ${t('tag_message_fallback_title')}\n\n---\n\n${annotatedTagData.message}`;
+                    }
+                    publicationDate = annotatedTagData.tagger.date;
+                }
+            }
+        }
+        
+        // If no annotated tag message was found (either lightweight tag or error), fall back to commit message.
+        if (!bodyContent) {
+          const commitResponse = await fetch(`${GITHUB_API_BASE_URL}/commits/${latestTag.commit.sha}`, fetchOptions);
+          if (commitResponse.ok) {
+            const commitData = await commitResponse.json();
+            bodyContent = `### ${t('commit_message_fallback_title')}\n\n---\n\n${commitData.commit.message}`;
+            publicationDate = commitData.commit.committer.date;
+          } else {
+             console.error(`Failed to fetch commit for tag ${latestTag.name} in ${owner}/${repo}.`);
+             return { release: null, error: { type: 'api_error' } };
+          }
+        }
+      } catch (e) {
+         console.error(`Error during tag fallback for ${owner}/${repo}:`, e);
+         return { release: null, error: { type: 'api_error' } };
+      }
+      
+      const virtualRelease: GithubRelease = {
+          id: 0, // Virtual release has no ID
+          html_url: `https://github.com/${owner}/${repo}/releases/tag/${latestTag.name}`,
+          tag_name: latestTag.name,
+          name: `Tag: ${latestTag.name}`,
+          body: bodyContent,
+          created_at: publicationDate,
+          published_at: publicationDate,
+          prerelease: false,
+          draft: false,
+      };
+      allReleases = [virtualRelease];
     }
 
     const filteredReleases = allReleases.filter(r => {
@@ -316,9 +381,11 @@ async function fetchLatestRelease(
 
     let latestRelease = filteredReleases[0];
 
-    if (!latestRelease.body || latestRelease.body.trim() === '') {
+    // This check is for formal releases that have an empty body.
+    // The tag fallback already populates the body with a commit message.
+    if (latestRelease.id !== 0 && (!latestRelease.body || latestRelease.body.trim() === '')) {
         console.log(`Release body for ${owner}/${repo} tag ${latestRelease.tag_name} is empty. Attempting to fetch commit message.`);
-        const commitApiUrl = `https://api.github.com/repos/${owner}/${repo}/commits/${latestRelease.tag_name}`;
+        const commitApiUrl = `${GITHUB_API_BASE_URL}/commits/${latestRelease.tag_name}`;
         try {
             const commitResponse = await fetch(commitApiUrl, { headers, ...fetchOptions });
             if (commitResponse.ok) {
@@ -1053,3 +1120,7 @@ export async function updateRepositorySettingsAction(
 export async function revalidateReleasesAction() {
   revalidateTag('github-releases');
 }
+
+    
+
+    

@@ -234,9 +234,9 @@
     "invalid_email_format": "Please enter a valid email address.",
     "toast_success_title": "Success",
     "toast_error_title": "Error",
+    "toast_email_error_title": "Email Send Error",
     "toast_email_success_title": "Success!",
     "toast_email_success_description": "Test email sent. Please check your inbox.",
-    "toast_email_error_title": "Email Send Error",
     "toast_email_error_description": "Failed to send email. Check server logs.",
     "email_all_variables_title": "Detected Environment Variables",
     "email_var_set": "Set",
@@ -310,10 +310,11 @@
   },
   "Actions": {
     "commit_message_fallback_title": "Commit Message",
+    "tag_message_fallback_title": "Tag Message",
     "error_invalid_url": "Invalid GitHub URL. Please check the input.",
     "error_rate_limit": "GitHub API rate limit hit. Please try again later or add an API token.",
     "error_repo_not_found": "Repository not found. It might be private, deleted, or misspelled.",
-    "error_no_releases_found": "The repository has no releases.",
+    "error_no_releases_found": "The repository has no releases or tags.",
     "error_no_matching_releases": "No releases found that match your filter settings. Try increasing the number of releases to fetch in the settings.",
     "error_generic_fetch": "Could not fetch release information."
   },

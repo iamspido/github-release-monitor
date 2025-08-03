@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from "react";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNowStrict } from "date-fns";
 import { de } from "date-fns/locale";
 import {
   AlertTriangle,
@@ -99,14 +99,14 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
       // Update release time ago
       if (release?.created_at) {
         const dateToUse = release.published_at || release.created_at;
-        setTimeAgo(formatDistanceToNow(new Date(dateToUse), {
+        setTimeAgo(formatDistanceToNowStrict(new Date(dateToUse), {
           addSuffix: true,
           locale: locale === 'de' ? de : undefined,
         }));
       }
       // Update checked time ago
       if (release?.fetched_at) {
-        setCheckedAgo(formatDistanceToNow(new Date(release.fetched_at), {
+        setCheckedAgo(formatDistanceToNowStrict(new Date(release.fetched_at), {
           addSuffix: true,
           locale: locale === 'de' ? de : undefined,
         }));

@@ -234,9 +234,9 @@
     "invalid_email_format": "Bitte geben Sie eine gültige E-Mail-Adresse ein.",
     "toast_success_title": "Erfolg",
     "toast_error_title": "Fehler",
+    "toast_email_error_title": "Fehler beim E-Mail-Versand",
     "toast_email_success_title": "Erfolg!",
     "toast_email_success_description": "Test-E-Mail gesendet. Bitte überprüfen Sie Ihren Posteingang.",
-    "toast_email_error_title": "Fehler beim E-Mail-Versand",
     "toast_email_error_description": "E-Mail konnte nicht gesendet werden. Überprüfen Sie die Server-Protokolle.",
     "email_all_variables_title": "Erkannte Umgebungsvariablen",
     "email_var_set": "Gesetzt",
@@ -310,10 +310,11 @@
   },
   "Actions": {
     "commit_message_fallback_title": "Commit-Nachricht",
+    "tag_message_fallback_title": "Tag-Nachricht",
     "error_invalid_url": "Ungültige GitHub-URL. Bitte überprüfen Sie die Eingabe.",
     "error_rate_limit": "GitHub API-Ratenlimit erreicht. Bitte versuchen Sie es später erneut oder fügen Sie einen API-Token hinzu.",
     "error_repo_not_found": "Das Repository wurde nicht gefunden. Es könnte privat, gelöscht oder falsch geschrieben sein.",
-    "error_no_releases_found": "Das Repository hat keine Releases.",
+    "error_no_releases_found": "Das Repository hat keine Releases oder Tags.",
     "error_no_matching_releases": "Keine Releases gefunden, die Ihren Filtereinstellungen entsprechen. Versuchen Sie, die Anzahl der abzurufenden Releases in den Einstellungen zu erhöhen.",
     "error_generic_fetch": "Release-Informationen konnten nicht abgerufen werden."
   },
