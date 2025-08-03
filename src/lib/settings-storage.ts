@@ -23,6 +23,7 @@ const defaultSettings: AppSettings = {
   excludeRegex: undefined,
   appriseMaxCharacters: 1800,
   appriseTags: undefined,
+  appriseFormat: 'text',
 };
 
 async function ensureDataFileExists() {

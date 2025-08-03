@@ -8,120 +8,70 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
 
-export async function sendNewReleaseEmail(repository: Repository, release: GithubRelease, locale: string, timeFormat: TimeFormat, toAddress?: string) {
+async function getFormattedDate(date: Date, locale: string, timeFormat: TimeFormat): Promise<{ textDate: string; htmlDate: string }> {
   const t = await getTranslations({locale, namespace: 'Email'});
 
-  const {
-    MAIL_HOST,
-    MAIL_PORT,
-    MAIL_USERNAME,
-    MAIL_PASSWORD,
-    MAIL_FROM_ADDRESS,
-    MAIL_FROM_NAME,
-    MAIL_TO_ADDRESS,
-  } = process.env;
-
-  const recipient = toAddress || MAIL_TO_ADDRESS;
-
-  // Check if email sending is configured
-  if (!MAIL_HOST || !MAIL_PORT || !MAIL_FROM_ADDRESS || !recipient) {
-    console.log('Email configuration is incomplete (missing host, port, from, or to address). Skipping email notification.');
-    // Throw a translated error to indicate configuration failure
-    throw new Error(t('error_config_incomplete'));
-  }
-
-  const port = parseInt(MAIL_PORT, 10);
-
-  const transporter = nodemailer.createTransport({
-    host: MAIL_HOST,
-    port: port,
-    // This is a more robust way to handle email security.
-    // `secure: true` is only for port 465. For all other ports (like 587),
-    // Nodemailer will automatically use STARTTLS if `secure` is false.
-    secure: port === 465,
-    auth: {
-      user: MAIL_USERNAME,
-      pass: MAIL_PASSWORD,
-    },
-  });
-
-  const releaseBodyHtml = release.body 
-    ? String(await remark().use(remarkGfm).use(remarkHtml).process(release.body))
-    : `<p style="font-style: italic;">${t('html_no_notes')}</p>`;
-
-  const subject = t('subject', {repoId: repository.id, tagName: release.tag_name});
-
-  const releaseDate = new Date(release.created_at);
-
-  // --- Custom Date/Time formatting logic ---
-  // This logic ensures the date format is tied to the time format (12h/24h)
-  // while the language is tied to the locale, without compromises.
-  
-  // Define options for the simpler text email format
   const textDateFormattingOptions: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    timeZoneName: 'short',
-    hour12: timeFormat === '12h',
+    year: 'numeric', month: 'long', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric',
+    timeZoneName: 'short', hour12: timeFormat === '12h',
   };
-  // For text emails, we can use a simpler locale-based format
   const textFormattingLocale = locale === 'de' ? 'de-DE' : (timeFormat === '12h' ? 'en-US' : 'en-GB');
-  const formattedTextDate = releaseDate.toLocaleString(textFormattingLocale, textDateFormattingOptions);
+  const textDate = date.toLocaleString(textFormattingLocale, textDateFormattingOptions);
 
-  // For HTML emails, we need full control to meet the specific format requirements.
-  // We get the translated parts and construct the string manually.
   const htmlTimeOptions: Intl.DateTimeFormatOptions = {
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-    timeZoneName: 'short',
-    hour12: timeFormat === '12h',
+    hour: 'numeric', minute: '2-digit', second: '2-digit',
+    timeZoneName: 'short', hour12: timeFormat === '12h',
   };
   const htmlDatePartsOptions: Intl.DateTimeFormatOptions = {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   };
-  
-  // Get a map of translated date parts, e.g., { weekday: 'Tuesday', month: 'July', ... }
   const dateParts = new Intl.DateTimeFormat(locale, htmlDatePartsOptions)
-    .formatToParts(releaseDate)
+    .formatToParts(date)
     .reduce((acc, part) => ({ ...acc, [part.type]: part.value }), {} as Record<string, string>);
-
-  const timeString = new Intl.DateTimeFormat(locale, htmlTimeOptions).format(releaseDate);
-  let formattedHtmlDate;
-
+  const timeString = new Intl.DateTimeFormat(locale, htmlTimeOptions).format(date);
+  
+  let htmlDate;
   if (timeFormat === '12h') {
-      // American format: Weekday, Month Day, Year at h:mm AM/PM
-      formattedHtmlDate = `${dateParts.weekday}, ${dateParts.month} ${dateParts.day}, ${dateParts.year} ${t('html_date_conjunction_at')} ${timeString}`;
+    htmlDate = `${dateParts.weekday}, ${dateParts.month} ${dateParts.day}, ${dateParts.year} ${t('html_date_conjunction_at')} ${timeString}`;
   } else {
-      // European format: Weekday, Day. Month Year, H:mm
-      formattedHtmlDate = `${dateParts.weekday}, ${dateParts.day}. ${dateParts.month} ${dateParts.year}, ${timeString}`;
+    htmlDate = `${dateParts.weekday}, ${dateParts.day}. ${dateParts.month} ${dateParts.year}, ${timeString}`;
   }
-  // --- End of custom formatting logic ---
 
-  const textBody = `
+  return { textDate, htmlDate };
+}
+
+export async function generatePlainTextReleaseBody(release: GithubRelease, repository: Repository, locale: string, timeFormat: TimeFormat): Promise<string> {
+    const t = await getTranslations({locale, namespace: 'Email'});
+    const { textDate } = await getFormattedDate(new Date(release.created_at), locale, timeFormat);
+    
+    return `
 ${t('text_new_version_of', {repoId: repository.id})}
 
 ${t('text_version_label')}: ${release.tag_name}
 ${t('text_release_name_label')}: ${release.name || 'N/A'}
-${t('text_release_date_label')}: ${formattedTextDate}
+${t('text_release_date_label')}: ${textDate}
 
 ${t('text_release_notes_label')}:
 ${release.body || t('text_no_notes')}
 
 ${t('text_view_on_github_label')}: ${release.html_url}
-  `;
+`;
+}
 
-  const repoLink = `<a href="${repository.url}" style="color: #8c9fe8; text-decoration: none;"><strong style="color: #fafafa;">${repository.id}</strong></a>`;
-  const introHtml = t('html_intro', {repoId: 'REPO_PLACEHOLDER'}).replace('REPO_PLACEHOLDER', repoLink);
+export async function generateHtmlReleaseBody(release: GithubRelease, repository: Repository, locale: string, timeFormat: TimeFormat): Promise<string> {
+    const t = await getTranslations({locale, namespace: 'Email'});
+    const subject = t('subject', {repoId: repository.id, tagName: release.tag_name});
+    const { htmlDate } = await getFormattedDate(new Date(release.created_at), locale, timeFormat);
 
-  const htmlBody = `
+    const releaseBodyHtml = release.body 
+        ? String(await remark().use(remarkGfm).use(remarkHtml).process(release.body))
+        : `<p style="font-style: italic;">${t('html_no_notes')}</p>`;
+    
+    const repoLink = `<a href="${repository.url}" style="color: #8c9fe8; text-decoration: none;"><strong style="color: #fafafa;">${repository.id}</strong></a>`;
+    const introHtml = t('html_intro', {repoId: 'REPO_PLACEHOLDER'}).replace('REPO_PLACEHOLDER', repoLink);
+
+    return `
     <!DOCTYPE html>
     <html lang="${locale}">
     <head>
@@ -257,7 +207,7 @@ ${t('text_view_on_github_label')}: ${release.html_url}
         <ul style="padding-left: 20px; margin-top: 16px; margin-bottom: 24px;">
           <li><strong style="color: #fafafa;">${t('html_list_version_label')}</strong> ${release.tag_name}</li>
           <li><strong style="color: #fafafa;">${t('html_list_name_label')}</strong> ${release.name || 'N/A'}</li>
-          <li><strong style="color: #fafafa;">${t('html_list_date_label')}</strong> ${formattedHtmlDate}</li>
+          <li><strong style="color: #fafafa;">${t('html_list_date_label')}</strong> ${htmlDate}</li>
         </ul>
         <h3>${t('html_notes_title')}</h3>
         <div class="release-notes-container">
@@ -272,6 +222,44 @@ ${t('text_view_on_github_label')}: ${release.html_url}
     </body>
     </html>
   `;
+}
+
+
+export async function sendNewReleaseEmail(repository: Repository, release: GithubRelease, locale: string, timeFormat: TimeFormat, toAddress?: string) {
+  const t = await getTranslations({locale, namespace: 'Email'});
+
+  const {
+    MAIL_HOST,
+    MAIL_PORT,
+    MAIL_USERNAME,
+    MAIL_PASSWORD,
+    MAIL_FROM_ADDRESS,
+    MAIL_FROM_NAME,
+    MAIL_TO_ADDRESS,
+  } = process.env;
+
+  const recipient = toAddress || MAIL_TO_ADDRESS;
+
+  if (!MAIL_HOST || !MAIL_PORT || !MAIL_FROM_ADDRESS || !recipient) {
+    console.log('Email configuration is incomplete (missing host, port, from, or to address). Skipping email notification.');
+    throw new Error(t('error_config_incomplete'));
+  }
+
+  const port = parseInt(MAIL_PORT, 10);
+
+  const transporter = nodemailer.createTransport({
+    host: MAIL_HOST,
+    port: port,
+    secure: port === 465,
+    auth: {
+      user: MAIL_USERNAME,
+      pass: MAIL_PASSWORD,
+    },
+  });
+  
+  const subject = t('subject', {repoId: repository.id, tagName: release.tag_name});
+  const textBody = await generatePlainTextReleaseBody(release, repository, locale, timeFormat);
+  const htmlBody = await generateHtmlReleaseBody(release, repository, locale, timeFormat);
 
   try {
     await transporter.sendMail({
@@ -284,7 +272,6 @@ ${t('text_view_on_github_label')}: ${release.html_url}
     console.log(`Email notification sent to ${recipient} for ${repository.id} ${release.tag_name}`);
   } catch (error: any) {
     console.error(`Failed to send email for ${repository.id}:`, error);
-    // Re-throw a translated error so the calling function can handle it
     throw new Error(t('error_send_failed', { details: error.message }));
   }
 }

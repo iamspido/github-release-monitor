@@ -168,7 +168,8 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
     (repoSettings?.releasesPerPage !== null && typeof repoSettings?.releasesPerPage === 'number') ||
     repoSettings?.includeRegex ||
     repoSettings?.excludeRegex ||
-    repoSettings?.appriseTags;
+    repoSettings?.appriseTags ||
+    repoSettings?.appriseFormat;
 
 
   if (error) {

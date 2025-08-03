@@ -12,6 +12,7 @@ export type Repository = {
   includeRegex?: string;
   excludeRegex?: string;
   appriseTags?: string;
+  appriseFormat?: AppriseFormat;
 };
 
 export type GithubRelease = {
@@ -44,6 +45,7 @@ export type EnrichedRelease = {
     includeRegex?: string;
     excludeRegex?: string;
     appriseTags?: string;
+    appriseFormat?: AppriseFormat;
   }
 };
 
@@ -89,6 +91,7 @@ export type TimeFormat = '12h' | '24h';
 export type ReleaseChannel = 'stable' | 'prerelease' | 'draft';
 export type PreReleaseChannelType = 'a' | 'alpha' | 'b' | 'beta' | 'canary' | 'cr' | 'dev' | 'eap' | 'm' | 'milestone' | 'next' | 'nightly' | 'pre' | 'preview' | 'pr' | 'rc' | 'snapshot' | 'sp' | 'tp';
 export const allPreReleaseTypes: PreReleaseChannelType[] = ['a', 'alpha', 'b', 'beta', 'canary', 'cr', 'dev', 'eap', 'm', 'milestone', 'next', 'nightly', 'pre', 'preview', 'pr', 'rc', 'snapshot', 'sp', 'tp'];
+export type AppriseFormat = 'text' | 'markdown' | 'html';
 
 
 export type AppSettings = {
@@ -107,6 +110,7 @@ export type AppSettings = {
   excludeRegex?: string;
   appriseMaxCharacters?: number;
   appriseTags?: string;
+  appriseFormat?: AppriseFormat;
 };
 
 // Session Data

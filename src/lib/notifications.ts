@@ -1,19 +1,12 @@
 
 'use server';
 
-import type { GithubRelease, Repository, AppSettings } from '@/types';
-import { sendNewReleaseEmail } from './email';
+import type { GithubRelease, Repository, AppSettings, AppriseFormat } from '@/types';
+import { sendNewReleaseEmail, generatePlainTextReleaseBody, generateHtmlReleaseBody } from './email';
 import { getTranslations } from 'next-intl/server';
 
-
-async function sendAppriseNotification(repository: Repository, release: GithubRelease, locale: string, settings: AppSettings) {
-    const { APPRISE_URL } = process.env;
-    if (!APPRISE_URL) return;
-
+async function generateMarkdownReleaseBody(release: GithubRelease, locale: string, maxChars: number): Promise<string> {
     const t = await getTranslations({ locale, namespace: 'Apprise' });
-    const maxChars = settings.appriseMaxCharacters ?? 0;
-
-    const title = t('title', { repoId: repository.id, tagName: release.tag_name });
 
     const viewOnGithubText = t('view_on_github_link', {
         link: release.html_url,
@@ -24,7 +17,6 @@ async function sendAppriseNotification(repository: Repository, release: GithubRe
     let body = release.body || t('no_release_notes');
 
     if (maxChars > 0) {
-        // Calculate the maximum length available for the body itself.
         const footer = `${footerSeparator}${truncatedText}\n${viewOnGithubText}`;
         const availableLength = maxChars - footer.length;
         
@@ -32,8 +24,6 @@ async function sendAppriseNotification(repository: Repository, release: GithubRe
             if (availableLength > 0) {
                 body = body.substring(0, availableLength) + footer;
             } else {
-                // If the footer itself is too long, just use the link.
-                // This is an edge case but good to handle.
                 body = viewOnGithubText;
             }
         } else {
@@ -42,14 +32,45 @@ async function sendAppriseNotification(repository: Repository, release: GithubRe
     } else {
         body = `${body}${footerSeparator}${viewOnGithubText}`;
     }
+    return body;
+}
 
-    // Determine which tags to use: repository-specific tags override global tags.
+async function generateAppriseBody(release: GithubRelease, repository: Repository, format: AppriseFormat, locale: string, settings: AppSettings): Promise<string> {
+    const maxChars = settings.appriseMaxCharacters ?? 0;
+    switch (format) {
+        case 'html':
+            return generateHtmlReleaseBody(release, repository, locale, settings.timeFormat);
+        case 'markdown':
+            return generateMarkdownReleaseBody(release, locale, maxChars);
+        case 'text':
+        default:
+            const plainText = await generatePlainTextReleaseBody(release, repository, locale, settings.timeFormat);
+            if (maxChars > 0 && plainText.length > maxChars) {
+                return plainText.substring(0, maxChars);
+            }
+            return plainText;
+    }
+}
+
+
+async function sendAppriseNotification(repository: Repository, release: GithubRelease, locale: string, settings: AppSettings) {
+    const { APPRISE_URL } = process.env;
+    if (!APPRISE_URL) return;
+
+    const t = await getTranslations({ locale, namespace: 'Apprise' });
+
+    // Determine which settings to use
     const tags = repository.appriseTags ?? settings.appriseTags;
+    // Default to 'text' if no format is specified anywhere
+    const format = repository.appriseFormat ?? settings.appriseFormat ?? 'text';
+    
+    const title = t('title', { repoId: repository.id, tagName: release.tag_name });
+    const body = await generateAppriseBody(release, repository, format, locale, settings);
 
-    const payload: { title: string; body: string; format: 'markdown'; tag?: string } = {
+    const payload: { title: string; body: string; format: AppriseFormat; tag?: string } = {
         title: title,
         body: body,
-        format: 'markdown',
+        format: format,
     };
 
     if (tags) {
@@ -57,11 +78,7 @@ async function sendAppriseNotification(repository: Repository, release: GithubRe
     }
 
     try {
-        // Determine the final notification URL.
-        // If APPRISE_URL already contains `/notify`, use it directly.
-        // Otherwise, append `/notify` for backward compatibility.
         const normalizedAppriseUrl = APPRISE_URL.replace(/\/+$/, '');
-
         const notifyUrl = /\/notify(\/|$)/.test(normalizedAppriseUrl)
             ? normalizedAppriseUrl
             : `${normalizedAppriseUrl}/notify`;
@@ -77,15 +94,12 @@ async function sendAppriseNotification(repository: Repository, release: GithubRe
         if (!response.ok) {
             const errorBody = await response.text();
             console.error(`Apprise notification for ${repository.id} failed with status ${response.status}: ${errorBody}`);
-            // Propagate the specific error message from Apprise
             throw new Error(t('error_send_failed_detailed', { status: response.status, details: errorBody }));
         } else {
             console.log(`Apprise notification sent successfully for ${repository.id} ${release.tag_name}`);
         }
     } catch (error: any) {
-        // This will now catch both fetch errors (like ENOTFOUND) and the re-thrown error from the !response.ok block.
         console.error(`Failed to send Apprise notification for ${repository.id}. Please check if the service is running and the URL is correct. Error: ${error.message}`);
-        // Re-throw the original, more specific error message.
         throw error;
     }
 }
@@ -128,5 +142,8 @@ export async function sendTestAppriseNotification(repository: Repository, releas
     if (!APPRISE_URL) {
         throw new Error(t('error_not_configured'));
     }
-    await sendAppriseNotification(repository, release, locale, settings);
+    // For testing, we force text to ensure maximum compatibility.
+    const testSettings = { ...settings, appriseFormat: 'text' as AppriseFormat };
+    const testRepo = { ...repository, appriseFormat: 'text' as AppriseFormat };
+    await sendAppriseNotification(testRepo, release, locale, testSettings);
 }

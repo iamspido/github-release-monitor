@@ -4,7 +4,7 @@
 import * as React from 'react';
 import { useTranslations } from 'next-intl';
 import { Loader2, Save, CheckCircle, AlertCircle, RotateCcw } from 'lucide-react';
-import type { Repository, ReleaseChannel, PreReleaseChannelType, AppSettings } from '@/types';
+import type { Repository, ReleaseChannel, PreReleaseChannelType, AppSettings, AppriseFormat } from '@/types';
 import { allPreReleaseTypes } from '@/types';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -29,6 +29,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -85,7 +92,7 @@ interface RepoSettingsDialogProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   repoId: string;
-  currentRepoSettings?: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags'>;
+  currentRepoSettings?: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags' | 'appriseFormat'>;
   globalSettings: AppSettings;
 }
 
@@ -103,6 +110,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const [includeRegex, setIncludeRegex] = React.useState(currentRepoSettings?.includeRegex ?? '');
   const [excludeRegex, setExcludeRegex] = React.useState(currentRepoSettings?.excludeRegex ?? '');
   const [appriseTags, setAppriseTags] = React.useState(currentRepoSettings?.appriseTags ?? '');
+  const [appriseFormat, setAppriseFormat] = React.useState<AppriseFormat | ''>(currentRepoSettings?.appriseFormat ?? '');
   
   // Validation state
   const [releasesPerPageError, setReleasesPerPageError] = React.useState<ReleasesPerPageError>(null);
@@ -120,13 +128,14 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const useGlobalIncludeRegex = includeRegex.trim() === '';
   const useGlobalExcludeRegex = excludeRegex.trim() === '';
   const useGlobalAppriseTags = appriseTags.trim() === '';
+  const useGlobalAppriseFormat = appriseFormat === '';
 
 
   // This will be used to disable the "Reset All" button.
-  const isUsingAllGlobalSettings = useGlobalChannels && useGlobalReleasesPerPage && useGlobalIncludeRegex && useGlobalExcludeRegex && useGlobalAppriseTags;
+  const isUsingAllGlobalSettings = useGlobalChannels && useGlobalReleasesPerPage && useGlobalIncludeRegex && useGlobalExcludeRegex && useGlobalAppriseTags && useGlobalAppriseFormat;
 
 
-  const newSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags'> = React.useMemo(() => {
+  const newSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags' | 'appriseFormat'> = React.useMemo(() => {
     let finalReleasesPerPage: number | null = null;
     const releasesPerPageStr = String(releasesPerPage).trim();
 
@@ -144,8 +153,9 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
       includeRegex: includeRegex.trim() || undefined,
       excludeRegex: excludeRegex.trim() || undefined,
       appriseTags: appriseTags.trim() || undefined,
+      appriseFormat: appriseFormat || undefined,
     };
-  }, [channels, preReleaseSubChannels, releasesPerPage, includeRegex, excludeRegex, appriseTags]);
+  }, [channels, preReleaseSubChannels, releasesPerPage, includeRegex, excludeRegex, appriseTags, appriseFormat]);
   
   // Ref to store the previous settings for comparison
   const prevSettingsRef = React.useRef(newSettings);
@@ -160,6 +170,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
         includeRegex: currentRepoSettings?.includeRegex ?? undefined,
         excludeRegex: currentRepoSettings?.excludeRegex ?? undefined,
         appriseTags: currentRepoSettings?.appriseTags ?? undefined,
+        appriseFormat: currentRepoSettings?.appriseFormat ?? undefined,
       };
       setChannels(initialSettings.releaseChannels);
       setPreReleaseSubChannels(initialSettings.preReleaseSubChannels);
@@ -167,6 +178,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
       setIncludeRegex(initialSettings.includeRegex ?? '');
       setExcludeRegex(initialSettings.excludeRegex ?? '');
       setAppriseTags(initialSettings.appriseTags ?? '');
+      setAppriseFormat(initialSettings.appriseFormat ?? '');
       
       setSaveStatus('idle');
       setHasChanged(false);
@@ -309,6 +321,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     setIncludeRegex('');
     setExcludeRegex('');
     setAppriseTags('');
+    setAppriseFormat('');
   }
 
   const handleResetFilters = () => {
@@ -351,7 +364,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-6 pt-4 max-h-[70vh] overflow-y-auto pr-2 -mr-4">
+        <div className="space-y-6 pt-4 max-h-[70vh] overflow-y-auto pr-2 -mr-4 pb-4">
           <div className="space-y-4 p-4 border rounded-md">
             <div className="flex justify-between items-center">
               <h4 className="font-semibold text-base">{tGlobal('release_channel_title')}</h4>
@@ -498,40 +511,82 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
 
           <div className="space-y-4 p-4 border rounded-md">
             <div className="flex justify-between items-center">
-              <h4 className="font-semibold text-base">{t('apprise_tags_label')}</h4>
+              <h4 className="font-semibold text-base">{tGlobal('apprise_settings_title')}</h4>
             </div>
-             <p className="text-xs text-muted-foreground">
-              {useGlobalAppriseTags ? t('apprise_tags_hint_global') : t('apprise_tags_hint_individual')}
+            
+            <p className="text-xs text-muted-foreground">
+              {useGlobalAppriseTags && useGlobalAppriseFormat ? t('apprise_settings_hint_global') : t('apprise_settings_hint_individual')}
             </p>
-            <div className="flex items-center gap-2">
-              <Input
-                id="apprise-tags-repo"
-                type="text"
-                value={appriseTags}
-                onChange={(e) => setAppriseTags(e.target.value)}
-                placeholder={t('apprise_tags_placeholder', { tags: globalSettings.appriseTags || '...' })}
-                disabled={!isAppriseConfigured}
-              />
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={() => setAppriseTags('')} className="size-8 shrink-0">
-                        <RotateCcw className="size-4" />
-                        <span className="sr-only">{t('reset_to_global_button')}</span>
-                      </Button>
-                  </TooltipTrigger>
-                    <TooltipContent>
-                        <p>{t('reset_to_global_tooltip')}</p>
-                    </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+            
+            <div className='space-y-2'>
+                <Label htmlFor="apprise-format-repo">{tGlobal('apprise_format_label')}</Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={appriseFormat}
+                    onValueChange={(value: AppriseFormat | 'global') => setAppriseFormat(value === 'global' ? '' : value)}
+                    disabled={!isAppriseConfigured}
+                  >
+                    <SelectTrigger id="apprise-format-repo">
+                        <SelectValue placeholder={t('apprise_format_placeholder', {format: globalSettings.appriseFormat || 'text'})} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="global">{t('apprise_format_option_global', {format: globalSettings.appriseFormat || 'text'})}</SelectItem>
+                        <SelectItem value="text">{tGlobal('apprise_format_text')}</SelectItem>
+                        <SelectItem value="markdown">{tGlobal('apprise_format_markdown')}</SelectItem>
+                        <SelectItem value="html">{tGlobal('apprise_format_html')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => setAppriseFormat('')} className="size-8 shrink-0">
+                            <RotateCcw className="size-4" />
+                            <span className="sr-only">{t('reset_to_global_button')}</span>
+                          </Button>
+                      </TooltipTrigger>
+                        <TooltipContent>
+                            <p>{t('reset_to_global_tooltip')}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                 {!isAppriseConfigured && (
+                    <p className="mt-2 text-xs text-muted-foreground">{tGlobal('apprise_format_disabled_hint')}</p>
+                )}
             </div>
-            {!isAppriseConfigured && (
-              <p className="mt-2 text-xs text-muted-foreground">{tGlobal('apprise_tags_disabled_hint')}</p>
-            )}
+
+            <div className='space-y-2'>
+              <Label htmlFor="apprise-tags-repo">{t('apprise_tags_label')}</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="apprise-tags-repo"
+                  type="text"
+                  value={appriseTags}
+                  onChange={(e) => setAppriseTags(e.target.value)}
+                  placeholder={t('apprise_tags_placeholder', { tags: globalSettings.appriseTags || '...' })}
+                  disabled={!isAppriseConfigured}
+                />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" onClick={() => setAppriseTags('')} className="size-8 shrink-0">
+                          <RotateCcw className="size-4" />
+                          <span className="sr-only">{t('reset_to_global_button')}</span>
+                        </Button>
+                    </TooltipTrigger>
+                      <TooltipContent>
+                          <p>{t('reset_to_global_tooltip')}</p>
+                      </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              {!isAppriseConfigured && (
+                <p className="mt-2 text-xs text-muted-foreground">{tGlobal('apprise_tags_disabled_hint')}</p>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="pt-2">
+          
+          <div className="pt-2">
             <AlertDialog>
                 <AlertDialogTrigger asChild>
                 <Button variant="outline" className="w-full" disabled={isUsingAllGlobalSettings}>
@@ -552,7 +607,9 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                 </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+          </div>
         </div>
+        
         <DialogFooter className="pt-4">
             <SaveStatusIndicator status={saveStatus} />
         </DialogFooter>

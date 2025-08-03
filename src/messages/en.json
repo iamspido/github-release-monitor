@@ -121,6 +121,8 @@
     "releases_per_page_hint": "GitHub API limit: 1-100.",
     "releases_per_page_error_min": "The number must be at least 1.",
     "releases_per_page_error_max": "The number cannot exceed 100.",
+    "apprise_settings_title": "Apprise Settings",
+    "apprise_settings_description": "Configure how notifications are sent to Apprise.",
     "apprise_max_chars_label": "Max characters for Apprise messages",
     "apprise_max_chars_hint": "Set to 0 to disable the limit. Useful for services like Discord (limit ~2000).",
     "apprise_max_chars_disabled_hint": "This option is disabled because the Apprise URL is not configured.",
@@ -128,6 +130,12 @@
     "apprise_tags_hint": "Comma-separated list of tags to send to Apprise.",
     "apprise_tags_placeholder": "e.g., tag1,tag2",
     "apprise_tags_disabled_hint": "This option is disabled because the Apprise URL is not configured.",
+    "apprise_format_label": "Global Apprise Format",
+    "apprise_format_hint": "Select the default message format for Apprise. 'Text' is the most compatible.",
+    "apprise_format_disabled_hint": "This option is disabled because the Apprise URL is not configured.",
+    "apprise_format_text": "Text",
+    "apprise_format_markdown": "Markdown",
+    "apprise_format_html": "HTML",
     "cache_settings_title": "Cache Settings",
     "cache_settings_description": "Configure how long release data is cached on the server to reduce API calls. Set to 0 to disable cache.",
     "cache_validation_error": "Cache duration cannot be longer than the refresh interval.",
@@ -193,10 +201,12 @@
     "autosave_success": "All changes saved",
     "autosave_success_short": "Saved",
     "autosave_error": "Error",
+    "apprise_settings_hint_global": "Using global Apprise settings.",
+    "apprise_settings_hint_individual": "Using individual Apprise settings.",
     "apprise_tags_label": "Apprise Tags",
     "apprise_tags_placeholder": "Global: {tags}",
-    "apprise_tags_hint_global": "Using global setting.",
-    "apprise_tags_hint_individual": "Using individual setting. Leave blank to use global."
+    "apprise_format_placeholder": "Global ({format})",
+    "apprise_format_option_global": "Use global ({format})"
   },
   "TestPage": {
     "title": "System Configuration Test",
@@ -366,11 +376,11 @@
     "table_row4_notes": "https://this.is.a.very.long.url.that.should.be.wrapped.or.broken.correctly.in.the.ui/and/should/not/break/the/layout/of/the/card.com",
     "apprise_basic_test_notification_title": "Apprise Test Notification",
     "apprise_basic_test_title": "This is a basic Apprise test",
-    "apprise_basic_item_bold": "**Bold text** is supported.",
-    "apprise_basic_item_italic": "*Italic text* is supported.",
-    "apprise_basic_item_code": "`Inline code` is supported.",
-    "apprise_basic_blockquote": "Blockquotes are supported.",
-    "apprise_basic_link_text": "Links are also supported!"
+    "apprise_basic_item_bold": "Plain text does not support **bold**.",
+    "apprise_basic_item_italic": "Plain text does not support *italics*.",
+    "apprise_basic_item_code": "Plain text does not support `code`.",
+    "apprise_basic_blockquote": "Blockquotes are not specially formatted.",
+    "apprise_basic_link_text": "Links will be displayed as plain URLs."
   },
   "Apprise": {
     "title": "🚀 New Release: {repoId} {tagName}",
@@ -379,6 +389,6 @@
     "truncated_message": "_(Message truncated)_",
     "error_send_failed": "Failed to send Apprise notification.",
     "error_send_failed_detailed": "Apprise error ({status}): {details}",
-    "error_not_configured": "Apprise URL is not configured."
+    "error_not_configured": "Apprise URL is not set in environment variables."
   }
 }

@@ -5,7 +5,7 @@ import * as React from 'react';
 import { Loader2, Save, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-import type { AppSettings, TimeFormat, Locale, ReleaseChannel, PreReleaseChannelType } from '@/types';
+import type { AppSettings, TimeFormat, Locale, ReleaseChannel, PreReleaseChannelType, AppriseFormat } from '@/types';
 import { allPreReleaseTypes } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -115,6 +115,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
   const [excludeRegex, setExcludeRegex] = React.useState(currentSettings.excludeRegex ?? '');
   const [appriseMaxCharacters, setAppriseMaxCharacters] = React.useState(String(currentSettings.appriseMaxCharacters ?? 1800));
   const [appriseTags, setAppriseTags] = React.useState(currentSettings.appriseTags ?? '');
+  const [appriseFormat, setAppriseFormat] = React.useState<AppriseFormat>(currentSettings.appriseFormat ?? 'text');
   
   const [days, setDays] = React.useState(() => String(minutesToDhms(currentSettings.refreshInterval).d));
   const [hours, setHours] = React.useState(() => String(minutesToDhms(currentSettings.refreshInterval).h));
@@ -169,8 +170,9 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
       // and explicitly check for it. This allows `0` to be a valid value.
       appriseMaxCharacters: isNaN(parsedAppriseChars) ? 1800 : parsedAppriseChars,
       appriseTags,
+      appriseFormat,
     };
-  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, timeFormat, locale, channels, preReleaseSubChannels, showAcknowledge, showMarkAsNew, includeRegex, excludeRegex, appriseMaxCharacters, appriseTags]);
+  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, timeFormat, locale, channels, preReleaseSubChannels, showAcknowledge, showMarkAsNew, includeRegex, excludeRegex, appriseMaxCharacters, appriseTags, appriseFormat]);
   
   // Effect for validation
   React.useEffect(() => {
@@ -269,7 +271,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
         clearTimeout(handler);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newSettings, days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, intervalError, isCacheInvalid, releasesPerPageError, includeRegexError, excludeRegexError, appriseMaxCharacters, appriseTags]);
+  }, [newSettings, days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, intervalError, isCacheInvalid, releasesPerPageError, includeRegexError, excludeRegexError, appriseMaxCharacters, appriseTags, appriseFormat]);
 
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -548,70 +550,10 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                   <p className="mt-2 text-xs text-muted-foreground">{t('refresh_interval_hint')}</p>
               )}
           </div>
-          <div>
-            <Label htmlFor="releases-per-page">{t('releases_per_page_label')}</Label>
-            <Input
-              id="releases-per-page"
-              type="number"
-              value={releasesPerPage}
-              onChange={(e) => setReleasesPerPage(e.target.value)}
-              min={1}
-              max={100}
-              disabled={saveStatus === 'saving'}
-              className={cn("mt-2 w-full sm:w-48", !!releasesPerPageError && 'border-destructive focus-visible:ring-destructive')}
-            />
-             {releasesPerPageError === 'too_low' ? (
-                <p className="mt-2 text-sm text-destructive">{t('releases_per_page_error_min')}</p>
-            ) : releasesPerPageError === 'too_high' ? (
-                <p className="mt-2 text-sm text-destructive">{t('releases_per_page_error_max')}</p>
-            ) : (
-                <p className="mt-2 text-xs text-muted-foreground">{t('releases_per_page_hint')}</p>
-            )}
-          </div>
-          <div>
-            <Label htmlFor="apprise-max-chars">{t('apprise_max_chars_label')}</Label>
-            <Input
-              id="apprise-max-chars"
-              type="number"
-              value={appriseMaxCharacters}
-              onChange={(e) => setAppriseMaxCharacters(e.target.value)}
-              min={0}
-              disabled={saveStatus === 'saving' || !isAppriseConfigured}
-              className="mt-2 w-full sm:w-48"
-            />
-            {isAppriseConfigured ? (
-              <p className="mt-2 text-xs text-muted-foreground">{t('apprise_max_chars_hint')}</p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">{t('apprise_max_chars_disabled_hint')}</p>
-            )}
-          </div>
-          <div>
-            <Label htmlFor="apprise-tags">{t('apprise_tags_label')}</Label>
-            <Input
-              id="apprise-tags"
-              type="text"
-              value={appriseTags}
-              onChange={(e) => setAppriseTags(e.target.value)}
-              disabled={saveStatus === 'saving' || !isAppriseConfigured}
-              className="mt-2 w-full"
-              placeholder={t('apprise_tags_placeholder')}
-            />
-            {isAppriseConfigured ? (
-                <p className="mt-2 text-xs text-muted-foreground">{t('apprise_tags_hint')}</p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">{t('apprise_tags_disabled_hint')}</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="break-words">{t('cache_settings_title')}</CardTitle>
-          <CardDescription>{t('cache_settings_description')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-4">
+           <div>
+            <Label>{t('cache_settings_title')}</Label>
+            <div className="grid grid-cols-3 gap-4 mt-2">
                <div className="space-y-2">
                 <Label htmlFor="cache-interval-minutes">{t('refresh_interval_minutes_label')}</Label>
                 <Input
@@ -652,9 +594,100 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                 />
               </div>
             </div>
-             {isCacheInvalid && (
+             {isCacheInvalid ? (
                 <p className="mt-2 text-sm text-destructive">{t('cache_validation_error')}</p>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">{t('cache_settings_description')}</p>
             )}
+          </div>
+          
+          <div>
+            <Label htmlFor="releases-per-page">{t('releases_per_page_label')}</Label>
+            <Input
+              id="releases-per-page"
+              type="number"
+              value={releasesPerPage}
+              onChange={(e) => setReleasesPerPage(e.target.value)}
+              min={1}
+              max={100}
+              disabled={saveStatus === 'saving'}
+              className={cn("mt-2 w-full sm:w-48", !!releasesPerPageError && 'border-destructive focus-visible:ring-destructive')}
+            />
+             {releasesPerPageError === 'too_low' ? (
+                <p className="mt-2 text-sm text-destructive">{t('releases_per_page_error_min')}</p>
+            ) : releasesPerPageError === 'too_high' ? (
+                <p className="mt-2 text-sm text-destructive">{t('releases_per_page_error_max')}</p>
+            ) : (
+                <p className="mt-2 text-xs text-muted-foreground">{t('releases_per_page_hint')}</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card>
+        <CardHeader>
+            <CardTitle>{t('apprise_settings_title')}</CardTitle>
+            <CardDescription>{t('apprise_settings_description')}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <Label htmlFor="apprise-max-chars">{t('apprise_max_chars_label')}</Label>
+            <Input
+              id="apprise-max-chars"
+              type="number"
+              value={appriseMaxCharacters}
+              onChange={(e) => setAppriseMaxCharacters(e.target.value)}
+              min={0}
+              disabled={saveStatus === 'saving' || !isAppriseConfigured}
+              className="mt-2 w-full sm:w-48"
+            />
+            {isAppriseConfigured ? (
+              <p className="mt-2 text-xs text-muted-foreground">{t('apprise_max_chars_hint')}</p>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">{t('apprise_max_chars_disabled_hint')}</p>
+            )}
+          </div>
+
+           <div>
+            <Label htmlFor="apprise-format">{t('apprise_format_label')}</Label>
+            <Select
+              value={appriseFormat}
+              onValueChange={(value: AppriseFormat) => setAppriseFormat(value)}
+              disabled={saveStatus === 'saving' || !isAppriseConfigured}
+            >
+              <SelectTrigger id="apprise-format" className="w-full sm:w-[180px] mt-2">
+                <SelectValue placeholder={t('apprise_format_text')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="text">{t('apprise_format_text')}</SelectItem>
+                <SelectItem value="markdown">{t('apprise_format_markdown')}</SelectItem>
+                <SelectItem value="html">{t('apprise_format_html')}</SelectItem>
+              </SelectContent>
+            </Select>
+            {isAppriseConfigured ? (
+                <p className="mt-2 text-xs text-muted-foreground">{t('apprise_format_hint')}</p>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">{t('apprise_format_disabled_hint')}</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="apprise-tags">{t('apprise_tags_label')}</Label>
+            <Input
+              id="apprise-tags"
+              type="text"
+              value={appriseTags}
+              onChange={(e) => setAppriseTags(e.target.value)}
+              disabled={saveStatus === 'saving' || !isAppriseConfigured}
+              className="mt-2 w-full"
+              placeholder={t('apprise_tags_placeholder')}
+            />
+            {isAppriseConfigured ? (
+                <p className="mt-2 text-xs text-muted-foreground">{t('apprise_tags_hint')}</p>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">{t('apprise_tags_disabled_hint')}</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -698,3 +731,5 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
     </div>
   );
 }
+
+    

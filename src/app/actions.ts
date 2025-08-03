@@ -169,18 +169,18 @@ ${jsCodeExample}
   }
 }
 
-async function getBasicMarkdownBodyForApprise(locale: string): Promise<{ title: string; body: string }> {
+async function getBasicAppriseTestBody(locale: string): Promise<{ title: string; body: string }> {
   const t = await getTranslations({ locale, namespace: 'TestRelease' });
 
-  const body = `**${t('apprise_basic_test_title')}**
+  const body = `${t('apprise_basic_test_title')}
   
-  - ${t('apprise_basic_item_bold')}
-  - ${t('apprise_basic_item_italic')}
-  - \`${t('apprise_basic_item_code')}\`
-  
-  > ${t('apprise_basic_blockquote')}
-  
-  [${t('apprise_basic_link_text')}](https://github.com/iamspido/github-release-monitor)`;
+- ${t('apprise_basic_item_bold')}
+- ${t('apprise_basic_item_italic')}
+- ${t('apprise_basic_item_code')}
+
+> ${t('apprise_basic_blockquote')}
+
+${t('apprise_basic_link_text')} (https://github.com/iamspido/github-release-monitor)`;
 
   return {
     title: t('apprise_basic_test_notification_title'),
@@ -428,6 +428,7 @@ export async function getLatestReleasesForRepos(
         includeRegex: repo.includeRegex,
         excludeRegex: repo.excludeRegex,
         appriseTags: repo.appriseTags,
+        appriseFormat: repo.appriseFormat,
       };
 
       const { release: latestRelease, error } = await fetchLatestReleaseWithCache(
@@ -583,6 +584,7 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
         includeRegex: importedRepo.includeRegex,
         excludeRegex: importedRepo.excludeRegex,
         appriseTags: importedRepo.appriseTags,
+        appriseFormat: importedRepo.appriseFormat,
       };
 
       currentReposMap.set(importedRepo.id, repoToSave);
@@ -969,7 +971,7 @@ export async function sendTestAppriseAction(): Promise<{
     url: 'https://github.com/test/test',
   };
   
-  const { title, body } = await getBasicMarkdownBodyForApprise(locale);
+  const { title, body } = await getBasicAppriseTestBody(locale);
   
   const testRelease: GithubRelease = {
     id: 12345,
@@ -1059,7 +1061,7 @@ export async function getRepositoriesForExport(): Promise<{ success: boolean; da
 
 export async function updateRepositorySettingsAction(
   repoId: string,
-  settings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags'>
+  settings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags' | 'appriseFormat'>
 ): Promise<{ success: boolean; error?: string }> {
   // Security: Validate input
   if (!isValidRepoId(repoId)) {
@@ -1086,6 +1088,7 @@ export async function updateRepositorySettingsAction(
       includeRegex: settings.includeRegex,
       excludeRegex: settings.excludeRegex,
       appriseTags: settings.appriseTags,
+      appriseFormat: settings.appriseFormat,
     };
 
     await saveRepositories(currentRepos);
