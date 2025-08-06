@@ -535,6 +535,10 @@ export async function getLatestReleasesForRepos(
         draft: false,
       } : undefined;
 
+      if (reconstructedRelease) {
+        reconstructedRelease.fetched_at = new Date().toISOString();
+      }
+
       enrichedReleases.push({
         repoId: repo.id,
         repoUrl: repo.url,
@@ -818,7 +822,12 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
     }
 
     if (enrichedRelease.release) {
-        repo.latestRelease = toCachedRelease(enrichedRelease.release);
+        const newCachedRelease = toCachedRelease(enrichedRelease.release);
+        if (JSON.stringify(repo.latestRelease) !== JSON.stringify(newCachedRelease)) {
+            repoWasUpdated = true;
+        }
+        repo.latestRelease = newCachedRelease;
+
         const newTag = enrichedRelease.release.tag_name;
         const isNewRelease = repo.lastSeenReleaseTag && repo.lastSeenReleaseTag !== newTag;
 
