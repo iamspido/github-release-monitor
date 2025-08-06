@@ -208,7 +208,7 @@ async function fetchLatestRelease(
   globalSettings: AppSettings,
   locale: string
 ): Promise<{ release: GithubRelease | null; error: FetchError | null, newEtag?: string }> {
-  console.log(`Fetching release for owner: ${owner}, repo: ${repo}`);
+  console.log(`Fetching release for ${owner}/${repo}`);
   const fetchedAtTimestamp = new Date().toISOString();
 
   // --- Determine effective settings ---
@@ -763,7 +763,6 @@ export async function refreshSingleRepositoryAction(repoId: string) {
     console.error('Invalid repoId format for refresh:', repoId);
     return;
   }
-  console.log(`Refreshing single repository: ${repoId}`);
 
   const settings = await getSettings();
   const locale = settings.locale;
@@ -1271,7 +1270,7 @@ export async function updateRepositorySettingsAction(
     };
 
     await saveRepositories(currentRepos);
-    refreshSingleRepositoryAction(repoId);
+    await refreshSingleRepositoryAction(repoId);
     return { success: true };
 
   } catch (error: any)
