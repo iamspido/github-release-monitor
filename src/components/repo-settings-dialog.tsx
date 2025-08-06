@@ -7,7 +7,8 @@ import type { Repository, ReleaseChannel, PreReleaseChannelType, AppSettings, Ap
 import { allPreReleaseTypes } from '@/types';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { updateRepositorySettingsAction, revalidateReleasesAction } from '@/app/actions';
+import { updateRepositorySettingsAction } from '@/app/actions';
+import { useRouter } from 'next/navigation';
 
 import {
   Dialog,
@@ -99,6 +100,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const t = useTranslations('RepoSettingsDialog');
   const tGlobal = useTranslations('SettingsForm');
   const { toast } = useToast();
+  const router = useRouter();
 
   const [channels, setChannels] = React.useState<ReleaseChannel[]>(currentRepoSettings?.releaseChannels ?? []);
   const [preReleaseSubChannels, setPreReleaseSubChannels] = React.useState<PreReleaseChannelType[]>(
@@ -285,7 +287,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (!open && hasChanged) {
-        revalidateReleasesAction();
+        router.refresh();
     }
   }
 

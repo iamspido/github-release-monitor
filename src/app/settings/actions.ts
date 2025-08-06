@@ -6,6 +6,7 @@ import type { AppSettings } from '@/types';
 import { getSettings, saveSettings } from '@/lib/settings-storage';
 import { getRepositories, saveRepositories } from '@/lib/repository-storage';
 import { cookies } from 'next/headers';
+import { checkForNewReleases } from '@/app/actions';
 
 export async function updateSettingsAction(newSettings: AppSettings) {
   try {
@@ -30,6 +31,7 @@ export async function updateSettingsAction(newSettings: AppSettings) {
 
 
     await saveSettings(settingsToSave);
+    checkForNewReleases({ skipCache: true });
 
     // Set the locale cookie for next-intl middleware to pick up.
     // This is now done on every save, not just on change, to ensure consistency.

@@ -1,98 +1,62 @@
 import * as React from 'react';
 import { getTranslations } from 'next-intl/server';
-import type { EnrichedRelease, Repository, AppSettings, FetchError, GithubRelease, CachedRelease } from '@/types';
-import { getLatestReleasesForRepos } from '@/app/actions';
-import { getRepositories, saveRepositories } from '@/lib/repository-storage';
+import type { EnrichedRelease, Repository, AppSettings, FetchError, GithubRelease } from '@/types';
+import { getRepositories } from '@/lib/repository-storage';
 import { getSettings } from '@/lib/settings-storage';
 import { Header } from '@/components/header';
 import { BackToTopButton } from '@/components/back-to-top-button';
 import { AutoRefresher } from '@/components/auto-refresher';
 import { HomePageClient } from '@/components/home-page-client';
 
-// Helper function to find the first general error that is a rate limit error.
-function findFirstRateLimitError(releases: EnrichedRelease[]): FetchError | undefined {
-  for (const r of releases) {
-    if (r.error?.type === 'rate_limit') {
-      return r.error;
-    }
-  }
-  return undefined;
-}
-
-// Helper function to count all other errors
-function countErrors(releases: EnrichedRelease[]): Map<Exclude<FetchError['type'], 'not_modified'>, number> {
-  const errorCounts = new Map<Exclude<FetchError['type'], 'not_modified'>, number>();
-  for (const r of releases) {
-    if (r.error && r.error.type !== 'rate_limit' && r.error.type !== 'not_modified') {
-      const currentCount = errorCounts.get(r.error.type) || 0;
-      errorCounts.set(r.error.type, currentCount + 1);
-    }
-  }
-  return errorCounts;
-}
-
-function toCachedRelease(release: GithubRelease): CachedRelease {
-  return {
-    html_url: release.html_url,
-    tag_name: release.tag_name,
-    name: release.name,
-    body: release.body,
-    created_at: release.created_at,
-    published_at: release.published_at,
-    fetched_at: release.fetched_at,
-  };
-}
-
 export default async function HomePage({params}: {params: Promise<{locale: string}>}) {
   const { locale } = await params;
   const t = await getTranslations({locale: locale, namespace: 'HomePage'});
-  const tActions = await getTranslations({locale: locale, namespace: 'Actions'});
 
   let repositories: Repository[] = [];
   let releases: EnrichedRelease[] = [];
   let error: string | null = null;
   const lastUpdated = new Date();
   let settings: AppSettings;
-  let generalError: string | null = null;
-  let errorSummary: Map<Exclude<FetchError['type'], 'not_modified'>, number> | null = null;
+  const generalError: string | null = null;
+  const errorSummary: Map<Exclude<FetchError['type'], 'not_modified'>, number> | null = null;
 
   try {
     settings = await getSettings();
     repositories = await getRepositories();
     if (repositories.length > 0) {
-      releases = await getLatestReleasesForRepos(repositories, settings, locale);
+      releases = repositories.map(repo => {
+        const cached = repo.latestRelease;
+        const reconstructedRelease: GithubRelease | undefined = cached ? {
+          ...cached,
+          id: 0, // Cached releases might not have a full ID
+          prerelease: false, // This info isn't in CachedRelease
+          draft: false, // This info isn't in CachedRelease
+        } : undefined;
 
-      // Update cache after fetch
-      const reposToSave = [...repositories];
-      for (const enrichedRelease of releases) {
-        const repoIndex = reposToSave.findIndex(r => r.id === enrichedRelease.repoId);
-        if (repoIndex === -1) continue;
-
-        if (enrichedRelease.newEtag) {
-          reposToSave[repoIndex].etag = enrichedRelease.newEtag;
-        }
-        if (enrichedRelease.release) {
-          reposToSave[repoIndex].latestRelease = toCachedRelease(enrichedRelease.release);
-        }
-      }
-      await saveRepositories(reposToSave);
+        return {
+          repoId: repo.id,
+          repoUrl: repo.url,
+          release: reconstructedRelease,
+          isNew: repo.isNew,
+          repoSettings: {
+            releaseChannels: repo.releaseChannels,
+            preReleaseSubChannels: repo.preReleaseSubChannels,
+            releasesPerPage: repo.releasesPerPage,
+            includeRegex: repo.includeRegex,
+            excludeRegex: repo.excludeRegex,
+            appriseTags: repo.appriseTags,
+            appriseFormat: repo.appriseFormat,
+          },
+          // No fetch, so no newEtag and no error
+          newEtag: repo.etag,
+          error: null,
+        };
+      });
     }
   } catch (e: any) {
     console.error('Failed to load repositories or releases:', e);
     error = t('load_error');
     settings = { timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releaseChannels: ['stable'], showAcknowledge: true, releasesPerPage: 30 };
-  }
-
-  // Prioritize showing the rate limit error as it's the most critical.
-  const rateLimitError = findFirstRateLimitError(releases);
-  if (rateLimitError) {
-    generalError = tActions('error_rate_limit');
-  } else {
-    // If there's no rate limit error, count and summarize the other errors.
-    const countedErrors = countErrors(releases);
-    if (countedErrors.size > 0) {
-      errorSummary = countedErrors;
-    }
   }
 
   return (

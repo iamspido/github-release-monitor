@@ -208,6 +208,7 @@ async function fetchLatestRelease(
   globalSettings: AppSettings,
   locale: string
 ): Promise<{ release: GithubRelease | null; error: FetchError | null, newEtag?: string }> {
+  console.log(`Fetching release for owner: ${owner}, repo: ${repo}`);
   const fetchedAtTimestamp = new Date().toISOString();
 
   // --- Determine effective settings ---
@@ -627,7 +628,26 @@ export async function addRepositoriesAction(
     const uniqueNewRepos = newRepos.filter(r => !existingIds.has(r.id));
 
     if (uniqueNewRepos.length > 0) {
-      await saveRepositories([...currentRepos, ...uniqueNewRepos]);
+      const settings = await getSettings();
+      const enrichedReleases = await getLatestReleasesForRepos(uniqueNewRepos, settings, locale, { skipCache: true });
+
+      const releaseMap = new Map(enrichedReleases.map(r => [r.repoId, r]));
+
+      const updatedNewRepos = uniqueNewRepos.map(repo => {
+        const enriched = releaseMap.get(repo.id);
+        if (enriched) {
+          if (enriched.release) {
+            repo.latestRelease = toCachedRelease(enriched.release);
+            repo.lastSeenReleaseTag = enriched.release.tag_name;
+          }
+          if (enriched.newEtag) {
+            repo.etag = enriched.newEtag;
+          }
+        }
+        return repo;
+      });
+
+      await saveRepositories([...currentRepos, ...updatedNewRepos]);
       revalidatePath('/');
     }
 
@@ -676,6 +696,7 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
 
     let addedCount = 0;
     let updatedCount = 0;
+    const reposToFetch: Repository[] = [];
 
     for (const importedRepo of validImportedRepos) {
       if (currentRepoIds.has(importedRepo.id)) {
@@ -686,24 +707,37 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
 
       const repoToSave: Repository = {
         ...currentReposMap.get(importedRepo.id),
-        id: importedRepo.id,
-        url: importedRepo.url,
-        lastSeenReleaseTag: importedRepo.lastSeenReleaseTag,
-        etag: importedRepo.etag,
+        ...importedRepo,
         isNew: (settings.showAcknowledge ?? true) ? (importedRepo.isNew ?? false) : false,
-        releaseChannels: importedRepo.releaseChannels,
-        preReleaseSubChannels: importedRepo.preReleaseSubChannels,
-        releasesPerPage: importedRepo.releasesPerPage,
-        includeRegex: importedRepo.includeRegex,
-        excludeRegex: importedRepo.excludeRegex,
-        appriseTags: importedRepo.appriseTags,
-        appriseFormat: importedRepo.appriseFormat,
       };
-
       currentReposMap.set(importedRepo.id, repoToSave);
+      reposToFetch.push(repoToSave);
     }
 
-    const finalList = Array.from(currentReposMap.values());
+    let finalList = Array.from(currentReposMap.values());
+
+    if (reposToFetch.length > 0) {
+      console.log(`Fetching initial releases for ${reposToFetch.length} imported/updated repos.`);
+      const enrichedReleases = await getLatestReleasesForRepos(reposToFetch, settings, locale, { skipCache: true });
+      const releaseMap = new Map(enrichedReleases.map(r => [r.repoId, r]));
+
+      finalList = finalList.map(repo => {
+        const enriched = releaseMap.get(repo.id);
+        if (enriched) {
+          if (enriched.release) {
+            repo.latestRelease = toCachedRelease(enriched.release);
+            if (!repo.lastSeenReleaseTag) {
+              repo.lastSeenReleaseTag = enriched.release.tag_name;
+            }
+          }
+          if (enriched.newEtag) {
+            repo.etag = enriched.newEtag;
+          }
+        }
+        return repo;
+      });
+    }
+
     await saveRepositories(finalList);
     revalidatePath('/');
 
@@ -722,6 +756,50 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
       message: t('toast_save_error_generic'),
     };
   }
+}
+
+export async function refreshSingleRepositoryAction(repoId: string) {
+  if (!isValidRepoId(repoId)) {
+    console.error('Invalid repoId format for refresh:', repoId);
+    return;
+  }
+  console.log(`Refreshing single repository: ${repoId}`);
+
+  const settings = await getSettings();
+  const locale = settings.locale;
+  const allRepos = await getRepositories();
+  const repoToRefresh = allRepos.find(r => r.id === repoId);
+
+  if (!repoToRefresh) {
+    console.error(`Repository ${repoId} not found for refresh.`);
+    return;
+  }
+
+  const enrichedReleases = await getLatestReleasesForRepos(
+    [repoToRefresh],
+    settings,
+    locale,
+    { skipCache: true }
+  );
+
+  const enrichedRelease = enrichedReleases[0];
+  if (!enrichedRelease) {
+    console.error(`Failed to get release for ${repoId} during single refresh.`);
+    return;
+  }
+
+  const repoIndex = allRepos.findIndex(r => r.id === repoId);
+  if (repoIndex === -1) return; // Should not happen
+
+  if (enrichedRelease.newEtag) {
+    allRepos[repoIndex].etag = enrichedRelease.newEtag;
+  }
+  if (enrichedRelease.release) {
+    allRepos[repoIndex].latestRelease = toCachedRelease(enrichedRelease.release);
+  }
+
+  await saveRepositories(allRepos);
+  revalidatePath('/'); // Revalidate the home page to show the new data
 }
 
 export async function removeRepositoryAction(repoId: string) {
@@ -1193,6 +1271,7 @@ export async function updateRepositorySettingsAction(
     };
 
     await saveRepositories(currentRepos);
+    refreshSingleRepositoryAction(repoId);
     return { success: true };
 
   } catch (error: any)
