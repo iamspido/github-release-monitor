@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -98,7 +97,7 @@ export function TestPageClient({
 
   const isRateLimitHigh = rateLimit ? rateLimit.limit > 1000 : false;
   const requiredMailVars = ['MAIL_HOST', 'MAIL_PORT', 'MAIL_FROM_ADDRESS', 'MAIL_TO_ADDRESS'];
-  
+
   React.useEffect(() => {
     if (rateLimit) {
       // Format the time on the client to avoid hydration mismatch
@@ -139,7 +138,7 @@ export function TestPageClient({
       }
     });
   };
-  
+
   const handleSendTestApprise = () => {
     startAppriseTransition(async () => {
         const result = await sendTestAppriseAction();
@@ -245,7 +244,7 @@ export function TestPageClient({
           )}
         </CardContent>
       </Card>
-      
+
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -267,7 +266,7 @@ export function TestPageClient({
               <p className="pl-7 text-sm text-muted-foreground">{appriseStatus.error}</p>
             </div>
           )}
-          
+
           <p className="text-sm text-muted-foreground font-mono break-all pl-7">
               <span className="font-semibold text-foreground">APPRISE_URL=</span>
               {notificationConfig.variables.APPRISE_URL ? (
@@ -334,7 +333,7 @@ export function TestPageClient({
                     if (key === 'APPRISE_URL') return null; // Handled in its own card
                     const isRequired = requiredMailVars.includes(key);
                     const isMissingAndRequired = isRequired && !value;
-                    
+
                     if (key === 'MAIL_PASSWORD' && value) {
                       return (
                         <div key={key} className="flex items-center gap-2">
@@ -365,7 +364,7 @@ export function TestPageClient({
                   })}
               </div>
             </div>
-          
+
             <div className="pt-4 space-y-4">
                 <div className="space-y-2">
                     <Label htmlFor="test-email-recipient">{t('email_recipient_label')}</Label>
@@ -399,7 +398,7 @@ export function TestPageClient({
             </div>
         </CardContent>
       </Card>
-      
+
       <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
@@ -450,5 +449,3 @@ export function TestPageClient({
     </div>
   );
 }
-
-    

@@ -1,4 +1,3 @@
-
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -19,7 +18,7 @@ export async function updateSettingsAction(newSettings: AppSettings) {
       const updatedRepos = allRepos.map(repo => ({...repo, isNew: false}));
       await saveRepositories(updatedRepos);
     }
-    
+
     // Ensure refreshInterval is at least 1
     const settingsToSave = {
         ...newSettings,
@@ -40,7 +39,7 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         maxAge: 60 * 60 * 24 * 365, // 1 year
         sameSite: 'lax',
     });
-    
+
 
     revalidatePath('/');
     revalidatePath('/settings');

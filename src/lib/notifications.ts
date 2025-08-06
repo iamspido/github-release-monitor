@@ -1,4 +1,3 @@
-
 'use server';
 
 import type { GithubRelease, Repository, AppSettings, AppriseFormat } from '@/types';
@@ -19,7 +18,7 @@ async function generateMarkdownReleaseBody(release: GithubRelease, locale: strin
     if (maxChars > 0) {
         const footer = `${footerSeparator}${truncatedText}\n${viewOnGithubText}`;
         const availableLength = maxChars - footer.length;
-        
+
         if (body.length > availableLength) {
             if (availableLength > 0) {
                 body = body.substring(0, availableLength) + footer;
@@ -63,7 +62,7 @@ async function sendAppriseNotification(repository: Repository, release: GithubRe
     const tags = repository.appriseTags ?? settings.appriseTags;
     // Default to 'text' if no format is specified anywhere
     const format = repository.appriseFormat ?? settings.appriseFormat ?? 'text';
-    
+
     const title = t('title', { repoId: repository.id, tagName: release.tag_name });
     const body = await generateAppriseBody(release, repository, format, locale, settings);
 
@@ -82,7 +81,7 @@ async function sendAppriseNotification(repository: Repository, release: GithubRe
         const notifyUrl = /\/notify(\/|$)/.test(normalizedAppriseUrl)
             ? normalizedAppriseUrl
             : `${normalizedAppriseUrl}/notify`;
-        
+
         const response = await fetch(notifyUrl, {
             method: 'POST',
             headers: {

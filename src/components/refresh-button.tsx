@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -22,7 +21,7 @@ export function RefreshButton() {
       try {
         const result = await refreshAndCheckAction();
         // After invalidating the cache on the server, refresh the page's data
-        router.refresh(); 
+        router.refresh();
         toast({
           title: t('toast_refresh_success_title'),
           description: t(result.messageKey),
@@ -51,5 +50,3 @@ export function RefreshButton() {
     </form>
   );
 }
-
-    

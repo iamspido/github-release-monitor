@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -55,8 +54,8 @@ export function MobileMenu({ onLogout, isLoggingOut }: MobileMenuProps) {
         <DropdownMenuContent align="end">
           {navLinks.map((link) => (
             <React.Fragment key={link.href}>
-              <DropdownMenuItem 
-                asChild 
+              <DropdownMenuItem
+                asChild
                 onSelect={() => router.push(link.href as any)}
                 className={cn("flex w-full cursor-pointer items-center", isActive(link.href as any) && 'bg-secondary')}
               >

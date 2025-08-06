@@ -88,7 +88,7 @@ export default {
           },
         },
         sm: {
-           css: {
+          css: {
             'code:not(pre code)': {
               fontFamily: theme('fontFamily.code').join(', '),
               backgroundColor: 'hsl(var(--muted))',

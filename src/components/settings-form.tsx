@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -72,10 +71,10 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
         idle: { text: '', icon: null, className: '' },
         waiting: { text: t('autosave_waiting'), icon: <Save className="size-4" />, className: 'text-muted-foreground' },
         saving: { text: t('autosave_saving'), icon: <Loader2 className="size-4 animate-spin" />, className: 'text-muted-foreground' },
-        success: { 
+        success: {
             text: t('autosave_success'),
-            icon: <CheckCircle className="size-4" />, 
-            className: 'text-green-500' 
+            icon: <CheckCircle className="size-4" />,
+            className: 'text-green-500'
         },
         error: { text: t('autosave_error'), icon: <AlertCircle className="size-4" />, className: 'text-destructive' },
     };
@@ -113,11 +112,11 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
   const [appriseMaxCharacters, setAppriseMaxCharacters] = React.useState(String(currentSettings.appriseMaxCharacters ?? 1800));
   const [appriseTags, setAppriseTags] = React.useState(currentSettings.appriseTags ?? '');
   const [appriseFormat, setAppriseFormat] = React.useState<AppriseFormat>(currentSettings.appriseFormat ?? 'text');
-  
+
   const [days, setDays] = React.useState(() => String(minutesToDhms(currentSettings.refreshInterval).d));
   const [hours, setHours] = React.useState(() => String(minutesToDhms(currentSettings.refreshInterval).h));
   const [minutes, setMinutes] = React.useState(() => String(minutesToDhms(currentSettings.refreshInterval).m));
-  
+
   const [cacheDays, setCacheDays] = React.useState(() => String(minutesToDhms(currentSettings.cacheInterval).d));
   const [cacheHours, setCacheHours] = React.useState(() => String(minutesToDhms(currentSettings.cacheInterval).h));
   const [cacheMinutes, setCacheMinutes] = React.useState(() => String(minutesToDhms(currentSettings.cacheInterval).m));
@@ -130,7 +129,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
 
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>('idle');
   const isInitialMount = React.useRef(true);
-  
+
   const [isDeleting, startDeleteTransition] = React.useTransition();
 
   const newSettings: AppSettings = React.useMemo(() => {
@@ -145,7 +144,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
     const totalCacheMinutes = (dCache * MINUTES_IN_DAY) + (hCache * MINUTES_IN_HOUR) + mCache;
 
     const parsedAppriseChars = parseInt(appriseMaxCharacters, 10);
-    
+
     return {
       timeFormat,
       locale,
@@ -163,7 +162,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
       appriseFormat,
     };
   }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, timeFormat, locale, channels, preReleaseSubChannels, showAcknowledge, showMarkAsNew, includeRegex, excludeRegex, appriseMaxCharacters, appriseTags, appriseFormat]);
-  
+
   React.useEffect(() => {
     const refreshFieldsFilled = days !== '' && hours !== '' && minutes !== '';
     const cacheFieldsFilled = cacheDays !== '' && cacheHours !== '' && cacheMinutes !== '';
@@ -207,11 +206,11 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
     } catch (e) {
         setExcludeRegexError('invalid');
     }
-    
+
     const isCacheEnabled = newSettings.cacheInterval > 0;
     const cacheIsLarger = newSettings.cacheInterval > newSettings.refreshInterval;
     setIsCacheInvalid(refreshFieldsFilled && cacheFieldsFilled && isCacheEnabled && cacheIsLarger);
-    
+
   }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, newSettings.refreshInterval, newSettings.cacheInterval, includeRegex, excludeRegex]);
 
 
@@ -228,7 +227,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
     }
 
     setSaveStatus('waiting');
-    
+
     const handler = setTimeout(async () => {
         setSaveStatus('saving');
         const result = await updateSettingsAction(newSettings);
@@ -273,16 +272,16 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
       return;
     }
     setChannels(newChannels);
-    
+
     if (channel === 'prerelease' && newChannels.includes('prerelease')) {
       setPreReleaseSubChannels(allPreReleaseTypes);
     }
   };
 
   const handlePreReleaseSubChannelChange = (subChannel: PreReleaseChannelType) => {
-    setPreReleaseSubChannels(prev => 
-      prev.includes(subChannel) 
-        ? prev.filter(sc => sc !== subChannel) 
+    setPreReleaseSubChannels(prev =>
+      prev.includes(subChannel)
+        ? prev.filter(sc => sc !== subChannel)
         : [...prev, subChannel]
     );
   };
@@ -380,7 +379,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
           </div>
         </CardContent>
       </Card>
-      
+
       <Card>
         <CardHeader>
           <CardTitle>{t('release_channel_title')}</CardTitle>
@@ -411,7 +410,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                     />
                     <Label htmlFor="prerelease" className="font-normal cursor-pointer">{t('release_channel_prerelease')}</Label>
                 </div>
-                
+
                 <div className={cn(
                     "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
                     isPreReleaseChecked ? 'mt-4 max-h-96 opacity-100' : 'max-h-0 opacity-0'
@@ -444,7 +443,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
               />
               <Label htmlFor="draft" className="font-normal cursor-pointer">{t('release_channel_draft')}</Label>
             </div>
-            
+
             <div className="space-y-2 pt-4">
                 <h3 className="font-medium">{t('regex_filter_title')}</h3>
                 <p className="text-sm text-muted-foreground">{t('regex_filter_description')}</p>
@@ -583,7 +582,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
               <p className="mt-2 text-xs text-muted-foreground">{t('cache_settings_description')}</p>
             )}
           </div>
-          
+
           <div>
             <Label htmlFor="releases-per-page">{t('releases_per_page_label')}</Label>
             <Input
@@ -607,7 +606,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
           </div>
         </CardContent>
       </Card>
-      
+
       <Card>
         <CardHeader>
             <CardTitle>{t('apprise_settings_title')}</CardTitle>
@@ -715,5 +714,3 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
     </div>
   );
 }
-
-    

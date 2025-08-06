@@ -47,7 +47,7 @@ export default async function HomePage({params}: {params: Promise<{locale: strin
   const { locale } = await params;
   const t = await getTranslations({locale: locale, namespace: 'HomePage'});
   const tActions = await getTranslations({locale: locale, namespace: 'Actions'});
-  
+
   let repositories: Repository[] = [];
   let releases: EnrichedRelease[] = [];
   let error: string | null = null;
@@ -61,7 +61,7 @@ export default async function HomePage({params}: {params: Promise<{locale: strin
     repositories = await getRepositories();
     if (repositories.length > 0) {
       releases = await getLatestReleasesForRepos(repositories, settings, locale);
-      
+
       // Update cache after fetch
       const reposToSave = [...repositories];
       for (const enrichedRelease of releases) {

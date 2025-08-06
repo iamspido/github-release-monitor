@@ -1,4 +1,3 @@
-
 'use server';
 
 import type {
@@ -59,7 +58,7 @@ function isPreReleaseByTagName(tagName: string, preReleaseSubChannels?: PreRelea
   if (!preReleaseSubChannels || preReleaseSubChannels.length === 0) {
       return false;
   }
-  
+
   // This regex looks for a separator (like - or .), then one of the keywords.
   // The (?=[^a-zA-Z]|$) is a positive lookahead. It asserts that the character
   // following the keyword is NOT a letter, or it's the end of the string.
@@ -186,7 +185,7 @@ async function getBasicAppriseTestBody(locale: string): Promise<{ title: string;
   const t = await getTranslations({ locale, namespace: 'TestRelease' });
 
   const body = `${t('apprise_basic_test_title')}
-  
+
 - ${t('apprise_basic_item_bold')}
 - ${t('apprise_basic_item_italic')}
 - ${t('apprise_basic_item_code')}
@@ -215,7 +214,7 @@ async function fetchLatestRelease(
   const effectiveReleaseChannels = (repoSettings.releaseChannels && repoSettings.releaseChannels.length > 0)
     ? repoSettings.releaseChannels
     : globalSettings.releaseChannels;
-  
+
   const effectivePreReleaseSubChannels = (repoSettings.preReleaseSubChannels && repoSettings.preReleaseSubChannels.length > 0)
     ? repoSettings.preReleaseSubChannels
     : globalSettings.preReleaseSubChannels || allPreReleaseTypes;
@@ -223,7 +222,7 @@ async function fetchLatestRelease(
   const totalReleasesToFetch = (typeof repoSettings.releasesPerPage === 'number' && repoSettings.releasesPerPage >= 1 && repoSettings.releasesPerPage <= 1000)
     ? repoSettings.releasesPerPage
     : globalSettings.releasesPerPage;
-  
+
   const effectiveIncludeRegex = repoSettings.includeRegex ?? globalSettings.includeRegex;
   const effectiveExcludeRegex = repoSettings.excludeRegex ?? globalSettings.excludeRegex;
 
@@ -260,14 +259,14 @@ async function fetchLatestRelease(
   if (process.env.GITHUB_ACCESS_TOKEN) {
     headers['Authorization'] = `token ${process.env.GITHUB_ACCESS_TOKEN}`;
   }
-  
+
   try {
     for (let page = 1; page <= pagesToFetch; page++) {
       const releasesOnThisPage = Math.min(MAX_PER_PAGE, totalReleasesToFetch - allReleases.length);
       if (releasesOnThisPage <= 0) break;
 
       const url = `${GITHUB_API_BASE_URL}/releases?per_page=${releasesOnThisPage}&page=${page}`;
-      
+
       const currentHeaders = {...headers};
       // Only use ETag for the first page request.
       if (page === 1 && repoSettings.etag) {
@@ -296,7 +295,7 @@ async function fetchLatestRelease(
           const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
           const rateLimitReset = response.headers.get('x-ratelimit-reset');
           const resetTime = rateLimitReset ? new Date(parseInt(rateLimitReset, 10) * 1000).toISOString() : 'N/A';
-          
+
           console.error(
             `GitHub API rate limit exceeded for ${owner}/${repo}. ` +
             `Limit: ${rateLimitLimit}, Remaining: ${rateLimitRemaining}, Resets at: ${resetTime}. ` +
@@ -319,7 +318,7 @@ async function fetchLatestRelease(
     if (allReleases.length === 0) {
       console.log(`No formal releases found for ${owner}/${repo}. Falling back to tags.`);
       const tagsResponse = await fetch(`${GITHUB_API_BASE_URL}/tags?per_page=1`, { headers, cache: 'no-store' });
-      
+
       if (!tagsResponse.ok) {
           console.error(`Failed to fetch tags for ${owner}/${repo} after failing to find releases.`);
           return { release: null, error: { type: 'no_releases_found' }, newEtag };
@@ -333,7 +332,7 @@ async function fetchLatestRelease(
 
       const latestTag = tags[0];
       const t = await getTranslations({ locale, namespace: 'Actions' });
-      
+
       let bodyContent = '';
       let publicationDate = new Date().toISOString();
 
@@ -354,7 +353,7 @@ async function fetchLatestRelease(
                 }
             }
         }
-        
+
         // If no annotated tag message was found (either lightweight tag or error), fall back to commit message.
         if (!bodyContent) {
           const commitResponse = await fetch(`${GITHUB_API_BASE_URL}/commits/${latestTag.commit.sha}`, { headers, cache: 'no-store' });
@@ -371,7 +370,7 @@ async function fetchLatestRelease(
          console.error(`Error during tag fallback for ${owner}/${repo}:`, e);
          return { release: null, error: { type: 'api_error' }, newEtag };
       }
-      
+
       const virtualRelease: GithubRelease = {
           id: 0, // Virtual release has no ID
           html_url: `https://github.com/${owner}/${repo}/releases/tag/${latestTag.name}`,
@@ -403,9 +402,9 @@ async function fetchLatestRelease(
       if (r.draft) {
         return effectiveReleaseChannels.includes('draft');
       }
-      
+
       const isConsideredPreRelease = r.prerelease || isPreReleaseByTagName(r.tag_name, allPreReleaseTypes);
-      
+
       if (isConsideredPreRelease) {
         if (!effectiveReleaseChannels.includes('prerelease')) return false;
         return isPreReleaseByTagName(r.tag_name, effectivePreReleaseSubChannels);
@@ -447,9 +446,9 @@ async function fetchLatestRelease(
     if (latestRelease) {
       latestRelease.fetched_at = new Date().toISOString();
     }
-    
+
     return { release: latestRelease, error: null, newEtag };
-    
+
   } catch (error) {
     console.error(`Failed to fetch releases for ${owner}/${repo}:`, error);
     return { release: null, error: { type: 'api_error' } };
@@ -531,7 +530,7 @@ export async function getLatestReleasesForRepos(
       const cached: CachedRelease | undefined = repo.latestRelease;
       const reconstructedRelease: GithubRelease | undefined = cached ? {
         ...cached,
-        id: 0, 
+        id: 0,
         prerelease: false,
         draft: false,
       } : undefined;
@@ -680,7 +679,7 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
       } else {
         addedCount++;
       }
-      
+
       const repoToSave: Repository = {
         ...currentReposMap.get(importedRepo.id),
         id: importedRepo.id,
@@ -741,14 +740,14 @@ export async function acknowledgeNewReleaseAction(repoId: string): Promise<{ suc
   try {
     const currentRepos = await getRepositories();
     const repoIndex = currentRepos.findIndex(r => r.id === repoId);
-    
+
     if (repoIndex !== -1) {
       currentRepos[repoIndex].isNew = false;
       await saveRepositories(currentRepos);
       revalidatePath('/');
       return { success: true };
     }
-    
+
     return { success: false, error: t('toast_acknowledge_error_not_found') };
 
   } catch (error: any) {
@@ -766,14 +765,14 @@ export async function markAsNewAction(repoId: string): Promise<{ success: boolea
   try {
     const currentRepos = await getRepositories();
     const repoIndex = currentRepos.findIndex(r => r.id === repoId);
-    
+
     if (repoIndex !== -1) {
       currentRepos[repoIndex].isNew = true;
       await saveRepositories(currentRepos);
       revalidatePath('/');
       return { success: true };
     }
-    
+
     return { success: false, error: t('toast_mark_as_new_error_not_found') };
 
   } catch (error: any) {
@@ -871,11 +870,11 @@ async function backgroundPollingLoop() {
     const settings = await getSettings();
     let pollingIntervalMinutes = settings.refreshInterval;
 
-    const MINIMUM_INTERVAL_MINUTES = 1; 
+    const MINIMUM_INTERVAL_MINUTES = 1;
     if (pollingIntervalMinutes < MINIMUM_INTERVAL_MINUTES) {
       pollingIntervalMinutes = MINIMUM_INTERVAL_MINUTES;
     }
-    
+
     const pollingIntervalMs = pollingIntervalMinutes * 60 * 1000;
 
     console.log(`Next background check scheduled in ${pollingIntervalMinutes} minutes.`);
@@ -897,11 +896,11 @@ const TEST_REPO_ID = 'test/test';
 export async function setupTestRepositoryAction(): Promise<{ success: boolean; message: string; }> {
   const locale = await getLocale();
   const t = await getTranslations({locale, namespace: 'TestPage'});
-  
+
   try {
     const currentRepos = await getRepositories();
     const testRepoIndex = currentRepos.findIndex(r => r.id === TEST_REPO_ID);
-    
+
     if (testRepoIndex > -1) {
       currentRepos[testRepoIndex].lastSeenReleaseTag = 'v0.9.0-reset';
       currentRepos[testRepoIndex].isNew = false;
@@ -928,7 +927,7 @@ export async function setupTestRepositoryAction(): Promise<{ success: boolean; m
 export async function triggerReleaseCheckAction(): Promise<{ success: boolean; message: string; }> {
   const locale = await getLocale();
   const t = await getTranslations({locale, namespace: 'TestPage'});
-  
+
   const {MAIL_HOST, MAIL_PORT, MAIL_FROM_ADDRESS, MAIL_TO_ADDRESS, APPRISE_URL} = process.env;
   const isSmtpConfigured = !!(MAIL_HOST && MAIL_PORT && MAIL_FROM_ADDRESS && MAIL_TO_ADDRESS);
   const isAppriseConfigured = !!APPRISE_URL;
@@ -942,7 +941,7 @@ export async function triggerReleaseCheckAction(): Promise<{ success: boolean; m
 
   try {
     const result = await checkForNewReleases({ overrideLocale: locale, skipCache: true });
-    
+
     if (result && result.notificationsSent > 0) {
       return { success: true, message: t('toast_trigger_check_success_email_sent') };
     } else {
@@ -996,7 +995,7 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
   const locale = await getLocale();
   const t = await getTranslations({locale, namespace: 'TestPage'});
   const tEmail = await getTranslations({locale, namespace: 'Email'});
-  
+
   const trimmedEmail = customEmail.trim();
   const recipient = trimmedEmail || process.env.MAIL_TO_ADDRESS;
 
@@ -1008,7 +1007,7 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
       error: tEmail('error_config_incomplete'),
     };
   }
-  
+
   if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
     return {
       success: false,
@@ -1021,9 +1020,9 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
     id: 'test/test',
     url: 'https://github.com/test/test',
   };
-  
+
   const { title, body } = await getComprehensiveMarkdownBody(locale);
-  
+
   const testRelease: GithubRelease = {
     id: 12345,
     html_url: 'https://github.com/test/test/releases/tag/v1.0.0',
@@ -1063,14 +1062,14 @@ export async function sendTestAppriseAction(): Promise<{
           error: t('toast_apprise_not_configured_error'),
       };
   }
-  
+
   const testRepo: Repository = {
     id: 'test/test',
     url: 'https://github.com/test/test',
   };
-  
+
   const { title, body } = await getBasicAppriseTestBody(locale);
-  
+
   const testRelease: GithubRelease = {
     id: 12345,
     html_url: 'https://github.com/test/test/releases/tag/v1.0.0',
@@ -1103,11 +1102,11 @@ export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
 
   const locale = await getLocale();
   const t = await getTranslations({ locale, namespace: 'TestPage' });
-  
+
   try {
     const urlObject = new URL(APPRISE_URL);
     const statusUrl = `${urlObject.protocol}//${urlObject.host}/status`;
-    
+
     const response = await fetch(statusUrl, {
       headers: {
         'Accept': 'application/json'
@@ -1118,7 +1117,7 @@ export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
     if (response.ok) {
       return { status: 'ok' };
     } else {
-      return { 
+      return {
         status: 'error',
         error: t('apprise_connection_error_status', {status: response.status}),
       };
@@ -1140,7 +1139,7 @@ export async function refreshAndCheckAction(): Promise<{
   const result = await checkForNewReleases({ overrideLocale: locale, skipCache: true });
 
   const messageKey = result.notificationsSent > 0 ? 'toast_refresh_found_new' : 'toast_refresh_success_description';
-  
+
   return { success: true, messageKey };
 }
 

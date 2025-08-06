@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -58,14 +57,14 @@ export function HomePageClient({
   }, [lastUpdated, locale, settings.timeFormat]);
 
 
-  const sortedReleases = React.useMemo(() => 
+  const sortedReleases = React.useMemo(() =>
     [...releases].sort((a, b) => {
         const dateA = a.release?.published_at || a.release?.created_at;
         const dateB = b.release?.published_at || b.release?.created_at;
 
         if (!dateA) return 1;
         if (!dateB) return -1;
-        
+
         return new Date(dateB).getTime() - new Date(dateA).getTime();
     }), [releases]);
 
@@ -109,9 +108,9 @@ export function HomePageClient({
             <ul className="list-disc pl-10 space-y-1">
               {Array.from(errorSummary.entries()).map(([type, count]) => (
                 <li key={type}>
-                  {t('error_summary_line', { 
-                    count, 
-                    errorText: tActions(getErrorTranslationKey(type)) 
+                  {t('error_summary_line', {
+                    count,
+                    errorText: tActions(getErrorTranslationKey(type))
                   })}
                 </li>
               ))}

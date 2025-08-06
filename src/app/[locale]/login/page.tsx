@@ -1,4 +1,3 @@
-
 import { LoginForm } from '@/components/auth/login-form';
 import { Logo } from '@/components/logo';
 import { getTranslations } from 'next-intl/server';

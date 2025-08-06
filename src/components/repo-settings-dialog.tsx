@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -65,15 +64,15 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
         idle: { text: '', icon: null, className: '' },
         waiting: { text: t('autosave_waiting'), icon: <Save className="size-4" />, className: 'text-muted-foreground' },
         saving: { text: t('autosave_saving'), icon: <Loader2 className="size-4 animate-spin" />, className: 'text-muted-foreground' },
-        success: { 
+        success: {
             text: (
                 <>
                     <span className="sm:hidden">{t('autosave_success_short')}</span>
                     <span className="hidden sm:inline">{tLong('autosave_success')}</span>
                 </>
-            ), 
-            icon: <CheckCircle className="size-4" />, 
-            className: 'text-green-500' 
+            ),
+            icon: <CheckCircle className="size-4" />,
+            className: 'text-green-500'
         },
         error: { text: t('autosave_error'), icon: <AlertCircle className="size-4" />, className: 'text-destructive' },
     };
@@ -110,11 +109,11 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const [excludeRegex, setExcludeRegex] = React.useState(currentRepoSettings?.excludeRegex ?? '');
   const [appriseTags, setAppriseTags] = React.useState(currentRepoSettings?.appriseTags ?? '');
   const [appriseFormat, setAppriseFormat] = React.useState<AppriseFormat | ''>(currentRepoSettings?.appriseFormat ?? '');
-  
+
   const [releasesPerPageError, setReleasesPerPageError] = React.useState<ReleasesPerPageError>(null);
   const [includeRegexError, setIncludeRegexError] = React.useState<RegexError>(null);
   const [excludeRegexError, setExcludeRegexError] = React.useState<RegexError>(null);
-  
+
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>('idle');
   const [hasChanged, setHasChanged] = React.useState(false);
 
@@ -149,7 +148,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
       appriseFormat: appriseFormat || undefined,
     };
   }, [channels, preReleaseSubChannels, releasesPerPage, includeRegex, excludeRegex, appriseTags, appriseFormat]);
-  
+
   const prevSettingsRef = React.useRef(newSettings);
 
   React.useEffect(() => {
@@ -170,10 +169,10 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
       setExcludeRegex(initialSettings.excludeRegex ?? '');
       setAppriseTags(initialSettings.appriseTags ?? '');
       setAppriseFormat(initialSettings.appriseFormat ?? '');
-      
+
       setSaveStatus('idle');
       setHasChanged(false);
-      
+
       prevSettingsRef.current = {
         ...initialSettings,
         releasesPerPage: initialSettings.releasesPerPage,
@@ -196,7 +195,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     } else {
         setReleasesPerPageError(null);
     }
-    
+
     try {
         if (includeRegex.trim()) new RegExp(includeRegex);
         setIncludeRegexError(null);
@@ -224,10 +223,10 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
       setSaveStatus('idle');
       return;
     }
-    
+
     setHasChanged(true);
     setSaveStatus('waiting');
-    
+
     const handler = setTimeout(async () => {
         setSaveStatus('saving');
         const result = await updateRepositorySettingsAction(repoId, newSettings);
@@ -255,7 +254,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     const newChannels = baseChannels.includes(channel)
         ? baseChannels.filter(c => c !== channel)
         : [...baseChannels, channel];
-    
+
     if (newChannels.length === 0) {
         toast({
             title: t('toast_error_title'),
@@ -264,19 +263,19 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
         });
         return;
     }
-    
+
     setChannels(newChannels);
-    
+
     if (useGlobalChannels && useGlobalSubChannels && channel === 'prerelease' && newChannels.includes('prerelease')) {
       setPreReleaseSubChannels(globalSettings.preReleaseSubChannels || allPreReleaseTypes);
     }
   };
 
   const handlePreReleaseSubChannelChange = (subChannel: PreReleaseChannelType) => {
-    const baseSubChannels = useGlobalSubChannels 
-        ? (globalSettings.preReleaseSubChannels || allPreReleaseTypes) 
+    const baseSubChannels = useGlobalSubChannels
+        ? (globalSettings.preReleaseSubChannels || allPreReleaseTypes)
         : preReleaseSubChannels;
-    
+
     const newSubChannels = baseSubChannels.includes(subChannel)
         ? baseSubChannels.filter(sc => sc !== subChannel)
         : [...baseSubChannels, subChannel];
@@ -310,7 +309,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const isStableChecked = useGlobalChannels
     ? globalSettings.releaseChannels.includes('stable')
     : channels.includes('stable');
-  
+
   const isPreReleaseChecked = useGlobalChannels
     ? globalSettings.releaseChannels.includes('prerelease')
     : channels.includes('prerelease');
@@ -318,7 +317,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const isDraftChecked = useGlobalChannels
     ? globalSettings.releaseChannels.includes('draft')
     : channels.includes('draft');
-  
+
   const effectivePreReleaseSubChannels = useGlobalSubChannels
     ? (globalSettings.preReleaseSubChannels || allPreReleaseTypes)
     : preReleaseSubChannels;
@@ -327,7 +326,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent 
+      <DialogContent
         className="sm:max-w-lg"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
@@ -339,7 +338,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
             })}
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="space-y-6 pt-4 max-h-[70vh] overflow-y-auto pr-2 -mr-4 pb-4">
           <div className="space-y-4 p-4 border rounded-md">
             <div className="flex justify-between items-center">
@@ -364,7 +363,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
             <p className="text-xs text-muted-foreground">
               {tGlobal('release_channel_description_repo')}
             </p>
-            
+
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="stable-repo"
@@ -383,7 +382,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                 />
                 <Label htmlFor="prerelease-repo" className="font-normal cursor-pointer">{tGlobal('release_channel_prerelease')}</Label>
               </div>
-              
+
               <div className={cn(
                 "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
                 isPreReleaseChecked ? 'mt-4 max-h-96 opacity-100' : 'max-h-0 opacity-0'
@@ -415,7 +414,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
               />
               <Label htmlFor="draft-repo" className="font-normal cursor-pointer">{tGlobal('release_channel_draft')}</Label>
             </div>
-            
+
             <div className="space-y-2 pt-4">
                 <h4 className="font-medium text-base">{tGlobal('regex_filter_title')}</h4>
                  <p className="text-xs text-muted-foreground">
@@ -492,11 +491,11 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
             <div className="flex justify-between items-center">
               <h4 className="font-semibold text-base">{tGlobal('apprise_settings_title')}</h4>
             </div>
-            
+
             <p className="text-xs text-muted-foreground">
               {useGlobalAppriseTags && useGlobalAppriseFormat ? t('apprise_settings_hint_global') : t('apprise_settings_hint_individual')}
             </p>
-            
+
             <div className='space-y-2'>
                 <Label htmlFor="apprise-format-repo">{tGlobal('apprise_format_label')}</Label>
                 <div className="flex items-center gap-2">
@@ -564,7 +563,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
               )}
             </div>
           </div>
-          
+
           <div className="pt-2">
             <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -588,7 +587,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
             </AlertDialog>
           </div>
         </div>
-        
+
         <DialogFooter className="pt-4">
             <SaveStatusIndicator status={saveStatus} />
         </DialogFooter>

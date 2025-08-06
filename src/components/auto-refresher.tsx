@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useRouter } from '@/navigation';
@@ -20,7 +19,7 @@ export function AutoRefresher({ intervalMinutes }: { intervalMinutes: number }) 
     const intervalId = setInterval(() => {
       // Don't stack refreshes if one is already in progress.
       if (isPending) return;
-      
+
       startTransition(async () => {
         // By explicitly invalidating the cache on the server before refreshing,
         // we ensure that router.refresh() fetches the newest data

@@ -1,4 +1,3 @@
-
 export type Repository = {
   id: string; // Should be in the format "owner/repo"
   url: string;

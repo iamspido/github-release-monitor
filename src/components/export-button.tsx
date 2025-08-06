@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -22,17 +21,17 @@ export function ExportButton() {
         try {
           // Create a blob from the JSON data
           const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' });
-          
+
           // Create a temporary URL for the blob
           const url = window.URL.createObjectURL(blob);
-          
+
           // Create a temporary anchor element and trigger the download
           const a = document.createElement('a');
           a.href = url;
           a.download = 'repositories.json';
           document.body.appendChild(a);
           a.click();
-          
+
           // Clean up the temporary elements
           document.body.removeChild(a);
           window.URL.revokeObjectURL(url);

@@ -42,7 +42,7 @@ export default async function TestPage({params}: {params: Promise<{locale: strin
   const rateLimitResult: RateLimitResult = await getGitHubRateLimit();
   const githubTokenSet = !!process.env.GITHUB_ACCESS_TOKEN;
   const notificationConfig = getNotificationConfig();
-  
+
   let appriseStatus: AppriseStatus;
   try {
     // This action is now robust and will not throw on network errors.

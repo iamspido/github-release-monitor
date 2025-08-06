@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -53,12 +52,12 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
   const t = useTranslations('RepositoryForm');
   const [urls, setUrls] = React.useState("");
   const { toast } = useToast();
-  
+
   const [state, formAction, isPending] = useActionState(addRepositoriesAction, initialState);
 
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  
+
   // State for the import confirmation dialog
   const [isImporting, startImportTransition] = React.useTransition();
   const [isDialogVisible, setIsDialogVisible] = React.useState(false);
@@ -115,14 +114,14 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
 
             if (Array.isArray(importedData)) {
                 // Perform a basic validation that it's an array of objects with id/url
-                const isValidFormat = importedData.every(item => 
+                const isValidFormat = importedData.every(item =>
                   typeof item === 'object' && item !== null && 'id' in item && 'url' in item
                 );
 
                 if (!isValidFormat) {
                     throw new Error(t('toast_import_error_invalid_format'));
                 }
-                
+
                 // Use the prop to calculate stats for the dialog
                 const existingIds = new Set(currentRepositories.map(repo => repo.id));
 
@@ -166,7 +165,7 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
 
     startImportTransition(async () => {
       const result = await importRepositoriesAction(reposToImport);
-      
+
       if (result.success) {
         toast({
           title: t('toast_import_success_title'),
@@ -226,7 +225,7 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
           </form>
         </CardContent>
       </Card>
-      
+
       <AlertDialog open={isDialogVisible} onOpenChange={setIsDialogVisible}>
         <AlertDialogContent>
           <AlertDialogHeader>

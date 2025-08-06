@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -83,7 +82,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
   const locale = useLocale();
   const { toast } = useToast();
   const { repoId, repoUrl, release, error, isNew, repoSettings } = enrichedRelease;
-  
+
   const [isRemoving, startRemoveTransition] = React.useTransition();
   const [isAcknowledging, startAcknowledgeTransition] = React.useTransition();
   const [isMarkingAsNew, startMarkingAsNewTransition] = React.useTransition();
@@ -161,7 +160,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
       }
     });
   }
-  
+
   const repoHasCustomSettings =
     (repoSettings?.releaseChannels && repoSettings.releaseChannels.length > 0) ||
     (repoSettings?.preReleaseSubChannels && repoSettings.preReleaseSubChannels.length > 0) ||
@@ -233,7 +232,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
             <AlertDialog>
                 <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm" disabled={isRemoving}>
-                    {isRemoving ? <Loader2 className="animate-spin" /> : <Trash2 />} 
+                    {isRemoving ? <Loader2 className="animate-spin" /> : <Trash2 />}
                     {t('remove_button')}
                 </Button>
                 </AlertDialogTrigger>
@@ -267,7 +266,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
   }
 
   if (!release) return <ReleaseCard.Skeleton />;
-  
+
   const showAcknowledgeFeature = settings.showAcknowledge ?? true;
   const showMarkAsNewButton = settings.showMarkAsNew ?? true;
 
@@ -334,7 +333,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
           {release.body && release.body.trim() !== '' ? (
               <div className="relative w-full max-h-72 overflow-hidden rounded-md border bg-background">
                 <div className="prose prose-sm dark:prose-invert max-w-none h-72 overflow-auto break-words p-4">
-                  <ReactMarkdown 
+                  <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkGemoji]}
                       components={{
                         table: ({node, ...props}) => (
@@ -405,7 +404,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-              
+
               <Button asChild variant="ghost" size="sm">
                 <a href={release.html_url} target="_blank" rel="noopener noreferrer">
                   {t('view_on_github')} <ExternalLink />

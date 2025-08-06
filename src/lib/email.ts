@@ -1,4 +1,3 @@
-
 'use server';
 
 import nodemailer from 'nodemailer';
@@ -30,7 +29,7 @@ async function getFormattedDate(date: Date, locale: string, timeFormat: TimeForm
     .formatToParts(date)
     .reduce((acc, part) => ({ ...acc, [part.type]: part.value }), {} as Record<string, string>);
   const timeString = new Intl.DateTimeFormat(locale, htmlTimeOptions).format(date);
-  
+
   let htmlDate;
   if (timeFormat === '12h') {
     htmlDate = `${dateParts.weekday}, ${dateParts.month} ${dateParts.day}, ${dateParts.year} ${t('html_date_conjunction_at')} ${timeString}`;
@@ -44,7 +43,7 @@ async function getFormattedDate(date: Date, locale: string, timeFormat: TimeForm
 export async function generatePlainTextReleaseBody(release: GithubRelease, repository: Repository, locale: string, timeFormat: TimeFormat): Promise<string> {
     const t = await getTranslations({locale, namespace: 'Email'});
     const { textDate } = await getFormattedDate(new Date(release.created_at), locale, timeFormat);
-    
+
     return `
 ${t('text_new_version_of', {repoId: repository.id})}
 
@@ -64,10 +63,10 @@ export async function generateHtmlReleaseBody(release: GithubRelease, repository
     const subject = t('subject', {repoId: repository.id, tagName: release.tag_name});
     const { htmlDate } = await getFormattedDate(new Date(release.created_at), locale, timeFormat);
 
-    const releaseBodyHtml = release.body 
+    const releaseBodyHtml = release.body
         ? String(await remark().use(remarkGfm).use(remarkHtml).process(release.body))
         : `<p style="font-style: italic;">${t('html_no_notes')}</p>`;
-    
+
     const repoLink = `<a href="${repository.url}" style="color: #8c9fe8; text-decoration: none;"><strong style="color: #fafafa;">${repository.id}</strong></a>`;
     const introHtml = t('html_intro', {repoId: 'REPO_PLACEHOLDER'}).replace('REPO_PLACEHOLDER', repoLink);
 
@@ -102,9 +101,9 @@ export async function generateHtmlReleaseBody(release: GithubRelease, repository
           border: 1px solid #30363d;
         }
         .release-notes-container {
-          background-color: #0d1117; 
-          border: 1px solid #30363d; 
-          border-radius: 6px; 
+          background-color: #0d1117;
+          border: 1px solid #30363d;
+          border-radius: 6px;
           padding: 1px 16px;
         }
         h1, h2, h3, h4, h5, h6 {
@@ -190,12 +189,12 @@ export async function generateHtmlReleaseBody(release: GithubRelease, repository
           margin: 24px 0;
         }
         .button {
-          display: inline-block; 
-          background-color: #24292f; 
-          color: #ffffff; 
-          padding: 10px 20px; 
-          text-decoration: none; 
-          border-radius: 5px; 
+          display: inline-block;
+          background-color: #24292f;
+          color: #ffffff;
+          padding: 10px 20px;
+          text-decoration: none;
+          border-radius: 5px;
           font-weight: 500;
         }
       </style>
@@ -256,7 +255,7 @@ export async function sendNewReleaseEmail(repository: Repository, release: Githu
       pass: MAIL_PASSWORD,
     },
   });
-  
+
   const subject = t('subject', {repoId: repository.id, tagName: release.tag_name});
   const textBody = await generatePlainTextReleaseBody(release, repository, locale, timeFormat);
   const htmlBody = await generateHtmlReleaseBody(release, repository, locale, timeFormat);

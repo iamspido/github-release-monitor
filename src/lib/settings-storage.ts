@@ -1,4 +1,3 @@
-
 'use server';
 
 import { promises as fs } from 'fs';
@@ -41,7 +40,7 @@ export async function getSettings(): Promise<AppSettings> {
   try {
     const fileContent = await fs.readFile(dataFilePath, 'utf8');
     const data = JSON.parse(fileContent);
-    
+
     // Merge with defaults to ensure all keys are present, especially after an update
     return { ...defaultSettings, ...data };
   } catch (error) {

@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -50,7 +49,7 @@ export function Header({ locale }: { locale: string }) {
           </Link>
           <div className="flex items-center gap-2">
             <MobileMenu onLogout={handleLogout} isLoggingOut={isLoggingOut} />
-            
+
             <div className="hidden items-center gap-2 md:flex">
               {navLinks.map(link => (
                 <Link key={link.href} href={link.href as any} passHref>
