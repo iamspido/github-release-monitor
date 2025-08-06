@@ -58,7 +58,13 @@
     "import_dialog_title": "Import Repositories?",
     "import_dialog_description": "The selected file contains {newCount, plural, =0 {no new repositories} =1 {# new repository} other {# new repositories}} and {existingCount, plural, =0 {no} =1 {one} other {#}} already monitored repositories. Already monitored entries will be updated with data from the file. Proceed?",
     "import_dialog_confirm_button": "Import",
-    "cancel_button": "Cancel"
+    "cancel_button": "Cancel",
+    "toast_refresh_success_title": "Update Complete",
+    "toast_refresh_success_description": "The new repositories have been fetched and the page has been updated.",
+    "toast_refresh_timeout_title": "Update Timed Out",
+    "toast_refresh_timeout_description": "The background refresh took too long. Please refresh the page manually to see the changes.",
+    "toast_refresh_error_title": "Update Failed",
+    "toast_refresh_error_description": "The background refresh failed. Please check the server logs for more details."
   },
   "ReleaseCard": {
     "error_title": "Could not fetch release information.",

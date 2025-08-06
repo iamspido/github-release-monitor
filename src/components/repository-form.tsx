@@ -10,7 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { addRepositoriesAction, importRepositoriesAction } from "@/app/actions";
+import { addRepositoriesAction, getJobStatusAction, importRepositoriesAction } from "@/app/actions";
+import { useRouter } from "next/navigation";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,22 +53,20 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
   const t = useTranslations('RepositoryForm');
   const [urls, setUrls] = React.useState("");
   const { toast } = useToast();
+  const router = useRouter();
 
   const [state, formAction, isPending] = useActionState(addRepositoriesAction, initialState);
+  const [jobId, setJobId] = React.useState<string | undefined>(undefined);
 
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // State for the import confirmation dialog
   const [isImporting, startImportTransition] = React.useTransition();
   const [isDialogVisible, setIsDialogVisible] = React.useState(false);
   const [reposToImport, setReposToImport] = React.useState<Repository[] | null>(null);
   const [importStats, setImportStats] = React.useState<{ newCount: number, existingCount: number } | null>(null);
-
-  // This key is used to force-remount the file input, which is the most reliable way to reset it.
   const [fileInputKey, setFileInputKey] = React.useState(Date.now());
 
-  // Effect to handle toasts and form reset on action completion
   React.useEffect(() => {
     if (state.error) {
       toast({
@@ -83,20 +82,64 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
       });
     }
     if (state.success) {
-      setUrls(''); // Clear textarea on success
+      setUrls('');
+      if (state.jobId) {
+        setJobId(state.jobId);
+      }
     }
   }, [state, t, toast]);
 
+  React.useEffect(() => {
+    if (!jobId) return;
 
-  // Effect to handle textarea auto-resizing
+    const POLLING_INTERVAL = 2000; // 2 seconds
+    const POLLING_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+
+    const startTime = Date.now();
+
+    const intervalId = setInterval(async () => {
+      if (Date.now() - startTime > POLLING_TIMEOUT) {
+        clearInterval(intervalId);
+        toast({
+          title: t('toast_refresh_timeout_title'),
+          description: t('toast_refresh_timeout_description'),
+          variant: 'destructive'
+        });
+        setJobId(undefined);
+        return;
+      }
+
+      const { status } = await getJobStatusAction(jobId);
+
+      if (status === 'complete') {
+        clearInterval(intervalId);
+        toast({
+          title: t('toast_refresh_success_title'),
+          description: t('toast_refresh_success_description'),
+        });
+        router.refresh();
+        setJobId(undefined);
+      } else if (status === 'error') {
+        clearInterval(intervalId);
+        toast({
+          title: t('toast_refresh_error_title'),
+          description: t('toast_refresh_error_description'),
+          variant: 'destructive'
+        });
+        setJobId(undefined);
+      }
+    }, POLLING_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [jobId, router, t, toast]);
+
   React.useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
-        textarea.style.height = 'auto'; // Reset height
-        textarea.style.height = `${textarea.scrollHeight}px`; // Set to content height
+        textarea.style.height = 'auto';
+        textarea.style.height = `${textarea.scrollHeight}px`;
     }
   }, [urls]);
-
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
@@ -113,7 +156,6 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
             const importedData = JSON.parse(content);
 
             if (Array.isArray(importedData)) {
-                // Perform a basic validation that it's an array of objects with id/url
                 const isValidFormat = importedData.every(item =>
                   typeof item === 'object' && item !== null && 'id' in item && 'url' in item
                 );
@@ -122,16 +164,13 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
                     throw new Error(t('toast_import_error_invalid_format'));
                 }
 
-                // Use the prop to calculate stats for the dialog
                 const existingIds = new Set(currentRepositories.map(repo => repo.id));
-
                 const newRepos = importedData.filter(repo => !existingIds.has(repo.id));
                 const existingCount = importedData.length - newRepos.length;
 
                 setReposToImport(importedData);
                 setImportStats({ newCount: newRepos.length, existingCount });
                 setIsDialogVisible(true);
-
             } else {
                  toast({
                     title: t('toast_import_error_title'),
@@ -155,8 +194,6 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
         });
     };
     reader.readAsText(file);
-
-    // Reset file input by changing its key, which forces a remount.
     setFileInputKey(Date.now());
   };
 
@@ -171,6 +208,9 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
           title: t('toast_import_success_title'),
           description: result.message,
         });
+        if (result.jobId) {
+          setJobId(result.jobId);
+        }
       } else {
         toast({
           title: t('toast_import_error_title'),
@@ -183,7 +223,6 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
       setImportStats(null);
     });
   };
-
 
   return (
     <>
@@ -204,7 +243,7 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
                 rows={4}
                 wrap="off"
                 className="resize-none overflow-y-auto overflow-x-auto max-h-80"
-                disabled={isPending}
+                disabled={isPending || !!jobId}
               />
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:gap-2">
                   <input
@@ -215,11 +254,11 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
                       accept=".json"
                       className="hidden"
                   />
-                  <Button type="button" variant="outline" onClick={handleImportClick} className="w-full sm:w-auto mt-2 sm:mt-0" disabled={isPending || isImporting}>
+                  <Button type="button" variant="outline" onClick={handleImportClick} className="w-full sm:w-auto mt-2 sm:mt-0" disabled={isPending || isImporting || !!jobId}>
                       {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                       {t('button_import')}
                   </Button>
-                  <SubmitButton isDisabled={!urls.trim()} isPending={isPending} />
+                  <SubmitButton isDisabled={!urls.trim()} isPending={isPending || !!jobId} />
               </div>
             </div>
           </form>

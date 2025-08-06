@@ -17,10 +17,12 @@ import {getRepositories, saveRepositories} from '@/lib/repository-storage';
 import {revalidatePath, revalidateTag, unstable_cache} from 'next/cache';
 import { getSettings } from '@/lib/settings-storage';
 import { getLocale, getTranslations } from 'next-intl/server';
+import { getJobStatus, setJobStatus, type JobStatus } from '@/lib/job-store';
 import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
 import { sendTestEmail } from '@/lib/email';
+import crypto from 'crypto';
 
 
 function parseGitHubUrl(url: string): {owner: string; repo: string; id: string} | null {
@@ -596,6 +598,7 @@ export async function addRepositoriesAction(
   success: boolean;
   toast?: {title: string; description: string};
   error?: string;
+  jobId?: string;
 }> {
   const locale = await getLocale();
   const t = await getTranslations({locale, namespace: 'RepositoryForm'});
@@ -626,29 +629,16 @@ export async function addRepositoriesAction(
     const currentRepos = await getRepositories();
     const existingIds = new Set(currentRepos.map(r => r.id));
     const uniqueNewRepos = newRepos.filter(r => !existingIds.has(r.id));
+    let jobId: string | undefined;
 
     if (uniqueNewRepos.length > 0) {
-      const settings = await getSettings();
-      const enrichedReleases = await getLatestReleasesForRepos(uniqueNewRepos, settings, locale, { skipCache: true });
-
-      const releaseMap = new Map(enrichedReleases.map(r => [r.repoId, r]));
-
-      const updatedNewRepos = uniqueNewRepos.map(repo => {
-        const enriched = releaseMap.get(repo.id);
-        if (enriched) {
-          if (enriched.release) {
-            repo.latestRelease = toCachedRelease(enriched.release);
-            repo.lastSeenReleaseTag = enriched.release.tag_name;
-          }
-          if (enriched.newEtag) {
-            repo.etag = enriched.newEtag;
-          }
-        }
-        return repo;
-      });
-
-      await saveRepositories([...currentRepos, ...updatedNewRepos]);
+      await saveRepositories([...currentRepos, ...uniqueNewRepos]);
       revalidatePath('/');
+
+      jobId = crypto.randomUUID();
+      setJobStatus(jobId, 'pending');
+      const repoIds = uniqueNewRepos.map(r => r.id);
+      refreshMultipleRepositoriesAction(repoIds, jobId);
     }
 
     const addedCount = uniqueNewRepos.length;
@@ -664,6 +654,7 @@ export async function addRepositoriesAction(
           failed: failedCount,
         }),
       },
+      jobId: addedCount > 0 ? jobId : undefined,
     };
   } catch (error: any) {
     console.error('Failed to add repositories:', error);
@@ -677,6 +668,7 @@ export async function addRepositoriesAction(
 export async function importRepositoriesAction(importedData: Repository[]): Promise<{
   success: boolean;
   message: string;
+  jobId?: string;
 }> {
   const locale = await getLocale();
   const t = await getTranslations({locale, namespace: 'RepositoryForm'});
@@ -714,32 +706,17 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
       reposToFetch.push(repoToSave);
     }
 
-    let finalList = Array.from(currentReposMap.values());
-
-    if (reposToFetch.length > 0) {
-      console.log(`Fetching initial releases for ${reposToFetch.length} imported/updated repos.`);
-      const enrichedReleases = await getLatestReleasesForRepos(reposToFetch, settings, locale, { skipCache: true });
-      const releaseMap = new Map(enrichedReleases.map(r => [r.repoId, r]));
-
-      finalList = finalList.map(repo => {
-        const enriched = releaseMap.get(repo.id);
-        if (enriched) {
-          if (enriched.release) {
-            repo.latestRelease = toCachedRelease(enriched.release);
-            if (!repo.lastSeenReleaseTag) {
-              repo.lastSeenReleaseTag = enriched.release.tag_name;
-            }
-          }
-          if (enriched.newEtag) {
-            repo.etag = enriched.newEtag;
-          }
-        }
-        return repo;
-      });
-    }
-
+    const finalList = Array.from(currentReposMap.values());
     await saveRepositories(finalList);
     revalidatePath('/');
+
+    let jobId: string | undefined;
+    if (reposToFetch.length > 0) {
+      jobId = crypto.randomUUID();
+      setJobStatus(jobId, 'pending');
+      const repoIds = reposToFetch.map(r => r.id);
+      refreshMultipleRepositoriesAction(repoIds, jobId);
+    }
 
     return {
       success: true,
@@ -747,6 +724,7 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
         addedCount,
         updatedCount
       }),
+      jobId: reposToFetch.length > 0 ? jobId : undefined,
     };
 
   } catch (error: any) {
@@ -799,6 +777,47 @@ export async function refreshSingleRepositoryAction(repoId: string) {
 
   await saveRepositories(allRepos);
   revalidatePath('/'); // Revalidate the home page to show the new data
+}
+
+export async function refreshMultipleRepositoriesAction(repoIds: string[], jobId: string) {
+  try {
+    const settings = await getSettings();
+    const locale = settings.locale;
+    const allRepos = await getRepositories();
+    const reposToRefresh = allRepos.filter(r => repoIds.includes(r.id));
+
+    if (reposToRefresh.length > 0) {
+      const enrichedReleases = await getLatestReleasesForRepos(
+        reposToRefresh,
+        settings,
+        locale,
+        { skipCache: true }
+      );
+
+      const enrichedMap = new Map(enrichedReleases.map(r => [r.repoId, r]));
+
+      const updatedRepos = allRepos.map(repo => {
+        const enriched = enrichedMap.get(repo.id);
+        if (enriched) {
+          if (enriched.release) {
+            repo.latestRelease = toCachedRelease(enriched.release);
+            if (!repo.lastSeenReleaseTag) {
+              repo.lastSeenReleaseTag = enriched.release.tag_name;
+            }
+          }
+          if (enriched.newEtag) {
+            repo.etag = enriched.newEtag;
+          }
+        }
+        return repo;
+      });
+      await saveRepositories(updatedRepos);
+    }
+    setJobStatus(jobId, 'complete');
+  } catch (error) {
+    console.error(`[Job ${jobId}] Failed to refresh repositories:`, error);
+    setJobStatus(jobId, 'error');
+  }
 }
 
 export async function removeRepositoryAction(repoId: string) {
@@ -1282,4 +1301,8 @@ export async function updateRepositorySettingsAction(
 
 export async function revalidateReleasesAction() {
   revalidateTag('github-releases');
+}
+
+export async function getJobStatusAction(jobId: string): Promise<{ status: JobStatus | undefined }> {
+    return { status: getJobStatus(jobId) };
 }

@@ -58,7 +58,13 @@
     "import_dialog_title": "Repositories importieren?",
     "import_dialog_description": "Die ausgewählte Datei enthält {newCount, plural, =0 {keine neuen Repositories} =1 {# neues Repository} other {# neue Repositories}} und {existingCount, plural, =0 {keine} =1 {ein} other {#}} bereits überwachte Repositories. Bereits überwachte Einträge werden mit den Daten aus der Datei aktualisiert. Fortfahren?",
     "import_dialog_confirm_button": "Importieren",
-    "cancel_button": "Abbrechen"
+    "cancel_button": "Abbrechen",
+    "toast_refresh_success_title": "Aktualisierung abgeschlossen",
+    "toast_refresh_success_description": "Die neuen Repositories wurden abgerufen und die Seite wurde aktualisiert.",
+    "toast_refresh_timeout_title": "Aktualisierung Zeitüberschreitung",
+    "toast_refresh_timeout_description": "Die Hintergrundaktualisierung hat zu lange gedauert. Bitte aktualisieren Sie die Seite manuell, um die Änderungen zu sehen.",
+    "toast_refresh_error_title": "Aktualisierung fehlgeschlagen",
+    "toast_refresh_error_description": "Die Hintergrundaktualisierung ist fehlgeschlagen. Weitere Details finden Sie in den Server-Protokollen."
   },
   "ReleaseCard": {
     "error_title": "Release-Informationen konnten nicht abgerufen werden.",
