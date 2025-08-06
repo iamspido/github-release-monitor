@@ -10,6 +10,7 @@ import type {
   PreReleaseChannelType,
   FetchError,
   AppriseStatus,
+  CachedRelease,
 } from '@/types';
 import { allPreReleaseTypes } from '@/types';
 import {sendNotification, sendTestAppriseNotification} from '@/lib/notifications';
@@ -66,6 +67,18 @@ function isPreReleaseByTagName(tagName: string, preReleaseSubChannels?: PreRelea
   // but prevents incorrectly matching `beta` in `v1.0-betamax`.
   const preReleaseRegex = new RegExp(`[.-](${preReleaseSubChannels.join('|')})(?=[^a-zA-Z]|$)`, 'i');
   return preReleaseRegex.test(tagName);
+}
+
+function toCachedRelease(release: GithubRelease): CachedRelease {
+  return {
+    html_url: release.html_url,
+    tag_name: release.tag_name,
+    name: release.name,
+    body: release.body,
+    created_at: release.created_at,
+    published_at: release.published_at,
+    fetched_at: release.fetched_at,
+  };
 }
 
 // This constant holds the non-translatable part of the test data.
@@ -192,10 +205,10 @@ ${t('apprise_basic_link_text')} (https://github.com/iamspido/github-release-moni
 async function fetchLatestRelease(
   owner: string,
   repo: string,
-  repoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex'>,
+  repoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'etag'>,
   globalSettings: AppSettings,
   locale: string
-): Promise<{ release: GithubRelease | null; error: FetchError | null }> {
+): Promise<{ release: GithubRelease | null; error: FetchError | null, newEtag?: string }> {
   const fetchedAtTimestamp = new Date().toISOString();
 
   // --- Determine effective settings ---
@@ -237,6 +250,7 @@ async function fetchLatestRelease(
   const MAX_PER_PAGE = 100;
   const pagesToFetch = Math.ceil(totalReleasesToFetch / MAX_PER_PAGE);
   let allReleases: GithubRelease[] = [];
+  let newEtag: string | undefined;
 
   const headers: HeadersInit = {
     Accept: 'application/vnd.github.v3+json',
@@ -246,27 +260,52 @@ async function fetchLatestRelease(
   if (process.env.GITHUB_ACCESS_TOKEN) {
     headers['Authorization'] = `token ${process.env.GITHUB_ACCESS_TOKEN}`;
   }
-  const fetchOptions: RequestInit = { headers, cache: 'no-store' };
-
+  
   try {
     for (let page = 1; page <= pagesToFetch; page++) {
       const releasesOnThisPage = Math.min(MAX_PER_PAGE, totalReleasesToFetch - allReleases.length);
       if (releasesOnThisPage <= 0) break;
 
       const url = `${GITHUB_API_BASE_URL}/releases?per_page=${releasesOnThisPage}&page=${page}`;
+      
+      const currentHeaders = {...headers};
+      // Only use ETag for the first page request.
+      if (page === 1 && repoSettings.etag) {
+          currentHeaders['If-None-Match'] = repoSettings.etag;
+      }
+      const fetchOptions: RequestInit = { headers: currentHeaders, cache: 'no-store' };
+
       const response = await fetch(url, fetchOptions);
+
+      // For the first page, check for 304 Not Modified.
+      if (page === 1) {
+        newEtag = response.headers.get('etag') || undefined;
+        if (response.status === 304) {
+            console.log(`[ETag] No changes for ${owner}/${repo}.`);
+            return { release: null, error: { type: 'not_modified' }, newEtag: repoSettings.etag };
+        }
+      }
 
       if (!response.ok) {
         if (response.status === 404) {
           console.error(`GitHub API error for ${owner}/${repo}: Not Found (404). The repository may not exist or is private.`);
-          return { release: null, error: { type: 'repo_not_found' } };
+          return { release: null, error: { type: 'repo_not_found' }, newEtag };
         }
         if (response.status === 403) {
-          console.error('GitHub API rate limit likely exceeded. Please add a GITHUB_ACCESS_TOKEN to your .env file.');
-          return { release: null, error: { type: 'rate_limit' } };
+          const rateLimitLimit = response.headers.get('x-ratelimit-limit');
+          const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
+          const rateLimitReset = response.headers.get('x-ratelimit-reset');
+          const resetTime = rateLimitReset ? new Date(parseInt(rateLimitReset, 10) * 1000).toISOString() : 'N/A';
+          
+          console.error(
+            `GitHub API rate limit exceeded for ${owner}/${repo}. ` +
+            `Limit: ${rateLimitLimit}, Remaining: ${rateLimitRemaining}, Resets at: ${resetTime}. ` +
+            'Please add or check your GITHUB_ACCESS_TOKEN.'
+          );
+          return { release: null, error: { type: 'rate_limit' }, newEtag };
         }
         console.error(`GitHub API error for ${owner}/${repo}: ${response.status} ${response.statusText}`);
-        return { release: null, error: { type: 'api_error' } };
+        return { release: null, error: { type: 'api_error' }, newEtag };
       }
 
       const pageReleases: GithubRelease[] = await response.json();
@@ -279,17 +318,17 @@ async function fetchLatestRelease(
 
     if (allReleases.length === 0) {
       console.log(`No formal releases found for ${owner}/${repo}. Falling back to tags.`);
-      const tagsResponse = await fetch(`${GITHUB_API_BASE_URL}/tags?per_page=1`, fetchOptions);
+      const tagsResponse = await fetch(`${GITHUB_API_BASE_URL}/tags?per_page=1`, { headers, cache: 'no-store' });
       
       if (!tagsResponse.ok) {
           console.error(`Failed to fetch tags for ${owner}/${repo} after failing to find releases.`);
-          return { release: null, error: { type: 'no_releases_found' } };
+          return { release: null, error: { type: 'no_releases_found' }, newEtag };
       }
 
       const tags: {name: string, commit: {sha: string}}[] = await tagsResponse.json();
       if (!tags || tags.length === 0) {
           console.log(`No tags found for ${owner}/${repo}.`);
-          return { release: null, error: { type: 'no_releases_found' } };
+          return { release: null, error: { type: 'no_releases_found' }, newEtag };
       }
 
       const latestTag = tags[0];
@@ -299,13 +338,13 @@ async function fetchLatestRelease(
       let publicationDate = new Date().toISOString();
 
       try {
-        const refResponse = await fetch(`${GITHUB_API_BASE_URL}/git/ref/tags/${latestTag.name}`, fetchOptions);
+        const refResponse = await fetch(`${GITHUB_API_BASE_URL}/git/ref/tags/${latestTag.name}`, { headers, cache: 'no-store' });
 
         if (refResponse.ok) {
             const refData = await refResponse.json();
             // If it's an annotated tag, the object type is 'tag'.
             if (refData.object.type === 'tag') {
-                const annotatedTagResponse = await fetch(refData.object.url, fetchOptions);
+                const annotatedTagResponse = await fetch(refData.object.url, { headers, cache: 'no-store' });
                 if (annotatedTagResponse.ok) {
                     const annotatedTagData = await annotatedTagResponse.json();
                     if (annotatedTagData.message) {
@@ -318,19 +357,19 @@ async function fetchLatestRelease(
         
         // If no annotated tag message was found (either lightweight tag or error), fall back to commit message.
         if (!bodyContent) {
-          const commitResponse = await fetch(`${GITHUB_API_BASE_URL}/commits/${latestTag.commit.sha}`, fetchOptions);
+          const commitResponse = await fetch(`${GITHUB_API_BASE_URL}/commits/${latestTag.commit.sha}`, { headers, cache: 'no-store' });
           if (commitResponse.ok) {
             const commitData = await commitResponse.json();
             bodyContent = `### ${t('commit_message_fallback_title')}\n\n---\n\n${commitData.commit.message}`;
             publicationDate = commitData.commit.committer.date;
           } else {
              console.error(`Failed to fetch commit for tag ${latestTag.name} in ${owner}/${repo}.`);
-             return { release: null, error: { type: 'api_error' } };
+             return { release: null, error: { type: 'api_error' }, newEtag };
           }
         }
       } catch (e) {
          console.error(`Error during tag fallback for ${owner}/${repo}:`, e);
-         return { release: null, error: { type: 'api_error' } };
+         return { release: null, error: { type: 'api_error' }, newEtag };
       }
       
       const virtualRelease: GithubRelease = {
@@ -376,7 +415,7 @@ async function fetchLatestRelease(
     });
 
     if (filteredReleases.length === 0) {
-      return { release: null, error: { type: 'no_matching_releases' } };
+      return { release: null, error: { type: 'no_matching_releases' }, newEtag };
     }
 
     let latestRelease = filteredReleases[0];
@@ -387,7 +426,7 @@ async function fetchLatestRelease(
         console.log(`Release body for ${owner}/${repo} tag ${latestRelease.tag_name} is empty. Attempting to fetch commit message.`);
         const commitApiUrl = `${GITHUB_API_BASE_URL}/commits/${latestRelease.tag_name}`;
         try {
-            const commitResponse = await fetch(commitApiUrl, { headers, ...fetchOptions });
+            const commitResponse = await fetch(commitApiUrl, { headers, cache: 'no-store' });
             if (commitResponse.ok) {
                 const commitData = await commitResponse.json();
                 if (commitData.commit && commitData.commit.message) {
@@ -409,7 +448,7 @@ async function fetchLatestRelease(
       latestRelease.fetched_at = new Date().toISOString();
     }
     
-    return { release: latestRelease, error: null };
+    return { release: latestRelease, error: null, newEtag };
     
   } catch (error) {
     console.error(`Failed to fetch releases for ${owner}/${repo}:`, error);
@@ -420,11 +459,11 @@ async function fetchLatestRelease(
 async function fetchLatestReleaseWithCache(
   owner: string,
   repo: string,
-  repoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex'>,
+  repoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'etag'>,
   globalSettings: AppSettings,
   locale: string,
   options?: { skipCache?: boolean }
-): Promise<{ release: GithubRelease | null; error: FetchError | null }> {
+): Promise<{ release: GithubRelease | null; error: FetchError | null; newEtag?: string }> {
   if (globalSettings.cacheInterval <= 0 || options?.skipCache) {
     return fetchLatestRelease(owner, repo, repoSettings, globalSettings, locale);
   }
@@ -454,70 +493,96 @@ export async function getLatestReleasesForRepos(
   locale: string,
   options?: { skipCache?: boolean }
 ): Promise<EnrichedRelease[]> {
-  const t = await getTranslations({locale, namespace: 'Actions'});
+  const enrichedReleases: EnrichedRelease[] = [];
 
-  const releasePromises = repositories.map(
-    async (repo): Promise<EnrichedRelease> => {
-      const parsed = parseGitHubUrl(repo.url);
-      if (!parsed) {
-        return {
-          repoId: repo.id,
-          repoUrl: repo.url,
-          error: { type: 'invalid_url' },
-          isNew: repo.isNew,
-        };
-      }
-
-      const repoSettings = {
-        releaseChannels: repo.releaseChannels,
-        preReleaseSubChannels: repo.preReleaseSubChannels,
-        releasesPerPage: repo.releasesPerPage,
-        includeRegex: repo.includeRegex,
-        excludeRegex: repo.excludeRegex,
-        appriseTags: repo.appriseTags,
-        appriseFormat: repo.appriseFormat,
-      };
-
-      const { release: latestRelease, error } = await fetchLatestReleaseWithCache(
-        parsed.owner,
-        parsed.repo,
-        repoSettings,
-        settings,
-        locale,
-        options
-      );
-
-      if (error) {
-        return {
-          repoId: repo.id,
-          repoUrl: repo.url,
-          error: error,
-          isNew: repo.isNew,
-          repoSettings: repoSettings,
-        };
-      }
-
-      if (!latestRelease) {
-        return {
-          repoId: repo.id,
-          repoUrl: repo.url,
-          error: { type: 'api_error' },
-          isNew: repo.isNew,
-          repoSettings: repoSettings,
-        };
-      }
-
-      return {
+  for (const repo of repositories) {
+    const parsed = parseGitHubUrl(repo.url);
+    if (!parsed) {
+      enrichedReleases.push({
         repoId: repo.id,
         repoUrl: repo.url,
-        release: latestRelease,
+        error: { type: 'invalid_url' },
+        isNew: repo.isNew,
+      });
+      continue;
+    }
+
+    const repoSettings = {
+      releaseChannels: repo.releaseChannels,
+      preReleaseSubChannels: repo.preReleaseSubChannels,
+      releasesPerPage: repo.releasesPerPage,
+      includeRegex: repo.includeRegex,
+      excludeRegex: repo.excludeRegex,
+      appriseTags: repo.appriseTags,
+      appriseFormat: repo.appriseFormat,
+      etag: repo.etag,
+    };
+
+    const { release: latestRelease, error, newEtag } = await fetchLatestReleaseWithCache(
+      parsed.owner,
+      parsed.repo,
+      repoSettings,
+      settings,
+      locale,
+      options
+    );
+
+    if (error?.type === 'not_modified') {
+      const cached: CachedRelease | undefined = repo.latestRelease;
+      const reconstructedRelease: GithubRelease | undefined = cached ? {
+        ...cached,
+        id: 0, 
+        prerelease: false,
+        draft: false,
+      } : undefined;
+
+      enrichedReleases.push({
+        repoId: repo.id,
+        repoUrl: repo.url,
+        release: reconstructedRelease,
+        error: error,
         isNew: repo.isNew,
         repoSettings: repoSettings,
-      };
+        newEtag: newEtag,
+      });
+      continue;
     }
-  );
 
-  return Promise.all(releasePromises);
+    if (error) {
+      enrichedReleases.push({
+        repoId: repo.id,
+        repoUrl: repo.url,
+        error: error,
+        isNew: repo.isNew,
+        repoSettings: repoSettings,
+        newEtag: newEtag,
+      });
+      continue;
+    }
+
+    if (!latestRelease) {
+      enrichedReleases.push({
+        repoId: repo.id,
+        repoUrl: repo.url,
+        error: { type: 'api_error' },
+        isNew: repo.isNew,
+        repoSettings: repoSettings,
+        newEtag: newEtag,
+      });
+      continue;
+    }
+
+    enrichedReleases.push({
+      repoId: repo.id,
+      repoUrl: repo.url,
+      release: latestRelease,
+      isNew: repo.isNew,
+      repoSettings: repoSettings,
+      newEtag: newEtag,
+    });
+  }
+
+  return enrichedReleases;
 }
 
 export async function addRepositoriesAction(
@@ -621,6 +686,7 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
         id: importedRepo.id,
         url: importedRepo.url,
         lastSeenReleaseTag: importedRepo.lastSeenReleaseTag,
+        etag: importedRepo.etag,
         isNew: (settings.showAcknowledge ?? true) ? (importedRepo.isNew ?? false) : false,
         releaseChannels: importedRepo.releaseChannels,
         preReleaseSubChannels: importedRepo.preReleaseSubChannels,
@@ -723,30 +789,37 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
   const settings = await getSettings();
   const effectiveLocale = options?.overrideLocale || settings.locale;
 
-  const repos = await getRepositories();
-  if (repos.length === 0) {
+  const originalRepos = await getRepositories();
+  if (originalRepos.length === 0) {
     console.log('No repositories to check.');
     return { notificationsSent: 0, checked: 0 };
   }
 
   const enrichedReleases = await getLatestReleasesForRepos(
-    repos, 
-    settings, 
-    effectiveLocale, 
+    originalRepos,
+    settings,
+    effectiveLocale,
     { skipCache: options?.skipCache }
   );
 
-  let updatedRepos = [...repos];
+  const updatedRepos = [...originalRepos];
   let changed = false;
   let notificationsSent = 0;
 
   for (const enrichedRelease of enrichedReleases) {
+    const repoIndex = updatedRepos.findIndex(r => r.id === enrichedRelease.repoId);
+    if (repoIndex === -1) continue;
+
+    const repo = updatedRepos[repoIndex];
+    let repoWasUpdated = false;
+
+    if (enrichedRelease.newEtag && repo.etag !== enrichedRelease.newEtag) {
+        repo.etag = enrichedRelease.newEtag;
+        repoWasUpdated = true;
+    }
+
     if (enrichedRelease.release) {
-      const repoIndex = updatedRepos.findIndex(
-        r => r.id === enrichedRelease.repoId
-      );
-      if (repoIndex !== -1) {
-        const repo = updatedRepos[repoIndex];
+        repo.latestRelease = toCachedRelease(enrichedRelease.release);
         const newTag = enrichedRelease.release.tag_name;
         const isNewRelease = repo.lastSeenReleaseTag && repo.lastSeenReleaseTag !== newTag;
 
@@ -754,11 +827,12 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
           console.log(
             `New release detected for ${repo.id}: ${newTag} (previously ${repo.lastSeenReleaseTag})`
           );
-          
+
           const shouldHighlight = settings.showAcknowledge ?? true;
-          updatedRepos[repoIndex] = {...repo, lastSeenReleaseTag: newTag, isNew: shouldHighlight};
-          changed = true;
-          
+          repo.lastSeenReleaseTag = newTag;
+          repo.isNew = shouldHighlight;
+          repoWasUpdated = true;
+
           try {
               await sendNotification(repo, enrichedRelease.release, effectiveLocale, settings);
               notificationsSent++;
@@ -769,10 +843,13 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
           console.log(
             `First fetch for ${repo.id}, setting initial release tag to ${newTag}. No notification will be sent.`
           );
-          updatedRepos[repoIndex] = {...repo, lastSeenReleaseTag: newTag, isNew: false};
-          changed = true;
+          repo.lastSeenReleaseTag = newTag;
+          repo.isNew = false;
+          repoWasUpdated = true;
         }
-      }
+    }
+    if (repoWasUpdated) {
+        changed = true;
     }
   }
 
@@ -782,7 +859,7 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
   } else {
     console.log('No new releases found.');
   }
-   return { notificationsSent, checked: repos.length };
+   return { notificationsSent, checked: originalRepos.length };
 }
 
 async function backgroundPollingLoop() {
@@ -1120,7 +1197,3 @@ export async function updateRepositorySettingsAction(
 export async function revalidateReleasesAction() {
   revalidateTag('github-releases');
 }
-
-    
-
-    

@@ -172,7 +172,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
     repoSettings?.appriseFormat;
 
 
-  if (error) {
+  if (error && error.type !== 'not_modified') {
     const errorMessage = getErrorMessage(error, tActions);
     return (
       <>

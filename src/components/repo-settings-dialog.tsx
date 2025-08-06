@@ -246,7 +246,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     }, 1500);
 
     return () => clearTimeout(handler);
-  }, [newSettings, repoId, isOpen, releasesPerPageError, includeRegexError, excludeRegexError, toast]);
+  }, [newSettings, repoId, isOpen, releasesPerPageError, includeRegexError, excludeRegexError, toast, t]);
 
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -596,7 +596,3 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     </Dialog>
   );
 }
-
-    
-
-    

@@ -18,14 +18,14 @@ interface HomePageClientProps {
   settings: AppSettings;
   error: string | null;
   generalError: string | null;
-  errorSummary: Map<FetchError['type'], number> | null;
+  errorSummary: Map<Exclude<FetchError['type'], 'not_modified'>, number> | null;
   lastUpdated: Date;
   locale: string;
 }
 
 // Helper to get the translation key for a specific error type.
-function getErrorTranslationKey(errorType: FetchError['type']): string {
-  const keyMap: Record<FetchError['type'], string> = {
+function getErrorTranslationKey(errorType: Exclude<FetchError['type'], 'not_modified'>): string {
+  const keyMap: Record<Exclude<FetchError['type'], 'not_modified'>, string> = {
     repo_not_found: 'error_repo_not_found',
     no_releases_found: 'error_no_releases_found',
     no_matching_releases: 'error_no_matching_releases',

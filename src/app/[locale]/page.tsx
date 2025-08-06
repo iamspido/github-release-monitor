@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { getTranslations } from 'next-intl/server';
-import type { EnrichedRelease, Repository, AppSettings, FetchError } from '@/types';
+import type { EnrichedRelease, Repository, AppSettings, FetchError, GithubRelease, CachedRelease } from '@/types';
 import { getLatestReleasesForRepos } from '@/app/actions';
-import { getRepositories } from '@/lib/repository-storage';
+import { getRepositories, saveRepositories } from '@/lib/repository-storage';
 import { getSettings } from '@/lib/settings-storage';
 import { Header } from '@/components/header';
 import { BackToTopButton } from '@/components/back-to-top-button';
@@ -20,15 +20,27 @@ function findFirstRateLimitError(releases: EnrichedRelease[]): FetchError | unde
 }
 
 // Helper function to count all other errors
-function countErrors(releases: EnrichedRelease[]): Map<FetchError['type'], number> {
-  const errorCounts = new Map<FetchError['type'], number>();
+function countErrors(releases: EnrichedRelease[]): Map<Exclude<FetchError['type'], 'not_modified'>, number> {
+  const errorCounts = new Map<Exclude<FetchError['type'], 'not_modified'>, number>();
   for (const r of releases) {
-    if (r.error && r.error.type !== 'rate_limit') {
+    if (r.error && r.error.type !== 'rate_limit' && r.error.type !== 'not_modified') {
       const currentCount = errorCounts.get(r.error.type) || 0;
       errorCounts.set(r.error.type, currentCount + 1);
     }
   }
   return errorCounts;
+}
+
+function toCachedRelease(release: GithubRelease): CachedRelease {
+  return {
+    html_url: release.html_url,
+    tag_name: release.tag_name,
+    name: release.name,
+    body: release.body,
+    created_at: release.created_at,
+    published_at: release.published_at,
+    fetched_at: release.fetched_at,
+  };
 }
 
 export default async function HomePage({params}: {params: Promise<{locale: string}>}) {
@@ -42,18 +54,33 @@ export default async function HomePage({params}: {params: Promise<{locale: strin
   const lastUpdated = new Date();
   let settings: AppSettings;
   let generalError: string | null = null;
-  let errorSummary: Map<FetchError['type'], number> | null = null;
+  let errorSummary: Map<Exclude<FetchError['type'], 'not_modified'>, number> | null = null;
 
   try {
     settings = await getSettings();
     repositories = await getRepositories();
     if (repositories.length > 0) {
       releases = await getLatestReleasesForRepos(repositories, settings, locale);
+      
+      // Update cache after fetch
+      const reposToSave = [...repositories];
+      for (const enrichedRelease of releases) {
+        const repoIndex = reposToSave.findIndex(r => r.id === enrichedRelease.repoId);
+        if (repoIndex === -1) continue;
+
+        if (enrichedRelease.newEtag) {
+          reposToSave[repoIndex].etag = enrichedRelease.newEtag;
+        }
+        if (enrichedRelease.release) {
+          reposToSave[repoIndex].latestRelease = toCachedRelease(enrichedRelease.release);
+        }
+      }
+      await saveRepositories(reposToSave);
     }
   } catch (e: any) {
     console.error('Failed to load repositories or releases:', e);
     error = t('load_error');
-    settings = { timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releaseChannels: ['stable'], showAcknowledge: true };
+    settings = { timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releaseChannels: ['stable'], showAcknowledge: true, releasesPerPage: 30 };
   }
 
   // Prioritize showing the rate limit error as it's the most critical.

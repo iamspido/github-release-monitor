@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
   const isLoginPage = request.nextUrl.pathname.endsWith(loginPathForLocale);
   
   // Step 6: Check the session.
-  const session = await getIronSession<SessionData>(request.cookies, sessionOptions);
+  const session = await getIronSession<SessionData>(request.cookies as any, sessionOptions);
   
   // Step 7: Redirect logic
   if (!session.isLoggedIn && !isLoginPage) {

@@ -4,6 +4,8 @@ export type Repository = {
   url: string;
   lastSeenReleaseTag?: string;
   isNew?: boolean;
+  etag?: string;
+  latestRelease?: CachedRelease;
   // New: Per-repository settings override
   // Empty arrays/undefined mean "use global setting"
   releaseChannels?: ReleaseChannel[];
@@ -28,8 +30,18 @@ export type GithubRelease = {
   fetched_at?: string; // Timestamp for when the data was fetched
 };
 
+export type CachedRelease = {
+  html_url: string;
+  tag_name: string;
+  name: string | null;
+  body: string | null;
+  created_at: string;
+  published_at: string | null;
+  fetched_at?: string;
+};
+
 export type FetchError = {
-  type: 'rate_limit' | 'repo_not_found' | 'no_releases_found' | 'no_matching_releases' | 'invalid_url' | 'api_error';
+  type: 'rate_limit' | 'repo_not_found' | 'no_releases_found' | 'no_matching_releases' | 'invalid_url' | 'api_error' | 'not_modified';
 }
 
 export type EnrichedRelease = {
@@ -38,6 +50,7 @@ export type EnrichedRelease = {
   release?: GithubRelease;
   error?: FetchError;
   isNew?: boolean;
+  newEtag?: string;
   repoSettings?: {
     releaseChannels?: ReleaseChannel[];
     preReleaseSubChannels?: PreReleaseChannelType[];
