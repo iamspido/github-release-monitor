@@ -24,6 +24,30 @@ import remarkHtml from 'remark-html';
 import { sendTestEmail } from '@/lib/email';
 import crypto from 'crypto';
 
+let currentUpdatePromise: Promise<any> = Promise.resolve();
+
+/**
+ * Schedules a task to be executed sequentially.
+ * @param taskName A descriptive name for the task, used for logging.
+ * @param taskFunction The async function to execute.
+ * @returns A promise that resolves with the result of the task function.
+ */
+function scheduleTask<T>(taskName: string, taskFunction: () => Promise<T>): Promise<T> {
+  console.log(`[${new Date().toLocaleString()}] [Scheduler] Queuing task: ${taskName}`);
+
+  const taskPromise = currentUpdatePromise.then(async () => {
+    console.log(`[${new Date().toLocaleString()}] [Scheduler] Starting task: ${taskName}`);
+    try {
+      return await taskFunction();
+    } finally {
+      console.log(`[${new Date().toLocaleString()}] [Scheduler] Finished task: ${taskName}`);
+    }
+  });
+
+  currentUpdatePromise = taskPromise;
+  return taskPromise;
+}
+
 
 function parseGitHubUrl(url: string): {owner: string; repo: string; id: string} | null {
   try {
@@ -210,7 +234,7 @@ async function fetchLatestRelease(
   globalSettings: AppSettings,
   locale: string
 ): Promise<{ release: GithubRelease | null; error: FetchError | null, newEtag?: string }> {
-  console.log(`Fetching release for ${owner}/${repo}`);
+  console.log(`[${new Date().toLocaleString()}] Fetching release for ${owner}/${repo}`);
   const fetchedAtTimestamp = new Date().toISOString();
 
   // --- Determine effective settings ---
@@ -283,7 +307,7 @@ async function fetchLatestRelease(
       if (page === 1) {
         newEtag = response.headers.get('etag') || undefined;
         if (response.status === 304) {
-            console.log(`[ETag] No changes for ${owner}/${repo}.`);
+            console.log(`[${new Date().toLocaleString()}] [ETag] No changes for ${owner}/${repo}.`);
             return { release: null, error: { type: 'not_modified' }, newEtag: repoSettings.etag };
         }
       }
@@ -371,7 +395,7 @@ async function fetchLatestRelease(
         }
       } catch (e) {
          console.error(`Error during tag fallback for ${owner}/${repo}:`, e);
-         return { release: null, error: { type: 'api_error' }, newEtag };
+         return { release: null, error: { type: 'api_error' } };
       }
 
       const virtualRelease: GithubRelease = {
@@ -600,69 +624,70 @@ export async function addRepositoriesAction(
   error?: string;
   jobId?: string;
 }> {
-  const locale = await getLocale();
-  const t = await getTranslations({locale, namespace: 'RepositoryForm'});
+  return scheduleTask('addRepositoriesAction', async () => {
+    const locale = await getLocale();
+    const t = await getTranslations({locale, namespace: 'RepositoryForm'});
 
-  const urls = formData.get('urls');
-  if (typeof urls !== 'string' || !urls.trim()) {
-    return {success: false, error: t('toast_fail_description_manual', {failed: 1})};
-  }
-
-  const urlList = urls.split('\n').filter(u => u.trim() !== '');
-  const newRepos: Repository[] = [];
-  let failedCount = 0;
-
-  for (const url of urlList) {
-    const parsed = parseGitHubUrl(url);
-    if (parsed) {
-      newRepos.push({id: parsed.id, url: `https://github.com/${parsed.id}`});
-    } else {
-      failedCount++;
-    }
-  }
-
-  if (newRepos.length === 0 && failedCount > 0) {
-    return {success: false, error: t('toast_fail_description_manual', {failed: failedCount})};
-  }
-
-  try {
-    const currentRepos = await getRepositories();
-    const existingIds = new Set(currentRepos.map(r => r.id));
-    const uniqueNewRepos = newRepos.filter(r => !existingIds.has(r.id));
-    let jobId: string | undefined;
-
-    if (uniqueNewRepos.length > 0) {
-      await saveRepositories([...currentRepos, ...uniqueNewRepos]);
-      revalidatePath('/');
-
-      jobId = crypto.randomUUID();
-      setJobStatus(jobId, 'pending');
-      const repoIds = uniqueNewRepos.map(r => r.id);
-      refreshMultipleRepositoriesAction(repoIds, jobId);
+    const urls = formData.get('urls');
+    if (typeof urls !== 'string' || !urls.trim()) {
+      return {success: false, error: t('toast_fail_description_manual', {failed: 1})};
     }
 
-    const addedCount = uniqueNewRepos.length;
-    const skippedCount = newRepos.length - addedCount;
+    const urlList = urls.split('\n').filter(u => u.trim() !== '');
+    const newRepos: Repository[] = [];
+    let failedCount = 0;
 
-    return {
-      success: true,
-      toast: {
-        title: t('toast_success_title'),
-        description: t('toast_success_description_manual', {
-          added: addedCount,
-          skipped: skippedCount,
-          failed: failedCount,
-        }),
-      },
-      jobId: addedCount > 0 ? jobId : undefined,
-    };
-  } catch (error: any) {
-    console.error('Failed to add repositories:', error);
-    return {
-      success: false,
-      error: t('toast_save_error_generic'),
-    };
-  }
+    for (const url of urlList) {
+      const parsed = parseGitHubUrl(url);
+      if (parsed) {
+        newRepos.push({id: parsed.id, url: `https://github.com/${parsed.id}`});
+      } else {
+        failedCount++;
+      }
+    }
+
+    if (newRepos.length === 0 && failedCount > 0) {
+      return {success: false, error: t('toast_fail_description_manual', {failed: failedCount})};
+    }
+
+    try {
+      const currentRepos = await getRepositories();
+      const existingIds = new Set(currentRepos.map(r => r.id));
+      const uniqueNewRepos = newRepos.filter(r => !existingIds.has(r.id));
+      let jobId: string | undefined;
+
+      if (uniqueNewRepos.length > 0) {
+        await saveRepositories([...currentRepos, ...uniqueNewRepos]);
+        revalidatePath('/');
+
+        jobId = crypto.randomUUID();
+        setJobStatus(jobId, 'pending');
+        refreshMultipleRepositoriesAction(uniqueNewRepos.map(r => r.id), jobId);
+      }
+
+      const addedCount = uniqueNewRepos.length;
+      const skippedCount = newRepos.length - addedCount;
+
+      return {
+        success: true,
+        toast: {
+          title: t('toast_success_title'),
+          description: t('toast_success_description_manual', {
+            added: addedCount,
+            skipped: skippedCount,
+            failed: failedCount,
+          }),
+        },
+        jobId: addedCount > 0 ? jobId : undefined,
+      };
+    } catch (error: any) {
+      console.error('Failed to add repositories:', error);
+      return {
+        success: false,
+        error: t('toast_save_error_generic'),
+      };
+    }
+  });
 }
 
 export async function importRepositoriesAction(importedData: Repository[]): Promise<{
@@ -670,113 +695,119 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
   message: string;
   jobId?: string;
 }> {
-  const locale = await getLocale();
-  const t = await getTranslations({locale, namespace: 'RepositoryForm'});
-  const settings = await getSettings();
+  return scheduleTask('importRepositoriesAction', async () => {
+    const locale = await getLocale();
+    const t = await getTranslations({locale, namespace: 'RepositoryForm'});
+    const settings = await getSettings();
 
-  try {
-    const currentRepos = await getRepositories();
-    const currentRepoIds = new Set(currentRepos.map(repo => repo.id));
-    const currentReposMap = new Map(currentRepos.map(r => [r.id, r]));
+    try {
+      const currentRepos = await getRepositories();
+      const currentRepoIds = new Set(currentRepos.map(repo => repo.id));
+      const currentReposMap = new Map(currentRepos.map(r => [r.id, r]));
 
-    const validImportedRepos: Repository[] = [];
-    for (const repo of importedData) {
-      if (repo.id && repo.url && parseGitHubUrl(repo.url)) {
-        validImportedRepos.push(repo);
-      }
-    }
-
-    let addedCount = 0;
-    let updatedCount = 0;
-    const reposToFetch: Repository[] = [];
-
-    for (const importedRepo of validImportedRepos) {
-      if (currentRepoIds.has(importedRepo.id)) {
-        updatedCount++;
-      } else {
-        addedCount++;
+      const validImportedRepos: Repository[] = [];
+      for (const repo of importedData) {
+        if (repo.id && repo.url && parseGitHubUrl(repo.url)) {
+          validImportedRepos.push(repo);
+        }
       }
 
-      const repoToSave: Repository = {
-        ...currentReposMap.get(importedRepo.id),
-        ...importedRepo,
-        isNew: (settings.showAcknowledge ?? true) ? (importedRepo.isNew ?? false) : false,
+      let addedCount = 0;
+      let updatedCount = 0;
+      const reposToFetch: Repository[] = [];
+
+      for (const importedRepo of validImportedRepos) {
+        if (currentRepoIds.has(importedRepo.id)) {
+          updatedCount++;
+        } else {
+          addedCount++;
+        }
+
+        const repoToSave: Repository = {
+          ...currentReposMap.get(importedRepo.id),
+          ...importedRepo,
+          isNew: (settings.showAcknowledge ?? true) ? (importedRepo.isNew ?? false) : false,
+        };
+        currentReposMap.set(importedRepo.id, repoToSave);
+        reposToFetch.push(repoToSave);
+      }
+
+      const finalList = Array.from(currentReposMap.values());
+      await saveRepositories(finalList);
+      revalidatePath('/');
+
+      let jobId: string | undefined;
+      if (reposToFetch.length > 0) {
+        jobId = crypto.randomUUID();
+        setJobStatus(jobId, 'pending');
+        const repoIds = reposToFetch.map(r => r.id);
+        refreshMultipleRepositoriesAction(repoIds, jobId);
+      }
+
+      return {
+        success: true,
+        message: t('toast_import_success_description', {
+          addedCount,
+          updatedCount
+        }),
+        jobId: reposToFetch.length > 0 ? jobId : undefined,
       };
-      currentReposMap.set(importedRepo.id, repoToSave);
-      reposToFetch.push(repoToSave);
+
+    } catch (error: any) {
+      console.error('Failed to import repositories:', error);
+      return {
+        success: false,
+        message: t('toast_save_error_generic'),
+      };
     }
-
-    const finalList = Array.from(currentReposMap.values());
-    await saveRepositories(finalList);
-    revalidatePath('/');
-
-    let jobId: string | undefined;
-    if (reposToFetch.length > 0) {
-      jobId = crypto.randomUUID();
-      setJobStatus(jobId, 'pending');
-      const repoIds = reposToFetch.map(r => r.id);
-      refreshMultipleRepositoriesAction(repoIds, jobId);
-    }
-
-    return {
-      success: true,
-      message: t('toast_import_success_description', {
-        addedCount,
-        updatedCount
-      }),
-      jobId: reposToFetch.length > 0 ? jobId : undefined,
-    };
-
-  } catch (error: any) {
-    console.error('Failed to import repositories:', error);
-    return {
-      success: false,
-      message: t('toast_save_error_generic'),
-    };
-  }
+  });
 }
 
 export async function refreshSingleRepositoryAction(repoId: string) {
-  if (!isValidRepoId(repoId)) {
-    console.error('Invalid repoId format for refresh:', repoId);
-    return;
-  }
+  return scheduleTask(`refreshSingleRepositoryAction: ${repoId}`, async () => {
+    if (!isValidRepoId(repoId)) {
+      console.error('Invalid repoId format for refresh:', repoId);
+      return;
+    }
 
-  const settings = await getSettings();
-  const locale = settings.locale;
-  const allRepos = await getRepositories();
-  const repoToRefresh = allRepos.find(r => r.id === repoId);
+    console.log(`[${new Date().toLocaleString()}] Refreshing single repository: ${repoId}`);
 
-  if (!repoToRefresh) {
-    console.error(`Repository ${repoId} not found for refresh.`);
-    return;
-  }
+    const settings = await getSettings();
+    const locale = settings.locale;
+    const allRepos = await getRepositories();
+    const repoToRefresh = allRepos.find(r => r.id === repoId);
 
-  const enrichedReleases = await getLatestReleasesForRepos(
-    [repoToRefresh],
-    settings,
-    locale,
-    { skipCache: true }
-  );
+    if (!repoToRefresh) {
+      console.error(`Repository ${repoId} not found for refresh.`);
+      return;
+    }
 
-  const enrichedRelease = enrichedReleases[0];
-  if (!enrichedRelease) {
-    console.error(`Failed to get release for ${repoId} during single refresh.`);
-    return;
-  }
+    const enrichedReleases = await getLatestReleasesForRepos(
+      [repoToRefresh],
+      settings,
+      locale,
+      { skipCache: true }
+    );
 
-  const repoIndex = allRepos.findIndex(r => r.id === repoId);
-  if (repoIndex === -1) return; // Should not happen
+    const enrichedRelease = enrichedReleases[0];
+    if (!enrichedRelease) {
+      console.error(`Failed to get release for ${repoId} during single refresh.`);
+      return;
+    }
 
-  if (enrichedRelease.newEtag) {
-    allRepos[repoIndex].etag = enrichedRelease.newEtag;
-  }
-  if (enrichedRelease.release) {
-    allRepos[repoIndex].latestRelease = toCachedRelease(enrichedRelease.release);
-  }
+    const repoIndex = allRepos.findIndex(r => r.id === repoId);
+    if (repoIndex === -1) return; // Should not happen
 
-  await saveRepositories(allRepos);
-  revalidatePath('/'); // Revalidate the home page to show the new data
+    if (enrichedRelease.newEtag) {
+      allRepos[repoIndex].etag = enrichedRelease.newEtag;
+    }
+    if (enrichedRelease.release) {
+      allRepos[repoIndex].latestRelease = toCachedRelease(enrichedRelease.release);
+    }
+
+    await saveRepositories(allRepos);
+    revalidatePath('/'); // Revalidate the home page to show the new data
+  });
 }
 
 export async function refreshMultipleRepositoriesAction(repoIds: string[], jobId: string) {
@@ -821,69 +852,75 @@ export async function refreshMultipleRepositoriesAction(repoIds: string[], jobId
 }
 
 export async function removeRepositoryAction(repoId: string) {
-  if (!isValidRepoId(repoId)) {
-    console.error('Invalid repoId format for removal:', repoId);
-    return;
-  }
-  const currentRepos = await getRepositories();
-  const newRepos = currentRepos.filter(r => r.id !== repoId);
-  await saveRepositories(newRepos);
-  revalidatePath('/');
+  return scheduleTask(`removeRepositoryAction: ${repoId}`, async () => {
+    if (!isValidRepoId(repoId)) {
+      console.error('Invalid repoId format for removal:', repoId);
+      return;
+    }
+    const currentRepos = await getRepositories();
+    const newRepos = currentRepos.filter(r => r.id !== repoId);
+    await saveRepositories(newRepos);
+    revalidatePath('/');
+  });
 }
 
 export async function acknowledgeNewReleaseAction(repoId: string): Promise<{ success: boolean; error?: string }> {
-  if (!isValidRepoId(repoId)) {
-    return { success: false, error: 'Invalid repository ID format.' };
-  }
-  const locale = await getLocale();
-  const t = await getTranslations({locale, namespace: 'ReleaseCard'});
-  try {
-    const currentRepos = await getRepositories();
-    const repoIndex = currentRepos.findIndex(r => r.id === repoId);
-
-    if (repoIndex !== -1) {
-      currentRepos[repoIndex].isNew = false;
-      await saveRepositories(currentRepos);
-      revalidatePath('/');
-      return { success: true };
+  return scheduleTask(`acknowledgeNewReleaseAction: ${repoId}`, async () => {
+    if (!isValidRepoId(repoId)) {
+      return { success: false, error: 'Invalid repository ID format.' };
     }
+    const locale = await getLocale();
+    const t = await getTranslations({locale, namespace: 'ReleaseCard'});
+    try {
+      const currentRepos = await getRepositories();
+      const repoIndex = currentRepos.findIndex(r => r.id === repoId);
 
-    return { success: false, error: t('toast_acknowledge_error_not_found') };
+      if (repoIndex !== -1) {
+        currentRepos[repoIndex].isNew = false;
+        await saveRepositories(currentRepos);
+        revalidatePath('/');
+        return { success: true };
+      }
 
-  } catch (error: any) {
-    console.error('Failed to acknowledge release:', error);
-    return { success: false, error: t('toast_acknowledge_error_generic') };
-  }
+      return { success: false, error: t('toast_acknowledge_error_not_found') };
+
+    } catch (error: any) {
+      console.error('Failed to acknowledge release:', error);
+      return { success: false, error: t('toast_acknowledge_error_generic') };
+    }
+  });
 }
 
 export async function markAsNewAction(repoId: string): Promise<{ success: boolean; error?: string }> {
-  if (!isValidRepoId(repoId)) {
-    return { success: false, error: 'Invalid repository ID format.' };
-  }
-  const locale = await getLocale();
-  const t = await getTranslations({locale, namespace: 'ReleaseCard'});
-  try {
-    const currentRepos = await getRepositories();
-    const repoIndex = currentRepos.findIndex(r => r.id === repoId);
-
-    if (repoIndex !== -1) {
-      currentRepos[repoIndex].isNew = true;
-      await saveRepositories(currentRepos);
-      revalidatePath('/');
-      return { success: true };
+  return scheduleTask(`markAsNewAction: ${repoId}`, async () => {
+    if (!isValidRepoId(repoId)) {
+      return { success: false, error: 'Invalid repository ID format.' };
     }
+    const locale = await getLocale();
+    const t = await getTranslations({locale, namespace: 'ReleaseCard'});
+    try {
+      const currentRepos = await getRepositories();
+      const repoIndex = currentRepos.findIndex(r => r.id === repoId);
 
-    return { success: false, error: t('toast_mark_as_new_error_not_found') };
+      if (repoIndex !== -1) {
+        currentRepos[repoIndex].isNew = true;
+        await saveRepositories(currentRepos);
+        revalidatePath('/');
+        return { success: true };
+      }
 
-  } catch (error: any) {
-    console.error('Failed to mark release as new:', error);
-    return { success: false, error: t('toast_mark_as_new_error_generic') };
-  }
+      return { success: false, error: t('toast_mark_as_new_error_not_found') };
+
+    } catch (error: any) {
+      console.error('Failed to mark release as new:', error);
+      return { success: false, error: t('toast_mark_as_new_error_generic') };
+    }
+  });
 }
 
-export async function checkForNewReleases(options?: { overrideLocale?: string, skipCache?: boolean }) {
+async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: string, skipCache?: boolean }) {
   console.log(
-    `[${new Date().toISOString()}] Running check for new releases...`
+    `[${new Date().toLocaleString()}] Running check for new releases...`
   );
   const settings = await getSettings();
   const effectiveLocale = options?.overrideLocale || settings.locale;
@@ -958,12 +995,16 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
   }
 
   if (changed) {
-    console.log('Found changes, updating repository data file.');
+    console.log(`[${new Date().toLocaleString()}] Found changes, updating repository data file.`);
     await saveRepositories(updatedRepos);
   } else {
     console.log('No new releases found.');
   }
    return { notificationsSent, checked: originalRepos.length };
+}
+
+export async function checkForNewReleases(options?: { overrideLocale?: string, skipCache?: boolean }) {
+  return scheduleTask('checkForNewReleases', () => _checkForNewReleasesUnscheduled(options));
 }
 
 async function backgroundPollingLoop() {
@@ -999,34 +1040,36 @@ if (
 const TEST_REPO_ID = 'test/test';
 
 export async function setupTestRepositoryAction(): Promise<{ success: boolean; message: string; }> {
-  const locale = await getLocale();
-  const t = await getTranslations({locale, namespace: 'TestPage'});
+  return scheduleTask('setupTestRepositoryAction', async () => {
+    const locale = await getLocale();
+    const t = await getTranslations({locale, namespace: 'TestPage'});
 
-  try {
-    const currentRepos = await getRepositories();
-    const testRepoIndex = currentRepos.findIndex(r => r.id === TEST_REPO_ID);
+    try {
+      const currentRepos = await getRepositories();
+      const testRepoIndex = currentRepos.findIndex(r => r.id === TEST_REPO_ID);
 
-    if (testRepoIndex > -1) {
-      currentRepos[testRepoIndex].lastSeenReleaseTag = 'v0.9.0-reset';
-      currentRepos[testRepoIndex].isNew = false;
-    } else {
-      currentRepos.push({
-        id: TEST_REPO_ID,
-        url: `https://github.com/${TEST_REPO_ID}`,
-        lastSeenReleaseTag: 'v0.9.0-initial',
-        isNew: false,
-      });
+      if (testRepoIndex > -1) {
+        currentRepos[testRepoIndex].lastSeenReleaseTag = 'v0.9.0-reset';
+        currentRepos[testRepoIndex].isNew = false;
+      } else {
+        currentRepos.push({
+          id: TEST_REPO_ID,
+          url: `https://github.com/${TEST_REPO_ID}`,
+          lastSeenReleaseTag: 'v0.9.0-initial',
+          isNew: false,
+        });
+      }
+
+      await saveRepositories(currentRepos);
+      revalidatePath('/');
+      revalidatePath('/test');
+      revalidateTag('github-releases');
+      return { success: true, message: t('toast_setup_test_repo_success') };
+    } catch (error: any) {
+      console.error('setupTestRepositoryAction failed:', error);
+      return { success: false, message: error.message || t('toast_setup_test_repo_error') };
     }
-
-    await saveRepositories(currentRepos);
-    revalidatePath('/');
-    revalidatePath('/test');
-    revalidateTag('github-releases');
-    return { success: true, message: t('toast_setup_test_repo_success') };
-  } catch (error: any) {
-    console.error('setupTestRepositoryAction failed:', error);
-    return { success: false, message: error.message || t('toast_setup_test_repo_error') };
-  }
+  });
 }
 
 export async function triggerReleaseCheckAction(): Promise<{ success: boolean; message: string; }> {
@@ -1262,41 +1305,43 @@ export async function updateRepositorySettingsAction(
   repoId: string,
   settings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags' | 'appriseFormat'>
 ): Promise<{ success: boolean; error?: string }> {
-  if (!isValidRepoId(repoId)) {
-    return { success: false, error: 'Invalid repository ID format.' };
-  }
-
-  const locale = await getLocale();
-  const t = await getTranslations({ locale, namespace: 'RepoSettingsDialog' });
-
-  try {
-    const currentRepos = await getRepositories();
-    const repoIndex = currentRepos.findIndex(r => r.id === repoId);
-
-    if (repoIndex === -1) {
-      return { success: false, error: t('toast_error_not_found') };
+  return scheduleTask(`updateRepositorySettingsAction: ${repoId}`, async () => {
+    if (!isValidRepoId(repoId)) {
+      return { success: false, error: 'Invalid repository ID format.' };
     }
 
-    currentRepos[repoIndex] = {
-      ...currentRepos[repoIndex],
-      releaseChannels: settings.releaseChannels,
-      preReleaseSubChannels: settings.preReleaseSubChannels,
-      releasesPerPage: settings.releasesPerPage,
-      includeRegex: settings.includeRegex,
-      excludeRegex: settings.excludeRegex,
-      appriseTags: settings.appriseTags,
-      appriseFormat: settings.appriseFormat,
-    };
+    const locale = await getLocale();
+    const t = await getTranslations({ locale, namespace: 'RepoSettingsDialog' });
 
-    await saveRepositories(currentRepos);
-    await refreshSingleRepositoryAction(repoId);
-    return { success: true };
+    try {
+      const currentRepos = await getRepositories();
+      const repoIndex = currentRepos.findIndex(r => r.id === repoId);
 
-  } catch (error: any)
-  {
-    console.error(`Failed to update settings for ${repoId}:`, error);
-    return { success: false, error: error.message || t('toast_error_generic') };
-  }
+      if (repoIndex === -1) {
+        return { success: false, error: t('toast_error_not_found') };
+      }
+
+      currentRepos[repoIndex] = {
+        ...currentRepos[repoIndex],
+        releaseChannels: settings.releaseChannels,
+        preReleaseSubChannels: settings.preReleaseSubChannels,
+        releasesPerPage: settings.releasesPerPage,
+        includeRegex: settings.includeRegex,
+        excludeRegex: settings.excludeRegex,
+        appriseTags: settings.appriseTags,
+        appriseFormat: settings.appriseFormat,
+      };
+
+      await saveRepositories(currentRepos);
+      revalidatePath('/');
+      return { success: true };
+
+    } catch (error: any)
+    {
+      console.error(`Failed to update settings for ${repoId}:`, error);
+      return { success: false, error: error.message || t('toast_error_generic') };
+    }
+  });
 }
 
 export async function revalidateReleasesAction() {

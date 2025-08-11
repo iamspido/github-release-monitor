@@ -7,8 +7,7 @@ import type { Repository, ReleaseChannel, PreReleaseChannelType, AppSettings, Ap
 import { allPreReleaseTypes } from '@/types';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { updateRepositorySettingsAction } from '@/app/actions';
-import { useRouter } from 'next/navigation';
+import { updateRepositorySettingsAction, refreshSingleRepositoryAction } from '@/app/actions';
 
 import {
   Dialog,
@@ -100,7 +99,6 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const t = useTranslations('RepoSettingsDialog');
   const tGlobal = useTranslations('SettingsForm');
   const { toast } = useToast();
-  const router = useRouter();
 
   const [channels, setChannels] = React.useState<ReleaseChannel[]>(currentRepoSettings?.releaseChannels ?? []);
   const [preReleaseSubChannels, setPreReleaseSubChannels] = React.useState<PreReleaseChannelType[]>(
@@ -117,7 +115,61 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const [excludeRegexError, setExcludeRegexError] = React.useState<RegexError>(null);
 
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>('idle');
-  const [hasChanged, setHasChanged] = React.useState(false);
+
+  const savedThisSessionRef = React.useRef(false);
+
+  const mountedRef = React.useRef(true);
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  const prevIsOpenRef = React.useRef(isOpen);
+  React.useEffect(() => {
+    const wasOpen = prevIsOpenRef.current;
+
+    // transition: closed -> open
+    if (!wasOpen && isOpen) {
+      const initialSettings = {
+        releaseChannels: currentRepoSettings?.releaseChannels ?? [],
+        preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels ?? [],
+        releasesPerPage: currentRepoSettings?.releasesPerPage ?? null,
+        includeRegex: currentRepoSettings?.includeRegex ?? undefined,
+        excludeRegex: currentRepoSettings?.excludeRegex ?? undefined,
+        appriseTags: currentRepoSettings?.appriseTags ?? undefined,
+        appriseFormat: currentRepoSettings?.appriseFormat ?? undefined,
+      };
+
+      setChannels(initialSettings.releaseChannels);
+      setPreReleaseSubChannels(initialSettings.preReleaseSubChannels);
+      setReleasesPerPage(initialSettings.releasesPerPage ?? '');
+      setIncludeRegex(initialSettings.includeRegex ?? '');
+      setExcludeRegex(initialSettings.excludeRegex ?? '');
+      setAppriseTags(initialSettings.appriseTags ?? '');
+      setAppriseFormat(initialSettings.appriseFormat ?? '');
+
+      setSaveStatus('idle');
+
+      savedThisSessionRef.current = false;
+
+      prevSettingsRef.current = {
+        ...initialSettings,
+        releasesPerPage: initialSettings.releasesPerPage,
+      };
+    }
+
+    if (wasOpen && !isOpen) {
+      if (savedThisSessionRef.current) {
+        try {
+          refreshSingleRepositoryAction(repoId);
+        } catch (e) {
+        }
+        savedThisSessionRef.current = false;
+      }
+    }
+
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, currentRepoSettings, repoId]);
 
   const useGlobalChannels = channels.length === 0;
   const useGlobalSubChannels = preReleaseSubChannels.length === 0;
@@ -152,35 +204,6 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   }, [channels, preReleaseSubChannels, releasesPerPage, includeRegex, excludeRegex, appriseTags, appriseFormat]);
 
   const prevSettingsRef = React.useRef(newSettings);
-
-  React.useEffect(() => {
-    if (isOpen) {
-      const initialSettings = {
-        releaseChannels: currentRepoSettings?.releaseChannels ?? [],
-        preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels ?? [],
-        releasesPerPage: currentRepoSettings?.releasesPerPage ?? null,
-        includeRegex: currentRepoSettings?.includeRegex ?? undefined,
-        excludeRegex: currentRepoSettings?.excludeRegex ?? undefined,
-        appriseTags: currentRepoSettings?.appriseTags ?? undefined,
-        appriseFormat: currentRepoSettings?.appriseFormat ?? undefined,
-      };
-      setChannels(initialSettings.releaseChannels);
-      setPreReleaseSubChannels(initialSettings.preReleaseSubChannels);
-      setReleasesPerPage(initialSettings.releasesPerPage ?? '');
-      setIncludeRegex(initialSettings.includeRegex ?? '');
-      setExcludeRegex(initialSettings.excludeRegex ?? '');
-      setAppriseTags(initialSettings.appriseTags ?? '');
-      setAppriseFormat(initialSettings.appriseFormat ?? '');
-
-      setSaveStatus('idle');
-      setHasChanged(false);
-
-      prevSettingsRef.current = {
-        ...initialSettings,
-        releasesPerPage: initialSettings.releasesPerPage,
-      };
-    }
-  }, [isOpen, currentRepoSettings]);
 
   React.useEffect(() => {
     if (String(releasesPerPage).trim() !== '') {
@@ -226,23 +249,38 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
       return;
     }
 
-    setHasChanged(true);
     setSaveStatus('waiting');
 
     const handler = setTimeout(async () => {
-        setSaveStatus('saving');
-        const result = await updateRepositorySettingsAction(repoId, newSettings);
+        if (mountedRef.current) setSaveStatus('saving');
 
-        if (result.success) {
-            setSaveStatus('success');
-            prevSettingsRef.current = newSettings;
-        } else {
-            setSaveStatus('error');
-            toast({
-              title: t('toast_error_title'),
-              description: result.error,
-              variant: 'destructive',
-            });
+        try {
+            const result = await updateRepositorySettingsAction(repoId, newSettings);
+
+            if (result.success) {
+                if (mountedRef.current) {
+                    setSaveStatus('success');
+                    prevSettingsRef.current = newSettings;
+
+                    savedThisSessionRef.current = true;
+                } else {
+                    savedThisSessionRef.current = true;
+                }
+            } else {
+                if (mountedRef.current) {
+                    setSaveStatus('error');
+                    toast({
+                      title: t('toast_error_title'),
+                      description: result.error,
+                      variant: 'destructive',
+                    });
+                }
+            }
+        } catch (err) {
+            if (mountedRef.current) {
+                setSaveStatus('error');
+                toast({ title: t('toast_error_title'), description: String(err), variant: 'destructive' });
+            }
         }
     }, 1500);
 
@@ -286,9 +324,6 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
-    if (!open && hasChanged) {
-        router.refresh();
-    }
   }
 
   const handleResetAll = () => {
