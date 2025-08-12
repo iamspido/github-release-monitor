@@ -65,7 +65,7 @@ services:
       # Middleware for redirecting HTTP to HTTPS
 #      - "traefik.http.middlewares.apprise-redirect.redirectscheme.scheme=https"
 #      - "traefik.http.middlewares.apprise-redirect.redirectscheme.permanent=true"
-#      - "traefik.http.routers.apprise.middlewares=apprise-auth@docker"
+#      - "traefik.http.routers.apprise-secured.middlewares=apprise-auth@docker"
       # To create user:password pair, it's possible to use this command:
       # echo $(htpasswd -nB admin) | sed -e s/\\$/\\$\\$/g
 #      - "traefik.http.middlewares.apprise-auth.basicauth.users=admin:<hash>"
@@ -74,6 +74,7 @@ services:
 #      - "8000:8000"
     environment:
       - "APPRISE_STATELESS_URLS=mailto://smtp:25?from=no-reply@example.com&name=GitHub%20Release%20Monitor&to=example@example.com,discord://{WebhookID}/{WebhookToken}/,tgram://{bot_token}/{chat_id}/"
+      - "TZ=Europe/Berlin"
     logging:
       driver: "json-file"
       options:

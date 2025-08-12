@@ -35,7 +35,8 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production \
     HOSTNAME="0.0.0.0" \
-    PORT=3000
+    PORT=3000 \
+    LANG=C.UTF-8
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \

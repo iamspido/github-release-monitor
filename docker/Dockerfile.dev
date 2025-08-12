@@ -4,7 +4,8 @@ FROM node:24-alpine
 WORKDIR /app
 
 # Disable Next.js telemetry
-ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    LANG=C.UTF-8
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
