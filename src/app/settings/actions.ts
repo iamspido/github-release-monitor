@@ -14,7 +14,7 @@ export async function updateSettingsAction(newSettings: AppSettings) {
 
     // If the "mark as seen" feature is being disabled, reset all isNew flags.
     if (currentSettings.showAcknowledge && newSettings.showAcknowledge === false) {
-      console.log("Disabling 'Mark as seen' feature. Resetting all 'isNew' flags to false.");
+      console.log(`[${new Date().toLocaleString()}] Disabling 'Mark as seen' feature. Resetting all 'isNew' flags to false.`);
       const allRepos = await getRepositories();
       const updatedRepos = allRepos.map(repo => ({...repo, isNew: false}));
       await saveRepositories(updatedRepos);

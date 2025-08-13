@@ -31,7 +31,7 @@ async function ensureDataFileExists() {
     await fs.access(dataFilePath);
   } catch {
     await fs.writeFile(dataFilePath, JSON.stringify(defaultSettings, null, 2), 'utf8');
-    console.log(`Created settings data file at: ${dataFilePath}`);
+    console.log(`[${new Date().toLocaleString()}] Created settings data file at: ${dataFilePath}`);
   }
 }
 

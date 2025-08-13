@@ -240,7 +240,7 @@ export async function sendNewReleaseEmail(repository: Repository, release: Githu
   const recipient = toAddress || MAIL_TO_ADDRESS;
 
   if (!MAIL_HOST || !MAIL_PORT || !MAIL_FROM_ADDRESS || !recipient) {
-    console.log('Email configuration is incomplete (missing host, port, from, or to address). Skipping email notification.');
+    console.log(`[${new Date().toLocaleString()}] Email configuration is incomplete (missing host, port, from, or to address). Skipping email notification.`);
     throw new Error(t('error_config_incomplete'));
   }
 
@@ -268,9 +268,9 @@ export async function sendNewReleaseEmail(repository: Repository, release: Githu
       text: textBody,
       html: htmlBody,
     });
-    console.log(`Email notification sent to ${recipient} for ${repository.id} ${release.tag_name}`);
+    console.log(`[${new Date().toLocaleString()}] Email notification sent to ${recipient} for ${repository.id} ${release.tag_name}`);
   } catch (error: any) {
-    console.error(`Failed to send email for ${repository.id}:`, error);
+    console.error(`[${new Date().toLocaleString()}] Failed to send email for ${repository.id}:`, error);
     throw new Error(t('error_send_failed', { details: error.message }));
   }
 }
@@ -278,6 +278,6 @@ export async function sendNewReleaseEmail(repository: Repository, release: Githu
 export async function sendTestEmail(repository: Repository, release: GithubRelease, locale: string, timeFormat: TimeFormat, toAddress?: string) {
   const t = await getTranslations({locale, namespace: 'Email'});
   const recipient = toAddress || process.env.MAIL_TO_ADDRESS;
-  console.log(`Sending test email to ${recipient}...`);
+  console.log(`[${new Date().toLocaleString()}] Sending test email to ${recipient}...`);
   return sendNewReleaseEmail(repository, release, locale, timeFormat, recipient);
 }

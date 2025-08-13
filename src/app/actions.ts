@@ -343,17 +343,17 @@ async function fetchLatestRelease(
     }
 
     if (allReleases.length === 0) {
-      console.log(`No formal releases found for ${owner}/${repo}. Falling back to tags.`);
+      console.log(`[${new Date().toLocaleString()}] No formal releases found for ${owner}/${repo}. Falling back to tags.`);
       const tagsResponse = await fetch(`${GITHUB_API_BASE_URL}/tags?per_page=1`, { headers, cache: 'no-store' });
 
       if (!tagsResponse.ok) {
-          console.error(`Failed to fetch tags for ${owner}/${repo} after failing to find releases.`);
+          console.error(`[${new Date().toLocaleString()}] Failed to fetch tags for ${owner}/${repo} after failing to find releases.`);
           return { release: null, error: { type: 'no_releases_found' }, newEtag };
       }
 
       const tags: {name: string, commit: {sha: string}}[] = await tagsResponse.json();
       if (!tags || tags.length === 0) {
-          console.log(`No tags found for ${owner}/${repo}.`);
+          console.log(`[${new Date().toLocaleString()}] No tags found for ${owner}/${repo}.`);
           return { release: null, error: { type: 'no_releases_found' }, newEtag };
       }
 
@@ -449,7 +449,7 @@ async function fetchLatestRelease(
     // This check is for formal releases that have an empty body.
     // The tag fallback already populates the body with a commit message.
     if (latestRelease.id !== 0 && (!latestRelease.body || latestRelease.body.trim() === '')) {
-        console.log(`Release body for ${owner}/${repo} tag ${latestRelease.tag_name} is empty. Attempting to fetch commit message.`);
+        console.log(`[${new Date().toLocaleString()}] Release body for ${owner}/${repo} tag ${latestRelease.tag_name} is empty. Attempting to fetch commit message.`);
         const commitApiUrl = `${GITHUB_API_BASE_URL}/commits/${latestRelease.tag_name}`;
         try {
             const commitResponse = await fetch(commitApiUrl, { headers, cache: 'no-store' });
@@ -458,15 +458,15 @@ async function fetchLatestRelease(
                 if (commitData.commit && commitData.commit.message) {
                     const t = await getTranslations({ locale, namespace: 'Actions' });
                     latestRelease.body = `### ${t('commit_message_fallback_title')}\n\n---\n\n${commitData.commit.message}`;
-                    console.log(`Successfully fetched commit message for ${owner}/${repo} tag ${latestRelease.tag_name}.`);
+                    console.log(`[${new Date().toLocaleString()}] Successfully fetched commit message for ${owner}/${repo} tag ${latestRelease.tag_name}.`);
                 } else {
-                     console.log(`Commit message for ${owner}/${repo} tag ${latestRelease.tag_name} could not be retrieved from commit data.`);
+                     console.log(`[${new Date().toLocaleString()}] Commit message for ${owner}/${repo} tag ${latestRelease.tag_name} could not be retrieved from commit data.`);
                 }
             } else {
-                console.error(`Failed to fetch commit for ${owner}/${repo} tag ${latestRelease.tag_name}: ${commitResponse.status} ${commitResponse.statusText}`);
+                console.error(`[${new Date().toLocaleString()}] Failed to fetch commit for ${owner}/${repo} tag ${latestRelease.tag_name}: ${commitResponse.status} ${commitResponse.statusText}`);
             }
         } catch (error) {
-            console.error(`Error fetching commit for tag ${latestRelease.tag_name} in ${owner}/${repo}:`, error);
+            console.error(`[${new Date().toLocaleString()}] Error fetching commit for tag ${latestRelease.tag_name} in ${owner}/${repo}:`, error);
         }
     }
 
@@ -927,7 +927,7 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
 
   const originalRepos = await getRepositories();
   if (originalRepos.length === 0) {
-    console.log('No repositories to check.');
+    console.log(`[${new Date().toLocaleString()}] No repositories to check.`);
     return { notificationsSent: 0, checked: 0 };
   }
 
@@ -966,7 +966,7 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
 
         if (isNewRelease) {
           console.log(
-            `New release detected for ${repo.id}: ${newTag} (previously ${repo.lastSeenReleaseTag})`
+            `[${new Date().toLocaleString()}] New release detected for ${repo.id}: ${newTag} (previously ${repo.lastSeenReleaseTag})`
           );
 
           const shouldHighlight = settings.showAcknowledge ?? true;
@@ -982,7 +982,7 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
           }
         } else if (!repo.lastSeenReleaseTag) {
           console.log(
-            `First fetch for ${repo.id}, setting initial release tag to ${newTag}. No notification will be sent.`
+            `[${new Date().toLocaleString()}] First fetch for ${repo.id}, setting initial release tag to ${newTag}. No notification will be sent.`
           );
           repo.lastSeenReleaseTag = newTag;
           repo.isNew = false;
@@ -998,7 +998,7 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
     console.log(`[${new Date().toLocaleString()}] Found changes, updating repository data file.`);
     await saveRepositories(updatedRepos);
   } else {
-    console.log('No new releases found.');
+    console.log(`[${new Date().toLocaleString()}] No new releases found.`);
   }
    return { notificationsSent, checked: originalRepos.length };
 }
@@ -1023,7 +1023,7 @@ async function backgroundPollingLoop() {
 
     const pollingIntervalMs = pollingIntervalMinutes * 60 * 1000;
 
-    console.log(`Next background check scheduled in ${pollingIntervalMinutes} minutes.`);
+    console.log(`[${new Date().toLocaleString()}] Next background check scheduled in ${pollingIntervalMinutes} minutes.`);
     setTimeout(backgroundPollingLoop, pollingIntervalMs);
   }
 }
@@ -1032,7 +1032,7 @@ if (
   process.env.NODE_ENV === 'production' &&
   !process.env.BACKGROUND_POLLING_INITIALIZED
 ) {
-  console.log("Initializing dynamic background polling.");
+  console.log(`[${new Date().toLocaleString()}] Initializing dynamic background polling.`);
   process.env.BACKGROUND_POLLING_INITIALIZED = 'true';
   setTimeout(backgroundPollingLoop, 5000);
 }

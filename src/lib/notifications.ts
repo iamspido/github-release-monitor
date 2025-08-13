@@ -113,13 +113,13 @@ async function sendAppriseNotification(repository: Repository, release: GithubRe
 
         if (!response.ok) {
             const errorBody = await response.text();
-            console.error(`Apprise notification for ${repository.id} failed with status ${response.status}: ${errorBody}`);
+            console.error(`[${new Date().toLocaleString()}] Apprise notification for ${repository.id} failed with status ${response.status}: ${errorBody}`);
             throw new Error(t('error_send_failed_detailed', { status: response.status, details: errorBody }));
         } else {
-            console.log(`Apprise notification sent successfully for ${repository.id} ${release.tag_name}`);
+            console.log(`[${new Date().toLocaleString()}] Apprise notification sent successfully for ${repository.id} ${release.tag_name}`);
         }
     } catch (error: any) {
-        console.error(`Failed to send Apprise notification for ${repository.id}. Please check if the service is running and the URL is correct. Error: ${error.message}`);
+        console.error(`[${new Date().toLocaleString()}] Failed to send Apprise notification for ${repository.id}. Please check if the service is running and the URL is correct. Error: ${error.message}`);
         throw error;
     }
 }
@@ -139,7 +139,7 @@ export async function sendNotification(repository: Repository, release: GithubRe
     }
 
     if (notificationPromises.length === 0) {
-        console.warn(`No notification services (SMTP or Apprise) are configured. Skipping notification for ${repository.id}.`);
+        console.warn(`[${new Date().toLocaleString()}] No notification services (SMTP or Apprise) are configured. Skipping notification for ${repository.id}.`);
         return;
     }
 

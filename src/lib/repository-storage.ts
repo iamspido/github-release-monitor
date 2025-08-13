@@ -18,7 +18,7 @@ async function ensureDataFileExists() {
   } catch {
     // File doesn't exist, create it with an empty array.
     await fs.writeFile(dataFilePath, JSON.stringify([], null, 2), 'utf8');
-    console.log(`Created repository data file at: ${dataFilePath}`);
+    console.log(`[${new Date().toLocaleString()}] Created repository data file at: ${dataFilePath}`);
   }
 }
 
