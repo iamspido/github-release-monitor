@@ -1,19 +1,35 @@
 'use server';
 
 import type { GithubRelease, Repository, AppSettings, AppriseFormat } from '@/types';
-import { sendNewReleaseEmail, generatePlainTextReleaseBody, generateHtmlReleaseBody } from './email';
+import { sendNewReleaseEmail, generatePlainTextReleaseBody, generateHtmlReleaseBody, getFormattedDate } from './email';
 import { getTranslations } from 'next-intl/server';
 
-async function generateMarkdownReleaseBody(release: GithubRelease, locale: string, maxChars: number): Promise<string> {
-    const t = await getTranslations({ locale, namespace: 'Apprise' });
+async function generateMarkdownReleaseBody(release: GithubRelease, repository: Repository, locale: string, settings: AppSettings, maxChars: number): Promise<string> {
+    const t = await getTranslations({ locale, namespace: 'Email' });
+    const tApprise = await getTranslations({ locale, namespace: 'Apprise' });
+    const { htmlDate } = await getFormattedDate(new Date(release.created_at), locale, settings.timeFormat);
 
-    const viewOnGithubText = t('view_on_github_link', {
+    const viewOnGithubText = tApprise('view_on_github_link', {
         link: release.html_url,
     });
-    const truncatedText = t('truncated_message');
+    const truncatedText = tApprise('truncated_message');
     const footerSeparator = '\n\n---\n\n';
 
-    let body = release.body || t('no_release_notes');
+    const title = tApprise('title', { repoId: repository.id, tagName: release.tag_name });
+    const repoLink = `**[${repository.id}](${repository.url})**`;
+    const introText = t('text_new_version_of_markdown').replace('REPO_PLACEHOLDER', repoLink);
+
+    const header = `
+## ${title}
+
+${introText}
+
+* **${t('text_version_label')}**: ${release.tag_name}
+* **${t('text_release_name_label')}**: ${release.name || 'N/A'}
+* **${t('text_release_date_label')}**: ${htmlDate}
+`;
+
+    let body = `${header.trim()}\n\n### ${t('text_release_notes_label')}\n---\n${release.body || t('text_no_notes')}`;
 
     if (maxChars > 0) {
         const footer = `${footerSeparator}${truncatedText}\n${viewOnGithubText}`;
@@ -26,7 +42,7 @@ async function generateMarkdownReleaseBody(release: GithubRelease, locale: strin
                 body = viewOnGithubText;
             }
         } else {
-             body = `${body}${footerSeparator}${viewOnGithubText}`;
+            body = `${body}${footerSeparator}${viewOnGithubText}`;
         }
     } else {
         body = `${body}${footerSeparator}${viewOnGithubText}`;
@@ -36,18 +52,23 @@ async function generateMarkdownReleaseBody(release: GithubRelease, locale: strin
 
 async function generateAppriseBody(release: GithubRelease, repository: Repository, format: AppriseFormat, locale: string, settings: AppSettings): Promise<string> {
     const maxChars = settings.appriseMaxCharacters ?? 0;
+    const tApprise = await getTranslations({ locale, namespace: 'Apprise' });
+
     switch (format) {
         case 'html':
             return generateHtmlReleaseBody(release, repository, locale, settings.timeFormat);
         case 'markdown':
-            return generateMarkdownReleaseBody(release, locale, maxChars);
+            return generateMarkdownReleaseBody(release, repository, locale, settings, maxChars);
         case 'text':
         default:
-            const plainText = await generatePlainTextReleaseBody(release, repository, locale, settings.timeFormat);
-            if (maxChars > 0 && plainText.length > maxChars) {
-                return plainText.substring(0, maxChars);
+            const title = tApprise('title', { repoId: repository.id, tagName: release.tag_name });
+            const plainTextBody = await generatePlainTextReleaseBody(release, repository, locale, settings.timeFormat);
+            const fullBody = `${title}\n\n${plainTextBody.trim()}`;
+
+            if (maxChars > 0 && fullBody.length > maxChars) {
+                return fullBody.substring(0, maxChars);
             }
-            return plainText;
+            return fullBody;
     }
 }
 

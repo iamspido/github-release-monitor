@@ -49,7 +49,6 @@ export default async function HomePage({params}: {params: Promise<{locale: strin
           },
           // No fetch, so no newEtag and no error
           newEtag: repo.etag,
-          error: null,
         };
       });
     }

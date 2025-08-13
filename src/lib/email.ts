@@ -7,7 +7,7 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
 
-async function getFormattedDate(date: Date, locale: string, timeFormat: TimeFormat): Promise<{ textDate: string; htmlDate: string }> {
+export async function getFormattedDate(date: Date, locale: string, timeFormat: TimeFormat): Promise<{ textDate: string; htmlDate: string }> {
   const t = await getTranslations({locale, namespace: 'Email'});
 
   const textDateFormattingOptions: Intl.DateTimeFormatOptions = {
@@ -42,14 +42,14 @@ async function getFormattedDate(date: Date, locale: string, timeFormat: TimeForm
 
 export async function generatePlainTextReleaseBody(release: GithubRelease, repository: Repository, locale: string, timeFormat: TimeFormat): Promise<string> {
     const t = await getTranslations({locale, namespace: 'Email'});
-    const { textDate } = await getFormattedDate(new Date(release.created_at), locale, timeFormat);
+    const { htmlDate } = await getFormattedDate(new Date(release.created_at), locale, timeFormat);
 
     return `
 ${t('text_new_version_of', {repoId: repository.id})}
 
 ${t('text_version_label')}: ${release.tag_name}
 ${t('text_release_name_label')}: ${release.name || 'N/A'}
-${t('text_release_date_label')}: ${textDate}
+${t('text_release_date_label')}: ${htmlDate}
 
 ${t('text_release_notes_label')}:
 ${release.body || t('text_no_notes')}

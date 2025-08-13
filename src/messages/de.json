@@ -283,15 +283,16 @@
   },
   "Email": {
     "from_name_fallback": "GitHub Release Monitor",
-    "subject": "Neue Version für {repoId}: {tagName}",
+    "subject": "🚀 Neue Version für {repoId}: {tagName}",
     "text_new_version_of": "Eine neue Version von {repoId} wurde veröffentlicht.",
+    "text_new_version_of_markdown": "Eine neue Version von REPO_PLACEHOLDER wurde veröffentlicht.",
     "text_version_label": "Version",
     "text_release_name_label": "Release-Name",
     "text_release_date_label": "Veröffentlichungsdatum",
     "text_release_notes_label": "Versionshinweise",
     "text_no_notes": "Keine Versionshinweise vorhanden.",
     "text_view_on_github_label": "Auf GitHub ansehen",
-    "html_title": "🚀 Neue Version: {repoId} - {tagName}",
+    "html_title": "🚀 Neue Version für {repoId}: {tagName}",
     "html_intro": "Eine neue Version von {repoId} wurde veröffentlicht.",
     "html_list_version_label": "Version:",
     "html_list_name_label": "Name:",
@@ -390,7 +391,7 @@
     "apprise_basic_link_text": "Links werden als reine URL angezeigt."
   },
   "Apprise": {
-    "title": "🚀 Neue Version: {repoId} {tagName}",
+    "title": "🚀 Neue Version für {repoId}: {tagName}",
     "no_release_notes": "_Keine Versionshinweise vorhanden._",
     "view_on_github_link": "[Auf GitHub ansehen]({link})",
     "truncated_message": "_(Nachricht gekürzt)_",

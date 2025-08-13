@@ -283,15 +283,16 @@
   },
   "Email": {
     "from_name_fallback": "GitHub Release Monitor",
-    "subject": "New Release for {repoId}: {tagName}",
+    "subject": "🚀 New Release for {repoId}: {tagName}",
     "text_new_version_of": "A new version of {repoId} has been released.",
+    "text_new_version_of_markdown": "A new version of REPO_PLACEHOLDER has been released.",
     "text_version_label": "Version",
     "text_release_name_label": "Release Name",
     "text_release_date_label": "Release Date",
     "text_release_notes_label": "Release Notes",
     "text_no_notes": "No release notes provided.",
     "text_view_on_github_label": "View on GitHub",
-    "html_title": "🚀 New Release: {repoId} - {tagName}",
+    "html_title": "🚀 New Release for {repoId}: {tagName}",
     "html_intro": "A new version of {repoId} has been released.",
     "html_list_version_label": "Version:",
     "html_list_name_label": "Name:",
@@ -390,7 +391,7 @@
     "apprise_basic_link_text": "Links will be displayed as plain URLs."
   },
   "Apprise": {
-    "title": "🚀 New Release: {repoId} {tagName}",
+    "title": "🚀 New Release for {repoId}: {tagName}",
     "no_release_notes": "_No release notes provided._",
     "view_on_github_link": "[View on GitHub]({link})",
     "truncated_message": "_(Message truncated)_",
