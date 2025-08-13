@@ -57,6 +57,7 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
 
   const [state, formAction, isPending] = useActionState(addRepositoriesAction, initialState);
   const [jobId, setJobId] = React.useState<string | undefined>(undefined);
+  const hasProcessedResult = React.useRef(true);
 
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -68,20 +69,28 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
   const [fileInputKey, setFileInputKey] = React.useState(Date.now());
 
   React.useEffect(() => {
+    if (isPending) {
+      hasProcessedResult.current = false;
+    }
+  }, [isPending]);
+
+  React.useEffect(() => {
     if (state.error) {
       toast({
         title: t('toast_fail_title'),
         description: state.error,
         variant: 'destructive',
       });
+      hasProcessedResult.current = true;
     }
-    if (state.toast) {
+    if (state.toast && !hasProcessedResult.current) {
       toast({
         title: state.toast.title,
         description: state.toast.description,
       });
     }
-    if (state.success) {
+    if (state.success && !hasProcessedResult.current) {
+      hasProcessedResult.current = true;
       setUrls('');
       if (state.jobId) {
         setJobId(state.jobId);
