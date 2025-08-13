@@ -7,10 +7,12 @@ import { getSettings, saveSettings } from '@/lib/settings-storage';
 import { getRepositories, saveRepositories } from '@/lib/repository-storage';
 import { cookies } from 'next/headers';
 import { checkForNewReleases } from '@/app/actions';
+import { scheduleTask } from '@/lib/task-scheduler';
 
 export async function updateSettingsAction(newSettings: AppSettings) {
-  try {
-    const currentSettings = await getSettings();
+  return scheduleTask('updateSettingsAction', async () => {
+    try {
+      const currentSettings = await getSettings();
 
     // If the "mark as seen" feature is being disabled, reset all isNew flags.
     if (currentSettings.showAcknowledge && newSettings.showAcknowledge === false) {
@@ -71,38 +73,41 @@ export async function updateSettingsAction(newSettings: AppSettings) {
       },
     };
   }
+  });
 }
 
 export async function deleteAllRepositoriesAction() {
-    try {
-        await saveRepositories([]);
-        revalidatePath('/');
+    return scheduleTask('deleteAllRepositoriesAction', async () => {
+        try {
+            await saveRepositories([]);
+            revalidatePath('/');
 
-        const locale = await getLocale();
-        const t = await getTranslations({
-            locale: locale,
-            namespace: 'SettingsForm'
-        });
-        return {
-            success: true,
-            message: {
-                title: t('toast_delete_all_success_title'),
-                description: t('toast_delete_all_success_description'),
-            }
-        };
-    } catch (error: any) {
-        console.error('Failed to delete all repositories:', error);
-        const locale = await getLocale();
-        const t = await getTranslations({
-            locale: locale,
-            namespace: 'SettingsForm'
-        });
-        return {
-            success: false,
-            message: {
-                title: t('toast_error_title'),
-                description: error.message || t('toast_delete_all_error_description'),
-            }
-        };
-    }
+            const locale = await getLocale();
+            const t = await getTranslations({
+                locale: locale,
+                namespace: 'SettingsForm'
+            });
+            return {
+                success: true,
+                message: {
+                    title: t('toast_delete_all_success_title'),
+                    description: t('toast_delete_all_success_description'),
+                }
+            };
+        } catch (error: any) {
+            console.error('Failed to delete all repositories:', error);
+            const locale = await getLocale();
+            const t = await getTranslations({
+                locale: locale,
+                namespace: 'SettingsForm'
+            });
+            return {
+                success: false,
+                message: {
+                    title: t('toast_error_title'),
+                    description: error.message || t('toast_delete_all_error_description'),
+                }
+            };
+        }
+    });
 }

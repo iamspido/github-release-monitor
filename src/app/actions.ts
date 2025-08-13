@@ -24,29 +24,7 @@ import remarkHtml from 'remark-html';
 import { sendTestEmail } from '@/lib/email';
 import crypto from 'crypto';
 
-let currentUpdatePromise: Promise<any> = Promise.resolve();
-
-/**
- * Schedules a task to be executed sequentially.
- * @param taskName A descriptive name for the task, used for logging.
- * @param taskFunction The async function to execute.
- * @returns A promise that resolves with the result of the task function.
- */
-function scheduleTask<T>(taskName: string, taskFunction: () => Promise<T>): Promise<T> {
-  console.log(`[${new Date().toLocaleString()}] [Scheduler] Queuing task: ${taskName}`);
-
-  const taskPromise = currentUpdatePromise.then(async () => {
-    console.log(`[${new Date().toLocaleString()}] [Scheduler] Starting task: ${taskName}`);
-    try {
-      return await taskFunction();
-    } finally {
-      console.log(`[${new Date().toLocaleString()}] [Scheduler] Finished task: ${taskName}`);
-    }
-  });
-
-  currentUpdatePromise = taskPromise;
-  return taskPromise;
-}
+import { scheduleTask } from '@/lib/task-scheduler';
 
 
 function parseGitHubUrl(url: string): {owner: string; repo: string; id: string} | null {
