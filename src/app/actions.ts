@@ -1358,15 +1358,43 @@ export async function updateRepositorySettingsAction(
         return { success: false, error: t('toast_error_not_found') };
       }
 
+      const existing = currentRepos[repoIndex];
+
+      const prevInclude = (existing.includeRegex ?? '').trim() || undefined;
+      const prevExclude = (existing.excludeRegex ?? '').trim() || undefined;
+      const newInclude = (settings.includeRegex ?? '').trim() || undefined;
+      const newExclude = (settings.excludeRegex ?? '').trim() || undefined;
+
+      const filtersChanged = prevInclude !== newInclude || prevExclude !== newExclude;
+
+      // Normalize arrays for comparison (treat empty array as undefined/global)
+      const normArray = <T,>(arr?: T[] | null) => {
+        if (!arr || arr.length === 0) return undefined;
+        return [...arr].sort();
+      };
+      const prevChannels = normArray(existing.releaseChannels);
+      const newChannels = normArray(settings.releaseChannels);
+      const channelsChanged = JSON.stringify(prevChannels) !== JSON.stringify(newChannels);
+
+      const prevPreSubs = normArray(existing.preReleaseSubChannels);
+      const newPreSubs = normArray(settings.preReleaseSubChannels);
+      const preSubsChanged = JSON.stringify(prevPreSubs) !== JSON.stringify(newPreSubs);
+
+      const prevRpp = existing.releasesPerPage ?? undefined;
+      const newRpp = settings.releasesPerPage ?? undefined;
+      const rppChanged = prevRpp !== newRpp;
+
       currentRepos[repoIndex] = {
-        ...currentRepos[repoIndex],
+        ...existing,
         releaseChannels: settings.releaseChannels,
         preReleaseSubChannels: settings.preReleaseSubChannels,
         releasesPerPage: settings.releasesPerPage,
-        includeRegex: settings.includeRegex,
-        excludeRegex: settings.excludeRegex,
+        includeRegex: newInclude,
+        excludeRegex: newExclude,
         appriseTags: settings.appriseTags,
         appriseFormat: settings.appriseFormat,
+        // Invalidate ETag when filters/pagination that affect visible latest release change
+        etag: (filtersChanged || channelsChanged || preSubsChanged || rppChanged) ? undefined : existing.etag,
       };
 
       await saveRepositories(currentRepos);
