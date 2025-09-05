@@ -390,6 +390,7 @@ async function fetchLatestRelease(
       allReleases = [virtualRelease];
     }
 
+    // Filter releases according to configured channels/regex
     const filteredReleases = allReleases.filter(r => {
       try {
         if (effectiveExcludeRegex) {
@@ -422,7 +423,16 @@ async function fetchLatestRelease(
       return { release: null, error: { type: 'no_matching_releases' }, newEtag };
     }
 
-    let latestRelease = filteredReleases[0];
+    // Sort by published_at (fallback to created_at) desc to ensure stability
+    const sortedReleases = filteredReleases
+      .slice()
+      .sort((a, b) => {
+        const aTime = new Date(a.published_at || a.created_at).getTime();
+        const bTime = new Date(b.published_at || b.created_at).getTime();
+        return bTime - aTime;
+      });
+
+    let latestRelease = sortedReleases[0];
 
     // This check is for formal releases that have an empty body.
     // The tag fallback already populates the body with a commit message.
@@ -780,7 +790,15 @@ export async function refreshSingleRepositoryAction(repoId: string) {
       allRepos[repoIndex].etag = enrichedRelease.newEtag;
     }
     if (enrichedRelease.release) {
-      allRepos[repoIndex].latestRelease = toCachedRelease(enrichedRelease.release);
+      const isVirtual = enrichedRelease.release.id === 0;
+      const newCached = toCachedRelease(enrichedRelease.release);
+      // Avoid overwriting existing real release data with virtual (tag-fallback) data
+      if (!isVirtual || !allRepos[repoIndex].latestRelease) {
+        allRepos[repoIndex].latestRelease = newCached;
+      } else if (isVirtual && allRepos[repoIndex].latestRelease && newCached.fetched_at) {
+        // Update last successful fetch time on 304 not modified
+        allRepos[repoIndex].latestRelease.fetched_at = newCached.fetched_at;
+      }
     }
 
     await saveRepositories(allRepos);
@@ -809,8 +827,17 @@ export async function refreshMultipleRepositoriesAction(repoIds: string[], jobId
         const enriched = enrichedMap.get(repo.id);
         if (enriched) {
           if (enriched.release) {
-            repo.latestRelease = toCachedRelease(enriched.release);
-            if (!repo.lastSeenReleaseTag) {
+            const isVirtual = enriched.release.id === 0;
+            const newCached = toCachedRelease(enriched.release);
+            // Avoid overwriting existing real release data with virtual (tag-fallback) data
+            if (!isVirtual || !repo.latestRelease) {
+              repo.latestRelease = newCached;
+            } else if (isVirtual && repo.latestRelease && newCached.fetched_at) {
+              // Update last successful fetch time on 304 not modified
+              repo.latestRelease.fetched_at = newCached.fetched_at;
+            }
+            // Do not initialize lastSeenReleaseTag from a virtual (tag-fallback) release
+            if (!repo.lastSeenReleaseTag && !isVirtual) {
               repo.lastSeenReleaseTag = enriched.release.tag_name;
             }
           }
@@ -933,14 +960,25 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
     }
 
     if (enrichedRelease.release) {
+        const isVirtual = enrichedRelease.release.id === 0; // tag-fallback or reconstructed data
         const newCachedRelease = toCachedRelease(enrichedRelease.release);
-        if (JSON.stringify(repo.latestRelease) !== JSON.stringify(newCachedRelease)) {
-            repoWasUpdated = true;
+
+        // Do not overwrite an existing real release with a virtual one.
+        if (!isVirtual || !repo.latestRelease) {
+            if (JSON.stringify(repo.latestRelease) !== JSON.stringify(newCachedRelease)) {
+                repoWasUpdated = true;
+            }
+            repo.latestRelease = newCachedRelease;
+        } else if (isVirtual && repo.latestRelease && newCachedRelease.fetched_at) {
+            // Still update the last successful fetch time when ETag says not modified
+            if (repo.latestRelease.fetched_at !== newCachedRelease.fetched_at) {
+              repo.latestRelease.fetched_at = newCachedRelease.fetched_at;
+              repoWasUpdated = true;
+            }
         }
-        repo.latestRelease = newCachedRelease;
 
         const newTag = enrichedRelease.release.tag_name;
-        const isNewRelease = repo.lastSeenReleaseTag && repo.lastSeenReleaseTag !== newTag;
+        const isNewRelease = !isVirtual && repo.lastSeenReleaseTag && repo.lastSeenReleaseTag !== newTag;
 
         if (isNewRelease) {
           console.log(
@@ -958,7 +996,7 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
           } catch(e: any) {
             console.error(`Failed to send notification for ${repo.id}. The release tag HAS been updated to prevent repeated failures for the same release. Error: ${e.message}`);
           }
-        } else if (!repo.lastSeenReleaseTag) {
+        } else if (!repo.lastSeenReleaseTag && !isVirtual) {
           console.log(
             `[${new Date().toLocaleString()}] First fetch for ${repo.id}, setting initial release tag to ${newTag}. No notification will be sent.`
           );
@@ -1021,6 +1059,8 @@ export async function setupTestRepositoryAction(): Promise<{ success: boolean; m
   return scheduleTask('setupTestRepositoryAction', async () => {
     const locale = await getLocale();
     const t = await getTranslations({locale, namespace: 'TestPage'});
+    // Prepare a readable title/body so the card renders nicely before the first check
+    const { title, body } = await getComprehensiveMarkdownBody(locale);
 
     try {
       const currentRepos = await getRepositories();
@@ -1029,12 +1069,31 @@ export async function setupTestRepositoryAction(): Promise<{ success: boolean; m
       if (testRepoIndex > -1) {
         currentRepos[testRepoIndex].lastSeenReleaseTag = 'v0.9.0-reset';
         currentRepos[testRepoIndex].isNew = false;
+        // Ensure a cached release exists so the UI shows a proper card immediately
+        currentRepos[testRepoIndex].latestRelease = {
+          html_url: `https://github.com/${TEST_REPO_ID}/releases/tag/v0.9.0-reset`,
+          tag_name: 'v0.9.0-reset',
+          name: title,
+          body: body,
+          created_at: new Date().toISOString(),
+          published_at: new Date().toISOString(),
+          fetched_at: new Date().toISOString(),
+        };
       } else {
         currentRepos.push({
           id: TEST_REPO_ID,
           url: `https://github.com/${TEST_REPO_ID}`,
           lastSeenReleaseTag: 'v0.9.0-initial',
           isNew: false,
+          latestRelease: {
+            html_url: `https://github.com/${TEST_REPO_ID}/releases/tag/v0.9.0-initial`,
+            tag_name: 'v0.9.0-initial',
+            name: title,
+            body: body,
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            fetched_at: new Date().toISOString(),
+          }
         });
       }
 
