@@ -63,8 +63,67 @@ COPY public/ ./public/
 COPY src/ ./src/
 COPY tests/ ./tests/
 
-# Run unit tests during build
-RUN npm run lint && npm run typecheck && npm test
+# Run unit tests during build (lint/typecheck run in separate targets)
+RUN npm test
+
+###############################
+# Builder Stage (for E2E / standalone)
+###############################
+FROM node:24-alpine AS builder
+
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY package*.json ./
+
+RUN npm ci
+
+COPY components.json \
+     next.config.mjs \
+     postcss.config.mjs \
+     tailwind.config.ts \
+     tsconfig.json \
+     ./
+COPY public/ ./public/
+COPY src/ ./src/
+
+# Produce standalone build used by Playwright e2e stage
+# Force production env only for the build step so Next emits standalone output
+RUN NODE_ENV=production npm run build
+
+################################
+# E2E Stage (Playwright)
+################################
+FROM mcr.microsoft.com/playwright:v1.55.0-jammy AS e2e
+
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    LANG=C.UTF-8 \
+    NODE_ENV=production \
+    CI=true \
+    HTTPS=false \
+    BACKGROUND_POLLING_INITIALIZED=true \
+    AUTH_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+    AUTH_USERNAME=test \
+    AUTH_PASSWORD=test
+
+# Install minimal deps for running Playwright
+COPY package*.json ./
+RUN npm install --omit=optional --no-audit --no-fund && npm cache clean --force \
+ && npm install @playwright/test@1.55.0 playwright@1.55.0 --no-save --no-audit --no-fund
+
+COPY playwright.config.ts ./
+COPY tests/e2e ./tests/e2e
+
+# Copy built app from builder
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+# Run Playwright tests
+RUN node ./node_modules/@playwright/test/cli.js test
 
 ################################
 # Coverage Stage (optional)

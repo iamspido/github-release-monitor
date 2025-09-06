@@ -16,7 +16,8 @@ import {sendNotification, sendTestAppriseNotification} from '@/lib/notifications
 import {getRepositories, saveRepositories} from '@/lib/repository-storage';
 import {revalidatePath, revalidateTag, unstable_cache} from 'next/cache';
 import { getSettings } from '@/lib/settings-storage';
-import { getLocale, getTranslations } from 'next-intl/server';
+import { getTranslations } from 'next-intl/server';
+import { getRequestLocale } from '@/lib/request-locale';
 import { getJobStatus, setJobStatus, type JobStatus } from '@/lib/job-store';
 import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
@@ -613,7 +614,7 @@ export async function addRepositoriesAction(
   jobId?: string;
 }> {
   return scheduleTask('addRepositoriesAction', async () => {
-    const locale = await getLocale();
+    const locale = await getRequestLocale();
     const t = await getTranslations({locale, namespace: 'RepositoryForm'});
 
     const urls = formData.get('urls');
@@ -684,7 +685,7 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
   jobId?: string;
 }> {
   return scheduleTask('importRepositoriesAction', async () => {
-    const locale = await getLocale();
+    const locale = await getRequestLocale();
     const t = await getTranslations({locale, namespace: 'RepositoryForm'});
     const settings = await getSettings();
 
@@ -874,7 +875,7 @@ export async function acknowledgeNewReleaseAction(repoId: string): Promise<{ suc
     if (!isValidRepoId(repoId)) {
       return { success: false, error: 'Invalid repository ID format.' };
     }
-    const locale = await getLocale();
+    const locale = await getRequestLocale();
     const t = await getTranslations({locale, namespace: 'ReleaseCard'});
     try {
       const currentRepos = await getRepositories();
@@ -901,7 +902,7 @@ export async function markAsNewAction(repoId: string): Promise<{ success: boolea
     if (!isValidRepoId(repoId)) {
       return { success: false, error: 'Invalid repository ID format.' };
     }
-    const locale = await getLocale();
+    const locale = await getRequestLocale();
     const t = await getTranslations({locale, namespace: 'ReleaseCard'});
     try {
       const currentRepos = await getRepositories();
@@ -1057,7 +1058,7 @@ const TEST_REPO_ID = 'test/test';
 
 export async function setupTestRepositoryAction(): Promise<{ success: boolean; message: string; }> {
   return scheduleTask('setupTestRepositoryAction', async () => {
-    const locale = await getLocale();
+    const locale = await getRequestLocale();
     const t = await getTranslations({locale, namespace: 'TestPage'});
     // Prepare a readable title/body so the card renders nicely before the first check
     const { title, body } = await getComprehensiveMarkdownBody(locale);
@@ -1110,7 +1111,7 @@ export async function setupTestRepositoryAction(): Promise<{ success: boolean; m
 }
 
 export async function triggerReleaseCheckAction(): Promise<{ success: boolean; message: string; }> {
-  const locale = await getLocale();
+  const locale = await getRequestLocale();
   const t = await getTranslations({locale, namespace: 'TestPage'});
 
   const {MAIL_HOST, MAIL_PORT, MAIL_FROM_ADDRESS, MAIL_TO_ADDRESS, APPRISE_URL} = process.env;
@@ -1177,7 +1178,7 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
   success: boolean;
   error?: string;
 }> {
-  const locale = await getLocale();
+  const locale = await getRequestLocale();
   const t = await getTranslations({locale, namespace: 'TestPage'});
   const tEmail = await getTranslations({locale, namespace: 'Email'});
 
@@ -1237,7 +1238,7 @@ export async function sendTestAppriseAction(): Promise<{
   success: boolean;
   error?: string;
 }> {
-  const locale = await getLocale();
+  const locale = await getRequestLocale();
   const t = await getTranslations({locale, namespace: 'TestPage'});
 
   const { APPRISE_URL } = process.env;
@@ -1285,7 +1286,7 @@ export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
     return { status: 'not_configured' };
   }
 
-  const locale = await getLocale();
+  const locale = await getRequestLocale();
   const t = await getTranslations({ locale, namespace: 'TestPage' });
 
   try {
@@ -1320,7 +1321,7 @@ export async function refreshAndCheckAction(): Promise<{
   success: boolean;
   messageKey: 'toast_refresh_success_description' | 'toast_refresh_found_new';
 }> {
-  const locale = await getLocale();
+  const locale = await getRequestLocale();
   const result = await checkForNewReleases({ overrideLocale: locale, skipCache: true });
 
   const messageKey = result.notificationsSent > 0 ? 'toast_refresh_found_new' : 'toast_refresh_success_description';
@@ -1347,7 +1348,7 @@ export async function updateRepositorySettingsAction(
       return { success: false, error: 'Invalid repository ID format.' };
     }
 
-    const locale = await getLocale();
+    const locale = await getRequestLocale();
     const t = await getTranslations({ locale, namespace: 'RepoSettingsDialog' });
 
     try {

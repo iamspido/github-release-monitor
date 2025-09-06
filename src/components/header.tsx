@@ -5,7 +5,7 @@ import { Github, FlaskConical, Settings, LogOut, Home, Loader2 } from 'lucide-re
 import { useTranslations } from 'next-intl';
 import { Link, usePathname } from '@/navigation';
 import { cn } from '@/lib/utils';
-import { pathnames } from '@/i18n';
+import { pathnames } from '@/i18n-config';
 import { logout } from '@/app/auth/actions';
 
 import { Button } from '@/components/ui/button';

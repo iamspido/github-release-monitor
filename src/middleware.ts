@@ -3,12 +3,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { sessionOptions } from './lib/session';
 import type { SessionData } from './types';
-import { locales, pathnames } from './i18n';
+import { locales, pathnames, defaultLocale } from './i18n-config';
 
 export async function middleware(request: NextRequest) {
   // Step 1: Determine the user's preferred locale from the cookie.
   // Fallback to 'en' if the cookie is not set.
-  const preferredLocale = request.cookies.get('NEXT_LOCALE')?.value || 'en';
+  const cookieLocale = request.cookies.get('NEXT_LOCALE')?.value;
+  const preferredLocale: typeof locales[number] = (locales as readonly string[]).includes((cookieLocale || '') as any)
+    ? (cookieLocale as typeof locales[number])
+    : defaultLocale;
 
   // Step 2: Create a middleware handler for internationalization.
   // It will now use the explicitly determined locale as the default.
@@ -24,7 +27,10 @@ export async function middleware(request: NextRequest) {
   const response = handleI18nRouting(request);
 
   // Step 3: Determine the current locale from the response prepared by next-intl.
-  const currentLocale = response.headers.get('x-next-intl-locale') || preferredLocale;
+  const headerLocale = response.headers.get('x-next-intl-locale');
+  const currentLocale: typeof locales[number] = (locales as readonly string[]).includes((headerLocale || '') as any)
+    ? (headerLocale as typeof locales[number])
+    : preferredLocale;
 
   // Step 4: Define the localized login path.
   const loginPathForLocale = pathnames['/login'][currentLocale as 'en' | 'de'] || pathnames['/login']['en'];

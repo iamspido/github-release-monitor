@@ -5,7 +5,7 @@ import { Github, FlaskConical, Settings, LogOut, Home, Menu, Loader2 } from 'luc
 import { useTranslations } from 'next-intl';
 import { Link, usePathname, useRouter } from '@/navigation';
 import { cn } from '@/lib/utils';
-import { pathnames } from '@/i18n';
+import { pathnames } from '@/i18n-config';
 
 import {
   DropdownMenu,

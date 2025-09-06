@@ -1,7 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getLocale, getTranslations } from 'next-intl/server';
+import { getTranslations } from 'next-intl/server';
+import { getRequestLocale } from '@/lib/request-locale';
 import type { AppSettings } from '@/types';
 import { getSettings, saveSettings } from '@/lib/settings-storage';
 import { getRepositories, saveRepositories } from '@/lib/repository-storage';
@@ -104,7 +105,7 @@ export async function deleteAllRepositoriesAction() {
             await saveRepositories([]);
             revalidatePath('/');
 
-            const locale = await getLocale();
+            const locale = await getRequestLocale();
             const t = await getTranslations({
                 locale: locale,
                 namespace: 'SettingsForm'
@@ -118,7 +119,7 @@ export async function deleteAllRepositoriesAction() {
             };
         } catch (error: any) {
             console.error('Failed to delete all repositories:', error);
-            const locale = await getLocale();
+            const locale = await getRequestLocale();
             const t = await getTranslations({
                 locale: locale,
                 namespace: 'SettingsForm'

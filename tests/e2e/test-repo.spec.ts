@@ -25,6 +25,12 @@ test('refresh marks test repo as new, then acknowledge removes the highlight', a
   // Ensure test repo exists
   await page.goto('/en/test');
   await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
+  // Wait for success toast to ensure the repo exists before navigating away
+  await expect.poll(async () => {
+    const en = await page.getByText("The 'test/test' repository is now ready.").isVisible().catch(() => false);
+    const de = await page.getByText("Das 'test/test'-Repository ist jetzt bereit.").isVisible().catch(() => false);
+    return en || de;
+  }, { timeout: 8000, intervals: [200] }).toBe(true);
 
   await page.goto('/en');
   await expect(page.getByText('test/test').first()).toBeVisible();

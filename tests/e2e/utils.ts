@@ -47,6 +47,12 @@ export async function login(page: Page, username?: string, password?: string) {
 export async function ensureTestRepo(page: Page) {
   await page.goto('/en/test');
   await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
+  // Wait for success toast in either EN or DE to ensure the action completed
+  await expect.poll(async () => {
+    const en = await page.getByText("The 'test/test' repository is now ready.").isVisible().catch(() => false);
+    const de = await page.getByText("Das 'test/test'-Repository ist jetzt bereit.").isVisible().catch(() => false);
+    return en || de;
+  }, { timeout: 8000, intervals: [200] }).toBe(true);
 }
 
 export async function assertNotVisibleFor(locator: Locator, waitMs = 1600) {
