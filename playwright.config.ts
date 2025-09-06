@@ -1,10 +1,16 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const reporters: any[] = [['list']];
+if (process.env.CI) {
+  reporters.push(['html', { outputFolder: 'playwright-report', open: 'never' }]);
+}
+
 export default defineConfig({
   testDir: 'tests/e2e',
   timeout: 30_000,
   retries: 0,
   workers: 1,
+  outputDir: 'test-results',
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:3000',
     trace: 'on-first-retry',
@@ -12,6 +18,7 @@ export default defineConfig({
     video: 'retain-on-failure',
     headless: true,
   },
+  reporter: reporters as any,
   projects: [
     {
       name: 'chromium',

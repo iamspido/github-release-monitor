@@ -128,6 +128,7 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1 \
     LANG=C.UTF-8 \
     NODE_ENV=production \
+    CI=true \
     HTTPS=false \
     BACKGROUND_POLLING_INITIALIZED=true \
     AUTH_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
