@@ -89,6 +89,18 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
   const [timeAgo, setTimeAgo] = React.useState('');
   const [checkedAgo, setCheckedAgo] = React.useState('');
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
+  const settingsButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const prevIsSettingsOpenRef = React.useRef(false);
+
+  React.useEffect(() => {
+    // When the settings dialog transitions from open -> closed, return focus to the trigger button.
+    // Use a micro-delay to ensure the overlay has unmounted before focusing.
+    if (prevIsSettingsOpenRef.current && !isSettingsOpen) {
+      const btn = settingsButtonRef.current;
+      setTimeout(() => btn?.focus(), 0);
+    }
+    prevIsSettingsOpenRef.current = isSettingsOpen;
+  }, [isSettingsOpen]);
 
 
   React.useEffect(() => {
@@ -312,6 +324,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
                     size="icon"
                     className="size-8 shrink-0 text-muted-foreground"
                     onClick={() => setIsSettingsOpen(true)}
+                    ref={settingsButtonRef}
                     aria-label={t('settings_button_aria')}
                   >
                     <Settings className="size-4" />
