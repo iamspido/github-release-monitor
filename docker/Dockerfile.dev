@@ -1,4 +1,104 @@
-# Use Node.js Alpine image for development
+###############################
+# Lint Stage (ESLint)
+###############################
+FROM node:24-alpine AS lint
+
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    LANG=C.UTF-8
+
+COPY package*.json ./
+RUN npm ci && npm cache clean --force
+
+COPY .eslintrc.json ./
+COPY tsconfig.json ./
+COPY src/ ./src/
+
+RUN npm run lint
+
+###############################
+# Typecheck Stage (TypeScript)
+###############################
+FROM node:24-alpine AS typecheck
+
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    LANG=C.UTF-8
+
+COPY package*.json ./
+RUN npm ci && npm cache clean --force
+
+COPY tsconfig.json ./
+COPY src/ ./src/
+
+RUN npm run typecheck
+
+###############################
+# Test Stage (Vitest in Docker)
+###############################
+FROM node:24-alpine AS tester
+
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    LANG=C.UTF-8
+
+# Copy package files and install deps via lockfile
+COPY package*.json ./
+RUN npm ci && npm cache clean --force
+
+# Copy config and source
+COPY components.json \
+     next.config.mjs \
+     .eslintrc.json \
+     postcss.config.mjs \
+     tailwind.config.ts \
+     tsconfig.json \
+     vitest.config.ts \
+     vitest.setup.ts \
+     ./
+COPY public/ ./public/
+COPY src/ ./src/
+COPY tests/ ./tests/
+
+# Run unit tests during build
+RUN npm run lint && npm run typecheck && npm test
+
+################################
+# Coverage Stage (optional)
+################################
+FROM node:24-alpine AS coverage
+
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    LANG=C.UTF-8
+
+# Copy package files and install deps via lockfile
+COPY package*.json ./
+RUN npm install && npm cache clean --force
+
+# Copy config and source
+COPY components.json \
+     next.config.mjs \
+     postcss.config.mjs \
+     tailwind.config.ts \
+     tsconfig.json \
+     vitest.config.ts \
+     vitest.setup.ts \
+     ./
+COPY public/ ./public/
+COPY src/ ./src/
+COPY tests/ ./tests/
+
+RUN npm install -D vitest @vitest/coverage-v8 --no-save && \
+    npx -y vitest run --coverage || (ls -la /app/coverage || true; exit 1)
+
+################################
+# Development Runtime Stage
+################################
 FROM node:24-alpine
 
 WORKDIR /app

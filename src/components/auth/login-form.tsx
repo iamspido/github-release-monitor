@@ -45,6 +45,7 @@ export function LoginForm() {
 
   const formRef = React.useRef<HTMLFormElement>(null);
   const [username, setUsername] = React.useState('');
+  const usernameRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (state?.errorKey) {
@@ -55,6 +56,8 @@ export function LoginForm() {
           passwordInput.value = '';
         }
       }
+      // Return focus to the first field for accessibility
+      usernameRef.current?.focus();
     }
   }, [state]);
 
@@ -77,6 +80,7 @@ export function LoginForm() {
               placeholder={t('username_placeholder')}
               required
               autoFocus
+              ref={usernameRef}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />

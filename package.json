@@ -10,7 +10,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc -p tests/tsconfig.json --noEmit",
+    "test": "npx -y vitest run --reporter=dot",
+    "test:watch": "npx -y vitest",
+    "test:coverage": "npx -y vitest run --coverage"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.6",
