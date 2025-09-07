@@ -4,6 +4,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import type { AppSettings } from '@/types';
 import { allPreReleaseTypes } from '@/types';
+import { logger } from '@/lib/logger';
 
 const dataFilePath = path.join(process.cwd(), 'data', 'settings.json');
 const dataDirPath = path.dirname(dataFilePath);
@@ -31,7 +32,7 @@ async function ensureDataFileExists() {
     await fs.access(dataFilePath);
   } catch {
     await fs.writeFile(dataFilePath, JSON.stringify(defaultSettings, null, 2), 'utf8');
-    console.log(`[${new Date().toLocaleString()}] Created settings data file at: ${dataFilePath}`);
+    logger.withScope('Settings').info(`Created settings data file at: ${dataFilePath}`);
   }
 }
 
@@ -44,7 +45,7 @@ export async function getSettings(): Promise<AppSettings> {
     // Merge with defaults to ensure all keys are present, especially after an update
     return { ...defaultSettings, ...data };
   } catch (error) {
-    console.error('Error reading or parsing settings.json:', error);
+    logger.withScope('Settings').error('Error reading or parsing settings.json:', error);
     return defaultSettings;
   }
 }
@@ -55,7 +56,7 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
     const fileContent = JSON.stringify(settings, null, 2);
     await fs.writeFile(dataFilePath, fileContent, 'utf8');
   } catch (error) {
-    console.error('Error writing to settings.json:', error);
+    logger.withScope('Settings').error('Error writing to settings.json:', error);
     throw new Error('Could not save settings data.');
   }
 }

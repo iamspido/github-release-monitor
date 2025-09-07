@@ -1,6 +1,7 @@
 import type { SessionData } from '@/types';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
+import { logger } from '@/lib/logger';
 
 // This setting controls whether the application operates in secure (HTTPS)
 // or insecure (HTTP) mode. It defaults to 'true' (HTTPS) unless explicitly
@@ -29,7 +30,7 @@ export const sessionOptions = {
 // This block runs only once when the server starts.
 if (!(global as any)._authSecretChecked) {
     if (!process.env.AUTH_SECRET || process.env.AUTH_SECRET.length < 32) {
-        console.error('CRITICAL: Missing or insecure AUTH_SECRET. Must be at least 32 characters long. Please check your .env file.');
+        logger.withScope('Session').error('CRITICAL: Missing or insecure AUTH_SECRET. Must be at least 32 characters long. Please check your .env file.');
     }
     // Set the flag to true after the first check to prevent re-running.
     (global as any)._authSecretChecked = true;
@@ -39,7 +40,7 @@ if (!(global as any)._authSecretChecked) {
 // This block also runs only once at startup.
 if (!(global as any)._httpWarningIssued) {
     if (process.env.NODE_ENV === 'production' && !https) {
-        console.warn(
+        logger.withScope('Session').warn(
             'WARNING: Application is running in PRODUCTION mode with HTTPS=false. This is insecure and not recommended unless running behind a trusted reverse proxy that handles TLS termination.'
         );
     }

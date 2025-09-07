@@ -4,8 +4,11 @@ import { getIronSession } from 'iron-session';
 import { sessionOptions } from './lib/session';
 import type { SessionData } from './types';
 import { locales, pathnames, defaultLocale } from './i18n-config';
+import { logger } from '@/lib/logger';
 
 export async function middleware(request: NextRequest) {
+  const logAuth = logger.withScope('Auth');
+  const logSecurity = logger.withScope('Security');
   // Step 1: Determine the user's preferred locale from the cookie.
   // Fallback to 'en' if the cookie is not set.
   const cookieLocale = request.cookies.get('NEXT_LOCALE')?.value;
@@ -47,12 +50,16 @@ export async function middleware(request: NextRequest) {
     // Redirect them to the login page for their current locale.
     const redirectUrl = new URL(`/${currentLocale}${loginPathForLocale}`, request.url);
     // Preserve the original path as a 'next' parameter so the user can be sent back after logging in.
-    const originalPath = request.nextUrl.pathname;
-    redirectUrl.searchParams.set('next', originalPath);
+    const originalPathname = request.nextUrl.pathname;
+    const originalSearch = request.nextUrl.search || '';
+    const originalWithQuery = `${originalPathname}${originalSearch}`;
+    redirectUrl.searchParams.set('next', originalPathname);
+    logAuth.warn(`Unauthenticated request to '${originalWithQuery}', redirecting to '/${currentLocale}${loginPathForLocale}' (next='${originalPathname}')`);
     return NextResponse.redirect(redirectUrl);
   } else if (session.isLoggedIn && isLoginPage) {
     // User is logged in but trying to access the login page.
     // Redirect them to the home page for their current locale.
+    logAuth.info(`Logged-in user attempted to access login page, redirecting to '/${currentLocale}'`);
     return NextResponse.redirect(new URL(`/${currentLocale}`, request.url));
   }
 
@@ -63,6 +70,7 @@ export async function middleware(request: NextRequest) {
 
     if (origin && allowedDevOrigins.length > 0 && !allowedDevOrigins.includes(origin)) {
       // Origin is not allowed in development mode
+      logSecurity.warn(`Blocked development origin: ${origin}`);
       return new NextResponse('Forbidden', { status: 403 });
     }
   }
@@ -72,6 +80,7 @@ export async function middleware(request: NextRequest) {
   securityHeaders.forEach(header => {
     response.headers.set(header.key, header.value);
   });
+  logger.withScope('Security').debug('Applied security headers');
 
   // Step 10: If no authentication-related redirect is necessary, return the response from the i18n middleware.
   return response;

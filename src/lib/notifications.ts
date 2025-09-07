@@ -3,6 +3,7 @@
 import type { GithubRelease, Repository, AppSettings, AppriseFormat } from '@/types';
 import { sendNewReleaseEmail, generatePlainTextReleaseBody, generateHtmlReleaseBody, getFormattedDate } from './email';
 import { getTranslations } from 'next-intl/server';
+import { logger } from '@/lib/logger';
 
 async function generateMarkdownReleaseBody(release: GithubRelease, repository: Repository, locale: string, settings: AppSettings, maxChars: number): Promise<string> {
     const t = await getTranslations({ locale, namespace: 'Email' });
@@ -113,13 +114,13 @@ async function sendAppriseNotification(repository: Repository, release: GithubRe
 
         if (!response.ok) {
             const errorBody = await response.text();
-            console.error(`[${new Date().toLocaleString()}] Apprise notification for ${repository.id} failed with status ${response.status}: ${errorBody}`);
+            logger.withScope('Notifications').error(`Apprise notification for ${repository.id} failed with status ${response.status}: ${errorBody}`);
             throw new Error(t('error_send_failed_detailed', { status: response.status, details: errorBody }));
         } else {
-            console.log(`[${new Date().toLocaleString()}] Apprise notification sent successfully for ${repository.id} ${release.tag_name}`);
+            logger.withScope('Notifications').info(`Apprise notification sent successfully for ${repository.id} ${release.tag_name}`);
         }
     } catch (error: any) {
-        console.error(`[${new Date().toLocaleString()}] Failed to send Apprise notification for ${repository.id}. Please check if the service is running and the URL is correct. Error: ${error.message}`);
+        logger.withScope('Notifications').error(`Failed to send Apprise notification for ${repository.id}. Please check if the service is running and the URL is correct. Error: ${error.message}`);
         throw error;
     }
 }
@@ -139,7 +140,7 @@ export async function sendNotification(repository: Repository, release: GithubRe
     }
 
     if (notificationPromises.length === 0) {
-        console.warn(`[${new Date().toLocaleString()}] No notification services (SMTP or Apprise) are configured. Skipping notification for ${repository.id}.`);
+        logger.withScope('Notifications').warn(`No notification services (SMTP or Apprise) are configured. Skipping notification for ${repository.id}.`);
         return;
     }
 

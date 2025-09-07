@@ -32,8 +32,7 @@ FROM node:24-alpine AS tester
 
 WORKDIR /app
 
-ENV NEXT_TELEMETRY_DISABLED=1 \
-    LANG=C.UTF-8
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copy package files and install dependencies (uses lockfile)
 COPY package*.json ./
@@ -62,8 +61,7 @@ FROM node:24-alpine AS lint
 
 WORKDIR /app
 
-ENV NEXT_TELEMETRY_DISABLED=1 \
-    LANG=C.UTF-8
+ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY package*.json ./
 RUN npm ci && npm cache clean --force
@@ -79,8 +77,7 @@ FROM node:24-alpine AS typecheck
 
 WORKDIR /app
 
-ENV NEXT_TELEMETRY_DISABLED=1 \
-    LANG=C.UTF-8
+ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY package*.json ./
 RUN npm ci && npm cache clean --force
@@ -95,8 +92,7 @@ FROM node:24-alpine AS coverage
 
 WORKDIR /app
 
-ENV NEXT_TELEMETRY_DISABLED=1 \
-    LANG=C.UTF-8
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copy package files and install dependencies (uses lockfile)
 COPY package*.json ./
@@ -126,7 +122,6 @@ FROM mcr.microsoft.com/playwright:v1.55.0-jammy AS e2e
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1 \
-    LANG=C.UTF-8 \
     NODE_ENV=production \
     CI=true \
     HTTPS=false \
@@ -159,8 +154,7 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production \
     HOSTNAME="0.0.0.0" \
-    PORT=3000 \
-    LANG=C.UTF-8
+    PORT=3000
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \

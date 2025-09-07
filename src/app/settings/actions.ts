@@ -9,6 +9,7 @@ import { getRepositories, saveRepositories } from '@/lib/repository-storage';
 import { cookies } from 'next/headers';
 import { checkForNewReleases } from '@/app/actions';
 import { scheduleTask } from '@/lib/task-scheduler';
+import { logger } from '@/lib/logger';
 
 export async function updateSettingsAction(newSettings: AppSettings) {
   return scheduleTask('updateSettingsAction', async () => {
@@ -17,7 +18,7 @@ export async function updateSettingsAction(newSettings: AppSettings) {
 
     // If the "mark as seen" feature is being disabled, reset all isNew flags.
     if (currentSettings.showAcknowledge && newSettings.showAcknowledge === false) {
-      console.log(`[${new Date().toLocaleString()}] Disabling 'Mark as seen' feature. Resetting all 'isNew' flags to false.`);
+      logger.withScope('Settings').info(`Disabling 'Mark as seen' feature. Resetting all 'isNew' flags to false.`);
       const allRepos = await getRepositories();
       const updatedRepos = allRepos.map(repo => ({...repo, isNew: false}));
       await saveRepositories(updatedRepos);
@@ -48,14 +49,50 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         appriseTags: newSettings.appriseTags?.trim() || undefined,
     };
 
+    // Compute a concise diff of global settings
+    const oldS = currentSettings;
+    const newS = settingsToSave;
+    const changes: string[] = [];
+    const fmt = (v: any) => v === undefined ? 'undefined' : Array.isArray(v) ? JSON.stringify(v) : JSON.stringify(v);
+    const cmpArr = (a?: any[] | null, b?: any[] | null) => JSON.stringify((a || []).slice().sort()) === JSON.stringify((b || []).slice().sort());
+    const pushIf = (label: string, a: any, b: any, arrCmp = false) => {
+      const equal = arrCmp ? cmpArr(a, b) : a === b;
+      if (!equal) changes.push(`${label}: ${fmt(a)} -> ${fmt(b)}`);
+    };
+    pushIf('timeFormat', oldS.timeFormat, newS.timeFormat);
+    pushIf('locale', oldS.locale, newS.locale);
+    pushIf('refreshInterval', oldS.refreshInterval, newS.refreshInterval);
+    pushIf('cacheInterval', oldS.cacheInterval, newS.cacheInterval);
+    pushIf('releasesPerPage', oldS.releasesPerPage, newS.releasesPerPage);
+    pushIf('releaseChannels', oldS.releaseChannels, newS.releaseChannels, true);
+    pushIf('preReleaseSubChannels', oldS.preReleaseSubChannels, newS.preReleaseSubChannels, true);
+    pushIf('showAcknowledge', oldS.showAcknowledge, newS.showAcknowledge);
+    pushIf('showMarkAsNew', oldS.showMarkAsNew, newS.showMarkAsNew);
+    pushIf('includeRegex', oldS.includeRegex, newS.includeRegex);
+    pushIf('excludeRegex', oldS.excludeRegex, newS.excludeRegex);
+    pushIf('appriseMaxCharacters', oldS.appriseMaxCharacters, newS.appriseMaxCharacters);
+    pushIf('appriseTags', oldS.appriseTags, newS.appriseTags);
+    pushIf('appriseFormat', oldS.appriseFormat, newS.appriseFormat);
+
     // If regex changed globally, clear ETags so next fetch doesn't short-circuit on 304
     if (regexChanged || channelsChanged || preSubsChanged || rppChanged) {
       const allRepos = await getRepositories();
       const cleared = allRepos.map(r => ({ ...r, etag: undefined }));
       await saveRepositories(cleared);
+      const reasons: string[] = [];
+      if (regexChanged) reasons.push('regexChanged');
+      if (channelsChanged) reasons.push('releaseChannelsChanged');
+      if (preSubsChanged) reasons.push('preReleaseSubChannelsChanged');
+      if (rppChanged) reasons.push('releasesPerPageChanged');
+      logger.withScope('Settings').info(`Cleared ETags for all repositories due to: ${reasons.join(', ')}`);
     }
 
     await saveSettings(settingsToSave);
+    if (changes.length > 0) {
+      logger.withScope('Settings').info(`Global settings updated: ${changes.join('; ')}`);
+    } else {
+      logger.withScope('Settings').info('Global settings saved (no changes).');
+    }
     checkForNewReleases({ skipCache: true });
 
     // Set the locale cookie for next-intl middleware to pick up.
@@ -83,7 +120,7 @@ export async function updateSettingsAction(newSettings: AppSettings) {
       },
     };
   } catch (error) {
-    console.error('Failed to save settings:', error);
+    logger.withScope('Settings').error('Failed to save settings:', error);
     const t = await getTranslations({
       locale: newSettings.locale,
       namespace: 'SettingsForm',
@@ -103,6 +140,7 @@ export async function deleteAllRepositoriesAction() {
     return scheduleTask('deleteAllRepositoriesAction', async () => {
         try {
             await saveRepositories([]);
+            logger.withScope('Settings').info('Deleted all repositories.');
             revalidatePath('/');
 
             const locale = await getRequestLocale();
@@ -118,7 +156,7 @@ export async function deleteAllRepositoriesAction() {
                 }
             };
         } catch (error: any) {
-            console.error('Failed to delete all repositories:', error);
+            logger.withScope('Settings').error('Failed to delete all repositories:', error);
             const locale = await getRequestLocale();
             const t = await getTranslations({
                 locale: locale,

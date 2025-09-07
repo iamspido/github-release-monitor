@@ -4,6 +4,7 @@ import { TestPageClient } from '@/components/test-page-client';
 import type { RateLimitResult, NotificationConfig, AppriseStatus } from '@/types';
 import { getTranslations } from 'next-intl/server';
 import { Header } from '@/components/header';
+import { logger } from '@/lib/logger';
 
 function getNotificationConfig(): NotificationConfig {
   const {
@@ -49,7 +50,7 @@ export default async function TestPage({params}: {params: Promise<{locale: strin
     appriseStatus = await checkAppriseStatusAction();
   } catch (error) {
     // This is a fallback safety net. The action itself should handle errors.
-    console.error("Critical error calling checkAppriseStatusAction:", error);
+    logger.withScope('WebServer').error("Critical error calling checkAppriseStatusAction:", error);
     appriseStatus = { status: 'error', error: t('apprise_connection_error_fetch') };
   }
 

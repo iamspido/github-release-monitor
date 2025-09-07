@@ -26,6 +26,9 @@ import { sendTestEmail } from '@/lib/email';
 import crypto from 'crypto';
 
 import { scheduleTask } from '@/lib/task-scheduler';
+import { logger } from '@/lib/logger';
+
+const log = logger.withScope('WebServer');
 
 
 function parseGitHubUrl(url: string): {owner: string; repo: string; id: string} | null {
@@ -213,7 +216,7 @@ async function fetchLatestRelease(
   globalSettings: AppSettings,
   locale: string
 ): Promise<{ release: GithubRelease | null; error: FetchError | null, newEtag?: string }> {
-  console.log(`[${new Date().toLocaleString()}] Fetching release for ${owner}/${repo}`);
+  log.info(`Fetching release for ${owner}/${repo}`);
   const fetchedAtTimestamp = new Date().toISOString();
 
   // --- Determine effective settings ---
@@ -286,14 +289,14 @@ async function fetchLatestRelease(
       if (page === 1) {
         newEtag = response.headers.get('etag') || undefined;
         if (response.status === 304) {
-            console.log(`[${new Date().toLocaleString()}] [ETag] No changes for ${owner}/${repo}.`);
+            log.info(`[ETag] No changes for ${owner}/${repo}.`);
             return { release: null, error: { type: 'not_modified' }, newEtag: repoSettings.etag };
         }
       }
 
       if (!response.ok) {
         if (response.status === 404) {
-          console.error(`GitHub API error for ${owner}/${repo}: Not Found (404). The repository may not exist or is private.`);
+          log.error(`GitHub API error for ${owner}/${repo}: Not Found (404). The repository may not exist or is private.`);
           return { release: null, error: { type: 'repo_not_found' }, newEtag };
         }
         if (response.status === 403) {
@@ -302,14 +305,14 @@ async function fetchLatestRelease(
           const rateLimitReset = response.headers.get('x-ratelimit-reset');
           const resetTime = rateLimitReset ? new Date(parseInt(rateLimitReset, 10) * 1000).toISOString() : 'N/A';
 
-          console.error(
+          log.error(
             `GitHub API rate limit exceeded for ${owner}/${repo}. ` +
             `Limit: ${rateLimitLimit}, Remaining: ${rateLimitRemaining}, Resets at: ${resetTime}. ` +
             'Please add or check your GITHUB_ACCESS_TOKEN.'
           );
           return { release: null, error: { type: 'rate_limit' }, newEtag };
         }
-        console.error(`GitHub API error for ${owner}/${repo}: ${response.status} ${response.statusText}`);
+        log.error(`GitHub API error for ${owner}/${repo}: ${response.status} ${response.statusText}`);
         return { release: null, error: { type: 'api_error' }, newEtag };
       }
 
@@ -322,17 +325,17 @@ async function fetchLatestRelease(
     }
 
     if (allReleases.length === 0) {
-      console.log(`[${new Date().toLocaleString()}] No formal releases found for ${owner}/${repo}. Falling back to tags.`);
+          log.info(`No formal releases found for ${owner}/${repo}. Falling back to tags.`);
       const tagsResponse = await fetch(`${GITHUB_API_BASE_URL}/tags?per_page=1`, { headers, cache: 'no-store' });
 
       if (!tagsResponse.ok) {
-          console.error(`[${new Date().toLocaleString()}] Failed to fetch tags for ${owner}/${repo} after failing to find releases.`);
+          log.error(`Failed to fetch tags for ${owner}/${repo} after failing to find releases.`);
           return { release: null, error: { type: 'no_releases_found' }, newEtag };
       }
 
       const tags: {name: string, commit: {sha: string}}[] = await tagsResponse.json();
       if (!tags || tags.length === 0) {
-          console.log(`[${new Date().toLocaleString()}] No tags found for ${owner}/${repo}.`);
+          log.info(`No tags found for ${owner}/${repo}.`);
           return { release: null, error: { type: 'no_releases_found' }, newEtag };
       }
 
@@ -368,12 +371,12 @@ async function fetchLatestRelease(
             bodyContent = `### ${t('commit_message_fallback_title')}\n\n---\n\n${commitData.commit.message}`;
             publicationDate = commitData.commit.committer.date;
           } else {
-             console.error(`Failed to fetch commit for tag ${latestTag.name} in ${owner}/${repo}.`);
+             log.error(`Failed to fetch commit for tag ${latestTag.name} in ${owner}/${repo}.`);
              return { release: null, error: { type: 'api_error' }, newEtag };
           }
         }
       } catch (e) {
-         console.error(`Error during tag fallback for ${owner}/${repo}:`, e);
+         log.error(`Error during tag fallback for ${owner}/${repo}:`, e);
          return { release: null, error: { type: 'api_error' } };
       }
 
@@ -403,7 +406,7 @@ async function fetchLatestRelease(
           return include.test(r.tag_name);
         }
       } catch (e) {
-        console.error(`Invalid regex for repo ${owner}/${repo}. Regex filters will be ignored. Error:`, e);
+        log.error(`Invalid regex for repo ${owner}/${repo}. Regex filters will be ignored. Error:`, e);
       }
 
       if (r.draft) {
@@ -438,7 +441,7 @@ async function fetchLatestRelease(
     // This check is for formal releases that have an empty body.
     // The tag fallback already populates the body with a commit message.
     if (latestRelease.id !== 0 && (!latestRelease.body || latestRelease.body.trim() === '')) {
-        console.log(`[${new Date().toLocaleString()}] Release body for ${owner}/${repo} tag ${latestRelease.tag_name} is empty. Attempting to fetch commit message.`);
+        log.info(`Release body for ${owner}/${repo} tag ${latestRelease.tag_name} is empty. Attempting to fetch commit message.`);
         const commitApiUrl = `${GITHUB_API_BASE_URL}/commits/${latestRelease.tag_name}`;
         try {
             const commitResponse = await fetch(commitApiUrl, { headers, cache: 'no-store' });
@@ -447,15 +450,15 @@ async function fetchLatestRelease(
                 if (commitData.commit && commitData.commit.message) {
                     const t = await getTranslations({ locale, namespace: 'Actions' });
                     latestRelease.body = `### ${t('commit_message_fallback_title')}\n\n---\n\n${commitData.commit.message}`;
-                    console.log(`[${new Date().toLocaleString()}] Successfully fetched commit message for ${owner}/${repo} tag ${latestRelease.tag_name}.`);
+                    log.info(`Successfully fetched commit message for ${owner}/${repo} tag ${latestRelease.tag_name}.`);
                 } else {
-                     console.log(`[${new Date().toLocaleString()}] Commit message for ${owner}/${repo} tag ${latestRelease.tag_name} could not be retrieved from commit data.`);
+                     log.info(`Commit message for ${owner}/${repo} tag ${latestRelease.tag_name} could not be retrieved from commit data.`);
                 }
             } else {
-                console.error(`[${new Date().toLocaleString()}] Failed to fetch commit for ${owner}/${repo} tag ${latestRelease.tag_name}: ${commitResponse.status} ${commitResponse.statusText}`);
+                log.error(`Failed to fetch commit for ${owner}/${repo} tag ${latestRelease.tag_name}: ${commitResponse.status} ${commitResponse.statusText}`);
             }
         } catch (error) {
-            console.error(`[${new Date().toLocaleString()}] Error fetching commit for tag ${latestRelease.tag_name} in ${owner}/${repo}:`, error);
+            log.error(`Error fetching commit for tag ${latestRelease.tag_name} in ${owner}/${repo}:`, error);
         }
     }
 
@@ -466,7 +469,7 @@ async function fetchLatestRelease(
     return { release: latestRelease, error: null, newEtag };
 
   } catch (error) {
-    console.error(`Failed to fetch releases for ${owner}/${repo}:`, error);
+    log.error(`Failed to fetch releases for ${owner}/${repo}:`, error);
     return { release: null, error: { type: 'api_error' } };
   }
 }
@@ -513,6 +516,7 @@ export async function getLatestReleasesForRepos(
   for (const repo of repositories) {
     const parsed = parseGitHubUrl(repo.url);
     if (!parsed) {
+      log.warn(`Skipping invalid GitHub URL for repoId=${repo.id}`);
       enrichedReleases.push({
         repoId: repo.id,
         repoUrl: repo.url,
@@ -657,6 +661,11 @@ export async function addRepositoriesAction(
       const addedCount = uniqueNewRepos.length;
       const skippedCount = newRepos.length - addedCount;
 
+      log.info(`Add repositories: added=${addedCount} skipped=${skippedCount} failed=${failedCount}`);
+      if (addedCount > 0 && jobId) {
+        log.debug(`Queued background refresh jobId=${jobId} for ${addedCount} repos`);
+      }
+
       return {
         success: true,
         toast: {
@@ -670,7 +679,7 @@ export async function addRepositoriesAction(
         jobId: addedCount > 0 ? jobId : undefined,
       };
     } catch (error: any) {
-      console.error('Failed to add repositories:', error);
+      log.error('Failed to add repositories:', error);
       return {
         success: false,
         error: t('toast_save_error_generic'),
@@ -733,6 +742,7 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
         refreshMultipleRepositoriesAction(repoIds, jobId);
       }
 
+      log.info(`Import repositories: added=${addedCount} updated=${updatedCount}`);
       return {
         success: true,
         message: t('toast_import_success_description', {
@@ -743,7 +753,7 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
       };
 
     } catch (error: any) {
-      console.error('Failed to import repositories:', error);
+      log.error('Failed to import repositories:', error);
       return {
         success: false,
         message: t('toast_save_error_generic'),
@@ -755,11 +765,11 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
 export async function refreshSingleRepositoryAction(repoId: string) {
   return scheduleTask(`refreshSingleRepositoryAction: ${repoId}`, async () => {
     if (!isValidRepoId(repoId)) {
-      console.error('Invalid repoId format for refresh:', repoId);
+      log.error('Invalid repoId format for refresh:', repoId);
       return;
     }
 
-    console.log(`[${new Date().toLocaleString()}] Refreshing single repository: ${repoId}`);
+    log.info(`Refreshing single repository: ${repoId}`);
 
     const settings = await getSettings();
     const locale = settings.locale;
@@ -767,7 +777,7 @@ export async function refreshSingleRepositoryAction(repoId: string) {
     const repoToRefresh = allRepos.find(r => r.id === repoId);
 
     if (!repoToRefresh) {
-      console.error(`Repository ${repoId} not found for refresh.`);
+      log.error(`Repository ${repoId} not found for refresh.`);
       return;
     }
 
@@ -780,7 +790,7 @@ export async function refreshSingleRepositoryAction(repoId: string) {
 
     const enrichedRelease = enrichedReleases[0];
     if (!enrichedRelease) {
-      console.error(`Failed to get release for ${repoId} during single refresh.`);
+      log.error(`Failed to get release for ${repoId} during single refresh.`);
       return;
     }
 
@@ -809,6 +819,7 @@ export async function refreshSingleRepositoryAction(repoId: string) {
 
 export async function refreshMultipleRepositoriesAction(repoIds: string[], jobId: string) {
   try {
+    log.info(`Refresh multiple repositories start: count=${repoIds.length} jobId=${jobId}`);
     const settings = await getSettings();
     const locale = settings.locale;
     const allRepos = await getRepositories();
@@ -851,8 +862,9 @@ export async function refreshMultipleRepositoriesAction(repoIds: string[], jobId
       await saveRepositories(updatedRepos);
     }
     setJobStatus(jobId, 'complete');
+    log.info(`Refresh multiple repositories complete: jobId=${jobId}`);
   } catch (error) {
-    console.error(`[Job ${jobId}] Failed to refresh repositories:`, error);
+    log.error(`[Job ${jobId}] Failed to refresh repositories:`, error);
     setJobStatus(jobId, 'error');
   }
 }
@@ -860,12 +872,13 @@ export async function refreshMultipleRepositoriesAction(repoIds: string[], jobId
 export async function removeRepositoryAction(repoId: string) {
   return scheduleTask(`removeRepositoryAction: ${repoId}`, async () => {
     if (!isValidRepoId(repoId)) {
-      console.error('Invalid repoId format for removal:', repoId);
+      log.error('Invalid repoId format for removal:', repoId);
       return;
     }
     const currentRepos = await getRepositories();
     const newRepos = currentRepos.filter(r => r.id !== repoId);
     await saveRepositories(newRepos);
+    log.info(`Removed repository: ${repoId}`);
     revalidatePath('/');
   });
 }
@@ -885,13 +898,14 @@ export async function acknowledgeNewReleaseAction(repoId: string): Promise<{ suc
         currentRepos[repoIndex].isNew = false;
         await saveRepositories(currentRepos);
         revalidatePath('/');
+        log.info(`Acknowledged new release for ${repoId}`);
         return { success: true };
       }
 
       return { success: false, error: t('toast_acknowledge_error_not_found') };
 
     } catch (error: any) {
-      console.error('Failed to acknowledge release:', error);
+      log.error('Failed to acknowledge release:', error);
       return { success: false, error: t('toast_acknowledge_error_generic') };
     }
   });
@@ -912,28 +926,27 @@ export async function markAsNewAction(repoId: string): Promise<{ success: boolea
         currentRepos[repoIndex].isNew = true;
         await saveRepositories(currentRepos);
         revalidatePath('/');
+        log.info(`Marked release as new for ${repoId}`);
         return { success: true };
       }
 
       return { success: false, error: t('toast_mark_as_new_error_not_found') };
 
     } catch (error: any) {
-      console.error('Failed to mark release as new:', error);
+      log.error('Failed to mark release as new:', error);
       return { success: false, error: t('toast_mark_as_new_error_generic') };
     }
   });
 }
 
 async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: string, skipCache?: boolean }) {
-  console.log(
-    `[${new Date().toLocaleString()}] Running check for new releases...`
-  );
+  log.info(`Running check for new releases...`);
   const settings = await getSettings();
   const effectiveLocale = options?.overrideLocale || settings.locale;
 
   const originalRepos = await getRepositories();
   if (originalRepos.length === 0) {
-    console.log(`[${new Date().toLocaleString()}] No repositories to check.`);
+    log.info(`No repositories to check.`);
     return { notificationsSent: 0, checked: 0 };
   }
 
@@ -982,9 +995,7 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
         const isNewRelease = !isVirtual && repo.lastSeenReleaseTag && repo.lastSeenReleaseTag !== newTag;
 
         if (isNewRelease) {
-          console.log(
-            `[${new Date().toLocaleString()}] New release detected for ${repo.id}: ${newTag} (previously ${repo.lastSeenReleaseTag})`
-          );
+          log.info(`New release detected for ${repo.id}: ${newTag} (previously ${repo.lastSeenReleaseTag})`);
 
           const shouldHighlight = settings.showAcknowledge ?? true;
           repo.lastSeenReleaseTag = newTag;
@@ -994,13 +1005,11 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
           try {
               await sendNotification(repo, enrichedRelease.release, effectiveLocale, settings);
               notificationsSent++;
-          } catch(e: any) {
-            console.error(`Failed to send notification for ${repo.id}. The release tag HAS been updated to prevent repeated failures for the same release. Error: ${e.message}`);
-          }
+    } catch(e: any) {
+            log.error(`Failed to send notification for ${repo.id}. The release tag HAS been updated to prevent repeated failures for the same release. Error: ${e.message}`);
+      }
         } else if (!repo.lastSeenReleaseTag && !isVirtual) {
-          console.log(
-            `[${new Date().toLocaleString()}] First fetch for ${repo.id}, setting initial release tag to ${newTag}. No notification will be sent.`
-          );
+          log.info(`First fetch for ${repo.id}, setting initial release tag to ${newTag}. No notification will be sent.`);
           repo.lastSeenReleaseTag = newTag;
           repo.isNew = false;
           repoWasUpdated = true;
@@ -1012,11 +1021,12 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
   }
 
   if (changed) {
-    console.log(`[${new Date().toLocaleString()}] Found changes, updating repository data file.`);
+    log.info(`Found changes, updating repository data file.`);
     await saveRepositories(updatedRepos);
   } else {
-    console.log(`[${new Date().toLocaleString()}] No new releases found.`);
+    log.info(`No new releases found.`);
   }
+   log.info(`Summary: notificationsSent=${notificationsSent} checked=${originalRepos.length}`);
    return { notificationsSent, checked: originalRepos.length };
 }
 
@@ -1028,7 +1038,7 @@ async function backgroundPollingLoop() {
   try {
     await checkForNewReleases({ skipCache: true });
   } catch (error) {
-    console.error("Error during background check for new releases:", error);
+    log.error("Error during background check for new releases:", error);
   } finally {
     const settings = await getSettings();
     let pollingIntervalMinutes = settings.refreshInterval;
@@ -1040,7 +1050,7 @@ async function backgroundPollingLoop() {
 
     const pollingIntervalMs = pollingIntervalMinutes * 60 * 1000;
 
-    console.log(`[${new Date().toLocaleString()}] Next background check scheduled in ${pollingIntervalMinutes} minutes.`);
+    log.info(`Next background check scheduled in ${pollingIntervalMinutes} minutes.`);
     setTimeout(backgroundPollingLoop, pollingIntervalMs);
   }
 }
@@ -1049,7 +1059,7 @@ if (
   process.env.NODE_ENV === 'production' &&
   !process.env.BACKGROUND_POLLING_INITIALIZED
 ) {
-  console.log(`[${new Date().toLocaleString()}] Initializing dynamic background polling.`);
+  log.info(`Initializing dynamic background polling.`);
   process.env.BACKGROUND_POLLING_INITIALIZED = 'true';
   setTimeout(backgroundPollingLoop, 5000);
 }
@@ -1104,7 +1114,7 @@ export async function setupTestRepositoryAction(): Promise<{ success: boolean; m
       revalidateTag('github-releases');
       return { success: true, message: t('toast_setup_test_repo_success') };
     } catch (error: any) {
-      console.error('setupTestRepositoryAction failed:', error);
+      log.error('setupTestRepositoryAction failed:', error);
       return { success: false, message: error.message || t('toast_setup_test_repo_error') };
     }
   });
@@ -1134,7 +1144,7 @@ export async function triggerReleaseCheckAction(): Promise<{ success: boolean; m
       return { success: true, message: t('toast_trigger_check_success_no_email') };
     }
   } catch (error: any) {
-    console.error('triggerReleaseCheckAction failed:', error);
+    log.error('triggerReleaseCheckAction failed:', error);
     return { success: false, message: error.message || t('toast_trigger_check_error') };
   }
 }
@@ -1158,7 +1168,7 @@ export async function getGitHubRateLimit(): Promise<RateLimitResult> {
     });
 
     if (!response.ok) {
-      console.error(
+      log.error(
         `GitHub API error for rate_limit: ${response.status} ${response.statusText}`
       );
       if (response.status === 401) {
@@ -1169,7 +1179,7 @@ export async function getGitHubRateLimit(): Promise<RateLimitResult> {
     const data = await response.json();
     return {data, error: undefined};
   } catch (error) {
-    console.error('Failed to fetch GitHub rate limit:', error);
+    log.error('Failed to fetch GitHub rate limit:', error);
     return {data: null, error: 'api_error'};
   }
 }
@@ -1226,7 +1236,7 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
     await sendTestEmail(testRepo, testRelease, locale, settings.timeFormat, recipient);
     return {success: true};
   } catch (error: any) {
-    console.error('sendTestEmailAction failed:', error);
+    log.error('sendTestEmailAction failed:', error);
     return {
       success: false,
       error: error.message || t('toast_email_error_description'),
@@ -1243,6 +1253,7 @@ export async function sendTestAppriseAction(): Promise<{
 
   const { APPRISE_URL } = process.env;
   if (!APPRISE_URL) {
+      log.warn('sendTestAppriseAction called but APPRISE_URL is not configured');
       return {
           success: false,
           error: t('toast_apprise_not_configured_error'),
@@ -1322,10 +1333,12 @@ export async function refreshAndCheckAction(): Promise<{
   messageKey: 'toast_refresh_success_description' | 'toast_refresh_found_new';
 }> {
   const locale = await getRequestLocale();
+  log.info('Manual refresh triggered by user');
   const result = await checkForNewReleases({ overrideLocale: locale, skipCache: true });
 
   const messageKey = result.notificationsSent > 0 ? 'toast_refresh_found_new' : 'toast_refresh_success_description';
 
+  log.info(`Manual refresh result: notificationsSent=${result.notificationsSent} checked=${result.checked}`);
   return { success: true, messageKey };
 }
 
@@ -1334,7 +1347,7 @@ export async function getRepositoriesForExport(): Promise<{ success: boolean; da
     const repos = await getRepositories();
     return { success: true, data: repos };
   } catch (error: any) {
-    console.error("Failed to get repositories for export:", error);
+    log.error("Failed to get repositories for export:", error);
     return { success: false, error: 'Failed to read repository data.' };
   }
 }
@@ -1385,6 +1398,34 @@ export async function updateRepositorySettingsAction(
       const newRpp = settings.releasesPerPage ?? undefined;
       const rppChanged = prevRpp !== newRpp;
 
+      // Build change summary for logging
+      const changes: string[] = [];
+      const fmt = (v: any) => v === undefined ? 'undefined' : Array.isArray(v) ? JSON.stringify(v) : JSON.stringify(v);
+      const cmpArr = (a?: any[] | null, b?: any[] | null) => JSON.stringify((a || []).slice().sort()) === JSON.stringify((b || []).slice().sort());
+      if (!cmpArr(existing.releaseChannels, settings.releaseChannels)) {
+        changes.push(`releaseChannels: ${fmt(existing.releaseChannels)} -> ${fmt(settings.releaseChannels)}`);
+      }
+      if (!cmpArr(existing.preReleaseSubChannels, settings.preReleaseSubChannels)) {
+        changes.push(`preReleaseSubChannels: ${fmt(existing.preReleaseSubChannels)} -> ${fmt(settings.preReleaseSubChannels)}`);
+      }
+      if ((existing.releasesPerPage ?? undefined) !== (settings.releasesPerPage ?? undefined)) {
+        changes.push(`releasesPerPage: ${fmt(existing.releasesPerPage)} -> ${fmt(settings.releasesPerPage)}`);
+      }
+      if (prevInclude !== newInclude) {
+        changes.push(`includeRegex: ${fmt(prevInclude)} -> ${fmt(newInclude)}`);
+      }
+      if (prevExclude !== newExclude) {
+        changes.push(`excludeRegex: ${fmt(prevExclude)} -> ${fmt(newExclude)}`);
+      }
+      if ((existing.appriseTags ?? undefined) !== (settings.appriseTags ?? undefined)) {
+        changes.push(`appriseTags: ${fmt(existing.appriseTags)} -> ${fmt(settings.appriseTags)}`);
+      }
+      if ((existing.appriseFormat ?? undefined) !== (settings.appriseFormat ?? undefined)) {
+        changes.push(`appriseFormat: ${fmt(existing.appriseFormat)} -> ${fmt(settings.appriseFormat)}`);
+      }
+
+      const etagInvalidated = (filtersChanged || channelsChanged || preSubsChanged || rppChanged);
+
       currentRepos[repoIndex] = {
         ...existing,
         releaseChannels: settings.releaseChannels,
@@ -1395,16 +1436,29 @@ export async function updateRepositorySettingsAction(
         appriseTags: settings.appriseTags,
         appriseFormat: settings.appriseFormat,
         // Invalidate ETag when filters/pagination that affect visible latest release change
-        etag: (filtersChanged || channelsChanged || preSubsChanged || rppChanged) ? undefined : existing.etag,
+        etag: etagInvalidated ? undefined : existing.etag,
       };
 
       await saveRepositories(currentRepos);
       revalidatePath('/');
+      if (etagInvalidated) {
+        const reasons: string[] = [];
+        if (filtersChanged) reasons.push('filtersChanged');
+        if (channelsChanged) reasons.push('releaseChannelsChanged');
+        if (preSubsChanged) reasons.push('preReleaseSubChannelsChanged');
+        if (rppChanged) reasons.push('releasesPerPageChanged');
+        log.info(`Cleared ETag for ${repoId} due to: ${reasons.join(', ')}`);
+      }
+      if (changes.length > 0) {
+        log.info(`Updated repository settings for ${repoId}: ${changes.join('; ')}`);
+      } else {
+        log.info(`Updated repository settings for ${repoId}: no changes.`);
+      }
       return { success: true };
 
     } catch (error: any)
     {
-      console.error(`Failed to update settings for ${repoId}:`, error);
+      log.error(`Failed to update settings for ${repoId}:`, error);
       return { success: false, error: error.message || t('toast_error_generic') };
     }
   });

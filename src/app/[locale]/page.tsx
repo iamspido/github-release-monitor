@@ -7,6 +7,7 @@ import { Header } from '@/components/header';
 import { BackToTopButton } from '@/components/back-to-top-button';
 import { AutoRefresher } from '@/components/auto-refresher';
 import { HomePageClient } from '@/components/home-page-client';
+import { logger } from '@/lib/logger';
 
 export default async function HomePage({params}: {params: Promise<{locale: string}>}) {
   const { locale } = await params;
@@ -53,7 +54,7 @@ export default async function HomePage({params}: {params: Promise<{locale: strin
       });
     }
   } catch (e: any) {
-    console.error('Failed to load repositories or releases:', e);
+    logger.withScope('WebServer').error('Failed to load repositories or releases:', e);
     error = t('load_error');
     settings = { timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releaseChannels: ['stable'], showAcknowledge: true, releasesPerPage: 30 };
   }
