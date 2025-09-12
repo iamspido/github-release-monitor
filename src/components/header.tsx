@@ -11,15 +11,24 @@ import { logout } from '@/app/auth/actions';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/logo';
 import { MobileMenu } from './mobile-menu';
+import { OfflineBanner } from '@/components/offline-banner';
+import { useNetworkStatus } from '@/hooks/use-network';
 
 export function Header({ locale }: { locale: string }) {
   const t = useTranslations('HomePage');
   const pathname = usePathname();
   const [isLoggingOut, startLogoutTransition] = React.useTransition();
+  const { isOnline } = useNetworkStatus();
 
   const handleLogout = () => {
     startLogoutTransition(async () => {
-      await logout();
+      try {
+        // Prevent unhandled rejections on flaky connections
+        await logout();
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Logout failed:', err);
+      }
     });
   };
 
@@ -68,12 +77,13 @@ export function Header({ locale }: { locale: string }) {
                   <Github className="size-5" />
                 </Button>
               </a>
-              <Button variant="ghost" size="icon" onClick={handleLogout} disabled={isLoggingOut} aria-label={t('logout_aria')}>
+              <Button variant="ghost" size="icon" onClick={handleLogout} disabled={isLoggingOut || !isOnline} aria-label={t('logout_aria')}>
                 {isLoggingOut ? <Loader2 className="size-5 animate-spin" /> : <LogOut className="size-5" />}
               </Button>
             </div>
           </div>
         </div>
+        <OfflineBanner />
       </header>
     </>
   );

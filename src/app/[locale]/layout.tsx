@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getTranslations } from 'next-intl/server';
 
 import { Toaster } from "@/components/ui/toaster";
+import { NetworkStatusProvider } from '@/hooks/use-network';
 import '../globals.css';
 
 const inter = Inter({
@@ -35,8 +36,10 @@ export default async function LocaleLayout({
     <html lang={locale} className={`${inter.variable} dark`}>
       <body className="font-body antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
-          {children}
-          <Toaster />
+          <NetworkStatusProvider>
+            {children}
+            <Toaster />
+          </NetworkStatusProvider>
         </NextIntlClientProvider>
       </body>
     </html>

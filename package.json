@@ -12,9 +12,9 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "typecheck:tests": "tsc -p tests/tsconfig.json --noEmit",
-    "test": "npx -y vitest run --reporter=dot",
-    "test:watch": "npx -y vitest",
-    "test:coverage": "npx -y vitest run --coverage"
+    "test": "vitest run --reporter=dot",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -45,6 +45,8 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
+    "jsdom": "^24.1.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^20.19.13",
     "@types/nodemailer": "^6.4.19",
@@ -54,6 +56,7 @@
     "eslint-config-next": "^15.5.2",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
   }
 }

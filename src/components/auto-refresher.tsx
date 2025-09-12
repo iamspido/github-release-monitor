@@ -21,11 +21,19 @@ export function AutoRefresher({ intervalMinutes }: { intervalMinutes: number }) 
       if (isPending) return;
 
       startTransition(async () => {
-        // By explicitly invalidating the cache on the server before refreshing,
-        // we ensure that router.refresh() fetches the newest data
-        // instead of potentially serving a stale version while revalidating.
-        await refreshAndCheckAction();
-        router.refresh();
+        // Skip when offline to avoid unhandled rejections.
+        if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+        try {
+          // By explicitly invalidating the cache on the server before refreshing,
+          // we ensure that router.refresh() fetches the newest data
+          // instead of potentially serving a stale version while revalidating.
+          await refreshAndCheckAction();
+          router.refresh();
+        } catch (err) {
+          // Silently ignore transient network errors during background refreshes.
+          // eslint-disable-next-line no-console
+          console.debug('Auto refresh skipped due to error:', err);
+        }
       });
     }, intervalMs);
 

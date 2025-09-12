@@ -34,6 +34,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useNetworkStatus } from '@/hooks/use-network';
 
 interface TestPageClientProps {
   rateLimitResult: RateLimitResult;
@@ -94,6 +95,7 @@ export function TestPageClient({
   const rateLimitData = rateLimitResult.data;
   const rateLimitError = rateLimitResult.error;
   const rateLimit = rateLimitData?.rate;
+  const { isOnline } = useNetworkStatus();
 
   const isRateLimitHigh = rateLimit ? rateLimit.limit > 1000 : false;
   const requiredMailVars = ['MAIL_HOST', 'MAIL_PORT', 'MAIL_FROM_ADDRESS', 'MAIL_TO_ADDRESS'];
@@ -123,16 +125,24 @@ export function TestPageClient({
     if (isEmailInvalid) return;
 
     startMailTransition(async () => {
-      const result = await sendTestEmailAction(customEmail);
-      if (result.success) {
-        toast({
-          title: t('toast_email_success_title'),
-          description: t('toast_email_success_description'),
-        });
-      } else {
+      try {
+        const result = await sendTestEmailAction(customEmail);
+        if (result.success) {
+          toast({
+            title: t('toast_email_success_title'),
+            description: t('toast_email_success_description'),
+          });
+        } else {
+          toast({
+            title: t('toast_email_error_title'),
+            description: result.error || t('toast_email_error_description'),
+            variant: 'destructive',
+          });
+        }
+      } catch (err) {
         toast({
           title: t('toast_email_error_title'),
-          description: result.error || t('toast_email_error_description'),
+          description: t('toast_email_error_description'),
           variant: 'destructive',
         });
       }
@@ -141,48 +151,81 @@ export function TestPageClient({
 
   const handleSendTestApprise = () => {
     startAppriseTransition(async () => {
-        const result = await sendTestAppriseAction();
-        if (result.success) {
-            toast({
-                title: t('toast_apprise_success_title'),
-                description: t('toast_apprise_success_description'),
-            });
-        } else {
-            toast({
-                title: t('toast_apprise_error_title'),
-                description: result.error,
-                variant: 'destructive',
-            });
+        try {
+          const result = await sendTestAppriseAction();
+          if (result.success) {
+              toast({
+                  title: t('toast_apprise_success_title'),
+                  description: t('toast_apprise_success_description'),
+              });
+          } else {
+              toast({
+                  title: t('toast_apprise_error_title'),
+                  description: result.error,
+                  variant: 'destructive',
+              });
+          }
+        } catch (err) {
+          toast({
+            title: t('toast_apprise_error_title'),
+            description: t('toast_apprise_not_configured_error'),
+            variant: 'destructive',
+          });
         }
     });
   };
 
   const handleSetupTestRepo = () => {
     startSetupRepoTransition(async () => {
-      const result = await setupTestRepositoryAction();
-      toast({
-        title: result.success ? t('toast_success_title') : t('toast_error_title'),
-        description: result.message,
-        variant: result.success ? 'default' : 'destructive',
-      });
+      try {
+        const result = await setupTestRepositoryAction();
+        toast({
+          title: result.success ? t('toast_success_title') : t('toast_error_title'),
+          description: result.message,
+          variant: result.success ? 'default' : 'destructive',
+        });
+      } catch (err) {
+        toast({
+          title: t('toast_error_title'),
+          description: t('toast_setup_test_repo_error'),
+          variant: 'destructive',
+        });
+      }
     });
   };
 
   const handleTriggerReleaseCheck = () => {
     startTriggerCheckTransition(async () => {
-      const result = await triggerReleaseCheckAction();
-      toast({
-        title: result.success ? t('toast_success_title') : t('toast_error_title'),
-        description: result.message,
-        variant: result.success ? 'default' : 'destructive',
-      });
+      try {
+        const result = await triggerReleaseCheckAction();
+        toast({
+          title: result.success ? t('toast_success_title') : t('toast_error_title'),
+          description: result.message,
+          variant: result.success ? 'default' : 'destructive',
+        });
+      } catch (err) {
+        toast({
+          title: t('toast_error_title'),
+          description: t('toast_trigger_check_error'),
+          variant: 'destructive',
+        });
+      }
     });
   };
 
   const handleRefreshAppriseStatus = () => {
     startAppriseCheckTransition(async () => {
-      const status = await checkAppriseStatusAction();
-      setAppriseStatus(status);
+      try {
+        const status = await checkAppriseStatusAction();
+        setAppriseStatus(status);
+      } catch (err) {
+        // Keep previous state, just inform user.
+        toast({
+          title: t('toast_error_title'),
+          description: t('apprise_error'),
+          variant: 'destructive',
+        });
+      }
     });
   }
 
@@ -278,7 +321,7 @@ export function TestPageClient({
           <div className="flex flex-col items-start gap-4 pt-2">
             <Button
               onClick={handleRefreshAppriseStatus}
-              disabled={isCheckingApprise || appriseStatus.status === 'not_configured'}
+              disabled={isCheckingApprise || appriseStatus.status === 'not_configured' || !isOnline}
               variant="outline"
               size="sm"
             >
@@ -287,7 +330,7 @@ export function TestPageClient({
             </Button>
             <Button
               onClick={handleSendTestApprise}
-              disabled={isSendingApprise || appriseStatus.status !== 'ok'}
+              disabled={isSendingApprise || appriseStatus.status !== 'ok' || !isOnline}
               size="sm"
             >
               {isSendingApprise ? <Loader2 className="animate-spin" /> : <Bell />}
@@ -380,7 +423,7 @@ export function TestPageClient({
                     {isEmailInvalid && <p className="text-sm text-destructive">{t('invalid_email_format')}</p>}
                 </div>
                 <div>
-                    <Button onClick={handleSendTestEmail} disabled={isSendingMail || !notificationConfig.isSmtpConfigured || isEmailInvalid}>
+                    <Button onClick={handleSendTestEmail} disabled={isSendingMail || !notificationConfig.isSmtpConfigured || isEmailInvalid || !isOnline}>
                         {isSendingMail ? (
                             <Loader2 className="mr-2 animate-spin" />
                         ) : (
@@ -415,7 +458,7 @@ export function TestPageClient({
               <div className="space-y-3">
                   <h4 className="font-semibold">{t('e2e_step1_title')}</h4>
                   <p className="text-sm text-muted-foreground">{t('e2e_step1_description')}</p>
-                    <Button onClick={handleSetupTestRepo} disabled={isSettingUpRepo}>
+                    <Button onClick={handleSetupTestRepo} disabled={isSettingUpRepo || !isOnline}>
                         {isSettingUpRepo ? (
                             <Loader2 className="mr-2 animate-spin" />
                         ) : (
@@ -428,7 +471,7 @@ export function TestPageClient({
                   <h4 className="font-semibold">{t('e2e_step2_title')}</h4>
                   <p className="text-sm text-muted-foreground">{t('e2e_step2_description')}</p>
                     <div>
-                        <Button onClick={handleTriggerReleaseCheck} disabled={isTriggeringCheck || (!notificationConfig.isSmtpConfigured && !notificationConfig.isAppriseConfigured)}>
+                        <Button onClick={handleTriggerReleaseCheck} disabled={isTriggeringCheck || (!notificationConfig.isSmtpConfigured && !notificationConfig.isAppriseConfigured) || !isOnline}>
                             {isTriggeringCheck ? (
                                 <Loader2 className="mr-2 animate-spin" />
                             ) : (

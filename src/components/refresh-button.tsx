@@ -8,12 +8,14 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { refreshAndCheckAction } from '@/app/actions';
 import { useRouter } from '@/navigation';
+import { useNetworkStatus } from '@/hooks/use-network';
 
 export function RefreshButton() {
   const t = useTranslations('HomePage');
   const { toast } = useToast();
   const [isPending, startTransition] = React.useTransition();
   const router = useRouter();
+  const { isOnline } = useNetworkStatus();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -39,7 +41,7 @@ export function RefreshButton() {
 
   return (
     <form onSubmit={handleSubmit} className="w-full sm:w-auto">
-      <Button type="submit" variant="outline" size="sm" className="w-full" disabled={isPending}>
+      <Button type="submit" variant="outline" size="sm" className="w-full" disabled={isPending || !isOnline}>
         {isPending ? (
           <Loader2 className="mr-2 size-4 animate-spin" />
         ) : (

@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Loader2, Save, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
+import { Loader2, Save, CheckCircle, AlertCircle, Trash2, WifiOff } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import type { AppSettings, TimeFormat, Locale, ReleaseChannel, PreReleaseChannelType, AppriseFormat } from '@/types';
@@ -32,6 +32,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { updateSettingsAction, deleteAllRepositoriesAction } from '@/app/settings/actions';
 import { usePathname, useRouter } from '@/navigation';
 import { cn } from '@/lib/utils';
+import { useNetworkStatus } from '@/hooks/use-network';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,7 +56,7 @@ function minutesToDhms(totalMinutes: number) {
     return { d, h, m };
 }
 
-type SaveStatus = 'idle' | 'waiting' | 'saving' | 'success' | 'error';
+type SaveStatus = 'idle' | 'waiting' | 'saving' | 'success' | 'error' | 'paused';
 type IntervalValidationError = 'too_low' | 'too_high' | null;
 type ReleasesPerPageError = 'too_low' | 'too_high' | null;
 type RegexError = 'invalid' | null;
@@ -77,6 +78,7 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
             className: 'text-green-500'
         },
         error: { text: t('autosave_error'), icon: <AlertCircle className="size-4" />, className: 'text-destructive' },
+        paused: { text: t('autosave_paused_offline'), icon: <WifiOff className="size-4" />, className: 'text-yellow-500' },
     };
 
     const current = messages[status];
@@ -99,6 +101,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
+  const { isOnline } = useNetworkStatus();
 
   const [timeFormat, setTimeFormat] = React.useState<TimeFormat>(currentSettings.timeFormat);
   const [locale, setLocale] = React.useState<Locale>(currentSettings.locale);
@@ -220,6 +223,11 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
         return;
     }
 
+    if (!isOnline) {
+        setSaveStatus('paused');
+        return;
+    }
+
     const hasEmptyFields = [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, appriseMaxCharacters].some(val => val === '');
     if (hasEmptyFields || intervalError || isCacheInvalid || releasesPerPageError || includeRegexError || excludeRegexError) {
         setSaveStatus('idle');
@@ -230,24 +238,33 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
 
     const handler = setTimeout(async () => {
         setSaveStatus('saving');
-        const result = await updateSettingsAction(newSettings);
+        try {
+          const result = await updateSettingsAction(newSettings);
 
-        if (result.success) {
-            setSaveStatus('success');
-            toast({
-              title: result.message.title,
-              description: result.message.description,
-            });
-            if (newSettings.locale !== currentSettings.locale) {
-                router.push(pathname, { locale: newSettings.locale });
-            }
-        } else {
-            setSaveStatus('error');
-            toast({
-              title: result.message.title,
-              description: result.message.description,
-              variant: 'destructive',
-            });
+          if (result.success) {
+              setSaveStatus('success');
+              toast({
+                title: result.message.title,
+                description: result.message.description,
+              });
+              if (newSettings.locale !== currentSettings.locale) {
+                  router.push(pathname, { locale: newSettings.locale });
+              }
+          } else {
+              setSaveStatus('error');
+              toast({
+                title: result.message.title,
+                description: result.message.description,
+                variant: 'destructive',
+              });
+          }
+        } catch (err) {
+          setSaveStatus('error');
+          toast({
+            title: t('toast_error_title'),
+            description: t('autosave_error'),
+            variant: 'destructive',
+          });
         }
     }, 1500);
 
@@ -255,7 +272,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
         clearTimeout(handler);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newSettings, days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, intervalError, isCacheInvalid, releasesPerPageError, includeRegexError, excludeRegexError, appriseMaxCharacters, appriseTags, appriseFormat]);
+  }, [newSettings, days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, intervalError, isCacheInvalid, releasesPerPageError, includeRegexError, excludeRegexError, appriseMaxCharacters, appriseTags, appriseFormat, isOnline]);
 
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -316,7 +333,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
               value={timeFormat}
               onValueChange={(value: TimeFormat) => setTimeFormat(value)}
               className="flex items-center gap-4"
-              disabled={saveStatus === 'saving'}
+              disabled={saveStatus === 'saving' || !isOnline}
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="12h" id="r1" />
@@ -333,7 +350,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
             <Select
               value={locale}
               onValueChange={(value: Locale) => setLocale(value)}
-              disabled={saveStatus === 'saving'}
+              disabled={saveStatus === 'saving' || !isOnline}
             >
               <SelectTrigger id="language-select" className="w-full sm:w-[180px]">
                 <SelectValue placeholder={t('language_placeholder')} />
@@ -350,7 +367,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                   id="showAcknowledge"
                   checked={showAcknowledge}
                   onCheckedChange={(checked) => setShowAcknowledge(Boolean(checked))}
-                  disabled={saveStatus === 'saving'}
+                  disabled={saveStatus === 'saving' || !isOnline}
                   className="mt-1"
                 />
                 <div className="grid gap-1.5 leading-none">
@@ -367,7 +384,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                         id="showMarkAsNew"
                         checked={showMarkAsNew}
                         onCheckedChange={(checked) => setShowMarkAsNew(Boolean(checked))}
-                        disabled={saveStatus === 'saving' || !showAcknowledge}
+                        disabled={saveStatus === 'saving' || !showAcknowledge || !isOnline}
                         className="mt-1"
                       />
                       <div className="grid gap-1.5 leading-none">
@@ -395,7 +412,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                 id="stable"
                 checked={channels.includes('stable')}
                 onCheckedChange={() => handleChannelChange('stable')}
-                disabled={saveStatus === 'saving'}
+                disabled={saveStatus === 'saving' || !isOnline}
               />
               <Label htmlFor="stable" className="font-normal cursor-pointer">{t('release_channel_stable')}</Label>
             </div>
@@ -406,7 +423,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                         id="prerelease"
                         checked={isPreReleaseChecked}
                         onCheckedChange={() => handleChannelChange('prerelease')}
-                        disabled={saveStatus === 'saving'}
+                        disabled={saveStatus === 'saving' || !isOnline}
                     />
                     <Label htmlFor="prerelease" className="font-normal cursor-pointer">{t('release_channel_prerelease')}</Label>
                 </div>
@@ -424,7 +441,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                                         id={`prerelease-${subType}`}
                                         checked={preReleaseSubChannels.includes(subType)}
                                         onCheckedChange={() => handlePreReleaseSubChannelChange(subType)}
-                                        disabled={!isPreReleaseChecked || saveStatus === 'saving'}
+                                        disabled={!isPreReleaseChecked || saveStatus === 'saving' || !isOnline}
                                     />
                                     <Label htmlFor={`prerelease-${subType}`} className="font-normal cursor-pointer text-sm">{subType}</Label>
                                 </div>
@@ -439,7 +456,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                 id="draft"
                 checked={channels.includes('draft')}
                 onCheckedChange={() => handleChannelChange('draft')}
-                disabled={saveStatus === 'saving'}
+                disabled={saveStatus === 'saving' || !isOnline}
               />
               <Label htmlFor="draft" className="font-normal cursor-pointer">{t('release_channel_draft')}</Label>
             </div>
@@ -455,7 +472,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                     value={includeRegex}
                     onChange={(e) => setIncludeRegex(e.target.value)}
                     placeholder={t('regex_placeholder')}
-                    disabled={saveStatus === 'saving'}
+                    disabled={saveStatus === 'saving' || !isOnline}
                     className={cn(!!includeRegexError && 'border-destructive focus-visible:ring-destructive')}
                 />
                 {includeRegexError && <p className="text-sm text-destructive">{t('regex_error_invalid')}</p>}
@@ -467,7 +484,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                     value={excludeRegex}
                     onChange={(e) => setExcludeRegex(e.target.value)}
                     placeholder={t('regex_placeholder')}
-                    disabled={saveStatus === 'saving'}
+                    disabled={saveStatus === 'saving' || !isOnline}
                     className={cn(!!excludeRegexError && 'border-destructive focus-visible:ring-destructive')}
                 />
                 {excludeRegexError && <p className="text-sm text-destructive">{t('regex_error_invalid')}</p>}
@@ -493,7 +510,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                     onChange={(e) => setMinutes(e.target.value)}
                     min={0}
                     max={59}
-                    disabled={saveStatus === 'saving'}
+                    disabled={saveStatus === 'saving' || !isOnline}
                     className={cn(!!intervalError && 'border-destructive focus-visible:ring-destructive')}
                   />
                 </div>
@@ -506,7 +523,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                     onChange={(e) => setHours(e.target.value)}
                     min={0}
                     max={23}
-                    disabled={saveStatus === 'saving'}
+                    disabled={saveStatus === 'saving' || !isOnline}
                     className={cn(!!intervalError && 'border-destructive focus-visible:ring-destructive')}
                   />
                 </div>
@@ -519,7 +536,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                     onChange={(e) => setDays(e.target.value)}
                     min={0}
                     max={3650}
-                    disabled={saveStatus === 'saving'}
+                    disabled={saveStatus === 'saving' || !isOnline}
                     className={cn(!!intervalError && 'border-destructive focus-visible:ring-destructive')}
                   />
                 </div>
@@ -545,7 +562,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                   onChange={(e) => setCacheMinutes(e.target.value)}
                   min={0}
                   max={59}
-                  disabled={saveStatus === 'saving'}
+                  disabled={saveStatus === 'saving' || !isOnline}
                   className={cn(isCacheInvalid && 'border-destructive focus-visible:ring-destructive')}
                 />
               </div>
@@ -558,7 +575,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                   onChange={(e) => setCacheHours(e.target.value)}
                   min={0}
                   max={23}
-                  disabled={saveStatus === 'saving'}
+                  disabled={saveStatus === 'saving' || !isOnline}
                   className={cn(isCacheInvalid && 'border-destructive focus-visible:ring-destructive')}
                 />
               </div>
@@ -571,7 +588,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                   onChange={(e) => setCacheDays(e.target.value)}
                   min={0}
                   max={3650}
-                  disabled={saveStatus === 'saving'}
+                  disabled={saveStatus === 'saving' || !isOnline}
                   className={cn(isCacheInvalid && 'border-destructive focus-visible:ring-destructive')}
                 />
               </div>
@@ -592,7 +609,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
               onChange={(e) => setReleasesPerPage(e.target.value)}
               min={1}
               max={1000}
-              disabled={saveStatus === 'saving'}
+              disabled={saveStatus === 'saving' || !isOnline}
               className={cn("mt-2 w-full sm:w-48", !!releasesPerPageError && 'border-destructive focus-visible:ring-destructive')}
             />
              {releasesPerPageError === 'too_low' ? (
@@ -621,7 +638,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
               value={appriseMaxCharacters}
               onChange={(e) => setAppriseMaxCharacters(e.target.value)}
               min={0}
-              disabled={saveStatus === 'saving' || !isAppriseConfigured}
+              disabled={saveStatus === 'saving' || !isAppriseConfigured || !isOnline}
               className="mt-2 w-full sm:w-48"
             />
             {isAppriseConfigured ? (
@@ -636,7 +653,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
             <Select
               value={appriseFormat}
               onValueChange={(value: AppriseFormat) => setAppriseFormat(value)}
-              disabled={saveStatus === 'saving' || !isAppriseConfigured}
+              disabled={saveStatus === 'saving' || !isAppriseConfigured || !isOnline}
             >
               <SelectTrigger id="apprise-format" className="w-full sm:w-[180px] mt-2">
                 <SelectValue placeholder={t('apprise_format_text')} />
@@ -661,7 +678,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
               type="text"
               value={appriseTags}
               onChange={(e) => setAppriseTags(e.target.value)}
-              disabled={saveStatus === 'saving' || !isAppriseConfigured}
+              disabled={saveStatus === 'saving' || !isAppriseConfigured || !isOnline}
               className="mt-2 w-full"
               placeholder={t('apprise_tags_placeholder')}
             />
@@ -682,7 +699,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
         <CardContent>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                  <Button variant="destructive" disabled={isDeleting}>
+                  <Button variant="destructive" disabled={isDeleting || !isOnline}>
                       {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
                       {t('delete_all_button_text')}
                   </Button>
@@ -693,11 +710,11 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
                   <AlertDialogDescription>{t('delete_all_dialog_description')}</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isDeleting}>{t('cancel_button')}</AlertDialogCancel>
+                  <AlertDialogCancel disabled={isDeleting || !isOnline}>{t('cancel_button')}</AlertDialogCancel>
                   <AlertDialogAction
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     onClick={handleDeleteAll}
-                    disabled={isDeleting}
+                    disabled={isDeleting || !isOnline}
                   >
                     {isDeleting && <Loader2 className="animate-spin" />}
                     {t('confirm_delete_button')}

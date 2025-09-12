@@ -112,9 +112,8 @@ COPY public/ ./public/
 COPY src/ ./src/
 COPY tests/ ./tests/
 
-# Generate coverage report
-RUN npm install -D vitest @vitest/coverage-v8 --no-save && \
-    npx -y vitest run --coverage || (ls -la /app/coverage || true; exit 1)
+# Generate coverage report using project dependencies
+RUN npm run test:coverage || (ls -la /app/coverage || true; exit 1)
 
 # E2E Stage (Playwright): runs end-to-end tests in Docker
 FROM mcr.microsoft.com/playwright:v1.55.0-jammy AS e2e
@@ -144,7 +143,8 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
 # Run Playwright tests using the local runner
-RUN node ./node_modules/@playwright/test/cli.js test
+ARG PW_TESTS=""
+RUN node ./node_modules/@playwright/test/cli.js test $PW_TESTS
 
 # Production Stage
 FROM node:24-alpine AS runner

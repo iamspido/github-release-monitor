@@ -45,6 +45,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { RepoSettingsDialog } from "./repo-settings-dialog";
+import { useNetworkStatus } from '@/hooks/use-network';
 import {
   Tooltip,
   TooltipContent,
@@ -82,6 +83,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
   const locale = useLocale();
   const { toast } = useToast();
   const { repoId, repoUrl, release, error, isNew, repoSettings } = enrichedRelease;
+  const { isOnline } = useNetworkStatus();
 
   const [isRemoving, startRemoveTransition] = React.useTransition();
   const [isAcknowledging, startAcknowledgeTransition] = React.useTransition();
@@ -138,18 +140,33 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
 
   const handleRemove = () => {
     startRemoveTransition(async () => {
-      await removeRepositoryAction(repoId);
+      try {
+        await removeRepositoryAction(repoId);
+      } catch (err) {
+        toast({
+          title: t('toast_error_title'),
+          variant: 'destructive',
+        });
+      }
     });
   };
 
   const handleAcknowledge = () => {
     startAcknowledgeTransition(async () => {
-      const result = await acknowledgeNewReleaseAction(repoId);
-      if (result && !result.success) {
+      try {
+        const result = await acknowledgeNewReleaseAction(repoId);
+        if (result && !result.success) {
+          toast({
+            title: t('toast_error_title'),
+            description: result.error,
+            variant: 'destructive'
+          });
+        }
+      } catch (err) {
         toast({
           title: t('toast_error_title'),
-          description: result.error,
-          variant: 'destructive'
+          description: t('toast_acknowledge_error_generic'),
+          variant: 'destructive',
         });
       }
     });
@@ -157,16 +174,24 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
 
   const handleMarkAsNew = () => {
     startMarkingAsNewTransition(async () => {
-      const result = await markAsNewAction(repoId);
-      if (result && result.success) {
-        toast({
-          title: t('toast_success_title'),
-          description: t('toast_mark_as_new_success'),
-        });
-      } else {
+      try {
+        const result = await markAsNewAction(repoId);
+        if (result && result.success) {
+          toast({
+            title: t('toast_success_title'),
+            description: t('toast_mark_as_new_success'),
+          });
+        } else {
+          toast({
+            title: t('toast_error_title'),
+            description: result.error,
+            variant: 'destructive',
+          });
+        }
+      } catch (err) {
         toast({
           title: t('toast_error_title'),
-          description: result.error,
+          description: t('toast_mark_as_new_error_generic'),
           variant: 'destructive',
         });
       }
@@ -372,28 +397,61 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
           {showAcknowledgeFeature && (
             <>
               {isNew ? (
-                  <Button size="sm" onClick={handleAcknowledge} disabled={isAcknowledging || isRemoving || isMarkingAsNew}>
-                      {isAcknowledging ? <Loader2 className="animate-spin" /> : <CheckSquare />}
-                      <span>{t('acknowledge_button')}</span>
-                  </Button>
+                <TooltipProvider delayDuration={100}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button size="sm" onClick={handleAcknowledge} disabled={isAcknowledging || isRemoving || isMarkingAsNew || !isOnline} aria-disabled={!isOnline}>
+                        {isAcknowledging ? <Loader2 className="animate-spin" /> : <CheckSquare />}
+                        <span>{t('acknowledge_button')}</span>
+                      </Button>
+                    </TooltipTrigger>
+                    {!isOnline && (
+                      <TooltipContent>
+                        <p>{t('offline_tooltip')}</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
               ) : (
-                  showMarkAsNewButton && (
-                  <Button size="sm" variant="secondary" onClick={handleMarkAsNew} disabled={isAcknowledging || isRemoving || isMarkingAsNew}>
-                      {isMarkingAsNew ? <Loader2 className="animate-spin" /> : <BellPlus />}
-                      <span>{t('mark_as_new_button')}</span>
-                  </Button>
-                  )
+                showMarkAsNewButton && (
+                  <TooltipProvider delayDuration={100}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button size="sm" variant="secondary" onClick={handleMarkAsNew} disabled={isAcknowledging || isRemoving || isMarkingAsNew || !isOnline} aria-disabled={!isOnline}>
+                          {isMarkingAsNew ? <Loader2 className="animate-spin" /> : <BellPlus />}
+                          <span>{t('mark_as_new_button')}</span>
+                        </Button>
+                      </TooltipTrigger>
+                      {!isOnline && (
+                        <TooltipContent>
+                          <p>{t('offline_tooltip')}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
+                )
               )}
             </>
           )}
           <div className="flex items-center justify-between">
               <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={isRemoving || isMarkingAsNew}>
-                    {isRemoving ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                    {t('remove_button')}
-                  </Button>
-                </AlertDialogTrigger>
+                <TooltipProvider delayDuration={100}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={isRemoving || isMarkingAsNew || !isOnline} aria-disabled={!isOnline}>
+                          {isRemoving ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                          {t('remove_button')}
+                        </Button>
+                      </AlertDialogTrigger>
+                    </TooltipTrigger>
+                    {!isOnline && (
+                      <TooltipContent>
+                        <p>{t('offline_tooltip')}</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>{t('confirm_dialog_title')}</AlertDialogTitle>
@@ -409,7 +467,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
                     <AlertDialogAction
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       onClick={handleRemove}
-                      disabled={isRemoving}
+                      disabled={isRemoving || !isOnline}
                     >
                       {isRemoving ? <Loader2 className="animate-spin" /> : null}
                       {t('confirm_button')}

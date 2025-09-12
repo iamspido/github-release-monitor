@@ -34,6 +34,8 @@
     "toast_export_success_description": "Die Repository-Liste steht zum Download bereit.",
     "toast_export_error_title": "Export fehlgeschlagen",
     "toast_export_error_description": "Die Repository-Daten konnten nicht für den Export gelesen werden.",
+    "offline_banner_title": "Sie sind offline.",
+    "offline_banner_description": "Aktionen, die Netzwerkzugriff benötigen, sind vorübergehend deaktiviert.",
     "error_summary_title": "Beim Abrufen der Daten sind Probleme aufgetreten:",
     "error_summary_line": "{count, plural, =1 {Bei # Repository trat folgendes Problem auf} other {Bei # Repositories trat folgendes Problem auf}}: {errorText}"
   },
@@ -89,7 +91,8 @@
     "toast_acknowledge_error_generic": "Der 'Gesehen'-Status konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut.",
     "toast_mark_as_new_success": "Das Repository wurde erfolgreich als 'neu' markiert.",
     "toast_mark_as_new_error_not_found": "Repository nicht gefunden.",
-    "toast_mark_as_new_error_generic": "Der Status 'Neu' konnte nicht gesetzt werden. Bitte versuchen Sie es erneut."
+    "toast_mark_as_new_error_generic": "Der Status 'Neu' konnte nicht gesetzt werden. Bitte versuchen Sie es erneut.",
+    "offline_tooltip": "Offline"
   },
   "EmptyState": {
     "title": "Beobachtung starten",
@@ -113,6 +116,8 @@
     "toast_success_description": "Einstellungen erfolgreich aktualisiert.",
     "toast_error_title": "Fehler",
     "toast_error_description": "Einstellungen konnten nicht in die Datei gespeichert werden.",
+    "offline_notice": "Offline – Änderungen sind schreibgeschützt, automatisches Speichern ist pausiert.",
+    "autosave_paused_offline": "Offline – Speichern pausiert",
     "automation_settings_title": "Automatisierungs- & API-Einstellungen",
     "automation_settings_description": "Konfigurieren Sie Intervalle für die Hintergrundaktualisierung und API-bezogene Parameter.",
     "refresh_interval_title": "Aktualisierungsintervall für Hintergrundprozesse",
@@ -207,6 +212,8 @@
     "autosave_success": "Alle Änderungen gespeichert",
     "autosave_success_short": "Gespeichert",
     "autosave_error": "Fehler",
+    "autosave_paused_offline": "Offline – Speichern pausiert",
+    "offline_notice": "Offline – Dieser Dialog ist schreibgeschützt. Änderungen werden erst gespeichert, wenn Sie wieder online sind.",
     "apprise_settings_hint_global": "Globale Apprise-Einstellungen werden verwendet.",
     "apprise_settings_hint_individual": "Individuelle Apprise-Einstellungen aktiv.",
     "apprise_tags_label": "Apprise Tags",

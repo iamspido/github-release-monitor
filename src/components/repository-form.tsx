@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { addRepositoriesAction, getJobStatusAction, importRepositoriesAction } from "@/app/actions";
 import { useRouter } from "next/navigation";
+import { useNetworkStatus } from "@/hooks/use-network";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +55,7 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
   const [urls, setUrls] = React.useState("");
   const { toast } = useToast();
   const router = useRouter();
+  const { isOnline } = useNetworkStatus();
 
   const [state, formAction, isPending] = useActionState(addRepositoriesAction, initialState);
   const [jobId, setJobId] = React.useState<string | undefined>(undefined);
@@ -118,17 +120,27 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
         return;
       }
 
-      const { status } = await getJobStatusAction(jobId);
+      try {
+        const { status } = await getJobStatusAction(jobId);
 
-      if (status === 'complete') {
-        clearInterval(intervalId);
-        toast({
-          title: t('toast_refresh_success_title'),
-          description: t('toast_refresh_success_description'),
-        });
-        router.refresh();
-        setJobId(undefined);
-      } else if (status === 'error') {
+        if (status === 'complete') {
+          clearInterval(intervalId);
+          toast({
+            title: t('toast_refresh_success_title'),
+            description: t('toast_refresh_success_description'),
+          });
+          router.refresh();
+          setJobId(undefined);
+        } else if (status === 'error') {
+          clearInterval(intervalId);
+          toast({
+            title: t('toast_refresh_error_title'),
+            description: t('toast_refresh_error_description'),
+            variant: 'destructive'
+          });
+          setJobId(undefined);
+        }
+      } catch (err) {
         clearInterval(intervalId);
         toast({
           title: t('toast_refresh_error_title'),
@@ -241,7 +253,19 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
           <CardDescription>{t('description')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={formAction}>
+          <form
+            action={formAction}
+            onSubmit={(e) => {
+              if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                e.preventDefault();
+                toast({
+                  title: t('toast_fail_title'),
+                  description: t('toast_generic_error'),
+                  variant: 'destructive',
+                });
+              }
+            }}
+          >
             <div className="grid w-full gap-2">
               <Textarea
                 ref={textareaRef}
@@ -263,11 +287,11 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
                       accept=".json"
                       className="hidden"
                   />
-                  <Button type="button" variant="outline" onClick={handleImportClick} className="w-full sm:w-auto mt-2 sm:mt-0" disabled={isPending || isImporting || !!jobId}>
-                      {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                      {t('button_import')}
-                  </Button>
-                  <SubmitButton isDisabled={!urls.trim()} isPending={isPending || !!jobId} />
+              <Button type="button" variant="outline" onClick={handleImportClick} className="w-full sm:w-auto mt-2 sm:mt-0" disabled={isPending || isImporting || !!jobId || !isOnline}>
+                  {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                  {t('button_import')}
+              </Button>
+              <SubmitButton isDisabled={!urls.trim() || !isOnline} isPending={isPending || !!jobId} />
               </div>
             </div>
           </form>

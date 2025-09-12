@@ -4,6 +4,7 @@ import { SettingsForm } from '@/components/settings-form';
 import type { AppSettings } from '@/types';
 import { getTranslations } from 'next-intl/server';
 import { Header } from '@/components/header';
+import { OfflineInlineNotice } from '@/components/offline-inline-notice';
 
 export default async function SettingsPage({params}: {params: Promise<{locale: string}>}) {
   const { locale } = await params;
@@ -16,7 +17,9 @@ export default async function SettingsPage({params}: {params: Promise<{locale: s
       <Header locale={locale} />
       <main className="container mx-auto px-4 py-8 md:px-6">
         <div className="mx-auto max-w-2xl">
-            <h2 className="mb-8 text-3xl font-bold tracking-tight break-words">{t('title')}</h2>
+            <h2 className="mb-4 text-3xl font-bold tracking-tight break-words">{t('title')}</h2>
+            <OfflineInlineNotice />
+            <div className="h-2" />
             <SettingsForm
               currentSettings={currentSettings}
               isAppriseConfigured={isAppriseConfigured}

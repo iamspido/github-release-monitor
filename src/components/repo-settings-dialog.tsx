@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useTranslations } from 'next-intl';
-import { Loader2, Save, CheckCircle, AlertCircle, RotateCcw } from 'lucide-react';
+import { Loader2, Save, CheckCircle, AlertCircle, RotateCcw, WifiOff } from 'lucide-react';
 import type { Repository, ReleaseChannel, PreReleaseChannelType, AppSettings, AppriseFormat } from '@/types';
 import { allPreReleaseTypes } from '@/types';
 import { cn } from '@/lib/utils';
@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { useNetworkStatus } from '@/hooks/use-network';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Input } from './ui/input';
@@ -47,7 +48,7 @@ import {
 } from "@/components/ui/tooltip";
 
 
-type SaveStatus = 'idle' | 'waiting' | 'saving' | 'success' | 'error';
+type SaveStatus = 'idle' | 'waiting' | 'saving' | 'success' | 'error' | 'paused';
 type ReleasesPerPageError = 'too_low' | 'too_high' | null;
 type RegexError = 'invalid' | null;
 
@@ -75,6 +76,7 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
             className: 'text-green-500'
         },
         error: { text: t('autosave_error'), icon: <AlertCircle className="size-4" />, className: 'text-destructive' },
+        paused: { text: t('autosave_paused_offline'), icon: <WifiOff className="size-4" />, className: 'text-yellow-500' },
     };
 
     const current = messages[status];
@@ -115,6 +117,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const [excludeRegexError, setExcludeRegexError] = React.useState<RegexError>(null);
 
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>('idle');
+  const { isOnline } = useNetworkStatus();
 
   const savedThisSessionRef = React.useRef(false);
 
@@ -160,10 +163,8 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
 
     if (wasOpen && !isOpen) {
       if (savedThisSessionRef.current) {
-        try {
-          refreshSingleRepositoryAction(repoId);
-        } catch (e) {
-        }
+        // Fire and forget; avoid unhandled rejection on flaky connections
+        refreshSingleRepositoryAction(repoId).catch(() => {});
         savedThisSessionRef.current = false;
       }
     }
@@ -240,6 +241,11 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   React.useEffect(() => {
     if (!isOpen) return;
 
+    if (!isOnline) {
+      setSaveStatus('paused');
+      return;
+    }
+
     if (JSON.stringify(newSettings) === JSON.stringify(prevSettingsRef.current)) {
         return;
     }
@@ -285,10 +291,11 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
     }, 1500);
 
     return () => clearTimeout(handler);
-  }, [newSettings, repoId, isOpen, releasesPerPageError, includeRegexError, excludeRegexError, toast, t]);
+  }, [newSettings, repoId, isOpen, releasesPerPageError, includeRegexError, excludeRegexError, toast, t, isOnline]);
 
 
   const handleChannelChange = (channel: ReleaseChannel) => {
+    if (!isOnline) return;
     const baseChannels = useGlobalChannels ? globalSettings.releaseChannels : channels;
 
     const newChannels = baseChannels.includes(channel)
@@ -312,6 +319,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   };
 
   const handlePreReleaseSubChannelChange = (subChannel: PreReleaseChannelType) => {
+    if (!isOnline) return;
     const baseSubChannels = useGlobalSubChannels
         ? (globalSettings.preReleaseSubChannels || allPreReleaseTypes)
         : preReleaseSubChannels;
@@ -327,6 +335,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   }
 
   const handleResetAll = () => {
+    if (!isOnline) return;
     setChannels([]);
     setPreReleaseSubChannels([]);
     setReleasesPerPage('');
@@ -337,6 +346,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   }
 
   const handleResetFilters = () => {
+    if (!isOnline) return;
     setChannels([]);
     setPreReleaseSubChannels([]);
     setIncludeRegex('');
@@ -376,14 +386,20 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 pt-4 max-h-[70vh] overflow-y-auto pr-2 -mr-4 pb-4">
+        {!isOnline && (
+          <div className="mb-3 mt-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-300">
+            {tGlobal('offline_notice')}
+          </div>
+        )}
+
+        <div className="space-y-6 pt-2 max-h-[60vh] overflow-y-auto pr-2 -mr-4 pb-4">
           <div className="space-y-4 p-4 border rounded-md">
             <div className="flex justify-between items-center">
               <h4 className="font-semibold text-base">{tGlobal('release_channel_title')}</h4>
               <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handleResetFilters} className="size-8 shrink-0">
+                        <Button variant="ghost" size="icon" onClick={handleResetFilters} className="size-8 shrink-0" disabled={!isOnline} aria-disabled={!isOnline}>
                           <RotateCcw className="size-4" />
                           <span className="sr-only">{t('reset_to_global_button')}</span>
                         </Button>
@@ -406,6 +422,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                 id="stable-repo"
                 checked={isStableChecked}
                 onCheckedChange={() => handleChannelChange('stable')}
+                disabled={!isOnline}
               />
               <Label htmlFor="stable-repo" className="font-normal cursor-pointer">{tGlobal('release_channel_stable')}</Label>
             </div>
@@ -416,6 +433,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                   id="prerelease-repo"
                   checked={isPreReleaseChecked}
                   onCheckedChange={() => handleChannelChange('prerelease')}
+                  disabled={!isOnline}
                 />
                 <Label htmlFor="prerelease-repo" className="font-normal cursor-pointer">{tGlobal('release_channel_prerelease')}</Label>
               </div>
@@ -433,7 +451,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                           id={`prerelease-repo-${subType}`}
                           checked={effectivePreReleaseSubChannels.includes(subType)}
                           onCheckedChange={() => handlePreReleaseSubChannelChange(subType)}
-                          disabled={!isPreReleaseChecked}
+                          disabled={!isPreReleaseChecked || !isOnline}
                         />
                         <Label htmlFor={`prerelease-repo-${subType}`} className="font-normal cursor-pointer text-sm">{subType}</Label>
                       </div>
@@ -448,6 +466,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                 id="draft-repo"
                 checked={isDraftChecked}
                 onCheckedChange={() => handleChannelChange('draft')}
+                disabled={!isOnline}
               />
               <Label htmlFor="draft-repo" className="font-normal cursor-pointer">{tGlobal('release_channel_draft')}</Label>
             </div>
@@ -466,6 +485,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                     onChange={(e) => setIncludeRegex(e.target.value)}
                     placeholder={globalSettings.includeRegex || tGlobal('regex_placeholder')}
                     className={cn(!!includeRegexError && 'border-destructive focus-visible:ring-destructive')}
+                    disabled={!isOnline}
                 />
                 {includeRegexError && <p className="text-sm text-destructive">{tGlobal('regex_error_invalid')}</p>}
             </div>
@@ -477,6 +497,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                     onChange={(e) => setExcludeRegex(e.target.value)}
                     placeholder={globalSettings.excludeRegex || tGlobal('regex_placeholder')}
                     className={cn(!!excludeRegexError && 'border-destructive focus-visible:ring-destructive')}
+                    disabled={!isOnline}
                 />
                  {excludeRegexError && <p className="text-sm text-destructive">{tGlobal('regex_error_invalid')}</p>}
             </div>
@@ -499,11 +520,12 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                 max={1000}
                 placeholder={t('releases_per_page_placeholder', { count: globalSettings.releasesPerPage })}
                 className={cn(!!releasesPerPageError && 'border-destructive focus-visible:ring-destructive')}
+                disabled={!isOnline}
               />
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => setReleasesPerPage('')} className="size-8 shrink-0">
+                        <Button variant="ghost" size="icon" onClick={() => setReleasesPerPage('')} className="size-8 shrink-0" disabled={!isOnline}>
                           <RotateCcw className="size-4" />
                           <span className="sr-only">{t('reset_to_global_button')}</span>
                         </Button>
@@ -539,7 +561,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                   <Select
                     value={appriseFormat}
                     onValueChange={(value: AppriseFormat | 'global') => setAppriseFormat(value === 'global' ? '' : value)}
-                    disabled={!isAppriseConfigured}
+                    disabled={!isAppriseConfigured || !isOnline}
                   >
                     <SelectTrigger id="apprise-format-repo">
                         <SelectValue placeholder={t('apprise_format_placeholder', {format: globalSettings.appriseFormat || 'text'})} />
@@ -554,7 +576,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" onClick={() => setAppriseFormat('')} className="size-8 shrink-0">
+                          <Button variant="ghost" size="icon" onClick={() => setAppriseFormat('')} className="size-8 shrink-0" disabled={!isOnline}>
                             <RotateCcw className="size-4" />
                             <span className="sr-only">{t('reset_to_global_button')}</span>
                           </Button>
@@ -579,12 +601,12 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
                   value={appriseTags}
                   onChange={(e) => setAppriseTags(e.target.value)}
                   placeholder={t('apprise_tags_placeholder', { tags: globalSettings.appriseTags || '...' })}
-                  disabled={!isAppriseConfigured}
+                  disabled={!isAppriseConfigured || !isOnline}
                 />
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => setAppriseTags('')} className="size-8 shrink-0">
+                        <Button variant="ghost" size="icon" onClick={() => setAppriseTags('')} className="size-8 shrink-0" disabled={!isOnline}>
                           <RotateCcw className="size-4" />
                           <span className="sr-only">{t('reset_to_global_button')}</span>
                         </Button>
@@ -604,7 +626,7 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
           <div className="pt-2">
             <AlertDialog>
                 <AlertDialogTrigger asChild>
-                <Button variant="outline" className="w-full" disabled={isUsingAllGlobalSettings}>
+                <Button variant="outline" className="w-full" disabled={isUsingAllGlobalSettings || !isOnline}>
                     <RotateCcw className="mr-2 size-4" />
                     {t('reset_all_button_text')}
                 </Button>

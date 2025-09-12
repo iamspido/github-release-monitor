@@ -63,7 +63,17 @@ export function LoginForm() {
 
 
   return (
-    <form ref={formRef} action={formAction}>
+    <form
+      ref={formRef}
+      action={formAction}
+      onSubmit={(e) => {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          e.preventDefault();
+          // eslint-disable-next-line no-console
+          console.warn('Login prevented: offline');
+        }
+      }}
+    >
       <Card>
         <CardHeader>
           <CardTitle>{t('form_title')}</CardTitle>

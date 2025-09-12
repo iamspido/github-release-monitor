@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { useLocale } from 'next-intl';
+import { useNetworkStatus } from '@/hooks/use-network';
 
 interface MobileMenuProps {
   onLogout: () => void;
@@ -27,6 +28,7 @@ export function MobileMenu({ onLogout, isLoggingOut }: MobileMenuProps) {
   const pathname = usePathname();
   const router = useRouter();
   const locale = useLocale();
+  const { isOnline } = useNetworkStatus();
 
   const navLinks = [
     { href: '/', label: t('home_aria'), icon: Home, page: 'home' },
@@ -74,7 +76,7 @@ export function MobileMenu({ onLogout, isLoggingOut }: MobileMenuProps) {
             </a>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild onSelect={onLogout} disabled={isLoggingOut}>
+          <DropdownMenuItem asChild onSelect={onLogout} disabled={isLoggingOut || !isOnline}>
             <button type="button" className="flex w-full cursor-pointer items-center">
               {isLoggingOut ? <Loader2 className="mr-2 size-4 animate-spin" /> : <LogOut className="mr-2 size-4" />}
               <span>{t('menu_logout')}</span>

@@ -34,6 +34,8 @@
     "toast_export_success_description": "The repository list is ready for download.",
     "toast_export_error_title": "Export Failed",
     "toast_export_error_description": "Could not read repository data for export.",
+    "offline_banner_title": "You're offline.",
+    "offline_banner_description": "Actions that require network access are temporarily disabled.",
     "error_summary_title": "Encountered issues while fetching data:",
     "error_summary_line": "{count, plural, =1 {# repository} other {# repositories}} had the following issue: {errorText}"
   },
@@ -89,7 +91,8 @@
     "toast_acknowledge_error_generic": "Could not update the 'seen' status. Please try again.",
     "toast_mark_as_new_success": "The repository was successfully marked as 'new'.",
     "toast_mark_as_new_error_not_found": "Repository not found.",
-    "toast_mark_as_new_error_generic": "Could not set the 'new' status. Please try again."
+    "toast_mark_as_new_error_generic": "Could not set the 'new' status. Please try again.",
+    "offline_tooltip": "Offline"
   },
   "EmptyState": {
     "title": "Start Observing",
@@ -113,6 +116,8 @@
     "toast_success_description": "Settings updated successfully.",
     "toast_error_title": "Error",
     "toast_error_description": "Could not save settings to the file.",
+    "offline_notice": "Offline – changes are read-only and auto-save is paused.",
+    "autosave_paused_offline": "Offline – saving paused",
     "automation_settings_title": "Automation & API Settings",
     "automation_settings_description": "Configure background refresh intervals and API-related parameters.",
     "refresh_interval_title": "Background Refresh Interval",
@@ -207,6 +212,8 @@
     "autosave_success": "All changes saved",
     "autosave_success_short": "Saved",
     "autosave_error": "Error",
+    "autosave_paused_offline": "Offline – saving paused",
+    "offline_notice": "Offline – this dialog is read-only. Changes will not be saved until you're back online.",
     "apprise_settings_hint_global": "Using global Apprise settings.",
     "apprise_settings_hint_individual": "Using individual Apprise settings.",
     "apprise_tags_label": "Apprise Tags",

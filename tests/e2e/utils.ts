@@ -67,3 +67,15 @@ export async function waitForLocale(page: Page, expected: 'en' | 'de', timeoutMs
     return c?.value || '';
   }, { timeout: timeoutMs, intervals: [200] }).toBe(expected);
 }
+
+// Simulate browser connectivity events that our app listens to.
+// Debounce in UI is ~350ms; wait slightly longer after toggling.
+export async function goOffline(page: Page, waitMs = 450) {
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  await page.waitForTimeout(waitMs);
+}
+
+export async function goOnline(page: Page, waitMs = 450) {
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await page.waitForTimeout(waitMs);
+}
