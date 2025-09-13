@@ -45,14 +45,15 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^3.2.4",
-    "jsdom": "^24.1.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^20.19.13",
+    "@types/nodemailer": "^7.0.1",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
+    "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^9.35.0",
     "eslint-config-next": "^15.5.2",
+    "jsdom": "^24.1.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.2",
