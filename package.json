@@ -28,7 +28,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "date-fns": "^3.6.0",
+    "date-fns": "^4.1.0",
     "iron-session": "^8.0.4",
     "lucide-react": "^0.475.0",
     "next": "^15.5.2",

@@ -268,7 +268,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
             <CardFooter className="pt-4 flex items-start">
             <AlertDialog>
                 <AlertDialogTrigger asChild>
-                <Button variant="destructive" size="sm" disabled={isRemoving}>
+                <Button variant="destructive" size="sm" disabled={isRemoving || !isOnline} aria-disabled={!isOnline}>
                     {isRemoving ? <Loader2 className="animate-spin" /> : <Trash2 />}
                     {t('remove_button')}
                 </Button>
@@ -288,7 +288,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
                     <AlertDialogAction
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     onClick={handleRemove}
-                    disabled={isRemoving}
+                    disabled={isRemoving || !isOnline}
                     >
                     {isRemoving ? <Loader2 className="animate-spin" /> : null}
                     {t('confirm_button')}
