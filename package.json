@@ -36,7 +36,7 @@
     "nodemailer": "^7.0.6",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-markdown": "^9.1.0",
+    "react-markdown": "^10.1.0",
     "remark": "^15.0.1",
     "remark-gemoji": "^8.0.0",
     "remark-gfm": "^4.0.1",
