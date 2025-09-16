@@ -269,8 +269,8 @@ export function TestPageClient({
                     }
                 />
                 <div className="mt-2 pl-7 text-sm text-muted-foreground space-y-1">
-                    <p>{t('api_limit', { limit: rateLimit?.limit })}</p>
-                    <p>{t('api_remaining', { remaining: rateLimit?.remaining })}</p>
+                    <p>{t('api_limit', { limit: rateLimit?.limit ?? 0 })}</p>
+                    <p>{t('api_remaining', { remaining: rateLimit?.remaining ?? 0 })}</p>
                     <p>{t('api_resets', { time: resetTime })}</p>
                 </div>
             </div>

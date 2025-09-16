@@ -1,10 +1,14 @@
-import type { Pathnames } from 'next-intl/navigation';
+type Pathnames<L extends readonly string[]> = Record<string, Record<L[number], string>>;
 
 export const locales = ['en', 'de'] as const;
 export const defaultLocale = 'en' as const;
 
 // Centralized pathnames for the app (no side-effects)
 export const pathnames = {
+    '/': {
+    en: '/',
+    de: '/',
+  },
   '/settings': {
     en: '/settings',
     de: '/einstellungen',
@@ -17,5 +21,4 @@ export const pathnames = {
     en: '/test',
     de: '/test',
   },
-} satisfies Pathnames<typeof locales>;
-
+};
