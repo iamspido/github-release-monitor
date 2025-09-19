@@ -3,86 +3,65 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { sessionOptions } from './lib/session';
 import type { SessionData } from './types';
-import { locales, pathnames, defaultLocale } from './i18n-config';
+import { routing, locales, defaultLocale, pathnames } from './i18n/routing';
 import { logger } from '@/lib/logger';
 
 export async function middleware(request: NextRequest) {
   const logAuth = logger.withScope('Auth');
   const logSecurity = logger.withScope('Security');
-  // Step 1: Determine the user's preferred locale from the cookie.
-  // Fallback to 'en' if the cookie is not set.
-  const cookieLocale = request.cookies.get('NEXT_LOCALE')?.value;
-  const preferredLocale: typeof locales[number] = (locales as readonly string[]).includes((cookieLocale || '') as any)
-    ? (cookieLocale as typeof locales[number])
-    : defaultLocale;
 
-  // Step 2: Create a middleware handler for internationalization.
-  // It will now use the explicitly determined locale as the default.
-  const handleI18nRouting = createIntlMiddleware({
-    locales,
-    defaultLocale: preferredLocale,
-    pathnames,
-    localePrefix: 'always',
-  });
-
-  // This response will be used if no auth redirect is needed.
-  // It handles locale detection and setting the correct headers.
+  // Step 1: Create and call the internationalization middleware.
+  const handleI18nRouting = createIntlMiddleware(routing);
   const response = handleI18nRouting(request);
 
-  // Step 3: Determine the current locale from the response prepared by next-intl.
+  // Step 2: Determine the current locale from the response.
   const headerLocale = response.headers.get('x-next-intl-locale');
-  const currentLocale: typeof locales[number] = (locales as readonly string[]).includes((headerLocale || '') as any)
-    ? (headerLocale as typeof locales[number])
-    : preferredLocale;
+  const currentLocale = (locales as readonly string[]).includes(headerLocale || '')
+    ? headerLocale!
+    : defaultLocale;
 
-  // Step 4: Define the localized login path.
-  const loginPathForLocale = pathnames['/login'][currentLocale as 'en' | 'de'] || pathnames['/login']['en'];
+  // Step 3: Define the localized login path.
+  const loginPathForLocale =
+    pathnames['/login'][currentLocale as 'en' | 'de'] || pathnames['/login']['en'];
 
-  // Step 5: Check if the current request is for the login page to prevent a redirect loop.
+  // Step 4: Check if the current request is for the login page.
   const isLoginPage = request.nextUrl.pathname.endsWith(loginPathForLocale);
 
-  // Step 6: Check the session.
+  // Step 5: Check the session.
   const session = await getIronSession<SessionData>(request.cookies as any, sessionOptions);
 
-  // Step 7: Redirect logic
+  // Step 6: Redirect logic based on authentication status.
   if (!session.isLoggedIn && !isLoginPage) {
-    // User is not logged in and not on the login page.
-    // Redirect them to the login page for their current locale.
     const redirectUrl = new URL(`/${currentLocale}${loginPathForLocale}`, request.url);
-    // Preserve the original path as a 'next' parameter so the user can be sent back after logging in.
     const originalPathname = request.nextUrl.pathname;
-    const originalSearch = request.nextUrl.search || '';
-    const originalWithQuery = `${originalPathname}${originalSearch}`;
     redirectUrl.searchParams.set('next', originalPathname);
-    logAuth.warn(`Unauthenticated request to '${originalWithQuery}', redirecting to '/${currentLocale}${loginPathForLocale}' (next='${originalPathname}')`);
+    logAuth.warn(
+      `Unauthenticated request to '${originalPathname}', redirecting to login.`,
+    );
     return NextResponse.redirect(redirectUrl);
   } else if (session.isLoggedIn && isLoginPage) {
-    // User is logged in but trying to access the login page.
-    // Redirect them to the home page for their current locale.
-    logAuth.info(`Logged-in user attempted to access login page, redirecting to '/${currentLocale}'`);
+    logAuth.info('Logged-in user on login page, redirecting to home.');
     return NextResponse.redirect(new URL(`/${currentLocale}`, request.url));
   }
 
-  // Step 8: Handle development origins validation
+  // Step 7: Handle development origins validation
   if (process.env.NODE_ENV === 'development') {
     const allowedDevOrigins = getAllowedDevOrigins();
     const origin = request.headers.get('origin');
-
     if (origin && allowedDevOrigins.length > 0 && !allowedDevOrigins.includes(origin)) {
-      // Origin is not allowed in development mode
       logSecurity.warn(`Blocked development origin: ${origin}`);
       return new NextResponse('Forbidden', { status: 403 });
     }
   }
 
-  // Step 9: Add security headers dynamically
+  // Step 8: Add security headers.
   const securityHeaders = getSecurityHeaders();
   securityHeaders.forEach(header => {
     response.headers.set(header.key, header.value);
   });
-  logger.withScope('Security').debug('Applied security headers');
+  logSecurity.debug('Applied security headers');
 
-  // Step 10: If no authentication-related redirect is necessary, return the response from the i18n middleware.
+  // Step 9: Return the response from the i18n middleware.
   return response;
 }
 
@@ -146,7 +125,8 @@ function getSecurityHeaders() {
 }
 
 export const config = {
-  // All paths are protected by default, except for static files and API routes.
-  // The logic inside the middleware handles which pages require login.
-  matcher: ['/((?!api|_next/static|_next/image|.*\\.svg$|favicon.ico|auth/logout).*)'],
+  // Match all pathnames except for
+  // - … if they start with `/api`, `/trpc`, `/_next` or `/_vercel`
+  // - … the ones containing a dot (e.g. `favicon.ico`)
+  matcher: ['/((?!api|trpc|_next|_vercel|.*\\..*).*)'],
 };

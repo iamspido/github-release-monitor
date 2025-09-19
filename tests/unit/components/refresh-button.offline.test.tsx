@@ -9,7 +9,7 @@ vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => (key === 'refresh' ? 'Refresh' : key),
 }));
 
-vi.mock('@/navigation', () => ({
+vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
@@ -24,7 +24,7 @@ describe('RefreshButton disabled offline', () => {
     vi.doMock('next-intl', () => ({
       useTranslations: () => (key: string) => (key === 'refresh' ? 'Refresh' : key),
     }));
-    vi.doMock('@/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+    vi.doMock('@/i18n/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
     vi.doMock('@/app/actions', () => ({ refreshAndCheckAction: vi.fn().mockResolvedValue({}) }));
     const { RefreshButton } = await import('@/components/refresh-button');
     const div = document.createElement('div');

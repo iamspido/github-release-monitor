@@ -4,7 +4,7 @@ vi.mock('next/cache', () => ({
   revalidatePath: () => {},
 }));
 
-vi.mock('@/navigation', () => ({
+vi.mock('@/i18n/navigation', () => ({
   redirect: (path: string) => {
     (globalThis as any).__redirectCalls = [...((globalThis as any).__redirectCalls || []), path];
     throw new Error('__REDIRECT__');

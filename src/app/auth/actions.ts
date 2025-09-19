@@ -1,9 +1,9 @@
 'use server';
 
 import { getSession } from '@/lib/session';
-import { pathnames } from '@/i18n-config';
+import { pathnames } from '@/i18n/routing';
 import { redirectLocalized } from '@/lib/redirect-localized';
-import { getRequestLocale } from '@/lib/request-locale';
+import { getLocale } from 'next-intl/server';
 import { revalidatePath } from 'next/cache';
 import { logger } from '@/lib/logger';
 
@@ -37,7 +37,7 @@ export async function login(
 
     // Security: Only redirect to relative paths within the app to prevent open redirect vulnerabilities.
     if (typeof next === 'string' && next.startsWith('/') && !next.startsWith('//') && !next.includes('..')) {
-        const locale = await getRequestLocale();
+        const locale = await getLocale();
         // Remove the leading locale from the 'next' parameter before redirecting
         // e.g., transforms "/de/test" to "/test"
         const pathWithoutLocale = next.startsWith(`/${locale}`) ? next.substring(`/${locale}`.length) : next;
@@ -48,7 +48,7 @@ export async function login(
         logger.withScope('Auth').info(`Redirect after login to '${finalPath}' (locale=${locale})`);
         await redirectLocalized(finalPath, locale);
     } else {
-        const locale = await getRequestLocale();
+        const locale = await getLocale();
         logger.withScope('Auth').info(`Redirect after login to '/' (locale=${locale})`);
         await redirectLocalized('/', locale);
     }
@@ -60,7 +60,7 @@ export async function login(
 
 export async function logout() {
   const session = await getSession();
-  const locale = await getRequestLocale();
+  const locale = await getLocale();
   const user = session.username || 'unknown';
   logger.withScope('Auth').info(`User '${user}' logged out`);
   session.destroy();
