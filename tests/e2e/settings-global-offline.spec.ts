@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { login, goOffline, goOnline, waitForAutosave } from './utils';
+import { goOffline, goOnline, waitForAutosave, login } from './utils';
+import { ensureAppLocale } from './utils/locale';
 
 const NOTICE_EN = 'Offline – changes are read-only and auto-save is paused.';
 const NOTICE_DE = 'Offline – Änderungen sind schreibgeschützt, automatisches Speichern ist pausiert.';
@@ -7,6 +8,7 @@ const NOTICE_DE = 'Offline – Änderungen sind schreibgeschützt, automatisches
 test.describe('Global settings offline read-only + autosave pause', () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
+    await ensureAppLocale(page, 'en');
     await page.goto('/en/settings');
   });
 

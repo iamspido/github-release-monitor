@@ -1,23 +1,8 @@
 import { test, expect } from '@playwright/test';
-
-async function login(page) {
-  const username = process.env.AUTH_USERNAME || 'test';
-  const password = process.env.AUTH_PASSWORD || 'test';
-  await page.goto('/en/login');
-  await page.getByLabel('Username').fill(username);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-}
+import { ensureAppLocale } from './utils/locale';
 
 test('mobile navigation works in DE locale', async ({ page }) => {
-  await login(page);
-
-  // Switch to German locale via settings
-  await page.goto('/en/settings');
-  await page.locator('#language-select').click();
-  await page.getByRole('option', { name: 'German' }).click();
-  // Navigate to a DE route explicitly to be deterministic
+  await ensureAppLocale(page, 'de');
   await page.goto('/de/test');
 
   // Simulate small viewport to show mobile menu
@@ -39,4 +24,6 @@ test('mobile navigation works in DE locale', async ({ page }) => {
   await page.getByRole('button', { name: 'Menü öffnen' }).click();
   await page.getByRole('menuitem', { name: 'Startseite' }).click();
   await expect(page).toHaveURL(/\/de(\/)?$/);
+
+  await ensureAppLocale(page, 'en');
 });

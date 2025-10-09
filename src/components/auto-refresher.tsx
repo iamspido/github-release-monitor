@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from '@/navigation';
+import { useRouter } from '@/i18n/navigation';
 import { useEffect, useTransition } from 'react';
 import { refreshAndCheckAction } from '@/app/actions';
 

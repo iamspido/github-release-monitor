@@ -9,7 +9,7 @@ vi.mock('@/app/actions', () => ({
   refreshAndCheckAction: vi.fn().mockResolvedValue({ messageKey: 'toast_refresh_success_description' }),
 }));
 
-vi.mock('@/navigation', () => ({
+vi.mock('@/i18n/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
@@ -35,7 +35,7 @@ describe('AutoRefresher', () => {
     vi.doMock('@/hooks/use-network', () => ({ useNetworkStatus: () => ({ isOnline: true }) }));
     vi.doMock('@/app/actions', () => ({ refreshAndCheckAction: vi.fn().mockResolvedValue({}) }));
     const routerRef = { refresh: vi.fn() };
-    vi.doMock('@/navigation', () => ({ useRouter: () => routerRef }));
+    vi.doMock('@/i18n/navigation', () => ({ useRouter: () => routerRef }));
     const { AutoRefresher } = await import('@/components/auto-refresher');
     const { refreshAndCheckAction } = await import('@/app/actions');
     // routerRef used by component
@@ -65,7 +65,7 @@ describe('AutoRefresher', () => {
     vi.doMock('@/hooks/use-network', () => ({ useNetworkStatus: () => ({ isOnline: false }) }));
     vi.doMock('@/app/actions', () => ({ refreshAndCheckAction: vi.fn().mockResolvedValue({}) }));
     const routerRef = { refresh: vi.fn() };
-    vi.doMock('@/navigation', () => ({ useRouter: () => routerRef }));
+    vi.doMock('@/i18n/navigation', () => ({ useRouter: () => routerRef }));
     const { AutoRefresher } = await import('@/components/auto-refresher');
     const { refreshAndCheckAction } = await import('@/app/actions');
 

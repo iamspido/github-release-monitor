@@ -3,90 +3,126 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { sessionOptions } from './lib/session';
 import type { SessionData } from './types';
-import { locales, pathnames, defaultLocale } from './i18n-config';
+import { routing, locales, defaultLocale, pathnames } from './i18n/routing';
 import { logger } from '@/lib/logger';
+import {
+  NEXT_LOCALE_COOKIE,
+  SETTINGS_LOCALE_COOKIE,
+  nextLocaleCookieOptions,
+  settingsLocaleCookieOptions,
+} from '@/lib/settings-locale-cookie';
+
+const localeSet = new Set<string>(locales as readonly string[]);
+
+type LocaleKey = (typeof locales)[number];
+type RouteKey = keyof typeof pathnames;
+
+const reversePathLookup: Record<LocaleKey, Record<string, RouteKey>> = locales.reduce(
+  (acc, locale) => {
+    acc[locale] = {};
+    return acc;
+  },
+  {} as Record<LocaleKey, Record<string, RouteKey>>
+);
+
+for (const routeKey of Object.keys(pathnames) as RouteKey[]) {
+  const localized = pathnames[routeKey] as Record<LocaleKey, string>;
+  for (const locale of locales as readonly LocaleKey[]) {
+    const localizedPath = normalizedRestPath(localized[locale]);
+    reversePathLookup[locale][localizedPath] = routeKey;
+  }
+}
+
+const logSettings = logger.withScope('Settings');
 
 export async function middleware(request: NextRequest) {
   const logAuth = logger.withScope('Auth');
   const logSecurity = logger.withScope('Security');
-  // Step 1: Determine the user's preferred locale from the cookie.
-  // Fallback to 'en' if the cookie is not set.
-  const cookieLocale = request.cookies.get('NEXT_LOCALE')?.value;
-  const preferredLocale: typeof locales[number] = (locales as readonly string[]).includes((cookieLocale || '') as any)
-    ? (cookieLocale as typeof locales[number])
-    : defaultLocale;
 
-  // Step 2: Create a middleware handler for internationalization.
-  // It will now use the explicitly determined locale as the default.
-  const handleI18nRouting = createIntlMiddleware({
-    locales,
-    defaultLocale: preferredLocale,
-    pathnames,
-    localePrefix: 'always',
-  });
-
-  // This response will be used if no auth redirect is needed.
-  // It handles locale detection and setting the correct headers.
-  const response = handleI18nRouting(request);
-
-  // Step 3: Determine the current locale from the response prepared by next-intl.
-  const headerLocale = response.headers.get('x-next-intl-locale');
-  const currentLocale: typeof locales[number] = (locales as readonly string[]).includes((headerLocale || '') as any)
-    ? (headerLocale as typeof locales[number])
-    : preferredLocale;
-
-  // Step 4: Define the localized login path.
-  const loginPathForLocale = pathnames['/login'][currentLocale as 'en' | 'de'] || pathnames['/login']['en'];
-
-  // Step 5: Check if the current request is for the login page to prevent a redirect loop.
-  const isLoginPage = request.nextUrl.pathname.endsWith(loginPathForLocale);
-
-  // Step 6: Check the session.
-  const session = await getIronSession<SessionData>(request.cookies as any, sessionOptions);
-
-  // Step 7: Redirect logic
-  if (!session.isLoggedIn && !isLoginPage) {
-    // User is not logged in and not on the login page.
-    // Redirect them to the login page for their current locale.
-    const redirectUrl = new URL(`/${currentLocale}${loginPathForLocale}`, request.url);
-    // Preserve the original path as a 'next' parameter so the user can be sent back after logging in.
-    const originalPathname = request.nextUrl.pathname;
-    const originalSearch = request.nextUrl.search || '';
-    const originalWithQuery = `${originalPathname}${originalSearch}`;
-    redirectUrl.searchParams.set('next', originalPathname);
-    logAuth.warn(`Unauthenticated request to '${originalWithQuery}', redirecting to '/${currentLocale}${loginPathForLocale}' (next='${originalPathname}')`);
-    return NextResponse.redirect(redirectUrl);
-  } else if (session.isLoggedIn && isLoginPage) {
-    // User is logged in but trying to access the login page.
-    // Redirect them to the home page for their current locale.
-    logAuth.info(`Logged-in user attempted to access login page, redirecting to '/${currentLocale}'`);
-    return NextResponse.redirect(new URL(`/${currentLocale}`, request.url));
+  const pathname = request.nextUrl.pathname;
+  if (
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/trpc/') ||
+    pathname.startsWith('/_next/') ||
+    pathname.startsWith('/_vercel/') ||
+    pathname.includes('.')
+  ) {
+    return NextResponse.next();
   }
 
-  // Step 8: Handle development origins validation
+  const cookieLocale = getLocaleFromCookies(request);
+  const settingsLocale = cookieLocale ?? (await fetchSettingsLocale(request));
+  const { locale: requestedLocale, restPath } = splitLocaleFromPath(pathname);
+
+  if (!requestedLocale) {
+    const targetRest = resolveLocalizedRestPath(restPath, settingsLocale);
+    const redirectUrl = buildRedirectUrl(request, settingsLocale, targetRest);
+    if (redirectUrl.pathname !== pathname) {
+      const redirectResponse = NextResponse.redirect(redirectUrl);
+      attachLocaleCookies(redirectResponse, settingsLocale);
+      return redirectResponse;
+    }
+  } else if (requestedLocale !== settingsLocale) {
+    const targetRest = resolveLocalizedRestPath(restPath, settingsLocale, requestedLocale);
+    const redirectUrl = buildRedirectUrl(request, settingsLocale, targetRest);
+    const redirectResponse = NextResponse.redirect(redirectUrl);
+    attachLocaleCookies(redirectResponse, settingsLocale);
+    return redirectResponse;
+  }
+
+  const handleI18nRouting = createIntlMiddleware(routing);
+  const response = handleI18nRouting(request);
+
+  const headerLocale = response.headers.get('x-next-intl-locale');
+  const currentLocale = (locales as readonly string[]).includes(headerLocale || '')
+    ? (headerLocale as LocaleKey)
+    : settingsLocale;
+
+  const loginPathForLocale =
+    pathnames['/login'][currentLocale as 'en' | 'de'] || pathnames['/login']['en'];
+  const isLoginPage = request.nextUrl.pathname.endsWith(loginPathForLocale);
+
+  const session = await getIronSession<SessionData>(request.cookies as any, sessionOptions);
+
+  if (!session.isLoggedIn && !isLoginPage) {
+    const redirectUrl = new URL(`/${currentLocale}${loginPathForLocale}`, request.url);
+    const originalPathname = request.nextUrl.pathname;
+    redirectUrl.searchParams.set('next', originalPathname);
+    logAuth.warn(
+      `Unauthenticated request to '${originalPathname}', redirecting to login.`,
+    );
+    const redirectResponse = NextResponse.redirect(redirectUrl);
+    attachLocaleCookies(redirectResponse, currentLocale);
+    return redirectResponse;
+  }
+
+  if (session.isLoggedIn && isLoginPage) {
+    logAuth.info('Logged-in user on login page, redirecting to home.');
+    const redirectResponse = NextResponse.redirect(new URL(`/${currentLocale}`, request.url));
+    attachLocaleCookies(redirectResponse, currentLocale);
+    return redirectResponse;
+  }
+
   if (process.env.NODE_ENV === 'development') {
     const allowedDevOrigins = getAllowedDevOrigins();
     const origin = request.headers.get('origin');
-
     if (origin && allowedDevOrigins.length > 0 && !allowedDevOrigins.includes(origin)) {
-      // Origin is not allowed in development mode
       logSecurity.warn(`Blocked development origin: ${origin}`);
       return new NextResponse('Forbidden', { status: 403 });
     }
   }
 
-  // Step 9: Add security headers dynamically
+  attachLocaleCookies(response, currentLocale);
+
   const securityHeaders = getSecurityHeaders();
   securityHeaders.forEach(header => {
     response.headers.set(header.key, header.value);
   });
-  logger.withScope('Security').debug('Applied security headers');
+  logSecurity.debug('Applied security headers');
 
-  // Step 10: If no authentication-related redirect is necessary, return the response from the i18n middleware.
   return response;
 }
 
-// Helper function to get allowed development origins dynamically
 function getAllowedDevOrigins(): string[] {
   const allowedOriginsFromEnv = process.env.ALLOWED_DEV_ORIGINS;
   return allowedOriginsFromEnv
@@ -94,12 +130,9 @@ function getAllowedDevOrigins(): string[] {
     : [];
 }
 
-// Helper function to generate security headers dynamically
 function getSecurityHeaders() {
-  // Determine if running in HTTPS mode. Defaults to true.
   const https = process.env.HTTPS !== 'false';
 
-  // Dynamically construct the Content Security Policy
   const cspPolicies = [
     "default-src 'self'",
     "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
@@ -110,43 +143,125 @@ function getSecurityHeaders() {
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'none'"
+    "frame-ancestors 'none'",
   ];
 
-  // Only add upgrade-insecure-requests if HTTPS is desired
   if (https) {
-    cspPolicies.push("upgrade-insecure-requests");
+    cspPolicies.push('upgrade-insecure-requests');
   }
 
-  // The final semicolon is optional but good practice.
   const cspHeader = cspPolicies.join('; ');
 
   return [
-    {
-      key: 'X-Content-Type-Options',
-      value: 'nosniff',
-    },
-    {
-      key: 'X-Frame-Options',
-      value: 'DENY',
-    },
-    {
-      key: 'Content-Security-Policy',
-      value: cspHeader,
-    },
-    {
-      key: 'Permissions-Policy',
-      value: 'camera=(), microphone=(), geolocation=()',
-    },
-    {
-      key: 'Referrer-Policy',
-      value: 'no-referrer',
-    }
+    { key: 'X-Content-Type-Options', value: 'nosniff' },
+    { key: 'X-Frame-Options', value: 'DENY' },
+    { key: 'Content-Security-Policy', value: cspHeader },
+    { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+    { key: 'Referrer-Policy', value: 'no-referrer' },
   ];
 }
 
 export const config = {
-  // All paths are protected by default, except for static files and API routes.
-  // The logic inside the middleware handles which pages require login.
-  matcher: ['/((?!api|_next/static|_next/image|.*\\.svg$|favicon.ico|auth/logout).*)'],
+  matcher: ['/((?!api|trpc|_next|_vercel|.*\\..*).*)'],
 };
+
+async function fetchSettingsLocale(request: NextRequest): Promise<LocaleKey> {
+  try {
+    const apiUrl = new URL('/api/settings-locale', request.url);
+    const response = await fetch(apiUrl, {
+      cache: 'no-store',
+      headers: {
+        'cache-control': 'no-store',
+        'x-from-middleware': '1',
+      },
+    });
+
+    if (!response.ok) {
+      logSettings.warn(
+        `Failed to fetch settings locale (status=${response.status}). Falling back to default locale.`,
+      );
+      return defaultLocale;
+    }
+
+    const data = (await response.json()) as { locale?: string | null };
+    if (data.locale && localeSet.has(data.locale)) {
+      return data.locale as LocaleKey;
+    }
+
+    logSettings.warn(
+      `Received invalid locale '${data.locale ?? 'undefined'}' from settings. Falling back to default locale.`,
+    );
+  } catch (error) {
+    logSettings.error('Error fetching settings locale in middleware. Falling back to default locale.', error);
+  }
+
+  return defaultLocale;
+}
+
+function getLocaleFromCookies(request: NextRequest): LocaleKey | null {
+  const cookieLocale =
+    request.cookies.get(SETTINGS_LOCALE_COOKIE)?.value ??
+    request.cookies.get(NEXT_LOCALE_COOKIE)?.value;
+  if (cookieLocale && localeSet.has(cookieLocale)) {
+    return cookieLocale as LocaleKey;
+  }
+  return null;
+}
+
+function attachLocaleCookies(response: NextResponse, locale: LocaleKey) {
+  response.cookies.set(SETTINGS_LOCALE_COOKIE, locale, settingsLocaleCookieOptions);
+  response.cookies.set(NEXT_LOCALE_COOKIE, locale, nextLocaleCookieOptions);
+}
+
+function splitLocaleFromPath(pathname: string): { locale: LocaleKey | null; restPath: string } {
+  const segments = pathname.split('/');
+  const candidate = segments[1];
+
+  if (candidate && localeSet.has(candidate)) {
+    const restSegments = segments.slice(2);
+    const restPath = restSegments.length > 0 ? `/${restSegments.join('/')}` : '/';
+    return { locale: candidate as LocaleKey, restPath: normalizedRestPath(restPath) };
+  }
+
+  return { locale: null, restPath: normalizedRestPath(pathname || '/') };
+}
+
+function normalizedRestPath(path: string): string {
+  if (!path || path === '/') {
+    return '/';
+  }
+  const prefixed = path.startsWith('/') ? path : `/${path}`;
+  return prefixed.length > 1 && prefixed.endsWith('/') ? prefixed.slice(0, -1) : prefixed;
+}
+
+function resolveLocalizedRestPath(
+  restPath: string,
+  targetLocale: LocaleKey,
+  sourceLocale?: LocaleKey,
+): string {
+  const normalized = normalizedRestPath(restPath);
+
+  if (sourceLocale) {
+    const candidateRoute = reversePathLookup[sourceLocale][normalized];
+    if (candidateRoute) {
+      return normalizedRestPath(pathnames[candidateRoute][targetLocale]);
+    }
+  }
+
+  for (const locale of locales as readonly LocaleKey[]) {
+    const candidateRoute = reversePathLookup[locale][normalized];
+    if (candidateRoute) {
+      return normalizedRestPath(pathnames[candidateRoute][targetLocale]);
+    }
+  }
+
+  return normalized;
+}
+
+function buildRedirectUrl(request: NextRequest, locale: LocaleKey, localizedRest: string): URL {
+  const url = new URL(request.url);
+  url.pathname = localizedRest === '/' ? `/${locale}` : `/${locale}${localizedRest}`;
+  url.search = request.nextUrl.search;
+  url.hash = request.nextUrl.hash;
+  return url;
+}

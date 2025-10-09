@@ -7,7 +7,7 @@ import { RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { refreshAndCheckAction } from '@/app/actions';
-import { useRouter } from '@/navigation';
+import { useRouter } from '@/i18n/navigation';
 import { useNetworkStatus } from '@/hooks/use-network';
 
 export function RefreshButton() {

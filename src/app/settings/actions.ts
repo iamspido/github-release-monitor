@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { getTranslations } from 'next-intl/server';
-import { getRequestLocale } from '@/lib/request-locale';
+import { getLocale } from 'next-intl/server';
 import type { AppSettings } from '@/types';
 import { getSettings, saveSettings } from '@/lib/settings-storage';
 import { getRepositories, saveRepositories } from '@/lib/repository-storage';
@@ -10,6 +10,12 @@ import { cookies } from 'next/headers';
 import { checkForNewReleases } from '@/app/actions';
 import { scheduleTask } from '@/lib/task-scheduler';
 import { logger } from '@/lib/logger';
+import {
+  NEXT_LOCALE_COOKIE,
+  SETTINGS_LOCALE_COOKIE,
+  nextLocaleCookieOptions,
+  settingsLocaleCookieOptions,
+} from '@/lib/settings-locale-cookie';
 
 export async function updateSettingsAction(newSettings: AppSettings) {
   return scheduleTask('updateSettingsAction', async () => {
@@ -98,11 +104,8 @@ export async function updateSettingsAction(newSettings: AppSettings) {
     // Set the locale cookie for next-intl middleware to pick up.
     // This is now done on every save, not just on change, to ensure consistency.
     const cookieStore = await cookies();
-    cookieStore.set('NEXT_LOCALE', newSettings.locale, {
-        path: '/',
-        maxAge: 60 * 60 * 24 * 365, // 1 year
-        sameSite: 'lax',
-    });
+    cookieStore.set(NEXT_LOCALE_COOKIE, newSettings.locale, nextLocaleCookieOptions);
+    cookieStore.set(SETTINGS_LOCALE_COOKIE, newSettings.locale, settingsLocaleCookieOptions);
 
 
     revalidatePath('/');
@@ -143,7 +146,7 @@ export async function deleteAllRepositoriesAction() {
             logger.withScope('Settings').info('Deleted all repositories.');
             revalidatePath('/');
 
-            const locale = await getRequestLocale();
+            const locale = await getLocale();
             const t = await getTranslations({
                 locale: locale,
                 namespace: 'SettingsForm'
@@ -157,7 +160,7 @@ export async function deleteAllRepositoriesAction() {
             };
         } catch (error: any) {
             logger.withScope('Settings').error('Failed to delete all repositories:', error);
-            const locale = await getRequestLocale();
+            const locale = await getLocale();
             const t = await getTranslations({
                 locale: locale,
                 namespace: 'SettingsForm'

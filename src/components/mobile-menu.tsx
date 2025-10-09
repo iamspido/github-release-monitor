@@ -3,9 +3,9 @@
 import * as React from 'react';
 import { Github, FlaskConical, Settings, LogOut, Home, Menu, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { Link, usePathname, useRouter } from '@/navigation';
+import { Link, usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
-import { pathnames } from '@/i18n-config';
+import { pathnames } from '@/i18n/routing';
 
 import {
   DropdownMenu,

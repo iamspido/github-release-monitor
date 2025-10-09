@@ -19,7 +19,7 @@ vi.mock('next-intl', () => ({
   useLocale: () => 'en',
 }));
 
-vi.mock('@/navigation', () => ({
+vi.mock('@/i18n/navigation', () => ({
   Link: ({ href, children }: any) => <a href={href}>{children}</a>,
   usePathname: () => '/',
   useRouter: () => ({ push: vi.fn() }),
@@ -44,7 +44,7 @@ describe('Header logout disabled offline', () => {
       } as any)[key] || key,
       useLocale: () => 'en',
     }));
-    vi.doMock('@/navigation', () => ({
+    vi.doMock('@/i18n/navigation', () => ({
       Link: ({ href, children }: any) => <a href={href}>{children}</a>,
       usePathname: () => '/',
       useRouter: () => ({ push: vi.fn() }),

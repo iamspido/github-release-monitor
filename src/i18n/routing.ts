@@ -1,10 +1,14 @@
-import type { Pathnames } from 'next-intl/navigation';
+import { Pathnames, defineRouting } from 'next-intl/routing';
 
 export const locales = ['en', 'de'] as const;
 export const defaultLocale = 'en' as const;
 
 // Centralized pathnames for the app (no side-effects)
 export const pathnames = {
+  '/': {
+    en: '/',
+    de: '/',
+  },
   '/settings': {
     en: '/settings',
     de: '/einstellungen',
@@ -19,3 +23,8 @@ export const pathnames = {
   },
 } satisfies Pathnames<typeof locales>;
 
+export const routing = defineRouting({
+  locales,
+  defaultLocale,
+  pathnames,
+});

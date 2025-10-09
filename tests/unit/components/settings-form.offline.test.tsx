@@ -13,7 +13,7 @@ vi.mock('@/app/settings/actions', () => ({
   deleteAllRepositoriesAction: vi.fn().mockResolvedValue({ success: true, message: { title: 'ok', description: 'ok' } }),
 }));
 
-vi.mock('@/navigation', () => ({
+vi.mock('@/i18n/navigation', () => ({
   usePathname: () => '/',
   useRouter: () => ({ push: vi.fn() }),
 }));
@@ -53,4 +53,3 @@ describe('SettingsForm offline autosave paused', () => {
     vi.useRealTimers();
   });
 });
-

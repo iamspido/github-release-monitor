@@ -30,7 +30,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { updateSettingsAction, deleteAllRepositoriesAction } from '@/app/settings/actions';
-import { usePathname, useRouter } from '@/navigation';
+import { usePathname, useRouter } from '@/i18n/navigation';
 import { cn } from '@/lib/utils';
 import { useNetworkStatus } from '@/hooks/use-network';
 import {
