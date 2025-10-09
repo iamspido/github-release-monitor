@@ -27,6 +27,7 @@ describe('OfflineBanner', () => {
     const bannerEl = div.querySelector('[aria-live="polite"]') as HTMLElement | null;
     expect(bannerEl).toBeTruthy();
     expect(bannerEl!.className).toContain('opacity-0');
+    flushSync(() => { root.unmount(); });
   });
 
   it('visible when offline (element present)', async () => {
@@ -42,6 +43,8 @@ describe('OfflineBanner', () => {
     // Debounce 350ms; advance timers and ensure element remains present
     vi.advanceTimersByTime(400);
     expect(bannerEl!.getAttribute('aria-live')).toBe('polite');
+    flushSync(() => { root.unmount(); });
+    vi.runOnlyPendingTimers();
     vi.useRealTimers();
   });
 });
