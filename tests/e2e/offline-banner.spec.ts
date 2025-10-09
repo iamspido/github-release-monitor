@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { login, goOffline, goOnline } from './utils';
+import { goOffline, goOnline, login } from './utils';
+import { ensureAppLocale } from './utils/locale';
 
 const EN_TITLE = "You're offline.";
 const DE_TITLE = 'Sie sind offline.';
@@ -10,6 +11,7 @@ test.describe('Offline banner behavior', () => {
   });
 
   test('appears on offline, sticky, and hides on online (EN)', async ({ page }) => {
+    await ensureAppLocale(page, 'en');
     await page.goto('/en');
 
     // Toggle offline to show the banner
@@ -31,6 +33,7 @@ test.describe('Offline banner behavior', () => {
   });
 
   test('appears on offline and hides on online (DE)', async ({ page }) => {
+    await ensureAppLocale(page, 'de');
     await page.goto('/de');
     await goOffline(page);
     const container = page.locator('header').locator('div[aria-live="polite"]');
@@ -38,5 +41,6 @@ test.describe('Offline banner behavior', () => {
     await expect(page.getByText(DE_TITLE)).toBeVisible();
     await goOnline(page);
     await expect.poll(async () => await container.evaluate(el => el.getBoundingClientRect().height), { timeout: 3000, intervals: [200] }).toBeLessThan(2);
+    await ensureAppLocale(page, 'en');
   });
 });

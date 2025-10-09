@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 let capturedGetRequestCb: any
 
@@ -9,17 +9,21 @@ vi.mock('next-intl/server', () => ({
   },
 }))
 
-const notFoundMock = vi.fn(() => {
-  throw new Error('notFound')
-})
-
-vi.mock('next/navigation', () => ({
-  notFound: notFoundMock,
-}))
-
 describe('i18n getRequestConfig callback', () => {
+  const loadRequestModule = async () => {
+    await import('../../../src/i18n/request')
+    if (!capturedGetRequestCb) {
+      throw new Error('getRequestConfig callback was not captured')
+    }
+  }
+
+  beforeEach(async () => {
+    capturedGetRequestCb = undefined
+    vi.resetModules()
+  })
+
   it('loads EN messages and returns locale', async () => {
-    await import('../../../src/i18n')
+    await loadRequestModule()
     const result = await capturedGetRequestCb({ requestLocale: Promise.resolve('en') })
     const en = (await import('../../../src/messages/en.json')).default
     expect(result.locale).toBe('en')
@@ -27,18 +31,18 @@ describe('i18n getRequestConfig callback', () => {
   })
 
   it('loads DE messages and returns locale', async () => {
-    // Module already imported; callback captured
+    await loadRequestModule()
     const result = await capturedGetRequestCb({ requestLocale: Promise.resolve('de') })
     const de = (await import('../../../src/messages/de.json')).default
     expect(result.locale).toBe('de')
     expect(result.messages).toEqual(de)
   })
 
-  it('calls notFound for invalid locale', async () => {
-    await expect(
-      capturedGetRequestCb({ requestLocale: Promise.resolve('fr') })
-    ).rejects.toThrowError('notFound')
-    expect(notFoundMock).toHaveBeenCalled()
+  it('falls back to default locale for invalid locale', async () => {
+    await loadRequestModule()
+    const result = await capturedGetRequestCb({ requestLocale: Promise.resolve('fr') })
+    const en = (await import('../../../src/messages/en.json')).default
+    expect(result.locale).toBe('en')
+    expect(result.messages).toEqual(en)
   })
 })
-

@@ -1,19 +1,10 @@
 import { test, expect } from '@playwright/test';
-
-async function loginAndEnsureRepo(page) {
-  const username = process.env.AUTH_USERNAME || 'test';
-  const password = process.env.AUTH_PASSWORD || 'test';
-  await page.goto('/en/login');
-  await page.getByLabel('Username').fill(username);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-  await page.goto('/en/test');
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
-}
+import { ensureAppLocale } from './utils/locale';
+import { ensureTestRepo } from './utils';
 
 test('repo apprise format/tags reset-to-global buttons restore global hints', async ({ page }) => {
-  await loginAndEnsureRepo(page);
+  await ensureAppLocale(page, 'en');
+  await ensureTestRepo(page);
   await page.goto('/en');
 
   await page.getByRole('button', { name: 'Open settings for this repository' }).first().click();

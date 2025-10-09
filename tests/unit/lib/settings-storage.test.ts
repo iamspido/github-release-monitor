@@ -1,9 +1,17 @@
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
+import { beforeEach, afterEach, describe, it, expect } from 'vitest';
 
 describe('settings-storage', () => {
   let tmpDir: string;
+  let clearCache: (() => Promise<void>) | undefined;
+
+  const loadModule = async () => {
+    const mod = await import('@/lib/settings-storage');
+    clearCache = mod.__clearSettingsCacheForTests__;
+    return mod;
+  };
 
   beforeEach(async () => {
     vi.resetModules();
@@ -11,6 +19,7 @@ describe('settings-storage', () => {
     // Mock cwd to tmpDir so storage writes under tmp
     // @ts-ignore
     vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+    await clearCache?.();
   });
 
   afterEach(async () => {
@@ -24,7 +33,7 @@ describe('settings-storage', () => {
   });
 
   it('creates settings file with defaults and merges correctly', async () => {
-    const mod = await import('@/lib/settings-storage');
+    const mod = await loadModule();
     const { getSettings } = mod;
 
     const settings1 = await getSettings();
@@ -45,6 +54,7 @@ describe('settings-storage', () => {
       'utf8',
     );
 
+    await clearCache?.();
     const settings2 = await getSettings();
     expect(settings2.timeFormat).toBe('12h');
     expect(settings2.includeRegex).toBe('v.*');
@@ -53,7 +63,7 @@ describe('settings-storage', () => {
   });
 
   it('saveSettings writes file and corrupt json falls back to defaults', async () => {
-    const mod = await import('@/lib/settings-storage');
+    const mod = await loadModule();
     const { getSettings, saveSettings } = mod;
 
     await saveSettings({
@@ -73,8 +83,8 @@ describe('settings-storage', () => {
     await fs.mkdir(dataDir, { recursive: true });
     await fs.writeFile(path.join(dataDir, 'settings.json'), '{invalid-json', 'utf8');
 
+    await clearCache?.();
     const fallback = await getSettings();
     expect(fallback).toMatchObject({ timeFormat: '24h', locale: 'en' });
   });
 });
-

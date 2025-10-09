@@ -6,6 +6,7 @@ const AUTOSAVE_SUCCESS_SHORT_RE = /^Saved$|^Gespeichert$/;
 const AUTOSAVE_TOAST_RE = /Settings updated successfully\.|Einstellungen erfolgreich aktualisiert\./;
 
 export async function waitForAutosave(page: Page, timeoutMs = 8000) {
+  const statusLocator = page.getByRole('status').filter({ hasText: AUTOSAVE_SUCCESS_LONG_RE }).first();
   const candidates = [
     page.getByRole('dialog').getByText(AUTOSAVE_SUCCESS_LONG_RE),
     page.getByText(AUTOSAVE_SUCCESS_LONG_RE),
@@ -14,12 +15,26 @@ export async function waitForAutosave(page: Page, timeoutMs = 8000) {
     page.getByRole('status').filter({ hasText: AUTOSAVE_TOAST_RE }),
   ];
 
-  await expect.poll(async () => {
+  const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+  const endTime = Date.now() + timeoutMs;
+
+  while (Date.now() < endTime) {
+    if (await statusLocator.count()) {
+      const text = await statusLocator.textContent();
+      if (text && AUTOSAVE_SUCCESS_LONG_RE.test(text)) {
+        return;
+      }
+    }
     const visible = await Promise.all(
       candidates.map((loc) => loc.isVisible().catch(() => false))
     );
-    return visible.some(Boolean);
-  }, { timeout: timeoutMs, intervals: [200] }).toBe(true);
+    if (visible.some(Boolean)) {
+      return;
+    }
+    await sleep(200);
+  }
+
+  throw new Error('Autosave indicator not visible within timeout');
 }
 
 export async function assertNoAutosave(page: Page, waitMs = 1600) {
@@ -32,16 +47,6 @@ export async function assertNoAutosave(page: Page, waitMs = 1600) {
   ]);
   // Not visible anywhere
   expect(noneVisible.some(Boolean)).toBe(false);
-}
-
-export async function login(page: Page, username?: string, password?: string) {
-  const u = username || process.env.AUTH_USERNAME || 'test';
-  const p = password || process.env.AUTH_PASSWORD || 'test';
-  await page.goto('/en/login');
-  await page.getByLabel('Username').fill(u);
-  await page.getByLabel('Password').fill(p);
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
 }
 
 export async function ensureTestRepo(page: Page) {
@@ -63,7 +68,11 @@ export async function assertNotVisibleFor(locator: Locator, waitMs = 1600) {
 export async function waitForLocale(page: Page, expected: 'en' | 'de', timeoutMs = 8000) {
   await expect.poll(async () => {
     const cookies = await page.context().cookies();
-    const c = cookies.find(c => c.name === 'NEXT_LOCALE' && (c.domain === 'localhost' || c.domain.endsWith('.localhost')));
+    const c = cookies.find(
+      c =>
+        c.name === 'NEXT_LOCALE' &&
+        (c.domain === 'localhost' || c.domain.endsWith('.localhost')),
+    );
     return c?.value || '';
   }, { timeout: timeoutMs, intervals: [200] }).toBe(expected);
 }
@@ -78,4 +87,75 @@ export async function goOffline(page: Page, waitMs = 450) {
 export async function goOnline(page: Page, waitMs = 450) {
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await page.waitForTimeout(waitMs);
+}
+
+async function hasSessionCookie(page: Page): Promise<boolean> {
+  const cookies = await page.context().cookies();
+  return cookies.some(cookie => cookie.name === 'github-release-monitor-session');
+}
+
+export async function isLoggedIn(page: Page): Promise<boolean> {
+  if (await hasSessionCookie(page)) {
+    return true;
+  }
+  const logoutButton = page.getByRole('button', { name: /logout|abmelden/i });
+  return logoutButton.isVisible().catch(() => false);
+}
+
+export async function ensureAuthenticated(page: Page): Promise<void> {
+  if (!(await isLoggedIn(page))) {
+    await login(page);
+  }
+}
+
+export async function login(page: Page, username?: string, password?: string, timeoutMs = 20_000) {
+  const u = username || process.env.AUTH_USERNAME || 'test';
+  const p = password || process.env.AUTH_PASSWORD || 'test';
+
+  const loginUrlRegex = /\/(en|de)\/(login|anmelden)/;
+
+  if (await isLoggedIn(page)) {
+    await page.goto('/en', { waitUntil: 'domcontentloaded' });
+    return;
+  }
+
+  const tryGotoLogin = async () => {
+    await page.goto('/en/login', { waitUntil: 'domcontentloaded' });
+    if (loginUrlRegex.test(new URL(page.url()).pathname)) {
+      return;
+    }
+    await page.goto('/de/anmelden', { waitUntil: 'domcontentloaded' });
+  };
+
+  await tryGotoLogin();
+
+  const currentPath = new URL(page.url()).pathname;
+  if (!loginUrlRegex.test(currentPath)) {
+    const homeRegex = /\/(en|de)(\/)?$/;
+    if (homeRegex.test(currentPath) || (await isLoggedIn(page))) {
+      return;
+    }
+    throw new Error(`Unable to reach login page, current path: ${currentPath}`);
+  }
+
+  const usernameField = page.locator('input[name="username"]');
+  const passwordField = page.locator('input[name="password"]');
+
+  if (await usernameField.count() === 0 || await passwordField.count() === 0) {
+    if (await isLoggedIn(page)) {
+      await page.goto('/en', { waitUntil: 'domcontentloaded' });
+      return;
+    }
+    await tryGotoLogin();
+  }
+
+  await usernameField.waitFor({ state: 'visible', timeout: timeoutMs });
+  await usernameField.fill(u, { timeout: timeoutMs });
+
+  await passwordField.waitFor({ state: 'visible', timeout: timeoutMs });
+  await passwordField.fill(p, { timeout: timeoutMs });
+
+  const loginButton = page.getByRole('button', { name: /login|anmelden/i }).first();
+  await loginButton.click({ timeout: timeoutMs });
+  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
 }
