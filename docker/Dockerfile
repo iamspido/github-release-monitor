@@ -16,7 +16,7 @@ RUN npm ci
 COPY components.json \
      next.config.mjs \
      postcss.config.mjs \
-     tailwind.config.ts \
+     tailwind.config.mjs \
      tsconfig.json \
      ./
 
@@ -43,7 +43,7 @@ COPY components.json \
      next.config.mjs \
      .eslintrc.json \
      postcss.config.mjs \
-     tailwind.config.ts \
+     tailwind.config.mjs \
      tsconfig.json \
      vitest.config.ts \
      vitest.setup.ts \
@@ -102,7 +102,7 @@ RUN npm install && npm cache clean --force
 COPY components.json \
      next.config.mjs \
      postcss.config.mjs \
-     tailwind.config.ts \
+     tailwind.config.mjs \
      tsconfig.json \
      vitest.config.ts \
      vitest.setup.ts \

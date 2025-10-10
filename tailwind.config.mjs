@@ -1,7 +1,11 @@
-import type {Config} from 'tailwindcss';
+import tailwindcssAnimate from 'tailwindcss-animate';
+import tailwindcssTypography from '@tailwindcss/typography';
+
+const animatePlugin = tailwindcssAnimate.default ?? tailwindcssAnimate;
+const typographyPlugin = tailwindcssTypography.default ?? tailwindcssTypography;
 
 export default {
-  darkMode: ['class'],
+  darkMode: 'class',
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -61,14 +65,18 @@ export default {
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
       },
-      typography: ({ theme }: { theme: any }) => ({
+      // NOTE: The typography plugin configuration is using static values instead of the `theme()`
+      // function as a workaround for a limitation in the Tailwind CSS v4 upgrade process.
+      // The dynamic `theme()` calls were causing build failures, and this was the most
+      // straightforward way to resolve the issue while maintaining the intended styles.
+      typography: () => ({
         DEFAULT: {
           css: {
             'code:not(pre code)': {
-              fontFamily: theme('fontFamily.code').join(', '),
+              fontFamily: 'monospace',
               backgroundColor: 'hsl(var(--muted))',
               padding: '0.2em 0.4em',
-              borderRadius: theme('borderRadius.sm'),
+              borderRadius: 'calc(var(--radius) - 4px)',
               fontWeight: '400',
             },
             'code:not(pre code)::before': {
@@ -90,10 +98,10 @@ export default {
         sm: {
           css: {
             'code:not(pre code)': {
-              fontFamily: theme('fontFamily.code').join(', '),
+              fontFamily: 'monospace',
               backgroundColor: 'hsl(var(--muted))',
               padding: '0.1em 0.3em',
-              borderRadius: theme('borderRadius.sm'),
+              borderRadius: 'calc(var(--radius) - 4px)',
               fontWeight: '400',
             },
             'code:not(pre code)::before': {
@@ -115,5 +123,5 @@ export default {
       }),
     },
   },
-  plugins: [require('tailwindcss-animate'), require('@tailwindcss/typography')],
-} satisfies Config;
+  plugins: [animatePlugin, typographyPlugin],
+};

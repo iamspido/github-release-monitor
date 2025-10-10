@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 export function EmptyState() {
   const t = useTranslations('EmptyState');
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed bg-card p-12 text-center shadow-sm">
+    <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed bg-card p-12 text-center shadow-xs">
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 mb-4">
         <Telescope className="h-8 w-8 text-primary" />
       </div>

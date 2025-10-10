@@ -19,7 +19,7 @@ export default function GlobalError({
     <html lang="en">
       <body className="min-h-screen bg-background text-foreground">
         <div className="container mx-auto px-4 py-16">
-          <div className="mx-auto max-w-xl rounded-lg border bg-card p-6 shadow-sm">
+          <div className="mx-auto max-w-xl rounded-lg border bg-card p-6 shadow-xs">
             <h1 className="text-2xl font-semibold mb-2">Something went wrong</h1>
             <p className="text-sm text-muted-foreground mb-6">
               This can happen if the network connection was interrupted. Check your
@@ -35,4 +35,3 @@ export default function GlobalError({
     </html>
   );
 }
-

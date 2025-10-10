@@ -380,7 +380,7 @@ export function TestPageClient({
                     if (key === 'MAIL_PASSWORD' && value) {
                       return (
                         <div key={key} className="flex items-center gap-2">
-                          <p className="flex-grow">
+                          <p className="grow">
                             <span className="font-semibold text-foreground">{key}=</span>
                             <span>{isPasswordVisible ? value : '••••••••'}</span>
                           </p>

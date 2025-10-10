@@ -38,17 +38,51 @@ export function Header({ locale }: { locale: string }) {
     { href: '/test', label: t('test_aria'), icon: FlaskConical, page: 'test' },
   ];
 
-  const isActive = (href: keyof typeof pathnames | '/') => {
-    if (href === '/') {
-      return pathname === '/';
+  const normalizePath = (path: string | null | undefined) => {
+    if (!path) {
+      return '/';
     }
-    const translatedPath = pathnames[href]?.[locale as 'en' | 'de'] || href;
-    return pathname === translatedPath;
+
+    const localePrefix = `/${locale}`;
+    let normalized = path;
+
+    if (normalized === localePrefix) {
+      return '/';
+    }
+
+    if (normalized.startsWith(`${localePrefix}/`)) {
+      normalized = normalized.slice(localePrefix.length);
+    }
+
+    if (!normalized.startsWith('/')) {
+      normalized = `/${normalized}`;
+    }
+
+    if (normalized.length > 1 && normalized.endsWith('/')) {
+      normalized = normalized.slice(0, -1);
+    }
+
+    return normalized;
+  };
+
+  const isActive = (href: keyof typeof pathnames | '/') => {
+    const currentPath = normalizePath(pathname);
+    const candidates = new Set<string>();
+
+    candidates.add(normalizePath(href));
+
+    const routeConfig = pathnames[href as keyof typeof pathnames];
+    const localizedPath = routeConfig?.[locale as 'en' | 'de'];
+    if (localizedPath) {
+      candidates.add(normalizePath(localizedPath));
+    }
+
+    return candidates.has(currentPath);
   };
 
   return (
     <>
-      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
+      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-xs">
         <div className="container mx-auto flex h-16 items-center justify-between gap-4 px-4 md:px-6">
           <Link href="/" className="flex items-center gap-3 hover:no-underline">
             <Logo />

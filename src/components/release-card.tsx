@@ -257,7 +257,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
                 </div>
             </div>
             </CardHeader>
-            <CardContent className="flex-grow pt-0 min-w-0">
+            <CardContent className="grow pt-0 min-w-0">
                 <div className="flex h-72 rounded-md border border-destructive/20 bg-background p-4">
                     <div className="flex items-center gap-2 text-sm text-red-400">
                         <AlertTriangle className="size-4 shrink-0" />
@@ -367,7 +367,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
             )}
           </div>
         </CardHeader>
-        <CardContent className="flex-grow pt-0 min-w-0">
+        <CardContent className="grow pt-0 min-w-0">
           {release.body && release.body.trim() !== '' ? (
               <div className="relative w-full max-h-72 overflow-hidden rounded-md border bg-background">
                 <div className="prose prose-sm dark:prose-invert max-w-none h-72 overflow-auto break-words p-4">
