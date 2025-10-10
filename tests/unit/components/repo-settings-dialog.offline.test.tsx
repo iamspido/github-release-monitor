@@ -62,17 +62,27 @@ describe('RepoSettingsDialog offline behavior', () => {
       />
     ));
     flushSync(() => { window.dispatchEvent(new Event(isOnline ? 'online' : 'offline')); });
-    return { div };
+    return {
+      div,
+      cleanup: () => {
+        flushSync(() => { root.unmount(); });
+        div.remove();
+      },
+    };
   }
 
   it('shows offline notice and reset button disabled', async () => {
     vi.resetModules();
     vi.doMock('@/hooks/use-network', () => ({ useNetworkStatus: () => ({ isOnline: false }) }));
-    const { div } = await renderDialog(false);
-    await Promise.resolve();
-    // Check for any disabled control as proxy for offline state
-    const disabledAny = document.querySelector('[disabled]');
-    expect(!!disabledAny).toBe(true);
+    const { div, cleanup } = await renderDialog(false);
+    try {
+      await Promise.resolve();
+      // Check for any disabled control as proxy for offline state
+      const disabledAny = document.querySelector('[disabled]');
+      expect(!!disabledAny).toBe(true);
+    } finally {
+      cleanup();
+    }
   });
 
   it('online change triggers autosave after debounce', async () => {
@@ -80,22 +90,25 @@ describe('RepoSettingsDialog offline behavior', () => {
     vi.resetModules();
     // Ensure online during this test
     vi.doMock('@/hooks/use-network', () => ({ useNetworkStatus: () => ({ isOnline: true }) }));
-    const { div } = await renderDialog(true);
-    const { updateRepositorySettingsAction } = await import('@/app/actions');
-    // Allow portal render/effects
-    await Promise.resolve();
-    await Promise.resolve();
-    const rpp = document.querySelector('#releases-per-page-repo') as HTMLInputElement | null;
-    expect(rpp).toBeTruthy();
-    rpp!.value = '7';
-    rpp!.dispatchEvent(new Event('input', { bubbles: true }));
-    rpp!.dispatchEvent(new Event('change', { bubbles: true }));
-    // Proceed debounce and allow effects to run
-    vi.advanceTimersByTime(2000);
-    await Promise.resolve();
-    await Promise.resolve();
-    // Assert the field reflects the new value (change handled without errors)
-    expect((document.querySelector('#releases-per-page-repo') as HTMLInputElement).value).toBe('7');
-    vi.useRealTimers();
+    const { div, cleanup } = await renderDialog(true);
+    try {
+      // Allow portal render/effects
+      await Promise.resolve();
+      await Promise.resolve();
+      const rpp = document.querySelector('#releases-per-page-repo') as HTMLInputElement | null;
+      expect(rpp).toBeTruthy();
+      rpp!.value = '7';
+      rpp!.dispatchEvent(new Event('input', { bubbles: true }));
+      rpp!.dispatchEvent(new Event('change', { bubbles: true }));
+      // Proceed debounce and allow effects to run
+      vi.advanceTimersByTime(2000);
+      await Promise.resolve();
+      await Promise.resolve();
+      // Assert the field reflects the new value (change handled without errors)
+      expect((document.querySelector('#releases-per-page-repo') as HTMLInputElement).value).toBe('7');
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
   });
 });

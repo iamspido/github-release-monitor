@@ -30,10 +30,15 @@ describe('RefreshButton disabled offline', () => {
     const div = document.createElement('div');
     document.body.appendChild(div);
     const root = ReactDOM.createRoot(div);
-    flushSync(() => { root.render(<RefreshButton />); });
-    await Promise.resolve();
-    const btn = document.querySelector('button[type="submit"]');
-    expect(btn).toBeTruthy();
-    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    try {
+      flushSync(() => { root.render(<RefreshButton />); });
+      await Promise.resolve();
+      const btn = document.querySelector('button[type="submit"]');
+      expect(btn).toBeTruthy();
+      expect((btn as HTMLButtonElement).disabled).toBe(true);
+    } finally {
+      flushSync(() => { root.unmount(); });
+      div.remove();
+    }
   });
 });

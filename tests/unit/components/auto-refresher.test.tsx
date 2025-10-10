@@ -21,8 +21,18 @@ describe('AutoRefresher', () => {
       cb();
       return 1 as any;
     });
-    vi.spyOn(global, 'clearInterval' as any).mockImplementation(() => {});
-    return { si, get cb() { return savedCb; } };
+    const ci = vi.spyOn(global, 'clearInterval' as any).mockImplementation(() => {});
+    return {
+      si,
+      ci,
+      get cb() {
+        return savedCb;
+      },
+      restore: () => {
+        si.mockRestore();
+        ci.mockRestore();
+      },
+    };
   }
 
   it('triggers refresh when online', async () => {
@@ -40,20 +50,31 @@ describe('AutoRefresher', () => {
     const { refreshAndCheckAction } = await import('@/app/actions');
     // routerRef used by component
 
-    const { si } = mockIntervalImmediate();
+    const { restore } = mockIntervalImmediate();
     const div = document.createElement('div');
     document.body.appendChild(div);
     const root = ReactDOM.createRoot(div);
+    const originalOnLine = Object.getOwnPropertyDescriptor(window.navigator, 'onLine');
     Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true } as any);
-    flushSync(() => {
-      root.render(<AutoRefresher intervalMinutes={1} />);
-    });
-    // allow startTransition to schedule
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(refreshAndCheckAction).toHaveBeenCalledTimes(1);
-    expect(routerRef.refresh).toHaveBeenCalledTimes(1);
-    si.mockRestore();
+    try {
+      flushSync(() => {
+        root.render(<AutoRefresher intervalMinutes={1} />);
+      });
+      // allow startTransition to schedule
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(refreshAndCheckAction).toHaveBeenCalledTimes(1);
+      expect(routerRef.refresh).toHaveBeenCalledTimes(1);
+    } finally {
+      flushSync(() => { root.unmount(); });
+      div.remove();
+      if (originalOnLine) {
+        Object.defineProperty(window.navigator, 'onLine', originalOnLine);
+      } else {
+        delete (window.navigator as any).onLine;
+      }
+      restore();
+    }
   });
 
   it('skips refresh when offline', async () => {
@@ -69,19 +90,30 @@ describe('AutoRefresher', () => {
     const { AutoRefresher } = await import('@/components/auto-refresher');
     const { refreshAndCheckAction } = await import('@/app/actions');
 
-    const { si } = mockIntervalImmediate();
+    const { restore } = mockIntervalImmediate();
     const div = document.createElement('div');
     document.body.appendChild(div);
     const root = ReactDOM.createRoot(div);
     // Guard also uses navigator.onLine; ensure false
+    const originalOnLine = Object.getOwnPropertyDescriptor(window.navigator, 'onLine');
     Object.defineProperty(window.navigator, 'onLine', { value: false, configurable: true } as any);
-    flushSync(() => {
-      root.render(<AutoRefresher intervalMinutes={1} />);
-    });
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(refreshAndCheckAction).not.toHaveBeenCalled();
-    expect(routerRef.refresh).not.toHaveBeenCalled();
-    si.mockRestore();
+    try {
+      flushSync(() => {
+        root.render(<AutoRefresher intervalMinutes={1} />);
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(refreshAndCheckAction).not.toHaveBeenCalled();
+      expect(routerRef.refresh).not.toHaveBeenCalled();
+    } finally {
+      flushSync(() => { root.unmount(); });
+      div.remove();
+      if (originalOnLine) {
+        Object.defineProperty(window.navigator, 'onLine', originalOnLine);
+      } else {
+        delete (window.navigator as any).onLine;
+      }
+      restore();
+    }
   });
 });

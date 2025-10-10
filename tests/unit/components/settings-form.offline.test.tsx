@@ -38,18 +38,30 @@ describe('SettingsForm offline autosave paused', () => {
         isAppriseConfigured={true}
       />
     );
-    return { div };
+    return {
+      div,
+      cleanup: () => {
+        root.unmount();
+        if (div.parentNode) {
+          div.remove();
+        }
+      },
+    };
   }
 
   it('does not call updateSettingsAction while offline', async () => {
     vi.useFakeTimers();
-    const { div } = renderForm(false);
-    const { updateSettingsAction } = await import('@/app/settings/actions');
-    // Trigger a change that would normally autosave
-    const localeSelect = div.querySelector('#language-select');
-    if (localeSelect) localeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    vi.advanceTimersByTime(2000);
-    expect(updateSettingsAction).not.toHaveBeenCalled();
-    vi.useRealTimers();
+    const { div, cleanup } = renderForm(false);
+    try {
+      const { updateSettingsAction } = await import('@/app/settings/actions');
+      // Trigger a change that would normally autosave
+      const localeSelect = div.querySelector('#language-select');
+      if (localeSelect) localeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      vi.advanceTimersByTime(2000);
+      expect(updateSettingsAction).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
   });
 });

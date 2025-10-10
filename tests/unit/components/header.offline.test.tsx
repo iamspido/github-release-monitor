@@ -56,9 +56,14 @@ describe('Header logout disabled offline', () => {
     const div = document.createElement('div');
     document.body.appendChild(div);
     const root = ReactDOM.createRoot(div);
-    flushSync(() => { root.render(<Header locale="en" />); });
-    await Promise.resolve();
-    const headerEl = document.querySelector('header');
-    expect(headerEl).toBeTruthy();
+    try {
+      flushSync(() => { root.render(<Header locale="en" />); });
+      await Promise.resolve();
+      const headerEl = document.querySelector('header');
+      expect(headerEl).toBeTruthy();
+    } finally {
+      flushSync(() => { root.unmount(); });
+      div.remove();
+    }
   });
 });
