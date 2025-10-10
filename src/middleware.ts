@@ -34,6 +34,7 @@ for (const routeKey of Object.keys(pathnames) as RouteKey[]) {
 }
 
 const logSettings = logger.withScope('Settings');
+const SETTINGS_LOCALE_API_PATH = '/api/settings-locale';
 
 export async function middleware(request: NextRequest) {
   const logAuth = logger.withScope('Auth');
@@ -165,34 +166,62 @@ export const config = {
   matcher: ['/((?!api|trpc|_next|_vercel|.*\\..*).*)'],
 };
 
-async function fetchSettingsLocale(request: NextRequest): Promise<LocaleKey> {
-  try {
-    const apiUrl = new URL('/api/settings-locale', request.url);
-    const response = await fetch(apiUrl, {
-      cache: 'no-store',
-      headers: {
-        'cache-control': 'no-store',
-        'x-from-middleware': '1',
-      },
-    });
+async function fetchSettingsLocale(
+  request: NextRequest,
+  options?: { fetchImpl?: typeof fetch },
+): Promise<LocaleKey> {
+  const fetchImpl = options?.fetchImpl ?? fetch;
+  const apiUrls = buildSettingsLocaleApiUrls(request);
+  const attemptSummaries: string[] = [];
+  let lastError: unknown = null;
 
-    if (!response.ok) {
+  for (const apiUrl of apiUrls) {
+    try {
+      const response = await fetchImpl(apiUrl, {
+        cache: 'no-store',
+        headers: {
+          'cache-control': 'no-store',
+          'x-from-middleware': '1',
+        },
+      });
+
+      if (!response.ok) {
+        attemptSummaries.push(`${apiUrl.toString()} (status=${response.status})`);
+        logSettings.warn(
+          `Failed to fetch settings locale (status=${response.status}) from ${apiUrl.origin}. Trying next candidate.`,
+        );
+        continue;
+      }
+
+      const data = (await response.json()) as { locale?: string | null };
+      if (data.locale && localeSet.has(data.locale)) {
+        return data.locale as LocaleKey;
+      }
+
+      attemptSummaries.push(`${apiUrl.toString()} (invalid locale='${data.locale ?? 'undefined'}')`);
       logSettings.warn(
-        `Failed to fetch settings locale (status=${response.status}). Falling back to default locale.`,
+        `Received invalid locale '${data.locale ?? 'undefined'}' from ${apiUrl.origin}. Trying next candidate.`,
       );
-      return defaultLocale;
+    } catch (error) {
+      lastError = error;
+      attemptSummaries.push(`${apiUrl.toString()} (fetch failed)`);
+      logSettings.warn(
+        `Error fetching settings locale from ${apiUrl.origin}. Trying next candidate.`,
+        error,
+      );
     }
+  }
 
-    const data = (await response.json()) as { locale?: string | null };
-    if (data.locale && localeSet.has(data.locale)) {
-      return data.locale as LocaleKey;
-    }
-
-    logSettings.warn(
-      `Received invalid locale '${data.locale ?? 'undefined'}' from settings. Falling back to default locale.`,
+  if (apiUrls.length > 0) {
+    logSettings.error(
+      `Error fetching settings locale in middleware. Attempts: ${attemptSummaries.join('; ')}. Falling back to default locale.`,
+      lastError || undefined,
     );
-  } catch (error) {
-    logSettings.error('Error fetching settings locale in middleware. Falling back to default locale.', error);
+  } else {
+    logSettings.error(
+      'Error fetching settings locale in middleware. No candidate API origins resolved. Falling back to default locale.',
+      lastError || undefined,
+    );
   }
 
   return defaultLocale;
@@ -265,3 +294,125 @@ function buildRedirectUrl(request: NextRequest, locale: LocaleKey, localizedRest
   url.hash = request.nextUrl.hash;
   return url;
 }
+
+function buildSettingsLocaleApiUrls(request: NextRequest): URL[] {
+  const origins: string[] = [];
+  const seen = new Set<string>();
+
+  const addOrigin = (candidate?: string | null) => {
+    if (!candidate) return;
+    const normalized = normalizeOrigin(candidate);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    origins.push(normalized);
+  };
+
+  const requestOrigin = request.nextUrl?.origin;
+  addOrigin(requestOrigin);
+
+  const forwardedProto = normalizeProtocolValue(
+    getFirstHeaderValue(request.headers.get('x-forwarded-proto')),
+  );
+  const forwardedHost = getFirstHeaderValue(request.headers.get('x-forwarded-host'));
+  const forwardedPort = getFirstHeaderValue(request.headers.get('x-forwarded-port'));
+  const headerHost = getFirstHeaderValue(request.headers.get('host'));
+  const requestProtocol = normalizeProtocolValue(request.nextUrl?.protocol) || 'http';
+  const requestPort = request.nextUrl?.port;
+
+  const hostEntries = [
+    { host: forwardedHost, proto: forwardedProto, port: forwardedPort },
+    { host: headerHost, proto: forwardedProto || requestProtocol, port: requestPort || forwardedPort },
+  ];
+
+  for (const entry of hostEntries) {
+    if (!entry.host) continue;
+    const proto = normalizeProtocolValue(entry.proto) || inferProtocol(entry.host);
+    const port = entry.host.includes(':') ? undefined : entry.port;
+    const hostWithPort = port ? `${entry.host}:${port}` : entry.host;
+    const origin = `${proto}://${hostWithPort}`;
+    addOrigin(origin);
+    if (!entry.host.includes(':') && !port && requestPort) {
+      addOrigin(`${proto}://${entry.host}:${requestPort}`);
+    }
+  }
+
+  const fallbackPorts = uniqueDefined([forwardedPort, requestPort, process.env.PORT, '3000']);
+
+  for (const port of fallbackPorts) {
+    addOrigin(`http://127.0.0.1:${port}`);
+    addOrigin(`http://localhost:${port}`);
+  }
+
+  if (origins.length === 0) {
+    addOrigin('http://127.0.0.1:3000');
+  }
+
+  return origins.map(origin => new URL(SETTINGS_LOCALE_API_PATH, origin));
+}
+
+function uniqueDefined(values: Array<string | undefined | null>): string[] {
+  const result: string[] = [];
+  for (const value of values) {
+    if (!value) continue;
+    if (!result.includes(value)) {
+      result.push(value);
+    }
+  }
+  return result;
+}
+
+function getFirstHeaderValue(value: string | null): string | undefined {
+  if (!value) return undefined;
+  const first = value.split(',')[0]?.trim();
+  return first || undefined;
+}
+
+function inferProtocol(host: string): string {
+  if (!host) return 'http';
+  if (host.includes('localhost') || host.includes('127.')) {
+    return 'http';
+  }
+  return process.env.HTTPS === 'false' ? 'http' : 'https';
+}
+
+function normalizeProtocolValue(value: string | undefined | null): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return undefined;
+  return trimmed.endsWith(':') ? trimmed.slice(0, -1) : trimmed;
+}
+
+function normalizeOrigin(candidate: string): string | null {
+  if (!candidate) {
+    return null;
+  }
+  const trimmed = candidate.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const tryNormalize = (value: string): string | null => {
+    try {
+      const url = new URL(value);
+      if (!url.protocol || !url.host) {
+        return null;
+      }
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      return null;
+    }
+  };
+
+  return (
+    tryNormalize(trimmed) ||
+    tryNormalize(`http://${trimmed}`) ||
+    tryNormalize(`https://${trimmed}`)
+  );
+}
+
+export const __test__ = {
+  fetchSettingsLocale,
+  buildSettingsLocaleApiUrls,
+};
