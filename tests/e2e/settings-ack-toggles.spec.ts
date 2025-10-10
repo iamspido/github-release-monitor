@@ -1,24 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { waitForAutosave } from './utils';
-
-async function loginAndEnsureRepo(page) {
-  const username = process.env.AUTH_USERNAME || 'test';
-  const password = process.env.AUTH_PASSWORD || 'test';
-  await page.goto('/en/login');
-  await page.getByLabel('Username').fill(username);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-  await page.goto('/en/test');
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
-}
+import { waitForAutosave, ensureTestRepo, login, waitForRepoLink } from './utils';
 
 test("disabling 'Mark as seen' hides both action buttons", async ({ page }) => {
-  await loginAndEnsureRepo(page);
+  await login(page);
+  await ensureTestRepo(page);
   // Make repo 'new' so actions would appear normally
   await page.goto('/en');
+  await waitForRepoLink(page);
   await page.getByRole('button', { name: 'Refresh' }).click();
-  await expect(page.getByRole('button', { name: 'Mark as seen' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Mark as seen' }).first()).toBeVisible({ timeout: 10_000 });
 
   // Disable acknowledge feature
   await page.goto('/en/settings');
@@ -29,6 +19,7 @@ test("disabling 'Mark as seen' hides both action buttons", async ({ page }) => {
 
   // Back to home
   await page.goto('/en');
+  await waitForRepoLink(page);
   await expect(page.getByRole('button', { name: 'Mark as seen' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Mark as new' })).toHaveCount(0);
   // Restore setting (re-enable) to avoid affecting subsequent tests
@@ -38,26 +29,28 @@ test("disabling 'Mark as seen' hides both action buttons", async ({ page }) => {
 });
 
 test("disabling 'Mark as new' hides only that button when not new", async ({ page }) => {
-  await loginAndEnsureRepo(page);
+  await login(page);
+  await ensureTestRepo(page);
   await page.goto('/en');
+  await waitForRepoLink(page);
   // Ensure not-new state: if 'Mark as seen' exists, click it to clear new flag
-  const markSeen = page.getByRole('button', { name: 'Mark as seen' });
+  const markSeen = page.getByRole('button', { name: 'Mark as seen' }).first();
   if (await markSeen.isVisible().catch(() => false)) {
     await markSeen.click();
   }
   // Ensure we see 'Mark as new' in default config; if not, click refresh then acknowledge to clear new
-  const markNewBtn = page.getByRole('button', { name: 'Mark as new' });
+  const markNewBtn = page.getByRole('button', { name: 'Mark as new' }).first();
   if (!(await markNewBtn.isVisible().catch(() => false))) {
-    const refreshBtn = page.getByRole('button', { name: 'Refresh' });
+    const refreshBtn = page.getByRole('button', { name: 'Refresh' }).first();
     if (await refreshBtn.isVisible().catch(() => false)) {
       await refreshBtn.click();
     }
-    const markSeen2 = page.getByRole('button', { name: 'Mark as seen' });
+    const markSeen2 = page.getByRole('button', { name: 'Mark as seen' }).first();
     if (await markSeen2.isVisible().catch(() => false)) {
       await markSeen2.click();
     }
   }
-  await expect(page.getByRole('button', { name: 'Mark as new' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Mark as new' }).first()).toBeVisible({ timeout: 10_000 });
 
   // Disable 'Show Mark as new'
   await page.goto('/en/settings');
@@ -66,6 +59,7 @@ test("disabling 'Mark as new' hides only that button when not new", async ({ pag
   await waitForAutosave(page);
 
   await page.goto('/en');
+  await waitForRepoLink(page);
   await expect(page.getByRole('button', { name: 'Mark as new' })).toHaveCount(0);
   // Restore setting (re-enable) for subsequent tests
   await page.goto('/en/settings');

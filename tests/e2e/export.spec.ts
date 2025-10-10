@@ -1,23 +1,12 @@
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
+import { ensureTestRepo, login, waitForRepoLink } from './utils';
 
-async function login(page) {
-  const username = process.env.AUTH_USERNAME || 'test';
-  const password = process.env.AUTH_PASSWORD || 'test';
-  await page.goto('/en/login');
-  await page.getByLabel('Username').fill(username);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-}
-
-test('export repositories initiates download with content', async ({ page, context }) => {
+test('export repositories initiates download with content', async ({ page }) => {
   await login(page);
-  // Ensure we have at least one repository to export
-  await page.goto('/en/test');
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
-  await expect(page.getByText("The 'test/test' repository is now ready.", { exact: true })).toBeVisible();
+  await ensureTestRepo(page);
   await page.goto('/en');
+  await waitForRepoLink(page);
   const [ download ] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Export' }).click(),

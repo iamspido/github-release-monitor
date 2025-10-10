@@ -1,21 +1,12 @@
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
-
-async function loginAndEnsureRepo(page) {
-  const u = process.env.AUTH_USERNAME || 'test';
-  const p = process.env.AUTH_PASSWORD || 'test';
-  await page.goto('/en/login');
-  await page.getByLabel('Username').fill(u);
-  await page.getByLabel('Password').fill(p);
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-  await page.goto('/en/test');
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
-}
+import { ensureTestRepo, login, waitForRepoLink } from './utils';
 
 test('export JSON schema has expected fields', async ({ page }) => {
-  await loginAndEnsureRepo(page);
+  await login(page);
+  await ensureTestRepo(page);
   await page.goto('/en');
+  await waitForRepoLink(page);
 
   const [ download ] = await Promise.all([
     page.waitForEvent('download'),
@@ -37,4 +28,3 @@ test('export JSON schema has expected fields', async ({ page }) => {
     }
   }
 });
-

@@ -1,21 +1,12 @@
 import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
-
-async function loginAndEnsureRepo(page) {
-  const u = process.env.AUTH_USERNAME || 'test';
-  const p = process.env.AUTH_PASSWORD || 'test';
-  await page.goto('/en/login');
-  await page.getByLabel('Username').fill(u);
-  await page.getByLabel('Password').fill(p);
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-  await page.goto('/en/test');
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
-}
+import { ensureTestRepo, login, waitForRepoLink } from './utils';
 
 test('export then import shows 0 new and updates existing without duplicates', async ({ page }) => {
-  await loginAndEnsureRepo(page);
+  await login(page);
+  await ensureTestRepo(page);
   await page.goto('/en');
+  await waitForRepoLink(page);
 
   // Export
   const [ download ] = await Promise.all([
@@ -39,7 +30,5 @@ test('export then import shows 0 new and updates existing without duplicates', a
   await expect(page.getByText('Update Complete', { exact: true })).toBeVisible();
 
   // Ensure only one test/test card exists
-  const cards = page.getByText('test/test');
-  await expect(cards).toHaveCount(1);
+  await expect(page.getByText('test/test')).toHaveCount(1);
 });
-

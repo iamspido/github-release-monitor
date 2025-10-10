@@ -1,23 +1,16 @@
 import { test, expect } from '@playwright/test';
-
-async function loginAndEnsureRepo(page) {
-  const username = process.env.AUTH_USERNAME || 'test';
-  const password = process.env.AUTH_PASSWORD || 'test';
-  await page.goto('/en/login');
-  await page.getByLabel('Username').fill(username);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-  await page.goto('/en/test');
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
-}
+import { ensureTestRepo, login, waitForRepoLink } from './utils';
 
 test('repo dialog ESC closes without saving pending changes', async ({ page }) => {
-  await loginAndEnsureRepo(page);
+  await login(page);
+  await ensureTestRepo(page);
   await page.goto('/en');
+  await waitForRepoLink(page);
 
   // Open repo dialog
-  await page.getByRole('button', { name: 'Open settings for this repository' }).first().click();
+  const settingsButton = page.getByRole('button', { name: 'Open settings for this repository' }).first();
+  await expect(settingsButton).toBeVisible({ timeout: 10_000 });
+  await settingsButton.click();
 
   // Capture current persisted values to compare later
   const beforeRpp = await page.locator('#releases-per-page-repo').inputValue();
@@ -29,7 +22,8 @@ test('repo dialog ESC closes without saving pending changes', async ({ page }) =
   await page.keyboard.press('Escape');
 
   // Reopen and ensure values were not saved (empty means global)
-  await page.getByRole('button', { name: 'Open settings for this repository' }).first().click();
+  await expect(settingsButton).toBeVisible({ timeout: 10_000 });
+  await settingsButton.click();
   await expect(page.locator('#releases-per-page-repo')).toHaveValue(beforeRpp);
   await expect(page.locator('#include-regex-repo')).toHaveValue(beforeInc);
 });

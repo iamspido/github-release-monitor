@@ -1,21 +1,12 @@
 import { test, expect } from '@playwright/test';
-
-async function loginAndSetupTestRepo(page) {
-  const username = process.env.AUTH_USERNAME || 'test';
-  const password = process.env.AUTH_PASSWORD || 'test';
-  await page.goto('/en/login');
-  await page.getByLabel('Username').fill(username);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-  await page.goto('/en/test');
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
-}
+import { ensureTestRepo, login, waitForRepoLink } from './utils';
 
 test('release markdown renders table, code, links, and emojis', async ({ page }) => {
-  await loginAndSetupTestRepo(page);
+  await login(page);
+  await ensureTestRepo(page);
 
   await page.goto('/en');
+  await waitForRepoLink(page);
 
   // Work within the markdown content container
   const content = page.locator('.prose').first();

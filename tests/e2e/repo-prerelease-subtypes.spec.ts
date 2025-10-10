@@ -1,22 +1,15 @@
 import { test, expect } from '@playwright/test';
-
-async function loginAndEnsureRepo(page) {
-  const username = process.env.AUTH_USERNAME || 'test';
-  const password = process.env.AUTH_PASSWORD || 'test';
-  await page.goto('/en/login');
-  await page.getByLabel('Username').fill(username);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-  await page.goto('/en/test');
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
-}
+import { ensureTestRepo, login, waitForRepoLink } from './utils';
 
 test('pre-release subtypes toggle while keeping parent active', async ({ page }) => {
-  await loginAndEnsureRepo(page);
+  await login(page);
+  await ensureTestRepo(page);
   await page.goto('/en');
+  await waitForRepoLink(page);
 
-  await page.getByRole('button', { name: 'Open settings for this repository' }).first().click();
+  const settingsButton = page.getByRole('button', { name: 'Open settings for this repository' }).first();
+  await expect(settingsButton).toBeVisible({ timeout: 10_000 });
+  await settingsButton.click();
 
   // Enable Pre-release
   const pre = page.getByLabel('Pre-release');
@@ -37,4 +30,3 @@ test('pre-release subtypes toggle while keeping parent active', async ({ page })
   // Parent pre-release checkbox should remain active
   await expect(pre).toBeChecked();
 });
-
