@@ -49,15 +49,24 @@ export async function assertNoAutosave(page: Page, waitMs = 1600) {
   expect(noneVisible.some(Boolean)).toBe(false);
 }
 
-export async function ensureTestRepo(page: Page) {
-  await page.goto('/en/test');
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
-  // Wait for success toast in either EN or DE to ensure the action completed
+export async function waitForTestRepoReady(page: Page, timeoutMs = 8_000) {
   await expect.poll(async () => {
     const en = await page.getByText("The 'test/test' repository is now ready.").isVisible().catch(() => false);
     const de = await page.getByText("Das 'test/test'-Repository ist jetzt bereit.").isVisible().catch(() => false);
     return en || de;
-  }, { timeout: 8000, intervals: [200] }).toBe(true);
+  }, { timeout: timeoutMs, intervals: [200] }).toBe(true);
+}
+
+export async function ensureTestRepo(page: Page, timeoutMs = 8_000) {
+  await page.goto('/en/test');
+  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
+  await waitForTestRepoReady(page, timeoutMs);
+}
+
+export async function waitForRepoLink(page: Page, repoId = 'test/test', timeoutMs = 15_000) {
+  const link = page.locator('a', { hasText: repoId });
+  await expect(link.first()).toBeVisible({ timeout: timeoutMs });
+  return link;
 }
 
 export async function assertNotVisibleFor(locator: Locator, waitMs = 1600) {

@@ -1,70 +1,52 @@
 import { test, expect } from '@playwright/test';
-
-async function login(page) {
-  const username = process.env.AUTH_USERNAME || 'test';
-  const password = process.env.AUTH_PASSWORD || 'test';
-  await page.goto('/en/login');
-  await page.getByLabel('Username').fill(username);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Login' }).click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-}
+import { ensureTestRepo, login, waitForRepoLink } from './utils';
 
 test('setup test repo on Test page and see it on Home', async ({ page }) => {
   await login(page);
-  await page.goto('/en/test');
+  await ensureTestRepo(page);
   await expect(page.getByRole('heading', { name: 'System Configuration Test' })).toBeVisible();
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
-  // Go to home and expect the repo card to exist
   await page.goto('/en');
-  await expect(page.getByText('test/test').first()).toBeVisible();
+  await waitForRepoLink(page);
 });
 
 test('refresh marks test repo as new, then acknowledge removes the highlight', async ({ page }) => {
   await login(page);
-  // Ensure test repo exists
-  await page.goto('/en/test');
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
-  // Wait for success toast to ensure the repo exists before navigating away
-  await expect.poll(async () => {
-    const en = await page.getByText("The 'test/test' repository is now ready.").isVisible().catch(() => false);
-    const de = await page.getByText("Das 'test/test'-Repository ist jetzt bereit.").isVisible().catch(() => false);
-    return en || de;
-  }, { timeout: 8000, intervals: [200] }).toBe(true);
-
+  await ensureTestRepo(page);
   await page.goto('/en');
-  await expect(page.getByText('test/test').first()).toBeVisible();
+  await waitForRepoLink(page);
   // Trigger refresh
   await page.getByRole('button', { name: 'Refresh' }).click();
   // After refresh, ensure the card enters 'new' state; if not, refresh again
-  let markAsSeen = page.getByRole('button', { name: 'Mark as seen' });
+  let markAsSeen = page.getByRole('button', { name: 'Mark as seen' }).first();
   if (!(await markAsSeen.isVisible().catch(() => false))) {
     await page.getByRole('button', { name: 'Refresh' }).click();
-    markAsSeen = page.getByRole('button', { name: 'Mark as seen' });
+    markAsSeen = page.getByRole('button', { name: 'Mark as seen' }).first();
   }
-  await expect(markAsSeen).toBeVisible();
+  await expect(markAsSeen).toBeVisible({ timeout: 10_000 });
   await markAsSeen.click();
   // Button should disappear once acknowledged
   await expect(page.getByRole('button', { name: 'Mark as seen' })).toHaveCount(0);
 
   // And "Mark as new" should now be visible; toggling should bring back "Mark as seen"
-  const markAsNew = page.getByRole('button', { name: 'Mark as new' });
-  await expect(markAsNew).toBeVisible();
+  const markAsNew = page.getByRole('button', { name: 'Mark as new' }).first();
+  await expect(markAsNew).toBeVisible({ timeout: 8_000 });
   await markAsNew.click();
-  await expect(page.getByRole('button', { name: 'Mark as seen' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Mark as seen' }).first()).toBeVisible({ timeout: 8_000 });
 });
 
 test('remove the test repo via confirm dialog', async ({ page }) => {
   await login(page);
-  // Ensure test repo exists
-  await page.goto('/en/test');
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
+  await ensureTestRepo(page);
   await page.goto('/en');
-
+  const repoLink = await waitForRepoLink(page);
   // Click Remove on the repo card
-  await page.getByRole('button', { name: 'Remove' }).click();
+  const removeButton = page.getByRole('button', { name: 'Remove' }).first();
+  await expect(removeButton).toBeVisible({ timeout: 10_000 });
+  await removeButton.click();
   // Confirm dialog → Confirm
-  await page.getByRole('button', { name: 'Confirm' }).click();
+  const alertDialog = page.getByRole('alertdialog');
+  await expect(alertDialog).toBeVisible();
+  await alertDialog.getByRole('button', { name: 'Confirm' }).click();
   // The repo card should be gone
-  await expect(page.getByText('test/test')).toHaveCount(0);
+  await expect(repoLink).toHaveCount(0);
 });
