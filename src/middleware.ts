@@ -396,10 +396,31 @@ function normalizeOrigin(candidate: string): string | null {
   const tryNormalize = (value: string): string | null => {
     try {
       const url = new URL(value);
-      if (!url.protocol || !url.host) {
+      if (!url.protocol || !url.hostname) {
         return null;
       }
-      return `${url.protocol}//${url.host}`;
+
+      const isZeroAddress = url.hostname === '0.0.0.0' || url.hostname === '::';
+      const hostname = isZeroAddress
+        ? url.hostname === '::'
+          ? '::1'
+          : '127.0.0.1'
+        : url.hostname;
+
+      const protocol = isZeroAddress
+        ? 'http'
+        : normalizeProtocolValue(url.protocol) ?? 'http';
+
+      const needsBrackets = hostname.includes(':');
+      const hostWithPort = url.port
+        ? needsBrackets
+          ? `[${hostname}]:${url.port}`
+          : `${hostname}:${url.port}`
+        : needsBrackets
+          ? `[${hostname}]`
+          : hostname;
+
+      return `${protocol}://${hostWithPort}`;
     } catch {
       return null;
     }

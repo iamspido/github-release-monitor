@@ -41,6 +41,7 @@ vi.mock('@/lib/logger', () => {
 });
 
 let fetchSettingsLocale: (request: any, options?: { fetchImpl?: typeof fetch }) => Promise<string>;
+let buildSettingsLocaleApiUrls: (request: any) => URL[];
 
 type MockRequest = {
   headers: Headers;
@@ -66,6 +67,7 @@ const createResponse = (overrides: Partial<Response> & { json?: () => Promise<an
 beforeAll(async () => {
   const middlewareModule = await import('@/middleware');
   fetchSettingsLocale = middlewareModule.__test__.fetchSettingsLocale;
+  buildSettingsLocaleApiUrls = middlewareModule.__test__.buildSettingsLocaleApiUrls;
 });
 
 describe('fetchSettingsLocale', () => {
@@ -116,5 +118,20 @@ describe('fetchSettingsLocale', () => {
 
     expect(locale).toBe(defaultLocale);
     expect(fetchMock).toHaveBeenCalled();
+  });
+});
+
+describe('buildSettingsLocaleApiUrls', () => {
+  it('normalizes zero address host to loopback http origin', () => {
+    const request = createRequest('https://0.0.0.0:3000/en', {
+      host: '0.0.0.0:3000',
+      'x-forwarded-proto': 'https',
+    });
+
+    const urls = buildSettingsLocaleApiUrls(request as any);
+    const origins = urls.map(url => url.origin);
+
+    expect(origins).toContain('http://127.0.0.1:3000');
+    expect(origins).not.toContain('https://0.0.0.0:3000');
   });
 });
