@@ -27,35 +27,6 @@ COPY src/ ./src/
 # Build the application
 RUN npm run build
 
-# Test Stage (runs unit tests with Vitest)
-FROM node:24-alpine AS tester
-
-WORKDIR /app
-
-ENV NEXT_TELEMETRY_DISABLED=1
-
-# Copy package files and install dependencies (uses lockfile)
-COPY package*.json ./
-RUN npm ci && npm cache clean --force
-
-# Copy config and source
-COPY components.json \
-     next.config.mjs \
-     .eslintrc.json \
-     postcss.config.mjs \
-     tailwind.config.mjs \
-     tsconfig.json \
-     vitest.config.ts \
-     vitest.setup.ts \
-     ./
-
-COPY public/ ./public/
-COPY src/ ./src/
-COPY tests/ ./tests/
-
-# Run tests during image build; build fails if tests fail
-RUN npm run lint && npm run typecheck && npm test
-
 # Lint Stage (only ESLint)
 FROM node:24-alpine AS lint
 
@@ -87,8 +58,8 @@ COPY src/ ./src/
 
 RUN npm run typecheck
 
-# Coverage Stage (optional): builds an image with coverage reports under /app/coverage
-FROM node:24-alpine AS coverage
+# Test Stage (runs unit tests with Vitest)
+FROM node:24-alpine AS tester
 
 WORKDIR /app
 
@@ -96,11 +67,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copy package files and install dependencies (uses lockfile)
 COPY package*.json ./
-RUN npm install && npm cache clean --force
+RUN npm ci && npm cache clean --force
 
 # Copy config and source
 COPY components.json \
      next.config.mjs \
+     .eslintrc.json \
      postcss.config.mjs \
      tailwind.config.mjs \
      tsconfig.json \
@@ -112,10 +84,10 @@ COPY public/ ./public/
 COPY src/ ./src/
 COPY tests/ ./tests/
 
-# Generate coverage report using project dependencies
-RUN npm run test:coverage || (ls -la /app/coverage || true; exit 1)
+# Run tests during image build; build fails if tests fail
+RUN npm test
 
-# E2E Stage (Playwright): runs end-to-end tests in Docker
+# E2E Stage (Playwright)
 FROM mcr.microsoft.com/playwright:v1.55.0-jammy AS e2e
 
 WORKDIR /app
@@ -173,3 +145,31 @@ EXPOSE 3000
 
 # Start the application
 CMD ["node", "server.js"]
+
+# Coverage Stage (optional): builds an image with coverage reports under /app/coverage
+FROM node:24-alpine AS coverage
+
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Copy package files and install dependencies (uses lockfile)
+COPY package*.json ./
+RUN npm install && npm cache clean --force
+
+# Copy config and source
+COPY components.json \
+     next.config.mjs \
+     postcss.config.mjs \
+     tailwind.config.mjs \
+     tsconfig.json \
+     vitest.config.ts \
+     vitest.setup.ts \
+     ./
+
+COPY public/ ./public/
+COPY src/ ./src/
+COPY tests/ ./tests/
+
+# Generate coverage report using project dependencies
+RUN npm run test:coverage || (ls -la /app/coverage || true; exit 1)

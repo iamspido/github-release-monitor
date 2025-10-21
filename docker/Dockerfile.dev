@@ -1,6 +1,4 @@
-###############################
-# Lint Stage (ESLint)
-###############################
+# Lint Stage (only ESLint)
 FROM node:24-alpine AS lint
 
 WORKDIR /app
@@ -16,9 +14,7 @@ COPY src/ ./src/
 
 RUN npm run lint
 
-###############################
-# Typecheck Stage (TypeScript)
-###############################
+# Typecheck Stage (only TypeScript)
 FROM node:24-alpine AS typecheck
 
 WORKDIR /app
@@ -33,16 +29,14 @@ COPY src/ ./src/
 
 RUN npm run typecheck
 
-###############################
-# Test Stage (Vitest in Docker)
-###############################
+# Test Stage (runs unit tests with Vitest)
 FROM node:24-alpine AS tester
 
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Copy package files and install deps via lockfile
+# Copy package files and install dependencies (uses lockfile)
 COPY package*.json ./
 RUN npm ci && npm cache clean --force
 
@@ -56,16 +50,15 @@ COPY components.json \
      vitest.config.ts \
      vitest.setup.ts \
      ./
+
 COPY public/ ./public/
 COPY src/ ./src/
 COPY tests/ ./tests/
 
-# Run unit tests during build (lint/typecheck run in separate targets)
+# Run tests during image build; build fails if tests fail
 RUN npm test
 
-###############################
 # Builder Stage (for E2E / standalone)
-###############################
 FROM node:24-alpine AS builder
 
 WORKDIR /app
@@ -89,9 +82,7 @@ COPY src/ ./src/
 # Force production env only for the build step so Next emits standalone output
 RUN NODE_ENV=production npm run build
 
-################################
 # E2E Stage (Playwright)
-################################
 FROM mcr.microsoft.com/playwright:v1.55.0-jammy AS e2e
 
 WORKDIR /app
@@ -121,38 +112,7 @@ COPY --from=builder /app/public ./public
 # Run Playwright tests
 RUN node ./node_modules/@playwright/test/cli.js test
 
-################################
-# Coverage Stage (optional)
-################################
-FROM node:24-alpine AS coverage
-
-WORKDIR /app
-
-ENV NEXT_TELEMETRY_DISABLED=1
-
-# Copy package files and install deps via lockfile
-COPY package*.json ./
-RUN npm install && npm cache clean --force
-
-# Copy config and source
-COPY components.json \
-     next.config.mjs \
-     postcss.config.mjs \
-     tailwind.config.mjs \
-     tsconfig.json \
-     vitest.config.ts \
-     vitest.setup.ts \
-     ./
-COPY public/ ./public/
-COPY src/ ./src/
-COPY tests/ ./tests/
-
-RUN npm install -D vitest @vitest/coverage-v8 --no-save && \
-    npx -y vitest run --coverage || (ls -la /app/coverage || true; exit 1)
-
-################################
 # Development Runtime Stage
-################################
 FROM node:24-alpine
 
 WORKDIR /app
@@ -192,3 +152,31 @@ EXPOSE 3000
 
 # Start application in development mode
 CMD ["npm", "run", "dev"]
+
+# Coverage Stage
+FROM node:24-alpine AS coverage
+
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Copy package files and install dependencies (uses lockfile)
+COPY package*.json ./
+RUN npm install && npm cache clean --force
+
+# Copy config and source
+COPY components.json \
+     next.config.mjs \
+     postcss.config.mjs \
+     tailwind.config.mjs \
+     tsconfig.json \
+     vitest.config.ts \
+     vitest.setup.ts \
+     ./
+
+COPY public/ ./public/
+COPY src/ ./src/
+COPY tests/ ./tests/
+
+# Generate coverage report using project dependencies
+RUN npm run test:coverage || (ls -la /app/coverage || true; exit 1)
