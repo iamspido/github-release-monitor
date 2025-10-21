@@ -32,6 +32,7 @@ const log = logger.withScope('WebServer');
 
 const DEFAULT_FETCH_RETRY_ATTEMPTS = 3;
 const DEFAULT_FETCH_RETRY_DELAY_MS = 500;
+const DEFAULT_RESPONSE_PARSE_ATTEMPTS = 3;
 const RETRYABLE_FETCH_ERROR_CODES = new Set([
   'UND_ERR_SOCKET',
   'UND_ERR_BODY_TIMEOUT',
@@ -74,10 +75,17 @@ async function wait(delayMs: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
 }
 
+type FetchRetryContext = {
+  description?: string;
+  maxAttempts?: number;
+  initialDelayMs?: number;
+  parseAttempts?: number;
+};
+
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  context?: { description?: string; maxAttempts?: number; initialDelayMs?: number }
+  context?: FetchRetryContext
 ): Promise<Response> {
   const description = context?.description ?? url;
   const maxAttempts = context?.maxAttempts ?? DEFAULT_FETCH_RETRY_ATTEMPTS;
@@ -102,6 +110,43 @@ async function fetchWithRetry(
   }
 
   throw new Error(`Failed to fetch ${description} after ${maxAttempts} attempts.`);
+}
+
+async function fetchJsonResponseWithRetry<T>(
+  url: string,
+  options: RequestInit,
+  context?: FetchRetryContext
+): Promise<{ response: Response; data?: T }> {
+  const description = context?.description ?? url;
+  const parseAttempts = context?.parseAttempts ?? DEFAULT_RESPONSE_PARSE_ATTEMPTS;
+  const initialDelayMs = context?.initialDelayMs ?? DEFAULT_FETCH_RETRY_DELAY_MS;
+
+  for (let attempt = 1; attempt <= parseAttempts; attempt += 1) {
+    const response = await fetchWithRetry(url, options, context);
+
+    if (!response.ok) {
+      return { response };
+    }
+
+    try {
+      const data = (await response.json()) as T;
+      return { response, data };
+    } catch (error) {
+      const shouldRetry = attempt < parseAttempts && isRetryableFetchError(error);
+      if (!shouldRetry) {
+        throw error;
+      }
+
+      const delayMs = initialDelayMs * Math.pow(2, attempt - 1);
+      log.warn(
+        `Retrying ${description} JSON parse in ${delayMs}ms (attempt ${attempt + 1}/${parseAttempts}) due to response parse error.`,
+        error
+      );
+      await wait(delayMs);
+    }
+  }
+
+  throw new Error(`Failed to parse JSON for ${description} after ${parseAttempts} attempts.`);
 }
 
 
@@ -357,7 +402,7 @@ async function fetchLatestRelease(
       }
       const fetchOptions: RequestInit = { headers: currentHeaders, cache: 'no-store' };
 
-      const response = await fetchWithRetry(
+      const { response, data: pageReleases } = await fetchJsonResponseWithRetry<GithubRelease[]>(
         url,
         fetchOptions,
         { description: `GitHub releases for ${owner}/${repo} page ${page}` }
@@ -394,7 +439,10 @@ async function fetchLatestRelease(
         return { release: null, error: { type: 'api_error' }, newEtag };
       }
 
-      const pageReleases: GithubRelease[] = await response.json();
+      if (!pageReleases) {
+        throw new Error(`GitHub API returned an empty body for ${owner}/${repo} releases page ${page}.`);
+      }
+
       allReleases = [...allReleases, ...pageReleases];
 
       if (pageReleases.length < releasesOnThisPage) {
@@ -404,7 +452,9 @@ async function fetchLatestRelease(
 
     if (allReleases.length === 0) {
           log.info(`No formal releases found for ${owner}/${repo}. Falling back to tags.`);
-      const tagsResponse = await fetchWithRetry(
+      const { response: tagsResponse, data: tags } = await fetchJsonResponseWithRetry<
+        { name: string; commit: { sha: string } }[]
+      >(
         `${GITHUB_API_BASE_URL}/tags?per_page=1`,
         { headers, cache: 'no-store' },
         { description: `GitHub tags for ${owner}/${repo}` }
@@ -415,7 +465,6 @@ async function fetchLatestRelease(
           return { release: null, error: { type: 'no_releases_found' }, newEtag };
       }
 
-      const tags: {name: string, commit: {sha: string}}[] = await tagsResponse.json();
       if (!tags || tags.length === 0) {
           log.info(`No tags found for ${owner}/${repo}.`);
           return { release: null, error: { type: 'no_releases_found' }, newEtag };
@@ -428,40 +477,50 @@ async function fetchLatestRelease(
       let publicationDate = new Date().toISOString();
 
       try {
-        const refResponse = await fetchWithRetry(
+        const { response: refResponse, data: refData } = await fetchJsonResponseWithRetry<{
+          object: { type: string; sha: string; url: string };
+        }>(
           `${GITHUB_API_BASE_URL}/git/ref/tags/${latestTag.name}`,
           { headers, cache: 'no-store' },
           { description: `Git reference for ${owner}/${repo} tag ${latestTag.name}` }
         );
 
-        if (refResponse.ok) {
-            const refData = await refResponse.json();
+        if (refResponse.ok && refData) {
             // If it's an annotated tag, the object type is 'tag'.
             if (refData.object.type === 'tag') {
-                const annotatedTagResponse = await fetchWithRetry(
+                const {
+                  response: annotatedTagResponse,
+                  data: annotatedTagData,
+                } = await fetchJsonResponseWithRetry<{
+                  message?: string;
+                  tagger?: { date?: string };
+                }>(
                   refData.object.url,
                   { headers, cache: 'no-store' },
                   { description: `Annotated tag for ${owner}/${repo} tag ${latestTag.name}` }
                 );
-                if (annotatedTagResponse.ok) {
-                    const annotatedTagData = await annotatedTagResponse.json();
+                if (annotatedTagResponse.ok && annotatedTagData) {
                     if (annotatedTagData.message) {
                         bodyContent = `### ${t('tag_message_fallback_title')}\n\n---\n\n${annotatedTagData.message}`;
                     }
-                    publicationDate = annotatedTagData.tagger.date;
+                    publicationDate = annotatedTagData.tagger?.date || publicationDate;
                 }
             }
         }
 
         // If no annotated tag message was found (either lightweight tag or error), fall back to commit message.
         if (!bodyContent) {
-          const commitResponse = await fetchWithRetry(
+          const {
+            response: commitResponse,
+            data: commitData,
+          } = await fetchJsonResponseWithRetry<{
+            commit: { message: string; committer: { date: string } };
+          }>(
             `${GITHUB_API_BASE_URL}/commits/${latestTag.commit.sha}`,
             { headers, cache: 'no-store' },
             { description: `GitHub commit ${latestTag.commit.sha} for ${owner}/${repo}` }
           );
-          if (commitResponse.ok) {
-            const commitData = await commitResponse.json();
+          if (commitResponse.ok && commitData) {
             bodyContent = `### ${t('commit_message_fallback_title')}\n\n---\n\n${commitData.commit.message}`;
             publicationDate = commitData.commit.committer.date;
           } else {
@@ -538,20 +597,22 @@ async function fetchLatestRelease(
         log.info(`Release body for ${owner}/${repo} tag ${latestRelease.tag_name} is empty. Attempting to fetch commit message.`);
         const commitApiUrl = `${GITHUB_API_BASE_URL}/commits/${latestRelease.tag_name}`;
         try {
-            const commitResponse = await fetchWithRetry(
+            const {
+              response: commitResponse,
+              data: commitData,
+            } = await fetchJsonResponseWithRetry<{
+              commit?: { message?: string };
+            }>(
               commitApiUrl,
               { headers, cache: 'no-store' },
               { description: `GitHub commit for ${owner}/${repo} tag ${latestRelease.tag_name}` }
             );
-            if (commitResponse.ok) {
-                const commitData = await commitResponse.json();
-                if (commitData.commit && commitData.commit.message) {
-                    const t = await getTranslations({ locale, namespace: 'Actions' });
-                    latestRelease.body = `### ${t('commit_message_fallback_title')}\n\n---\n\n${commitData.commit.message}`;
-                    log.info(`Successfully fetched commit message for ${owner}/${repo} tag ${latestRelease.tag_name}.`);
-                } else {
-                     log.info(`Commit message for ${owner}/${repo} tag ${latestRelease.tag_name} could not be retrieved from commit data.`);
-                }
+            if (commitResponse.ok && commitData?.commit?.message) {
+                const t = await getTranslations({ locale, namespace: 'Actions' });
+                latestRelease.body = `### ${t('commit_message_fallback_title')}\n\n---\n\n${commitData.commit.message}`;
+                log.info(`Successfully fetched commit message for ${owner}/${repo} tag ${latestRelease.tag_name}.`);
+            } else if (commitResponse.ok) {
+                 log.info(`Commit message for ${owner}/${repo} tag ${latestRelease.tag_name} could not be retrieved from commit data.`);
             } else {
                 log.error(`Failed to fetch commit for ${owner}/${repo} tag ${latestRelease.tag_name}: ${commitResponse.status} ${commitResponse.statusText}`);
             }
@@ -1260,10 +1321,14 @@ export async function getGitHubRateLimit(): Promise<RateLimitResult> {
   }
 
   try {
-    const response = await fetch(GITHUB_API_URL, {
-      headers,
-      cache: 'no-store',
-    });
+    const { response, data } = await fetchJsonResponseWithRetry<RateLimitResult['data']>(
+      GITHUB_API_URL,
+      {
+        headers,
+        cache: 'no-store',
+      },
+      { description: 'GitHub rate limit endpoint' }
+    );
 
     if (!response.ok) {
       log.error(
@@ -1274,8 +1339,7 @@ export async function getGitHubRateLimit(): Promise<RateLimitResult> {
       }
       return {data: null, error: 'api_error'};
     }
-    const data = await response.json();
-    return {data, error: undefined};
+    return {data: data ?? null, error: undefined};
   } catch (error) {
     log.error('Failed to fetch GitHub rate limit:', error);
     return {data: null, error: 'api_error'};
