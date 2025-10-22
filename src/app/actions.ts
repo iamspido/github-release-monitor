@@ -330,6 +330,15 @@ ${t('apprise_basic_link_text')} (https://github.com/iamspido/github-release-moni
   };
 }
 
+function resolveParallelRepoFetches(settings: AppSettings): number {
+  const raw = Number(settings.parallelRepoFetches);
+  if (!Number.isFinite(raw)) {
+    return 1;
+  }
+  const rounded = Math.round(raw);
+  return Math.min(Math.max(rounded, 1), 50);
+}
+
 
 async function fetchLatestRelease(
   owner: string,
@@ -673,19 +682,27 @@ export async function getLatestReleasesForRepos(
   locale: string,
   options?: { skipCache?: boolean }
 ): Promise<EnrichedRelease[]> {
-  const enrichedReleases: EnrichedRelease[] = [];
+  if (repositories.length === 0) {
+    return [];
+  }
 
-  for (const repo of repositories) {
+  const configuredParallel = resolveParallelRepoFetches(settings);
+  const effectiveBatchSize = Math.min(configuredParallel, repositories.length);
+  const tokenConfigured = !!(process.env.GITHUB_ACCESS_TOKEN && process.env.GITHUB_ACCESS_TOKEN.trim());
+  log.info(
+    `Fetching ${repositories.length} repositories with parallel batch size ${effectiveBatchSize} (configured=${configuredParallel}, token configured=${tokenConfigured ? 'yes' : 'no'}).`
+  );
+
+  const buildEnrichedRelease = async (repo: Repository): Promise<EnrichedRelease> => {
     const parsed = parseGitHubUrl(repo.url);
     if (!parsed) {
       log.warn(`Skipping invalid GitHub URL for repoId=${repo.id}`);
-      enrichedReleases.push({
+      return {
         repoId: repo.id,
         repoUrl: repo.url,
         error: { type: 'invalid_url' },
         isNew: repo.isNew,
-      });
-      continue;
+      };
     }
 
     const repoSettings = {
@@ -710,18 +727,20 @@ export async function getLatestReleasesForRepos(
 
     if (error?.type === 'not_modified') {
       const cached: CachedRelease | undefined = repo.latestRelease;
-      const reconstructedRelease: GithubRelease | undefined = cached ? {
-        ...cached,
-        id: 0,
-        prerelease: false,
-        draft: false,
-      } : undefined;
+      const reconstructedRelease: GithubRelease | undefined = cached
+        ? {
+            ...cached,
+            id: 0,
+            prerelease: false,
+            draft: false,
+          }
+        : undefined;
 
       if (reconstructedRelease) {
         reconstructedRelease.fetched_at = new Date().toISOString();
       }
 
-      enrichedReleases.push({
+      return {
         repoId: repo.id,
         repoUrl: repo.url,
         release: reconstructedRelease,
@@ -729,45 +748,54 @@ export async function getLatestReleasesForRepos(
         isNew: repo.isNew,
         repoSettings: repoSettings,
         newEtag: newEtag,
-      });
-      continue;
+      };
     }
 
     if (error) {
-      enrichedReleases.push({
+      return {
         repoId: repo.id,
         repoUrl: repo.url,
         error: error,
         isNew: repo.isNew,
         repoSettings: repoSettings,
         newEtag: newEtag,
-      });
-      continue;
+      };
     }
 
     if (!latestRelease) {
-      enrichedReleases.push({
+      return {
         repoId: repo.id,
         repoUrl: repo.url,
         error: { type: 'api_error' },
         isNew: repo.isNew,
         repoSettings: repoSettings,
         newEtag: newEtag,
-      });
-      continue;
+      };
     }
 
-    enrichedReleases.push({
+    return {
       repoId: repo.id,
       repoUrl: repo.url,
       release: latestRelease,
       isNew: repo.isNew,
       repoSettings: repoSettings,
       newEtag: newEtag,
-    });
+    };
+  };
+
+  const results: EnrichedRelease[] = new Array(repositories.length);
+
+  for (let start = 0; start < repositories.length; start += effectiveBatchSize) {
+    const batch = repositories.slice(start, start + effectiveBatchSize);
+    await Promise.all(
+      batch.map(async (repo, offset) => {
+        const result = await buildEnrichedRelease(repo);
+        results[start + offset] = result;
+      })
+    );
   }
 
-  return enrichedReleases;
+  return results;
 }
 
 export async function addRepositoriesAction(
@@ -1105,6 +1133,9 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
   log.info(`Running check for new releases...`);
   const settings = await getSettings();
   const effectiveLocale = options?.overrideLocale || settings.locale;
+  const parallelLimit = resolveParallelRepoFetches(settings);
+  const tokenConfigured = !!(process.env.GITHUB_ACCESS_TOKEN && process.env.GITHUB_ACCESS_TOKEN.trim());
+  log.info(`Parallel fetch batch size set to ${parallelLimit} (GitHub token configured=${tokenConfigured ? 'yes' : 'no'}).`);
 
   const originalRepos = await getRepositories();
   if (originalRepos.length === 0) {

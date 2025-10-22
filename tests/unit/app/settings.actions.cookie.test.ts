@@ -18,7 +18,7 @@ vi.mock('@/lib/repository-storage', () => ({
 
 vi.mock('@/lib/settings-storage', () => ({
   getSettings: async () => ({
-    timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30,
+    timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30, parallelRepoFetches: 5,
     releaseChannels: ['stable'], preReleaseSubChannels: ['beta'], includeRegex: undefined, excludeRegex: undefined, showAcknowledge: true,
   }),
   saveSettings: async (s: any) => s,
@@ -33,7 +33,7 @@ describe('updateSettingsAction cookie and trigger', () => {
 
     const { updateSettingsAction } = await import('@/app/settings/actions');
     const res = await updateSettingsAction({
-      timeFormat: '24h', locale: 'de', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30,
+      timeFormat: '24h', locale: 'de', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30, parallelRepoFetches: 5,
       releaseChannels: ['stable'],
     } as any);
 
@@ -45,4 +45,3 @@ describe('updateSettingsAction cookie and trigger', () => {
     expect(value).toBe('de');
   });
 });
-

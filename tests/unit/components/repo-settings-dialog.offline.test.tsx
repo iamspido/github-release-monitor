@@ -55,6 +55,7 @@ describe('RepoSettingsDialog offline behavior', () => {
           refreshInterval: 10,
           cacheInterval: 5,
           releasesPerPage: 30,
+          parallelRepoFetches: 5,
           releaseChannels: ['stable'],
           preReleaseSubChannels: undefined,
           showAcknowledge: true,

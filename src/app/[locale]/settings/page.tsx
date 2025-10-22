@@ -12,6 +12,7 @@ export default async function SettingsPage({params}: {params: Promise<{locale: s
   const t = await getTranslations({locale: locale, namespace: 'SettingsPage'});
   const currentSettings: AppSettings = await getSettings();
   const isAppriseConfigured = !!process.env.APPRISE_URL;
+  const isGithubTokenSet = !!(process.env.GITHUB_ACCESS_TOKEN && process.env.GITHUB_ACCESS_TOKEN.trim());
   const updateNotice = await getUpdateNotificationState();
 
   return (
@@ -25,6 +26,7 @@ export default async function SettingsPage({params}: {params: Promise<{locale: s
             <SettingsForm
               currentSettings={currentSettings}
               isAppriseConfigured={isAppriseConfigured}
+              isGithubTokenSet={isGithubTokenSet}
             />
         </div>
       </main>

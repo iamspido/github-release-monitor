@@ -22,6 +22,7 @@ describe('actions fetcher scenarios', () => {
     refreshInterval: 10,
     cacheInterval: 0,
     releasesPerPage: 30,
+    parallelRepoFetches: 5,
     releaseChannels: ['stable'],
   } as any;
 
@@ -148,4 +149,3 @@ describe('actions fetcher scenarios', () => {
     expect(enriched[0].error?.type).toBe('repo_not_found');
   });
 });
-

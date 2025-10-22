@@ -17,7 +17,7 @@ describe('settings actions error paths', () => {
   it('updateSettingsAction returns error message when saveSettings throws', async () => {
     vi.doMock('@/lib/settings-storage', () => ({
       getSettings: async () => ({
-        timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30,
+        timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30, parallelRepoFetches: 5,
         releaseChannels: ['stable'], preReleaseSubChannels: ['beta'], includeRegex: undefined, excludeRegex: undefined, showAcknowledge: true,
       }),
       saveSettings: async () => { throw new Error('fail-save'); },
@@ -28,7 +28,7 @@ describe('settings actions error paths', () => {
     }));
 
     const { updateSettingsAction } = await import('@/app/settings/actions');
-    const res = await updateSettingsAction({ locale: 'en', timeFormat: '24h', refreshInterval: 1, cacheInterval: 5, releasesPerPage: 30, releaseChannels: ['stable'] } as any);
+    const res = await updateSettingsAction({ locale: 'en', timeFormat: '24h', refreshInterval: 1, cacheInterval: 5, releasesPerPage: 30, parallelRepoFetches: 5, releaseChannels: ['stable'] } as any);
     expect(res.success).toBe(false);
     expect(res.message.description).toBe('toast_error_description');
   });

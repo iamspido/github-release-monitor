@@ -26,6 +26,7 @@ vi.mock('@/lib/settings-storage', () => ({
     refreshInterval: 10,
     cacheInterval: 0,
     releasesPerPage: 30,
+    parallelRepoFetches: 5,
     releaseChannels: ['stable'],
     showAcknowledge: true,
   }),
@@ -104,4 +105,3 @@ describe('deduplication in checkForNewReleases', () => {
     expect(mem.repos[0].lastSeenReleaseTag).toBe('v2');
   });
 });
-

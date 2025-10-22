@@ -18,6 +18,7 @@ describe('filters: include/exclude/channels/subchannels', () => {
     refreshInterval: 10,
     cacheInterval: 0,
     releasesPerPage: 30,
+    parallelRepoFetches: 5,
     releaseChannels: ['stable', 'prerelease', 'draft'],
     preReleaseSubChannels: ['beta', 'rc'],
   } as any;
@@ -105,4 +106,3 @@ describe('filters: include/exclude/channels/subchannels', () => {
     expect(enriched[0].error?.type).toBe('no_matching_releases');
   });
 });
-

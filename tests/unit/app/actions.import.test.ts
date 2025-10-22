@@ -24,6 +24,7 @@ vi.mock('@/lib/settings-storage', () => ({
     refreshInterval: 10,
     cacheInterval: 0,
     releasesPerPage: 30,
+    parallelRepoFetches: 5,
     releaseChannels: ['stable'],
     showAcknowledge: true,
   }),
@@ -56,4 +57,3 @@ describe('importRepositoriesAction idempotency', () => {
     expect(mem.repos.find(r => r.id === 'owner2/repo2')).toBeTruthy();
   });
 });
-

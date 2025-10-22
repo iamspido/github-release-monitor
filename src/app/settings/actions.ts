@@ -47,9 +47,20 @@ export async function updateSettingsAction(newSettings: AppSettings) {
     const rppChanged = currentSettings.releasesPerPage !== newSettings.releasesPerPage;
 
     // Ensure refreshInterval is at least 1
+    const sanitizedParallelRepoFetches = (() => {
+      const incoming = Number.isFinite(newSettings.parallelRepoFetches)
+        ? Math.round(newSettings.parallelRepoFetches)
+        : currentSettings.parallelRepoFetches;
+      const fallback = Number.isFinite(incoming) ? incoming : currentSettings.parallelRepoFetches;
+      const normalized = Number.isFinite(fallback) ? fallback : 1;
+      return Math.min(Math.max(normalized, 1), 50);
+    })();
+
     const settingsToSave = {
         ...newSettings,
         refreshInterval: Math.max(1, newSettings.refreshInterval),
+        cacheInterval: Math.max(0, newSettings.cacheInterval),
+        parallelRepoFetches: sanitizedParallelRepoFetches,
         includeRegex: newSettings.includeRegex?.trim() || undefined,
         excludeRegex: newSettings.excludeRegex?.trim() || undefined,
         appriseTags: newSettings.appriseTags?.trim() || undefined,
@@ -70,6 +81,7 @@ export async function updateSettingsAction(newSettings: AppSettings) {
     pushIf('refreshInterval', oldS.refreshInterval, newS.refreshInterval);
     pushIf('cacheInterval', oldS.cacheInterval, newS.cacheInterval);
     pushIf('releasesPerPage', oldS.releasesPerPage, newS.releasesPerPage);
+    pushIf('parallelRepoFetches', oldS.parallelRepoFetches, newS.parallelRepoFetches);
     pushIf('releaseChannels', oldS.releaseChannels, newS.releaseChannels, true);
     pushIf('preReleaseSubChannels', oldS.preReleaseSubChannels, newS.preReleaseSubChannels, true);
     pushIf('showAcknowledge', oldS.showAcknowledge, newS.showAcknowledge);

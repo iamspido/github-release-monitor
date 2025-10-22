@@ -16,7 +16,7 @@ describe('virtual test repo path produces release with content', () => {
     const repo: Repository = { id: 'test/test', url: 'https://github.com/test/test' } as any;
     const settings: AppSettings = {
       timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 0,
-      releasesPerPage: 30, releaseChannels: ['stable'],
+      releasesPerPage: 30, parallelRepoFetches: 5, releaseChannels: ['stable'],
     } as any;
 
     const res = await getLatestReleasesForRepos([repo], settings, 'en', { skipCache: true });
@@ -25,4 +25,3 @@ describe('virtual test repo path produces release with content', () => {
     expect(String(res[0].release!.body)).toContain('section_code_blocks');
   });
 });
-

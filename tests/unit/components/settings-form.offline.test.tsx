@@ -31,11 +31,13 @@ describe('SettingsForm offline autosave paused', () => {
           refreshInterval: 10,
           cacheInterval: 5,
           releasesPerPage: 30,
+          parallelRepoFetches: 1,
           releaseChannels: ['stable'],
           preReleaseSubChannels: undefined,
           showAcknowledge: true,
         } as any}
         isAppriseConfigured={true}
+        isGithubTokenSet={false}
       />
     );
     return {

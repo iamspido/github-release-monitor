@@ -40,6 +40,7 @@ const baseSettings = {
   refreshInterval: 10,
   cacheInterval: 5,
   releasesPerPage: 30,
+  parallelRepoFetches: 5,
   releaseChannels: ['stable'],
   appriseMaxCharacters: 0,
 } as any;

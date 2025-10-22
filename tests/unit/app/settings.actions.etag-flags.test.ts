@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mem = {
   repos: [] as any[],
   settings: {
-    timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30,
+    timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30, parallelRepoFetches: 5,
     releaseChannels: ['stable'], preReleaseSubChannels: ['beta'], includeRegex: undefined as string | undefined, excludeRegex: undefined as string | undefined, showAcknowledge: true,
   },
 }
@@ -31,7 +31,7 @@ describe('updateSettingsAction clears ETags for all change flags', () => {
       { id: 'c/d', url: 'https://github.com/c/d', etag: 'E2' },
     ]
     mem.settings = {
-      timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30,
+      timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30, parallelRepoFetches: 5,
       releaseChannels: ['stable'], preReleaseSubChannels: ['beta'], includeRegex: undefined, excludeRegex: undefined, showAcknowledge: true,
     }
   })
@@ -59,4 +59,3 @@ describe('updateSettingsAction clears ETags for all change flags', () => {
     await runAndAssert({ ...mem.settings, releasesPerPage: 99 })
   })
 })
-

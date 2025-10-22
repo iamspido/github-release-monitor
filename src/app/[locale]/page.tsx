@@ -58,7 +58,7 @@ export default async function HomePage({params}: {params: Promise<{locale: strin
   } catch (e: any) {
     logger.withScope('WebServer').error('Failed to load repositories or releases:', e);
     error = t('load_error');
-    settings = { timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releaseChannels: ['stable'], showAcknowledge: true, releasesPerPage: 30 };
+    settings = { timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releaseChannels: ['stable'], showAcknowledge: true, releasesPerPage: 30, parallelRepoFetches: 1 };
   }
 
   return (

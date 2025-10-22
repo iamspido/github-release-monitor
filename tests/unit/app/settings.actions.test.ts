@@ -15,7 +15,7 @@ vi.mock('next/headers', () => ({
 
 const memRepos: { list: any[] } = { list: [] };
 const settingsStore: { current: any } = { current: {
-  timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30,
+  timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30, parallelRepoFetches: 5,
   releaseChannels: ['stable'], preReleaseSubChannels: ['beta'], includeRegex: undefined, excludeRegex: undefined, showAcknowledge: true,
 }};
 
@@ -34,7 +34,7 @@ describe('settings actions', () => {
     vi.resetModules();
     memRepos.list = [];
     settingsStore.current = {
-      timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30,
+      timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30, parallelRepoFetches: 5,
       releaseChannels: ['stable'], preReleaseSubChannels: ['beta'], includeRegex: undefined, excludeRegex: undefined, showAcknowledge: true,
     };
   });
@@ -75,4 +75,3 @@ describe('settings actions', () => {
     expect(memRepos.list.length).toBe(0);
   });
 });
-

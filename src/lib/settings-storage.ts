@@ -11,12 +11,16 @@ import { defaultLocale, locales } from '@/i18n/routing';
 const dataFilePath = path.join(process.cwd(), 'data', 'settings.json');
 const dataDirPath = path.dirname(dataFilePath);
 
+const hasGithubToken = Boolean(process.env.GITHUB_ACCESS_TOKEN && process.env.GITHUB_ACCESS_TOKEN.trim());
+const defaultParallelRepoFetches = hasGithubToken ? 5 : 1;
+
 const defaultSettings: AppSettings = {
   timeFormat: '24h',
   locale: 'en',
   refreshInterval: 10, // in minutes
   cacheInterval: 5, // in minutes
   releasesPerPage: 30, // GitHub API default
+  parallelRepoFetches: defaultParallelRepoFetches,
   releaseChannels: ['stable'],
   preReleaseSubChannels: allPreReleaseTypes,
   showAcknowledge: true,

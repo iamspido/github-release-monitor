@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mem = {
   repos: [] as any[],
   settings: {
-    timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30,
+    timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30, parallelRepoFetches: 5,
     releaseChannels: ['stable'], preReleaseSubChannels: ['beta'], includeRegex: undefined as any, excludeRegex: undefined as any, showAcknowledge: true,
   },
 }
@@ -31,7 +31,7 @@ describe('updateSettingsAction trimming does not cause regexChanged and preserve
       { id: 'c/d', url: 'https://github.com/c/d', etag: 'E2' },
     ]
     mem.settings = {
-      timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30,
+      timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30, parallelRepoFetches: 5,
       releaseChannels: ['stable'], preReleaseSubChannels: ['beta'], includeRegex: undefined, excludeRegex: undefined, showAcknowledge: true,
     }
   })
@@ -47,4 +47,3 @@ describe('updateSettingsAction trimming does not cause regexChanged and preserve
     expect(mem.repos[1].etag).toBe('E2')
   })
 })
-

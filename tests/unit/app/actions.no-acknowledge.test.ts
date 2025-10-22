@@ -24,6 +24,7 @@ vi.mock('@/lib/settings-storage', () => ({
     refreshInterval: 10,
     cacheInterval: 0,
     releasesPerPage: 30,
+    parallelRepoFetches: 5,
     releaseChannels: ['stable'],
     showAcknowledge: false, // key for this test
   }),
@@ -76,4 +77,3 @@ describe('checkForNewReleases with showAcknowledge=false', () => {
     expect(mem.repos[0].isNew).toBe(false); // no highlight when showAcknowledge=false
   });
 });
-

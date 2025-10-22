@@ -15,6 +15,7 @@ describe('settings-storage', () => {
 
   beforeEach(async () => {
     vi.resetModules();
+    delete process.env.GITHUB_ACCESS_TOKEN;
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'grm-settings-'));
     // Mock cwd to tmpDir so storage writes under tmp
     // @ts-ignore
@@ -43,6 +44,7 @@ describe('settings-storage', () => {
       refreshInterval: 10,
       cacheInterval: 5,
       releasesPerPage: 30,
+      parallelRepoFetches: 1,
     });
 
     // Write partial settings and ensure merge with defaults
@@ -72,11 +74,12 @@ describe('settings-storage', () => {
       refreshInterval: 15,
       cacheInterval: 3,
       releasesPerPage: 20,
+      parallelRepoFetches: 4,
       releaseChannels: ['stable'],
     });
 
     const after = await getSettings();
-    expect(after).toMatchObject({ locale: 'de', releasesPerPage: 20 });
+    expect(after).toMatchObject({ locale: 'de', releasesPerPage: 20, parallelRepoFetches: 4 });
 
     // Corrupt the file
     const dataDir = path.join(tmpDir, 'data');

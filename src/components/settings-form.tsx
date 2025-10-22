@@ -59,6 +59,7 @@ function minutesToDhms(totalMinutes: number) {
 type SaveStatus = 'idle' | 'waiting' | 'saving' | 'success' | 'error' | 'paused';
 type IntervalValidationError = 'too_low' | 'too_high' | null;
 type ReleasesPerPageError = 'too_low' | 'too_high' | null;
+type ParallelRepoFetchError = 'too_low' | 'too_high' | null;
 type RegexError = 'invalid' | null;
 
 function SaveStatusIndicator({ status }: { status: SaveStatus }) {
@@ -94,9 +95,10 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
 interface SettingsFormProps {
   currentSettings: AppSettings;
   isAppriseConfigured: boolean;
+  isGithubTokenSet: boolean;
 }
 
-export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsFormProps) {
+export function SettingsForm({ currentSettings, isAppriseConfigured, isGithubTokenSet }: SettingsFormProps) {
   const t = useTranslations('SettingsForm');
   const router = useRouter();
   const pathname = usePathname();
@@ -106,6 +108,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
   const [timeFormat, setTimeFormat] = React.useState<TimeFormat>(currentSettings.timeFormat);
   const [locale, setLocale] = React.useState<Locale>(currentSettings.locale);
   const [releasesPerPage, setReleasesPerPage] = React.useState(String(currentSettings.releasesPerPage || 30));
+  const [parallelRepoFetches, setParallelRepoFetches] = React.useState(String(currentSettings.parallelRepoFetches || 1));
   const [channels, setChannels] = React.useState<ReleaseChannel[]>(currentSettings.releaseChannels || ['stable']);
   const [preReleaseSubChannels, setPreReleaseSubChannels] = React.useState<PreReleaseChannelType[]>(currentSettings.preReleaseSubChannels || allPreReleaseTypes);
   const [showAcknowledge, setShowAcknowledge] = React.useState<boolean>(currentSettings.showAcknowledge ?? true);
@@ -126,6 +129,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
 
   const [intervalError, setIntervalError] = React.useState<IntervalValidationError>(null);
   const [releasesPerPageError, setReleasesPerPageError] = React.useState<ReleasesPerPageError>(null);
+  const [parallelRepoFetchesError, setParallelRepoFetchesError] = React.useState<ParallelRepoFetchError>(null);
   const [isCacheInvalid, setIsCacheInvalid] = React.useState(false);
   const [includeRegexError, setIncludeRegexError] = React.useState<RegexError>(null);
   const [excludeRegexError, setExcludeRegexError] = React.useState<RegexError>(null);
@@ -154,6 +158,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
       refreshInterval: totalMinutes,
       cacheInterval: totalCacheMinutes,
       releasesPerPage: parseInt(releasesPerPage, 10) || 30,
+      parallelRepoFetches: parseInt(parallelRepoFetches, 10) || currentSettings.parallelRepoFetches || 1,
       releaseChannels: channels,
       preReleaseSubChannels,
       showAcknowledge,
@@ -164,12 +169,13 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
       appriseTags,
       appriseFormat,
     };
-  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, timeFormat, locale, channels, preReleaseSubChannels, showAcknowledge, showMarkAsNew, includeRegex, excludeRegex, appriseMaxCharacters, appriseTags, appriseFormat]);
+  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, parallelRepoFetches, timeFormat, locale, channels, preReleaseSubChannels, showAcknowledge, showMarkAsNew, includeRegex, excludeRegex, appriseMaxCharacters, appriseTags, appriseFormat, currentSettings.parallelRepoFetches]);
 
   React.useEffect(() => {
     const refreshFieldsFilled = days !== '' && hours !== '' && minutes !== '';
     const cacheFieldsFilled = cacheDays !== '' && cacheHours !== '' && cacheMinutes !== '';
     const releasesPerPageFilled = releasesPerPage !== '';
+    const parallelRepoFetchesFilled = parallelRepoFetches !== '';
 
     if (refreshFieldsFilled) {
         if (newSettings.refreshInterval < 1) {
@@ -196,6 +202,19 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
         setReleasesPerPageError(null);
     }
 
+    if (parallelRepoFetchesFilled) {
+        const numParallel = parseInt(parallelRepoFetches, 10);
+        if (numParallel < 1) {
+            setParallelRepoFetchesError('too_low');
+        } else if (numParallel > 50) {
+            setParallelRepoFetchesError('too_high');
+        } else {
+            setParallelRepoFetchesError(null);
+        }
+    } else {
+        setParallelRepoFetchesError(null);
+    }
+
     try {
         if (includeRegex.trim()) new RegExp(includeRegex);
         setIncludeRegexError(null);
@@ -214,7 +233,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
     const cacheIsLarger = newSettings.cacheInterval > newSettings.refreshInterval;
     setIsCacheInvalid(refreshFieldsFilled && cacheFieldsFilled && isCacheEnabled && cacheIsLarger);
 
-  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, newSettings.refreshInterval, newSettings.cacheInterval, includeRegex, excludeRegex]);
+  }, [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, parallelRepoFetches, newSettings.refreshInterval, newSettings.cacheInterval, includeRegex, excludeRegex]);
 
 
   React.useEffect(() => {
@@ -228,8 +247,8 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
         return;
     }
 
-    const hasEmptyFields = [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, appriseMaxCharacters].some(val => val === '');
-    if (hasEmptyFields || intervalError || isCacheInvalid || releasesPerPageError || includeRegexError || excludeRegexError) {
+    const hasEmptyFields = [days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, parallelRepoFetches, appriseMaxCharacters].some(val => val === '');
+    if (hasEmptyFields || intervalError || isCacheInvalid || releasesPerPageError || parallelRepoFetchesError || includeRegexError || excludeRegexError) {
         setSaveStatus('idle');
         return;
     }
@@ -272,7 +291,7 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
         clearTimeout(handler);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newSettings, days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, intervalError, isCacheInvalid, releasesPerPageError, includeRegexError, excludeRegexError, appriseMaxCharacters, appriseTags, appriseFormat, isOnline]);
+  }, [newSettings, days, hours, minutes, cacheDays, cacheHours, cacheMinutes, releasesPerPage, parallelRepoFetches, intervalError, isCacheInvalid, releasesPerPageError, parallelRepoFetchesError, includeRegexError, excludeRegexError, appriseMaxCharacters, appriseTags, appriseFormat, isOnline]);
 
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -302,6 +321,11 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
         : [...prev, subChannel]
     );
   };
+
+  const parsedParallelRepoFetches = Number.parseInt(parallelRepoFetches, 10);
+  const hasValidParallelValue = !Number.isNaN(parsedParallelRepoFetches);
+  const showParallelHighWarning = !parallelRepoFetchesError && hasValidParallelValue && parsedParallelRepoFetches > 20;
+  const showParallelTokenWarning = !parallelRepoFetchesError && hasValidParallelValue && parsedParallelRepoFetches > 1 && !isGithubTokenSet;
 
   const isPreReleaseChecked = channels.includes('prerelease');
 
@@ -617,9 +641,36 @@ export function SettingsForm({ currentSettings, isAppriseConfigured }: SettingsF
             ) : releasesPerPageError === 'too_high' ? (
                 <p className="mt-2 text-sm text-destructive">{t('releases_per_page_error_max_1000')}</p>
             ) : (
-                <p className="mt-2 text-xs text-muted-foreground">{t('releases_per_page_hint_1000')}</p>
+             <p className="mt-2 text-xs text-muted-foreground">{t('releases_per_page_hint_1000')}</p>
             )}
              <p className="mt-2 text-xs text-muted-foreground">{t('releases_per_page_api_call_hint')}</p>
+          </div>
+
+          <div>
+            <Label htmlFor="parallel-repo-fetches">{t('parallel_repo_fetches_label')}</Label>
+            <Input
+              id="parallel-repo-fetches"
+              type="number"
+              value={parallelRepoFetches}
+              onChange={(e) => setParallelRepoFetches(e.target.value)}
+              min={1}
+              max={50}
+              disabled={saveStatus === 'saving' || !isOnline}
+              className={cn("mt-2 w-full sm:w-48", !!parallelRepoFetchesError && 'border-destructive focus-visible:ring-destructive')}
+            />
+            {parallelRepoFetchesError === 'too_low' ? (
+              <p className="mt-2 text-sm text-destructive">{t('parallel_repo_fetches_error_min')}</p>
+            ) : parallelRepoFetchesError === 'too_high' ? (
+              <p className="mt-2 text-sm text-destructive">{t('parallel_repo_fetches_error_max')}</p>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">{t('parallel_repo_fetches_hint')}</p>
+            )}
+            {showParallelTokenWarning && (
+              <p className="mt-2 text-xs text-yellow-600">{t('parallel_repo_fetches_warning_token')}</p>
+            )}
+            {showParallelHighWarning && (
+              <p className="mt-2 text-xs text-yellow-600">{t('parallel_repo_fetches_warning_high')}</p>
+            )}
           </div>
         </CardContent>
       </Card>

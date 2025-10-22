@@ -114,6 +114,7 @@ export type AppSettings = {
   // The total cache interval, stored in minutes.
   cacheInterval: number;
   releasesPerPage: number;
+  parallelRepoFetches: number;
   releaseChannels: ReleaseChannel[];
   preReleaseSubChannels?: PreReleaseChannelType[];
   showAcknowledge?: boolean;
