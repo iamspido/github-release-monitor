@@ -64,6 +64,17 @@ describe('settings-storage', () => {
     expect(settings2.releasesPerPage).toBe(30);
   });
 
+  it('uses higher default parallel fetches when GitHub token is set', async () => {
+    process.env.GITHUB_ACCESS_TOKEN = 'token';
+    vi.resetModules();
+    clearCache = undefined;
+    const mod = await loadModule();
+    const { getSettings } = mod;
+    const settings = await getSettings();
+    expect(settings.parallelRepoFetches).toBe(5);
+    process.env.GITHUB_ACCESS_TOKEN = '';
+  });
+
   it('saveSettings writes file and corrupt json falls back to defaults', async () => {
     const mod = await loadModule();
     const { getSettings, saveSettings } = mod;

@@ -148,4 +148,99 @@ describe('actions fetcher scenarios', () => {
     enriched = await actions.getLatestReleasesForRepos([repo], baseSettings, 'en', { skipCache: true });
     expect(enriched[0].error?.type).toBe('repo_not_found');
   });
+
+  it('preserves repository order when parallel batches resolve out of order', async () => {
+    const actions = await import('@/app/actions');
+    const originalFetch = global.fetch;
+
+    const repos: Repository[] = [
+      { id: 'alpha/repo-a', url: 'https://github.com/alpha/repo-a', releaseChannels: ['stable', 'prerelease'] } as any,
+      { id: 'beta/repo-b', url: 'https://github.com/beta/repo-b', releaseChannels: ['stable', 'prerelease'] } as any,
+      { id: 'gamma/repo-c', url: 'https://github.com/gamma/repo-c', releaseChannels: ['stable', 'prerelease'] } as any,
+    ];
+
+    const releaseMap: Record<string, any[]> = {
+      'alpha/repo-a': [{
+        id: 1,
+        html_url: '#a',
+        tag_name: 'v1-a',
+        name: 'A',
+        body: 'note-a',
+        created_at: new Date().toISOString(),
+        published_at: new Date().toISOString(),
+        prerelease: false,
+        draft: false,
+      }],
+      'beta/repo-b': [{
+        id: 2,
+        html_url: '#b',
+        tag_name: 'v1-b',
+        name: 'B',
+        body: 'note-b',
+        created_at: new Date().toISOString(),
+        published_at: new Date().toISOString(),
+        prerelease: false,
+        draft: false,
+      }],
+      'gamma/repo-c': [{
+        id: 3,
+        html_url: '#c',
+        tag_name: 'v1-c',
+        name: 'C',
+        body: 'note-c',
+        created_at: new Date().toISOString(),
+        published_at: new Date().toISOString(),
+        prerelease: false,
+        draft: false,
+      }],
+    };
+
+    const delays: Record<string, number> = {
+      'alpha/repo-a': 30,
+      'beta/repo-b': 10,
+      'gamma/repo-c': 0,
+    };
+
+    // @ts-ignore
+    global.fetch = vi.fn((url: string) => {
+      const match = url.match(/repos\/([^/]+\/[^/]+)\/releases/);
+      if (!match) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: { get: () => null },
+          json: async () => ([]),
+        });
+      }
+      const repoId = match[1];
+      const data = releaseMap[repoId];
+      const delay = delays[repoId] ?? 0;
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          resolve({
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            headers: { get: () => null },
+            json: async () => data,
+          });
+        }, delay);
+      });
+    });
+
+    const settings = {
+      ...baseSettings,
+      parallelRepoFetches: 2,
+    };
+
+    try {
+      const enriched = await actions.getLatestReleasesForRepos(repos, settings, 'en', { skipCache: true });
+      expect(enriched.map(r => r.repoId)).toEqual(['alpha/repo-a', 'beta/repo-b', 'gamma/repo-c']);
+      expect(enriched.map(r => r.release?.tag_name)).toEqual(['v1-a', 'v1-b', 'v1-c']);
+      expect((global.fetch as any).mock.calls.length).toBe(3);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
 });
