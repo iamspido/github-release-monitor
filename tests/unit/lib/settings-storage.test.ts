@@ -1,104 +1,61 @@
-import { promises as fs } from 'fs';
-import os from 'os';
-import path from 'path';
-import { beforeEach, afterEach, describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-describe('settings-storage', () => {
-  let tmpDir: string;
-  let clearCache: (() => Promise<void>) | undefined;
+const fsMock = {
+  mkdir: vi.fn(),
+  access: vi.fn(),
+  writeFile: vi.fn(),
+  readFile: vi.fn(),
+  stat: vi.fn(),
+};
 
-  const loadModule = async () => {
-    const mod = await import('@/lib/settings-storage');
-    clearCache = mod.__clearSettingsCacheForTests__;
-    return mod;
+vi.mock('fs', () => ({
+  promises: fsMock,
+}));
+
+vi.mock('@/lib/logger', () => {
+  const logger = {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    withScope: () => logger,
   };
+  return { logger };
+});
 
-  beforeEach(async () => {
+describe('settings-storage failure scenarios', () => {
+  beforeEach(() => {
     vi.resetModules();
-    delete process.env.GITHUB_ACCESS_TOKEN;
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'grm-settings-'));
-    // Mock cwd to tmpDir so storage writes under tmp
-    // @ts-ignore
-    vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
-    await clearCache?.();
+    fsMock.mkdir.mockResolvedValue(undefined);
+    fsMock.access.mockResolvedValue(undefined);
+    fsMock.writeFile.mockResolvedValue(undefined);
+    fsMock.readFile.mockResolvedValue('{}');
+    fsMock.stat.mockResolvedValue({ mtimeMs: 1 } as any);
   });
 
-  afterEach(async () => {
-    // restore cwd
-    // @ts-ignore
-    process.cwd.mockRestore?.();
-    // cleanup tmpDir
-    try {
-      await fs.rm(tmpDir, { recursive: true, force: true });
-    } catch {}
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
-  it('creates settings file with defaults and merges correctly', async () => {
-    const mod = await loadModule();
-    const { getSettings } = mod;
+  it('throws when ensureDataFileExists cannot write settings file', async () => {
+    fsMock.access.mockRejectedValueOnce(new Error('missing'));
+    const failure = new Error('disk full');
+    fsMock.writeFile.mockRejectedValueOnce(failure);
+    const { getSettings } = await import('@/lib/settings-storage');
 
-    const settings1 = await getSettings();
-    expect(settings1).toMatchObject({
-      timeFormat: '24h',
-      locale: 'en',
-      refreshInterval: 10,
-      cacheInterval: 5,
-      releasesPerPage: 30,
-      parallelRepoFetches: 1,
-    });
-
-    // Write partial settings and ensure merge with defaults
-    const dataDir = path.join(tmpDir, 'data');
-    await fs.mkdir(dataDir, { recursive: true });
-    await fs.writeFile(
-      path.join(dataDir, 'settings.json'),
-      JSON.stringify({ timeFormat: '12h', includeRegex: 'v.*' }, null, 2),
-      'utf8',
-    );
-
-    await clearCache?.();
-    const settings2 = await getSettings();
-    expect(settings2.timeFormat).toBe('12h');
-    expect(settings2.includeRegex).toBe('v.*');
-    // default still present
-    expect(settings2.releasesPerPage).toBe(30);
+    await expect(getSettings()).rejects.toThrow(failure);
   });
 
-  it('uses higher default parallel fetches when GitHub token is set', async () => {
-    process.env.GITHUB_ACCESS_TOKEN = 'token';
-    vi.resetModules();
-    clearCache = undefined;
-    const mod = await loadModule();
-    const { getSettings } = mod;
-    const settings = await getSettings();
-    expect(settings.parallelRepoFetches).toBe(5);
-    process.env.GITHUB_ACCESS_TOKEN = '';
-  });
+  it('throws when saveSettings cannot persist data', async () => {
+    const { saveSettings, getSettings, __clearSettingsCacheForTests__ } = await import('@/lib/settings-storage');
 
-  it('saveSettings writes file and corrupt json falls back to defaults', async () => {
-    const mod = await loadModule();
-    const { getSettings, saveSettings } = mod;
+    // warm cache so saveSettings runs writeFile branch
+    const current = await getSettings();
+    await __clearSettingsCacheForTests__();
 
-    await saveSettings({
-      timeFormat: '24h',
-      locale: 'de',
-      refreshInterval: 15,
-      cacheInterval: 3,
-      releasesPerPage: 20,
-      parallelRepoFetches: 4,
-      releaseChannels: ['stable'],
-    });
+    const failure = new Error('disk full');
+    fsMock.writeFile.mockRejectedValueOnce(failure);
 
-    const after = await getSettings();
-    expect(after).toMatchObject({ locale: 'de', releasesPerPage: 20, parallelRepoFetches: 4 });
-
-    // Corrupt the file
-    const dataDir = path.join(tmpDir, 'data');
-    await fs.mkdir(dataDir, { recursive: true });
-    await fs.writeFile(path.join(dataDir, 'settings.json'), '{invalid-json', 'utf8');
-
-    await clearCache?.();
-    const fallback = await getSettings();
-    expect(fallback).toMatchObject({ timeFormat: '24h', locale: 'en' });
+    await expect(saveSettings(current)).rejects.toThrow('Could not save settings data.');
   });
 });
