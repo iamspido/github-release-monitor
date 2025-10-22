@@ -5,16 +5,18 @@ import type { AppSettings } from '@/types';
 import { getTranslations } from 'next-intl/server';
 import { Header } from '@/components/header';
 import { OfflineInlineNotice } from '@/components/offline-inline-notice';
+import { getUpdateNotificationState } from '@/app/actions';
 
 export default async function SettingsPage({params}: {params: Promise<{locale: string}>}) {
   const { locale } = await params;
   const t = await getTranslations({locale: locale, namespace: 'SettingsPage'});
   const currentSettings: AppSettings = await getSettings();
   const isAppriseConfigured = !!process.env.APPRISE_URL;
+  const updateNotice = await getUpdateNotificationState();
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
-      <Header locale={locale} />
+      <Header locale={locale} updateNotice={updateNotice} />
       <main className="container mx-auto px-4 py-8 md:px-6">
         <div className="mx-auto max-w-2xl">
             <h2 className="mb-4 text-3xl font-bold tracking-tight break-words">{t('title')}</h2>

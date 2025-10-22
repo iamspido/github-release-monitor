@@ -286,7 +286,21 @@
     "toast_apprise_success_title": "Erfolg!",
     "toast_apprise_success_description": "Apprise-Testbenachrichtigung gesendet.",
     "toast_apprise_error_title": "Fehler",
-    "toast_apprise_not_configured_error": "Apprise URL ist nicht in den Umgebungsvariablen gesetzt."
+    "toast_apprise_not_configured_error": "Apprise URL ist nicht in den Umgebungsvariablen gesetzt.",
+    "update_card_title": "Anwendungs-Update",
+    "update_card_description": "Prüfen Sie manuell, ob neue Versionen verfügbar sind.",
+    "update_current_version": "Aktueller Build: {version}",
+    "update_last_checked": "Zuletzt geprüft: {time}",
+    "update_last_checked_never": "Zuletzt geprüft: noch nie",
+    "update_latest_known": "Letzte bekannte Version: {version}",
+    "update_latest_known_none": "Letzte bekannte Version: k. A.",
+    "update_button_label": "Nach Updates suchen",
+    "update_available_status": "Update verfügbar: {version}",
+    "update_not_available_status": "Keine Updates verfügbar.",
+    "update_error_status": "Letzte Prüfung fehlgeschlagen: {error}",
+    "toast_update_available_description": "Update gefunden: {version}",
+    "toast_update_not_available_description": "Sie nutzen bereits die aktuelle Version.",
+    "toast_update_error_description": "Update-Prüfung fehlgeschlagen: {error}"
   },
   "Email": {
     "from_name_fallback": "GitHub Release Monitor",
@@ -396,6 +410,12 @@
     "apprise_basic_item_code": "Reiner Text unterstützt keinen `Code`.",
     "apprise_basic_blockquote": "Zitatblöcke werden nicht besonders formatiert.",
     "apprise_basic_link_text": "Links werden als reine URL angezeigt."
+  },
+  "UpdateNotice": {
+    "title": "Version {version} ist verfügbar",
+    "description": "Aktuell läuft Version {currentVersion}.",
+    "cta_label": "Release ansehen",
+    "dismiss_label": "Ausblenden"
   },
   "Apprise": {
     "title": "🚀 Neue Version für {repoId}: {tagName}",

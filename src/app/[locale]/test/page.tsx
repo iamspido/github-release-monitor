@@ -1,10 +1,11 @@
 import * as React from 'react';
 import { getGitHubRateLimit, checkAppriseStatusAction } from '@/app/actions';
 import { TestPageClient } from '@/components/test-page-client';
-import type { RateLimitResult, NotificationConfig, AppriseStatus } from '@/types';
+import type { RateLimitResult, NotificationConfig, AppriseStatus, UpdateNotificationState } from '@/types';
 import { getTranslations } from 'next-intl/server';
 import { Header } from '@/components/header';
 import { logger } from '@/lib/logger';
+import { getUpdateNotificationState } from '@/app/actions';
 
 function getNotificationConfig(): NotificationConfig {
   const {
@@ -43,6 +44,7 @@ export default async function TestPage({params}: {params: Promise<{locale: strin
   const rateLimitResult: RateLimitResult = await getGitHubRateLimit();
   const githubTokenSet = !!process.env.GITHUB_ACCESS_TOKEN;
   const notificationConfig = getNotificationConfig();
+  const updateNotice: UpdateNotificationState = await getUpdateNotificationState();
 
   let appriseStatus: AppriseStatus;
   try {
@@ -57,14 +59,15 @@ export default async function TestPage({params}: {params: Promise<{locale: strin
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
-      <Header locale={locale} />
+      <Header locale={locale} updateNotice={updateNotice} />
       <main className="container mx-auto px-4 py-8 md:px-6">
         <h2 className="mb-8 text-3xl font-bold tracking-tight break-words">{t('title')}</h2>
         <TestPageClient
-            rateLimitResult={rateLimitResult}
-            isTokenSet={githubTokenSet}
-            notificationConfig={notificationConfig}
-            appriseStatus={appriseStatus}
+          rateLimitResult={rateLimitResult}
+          isTokenSet={githubTokenSet}
+          notificationConfig={notificationConfig}
+          appriseStatus={appriseStatus}
+          updateNotice={updateNotice}
         />
       </main>
     </div>

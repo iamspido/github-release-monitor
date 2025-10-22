@@ -10,6 +10,7 @@ import type {
   FetchError,
   AppriseStatus,
   CachedRelease,
+  UpdateNotificationState,
 } from '@/types';
 import { allPreReleaseTypes } from '@/types';
 import {sendNotification, sendTestAppriseNotification} from '@/lib/notifications';
@@ -27,6 +28,8 @@ import crypto from 'crypto';
 
 import { scheduleTask } from '@/lib/task-scheduler';
 import { logger } from '@/lib/logger';
+import { runApplicationUpdateCheck } from '@/lib/update-check';
+import { getSystemStatus, updateSystemStatus } from '@/lib/system-status';
 
 const log = logger.withScope('WebServer');
 
@@ -1193,6 +1196,109 @@ export async function checkForNewReleases(options?: { overrideLocale?: string, s
   return scheduleTask('checkForNewReleases', () => _checkForNewReleasesUnscheduled(options));
 }
 
+function normalizeVersion(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value.trim().replace(/^v/i, '').replace(/\+.*$/, '');
+}
+
+function compareSemanticVersions(a: string, b: string): number {
+  const parse = (version: string) => {
+    const [core, preRelease] = version.split('-', 2);
+    const parts = core.split('.').map(part => {
+      const numeric = Number(part);
+      return Number.isNaN(numeric) ? 0 : numeric;
+    });
+    return { parts, preRelease: preRelease ?? null };
+  };
+
+  const parsedA = parse(a);
+  const parsedB = parse(b);
+  const length = Math.max(parsedA.parts.length, parsedB.parts.length);
+
+  for (let i = 0; i < length; i += 1) {
+    const segmentA = parsedA.parts[i] ?? 0;
+    const segmentB = parsedB.parts[i] ?? 0;
+    if (segmentA > segmentB) return 1;
+    if (segmentA < segmentB) return -1;
+  }
+
+  if (parsedA.preRelease && !parsedB.preRelease) return -1;
+  if (!parsedA.preRelease && parsedB.preRelease) return 1;
+  if (parsedA.preRelease && parsedB.preRelease) {
+    if (parsedA.preRelease > parsedB.preRelease) return 1;
+    if (parsedA.preRelease < parsedB.preRelease) return -1;
+  }
+
+  return 0;
+}
+
+export async function getUpdateNotificationState(): Promise<UpdateNotificationState> {
+  const status = await getSystemStatus();
+  const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0';
+  const latestVersion = status.latestKnownVersion;
+  const normalizedCurrent = normalizeVersion(currentVersion);
+  const normalizedLatest = normalizeVersion(latestVersion);
+
+  let hasUpdate = false;
+
+  if (normalizedCurrent && normalizedLatest) {
+    hasUpdate = compareSemanticVersions(normalizedLatest, normalizedCurrent) === 1;
+  } else if (latestVersion) {
+    hasUpdate = latestVersion !== currentVersion;
+  }
+
+  const isDismissed =
+    hasUpdate &&
+    typeof status.dismissedVersion === 'string' &&
+    status.dismissedVersion === latestVersion;
+
+  return {
+    latestVersion,
+    currentVersion,
+    lastCheckedAt: status.lastCheckedAt,
+    lastCheckError: status.lastCheckError,
+    hasUpdate,
+    isDismissed,
+    shouldNotify: hasUpdate && !isDismissed,
+  };
+}
+
+export async function dismissUpdateNotificationAction(): Promise<{ success: boolean }> {
+  return scheduleTask('dismissUpdateNotification', async () => {
+    await updateSystemStatus(current => {
+      const latestVersion = current.latestKnownVersion;
+      if (!latestVersion) {
+        return {
+          ...current,
+          dismissedVersion: null,
+        };
+      }
+      return {
+        ...current,
+        dismissedVersion: latestVersion,
+      };
+    });
+    return { success: true };
+  });
+}
+
+export async function triggerAppUpdateCheckAction(): Promise<{
+  success: boolean;
+  notice: UpdateNotificationState;
+}> {
+  return scheduleTask('triggerAppUpdateCheck', async () => {
+    await updateSystemStatus(current => ({
+      ...current,
+      dismissedVersion: null,
+    }));
+
+    const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0';
+    await runApplicationUpdateCheck(currentVersion);
+    const notice = await getUpdateNotificationState();
+    return { success: true, notice };
+  });
+}
+
 async function backgroundPollingLoop() {
   try {
     await checkForNewReleases({ skipCache: true });
@@ -1221,6 +1327,33 @@ if (
   log.info(`Initializing dynamic background polling.`);
   process.env.BACKGROUND_POLLING_INITIALIZED = 'true';
   setTimeout(backgroundPollingLoop, 5000);
+}
+
+const UPDATE_CHECK_INTERVAL_MINUTES = 60;
+const UPDATE_CHECK_INITIAL_DELAY_MS = 10_000;
+
+async function backgroundUpdateCheckLoop() {
+  const intervalMinutes = Math.max(UPDATE_CHECK_INTERVAL_MINUTES, 1);
+  const intervalMs = intervalMinutes * 60 * 1000;
+  const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0';
+
+  try {
+    await runApplicationUpdateCheck(currentVersion);
+  } catch (error) {
+    log.error('Error during application update check:', error);
+  } finally {
+    log.info(`Next application update check scheduled in ${intervalMinutes} minutes.`);
+    setTimeout(backgroundUpdateCheckLoop, intervalMs);
+  }
+}
+
+if (
+  process.env.NODE_ENV !== 'test' &&
+  !process.env.APP_UPDATE_CHECK_INITIALIZED
+) {
+  log.info('Initializing application update checker.');
+  process.env.APP_UPDATE_CHECK_INITIALIZED = 'true';
+  setTimeout(backgroundUpdateCheckLoop, UPDATE_CHECK_INITIAL_DELAY_MS);
 }
 
 const TEST_REPO_ID = 'test/test';

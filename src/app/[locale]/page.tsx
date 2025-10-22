@@ -8,6 +8,7 @@ import { BackToTopButton } from '@/components/back-to-top-button';
 import { AutoRefresher } from '@/components/auto-refresher';
 import { HomePageClient } from '@/components/home-page-client';
 import { logger } from '@/lib/logger';
+import { getUpdateNotificationState } from '@/app/actions';
 
 export default async function HomePage({params}: {params: Promise<{locale: string}>}) {
   const { locale } = await params;
@@ -20,6 +21,7 @@ export default async function HomePage({params}: {params: Promise<{locale: strin
   let settings: AppSettings;
   const generalError: string | null = null;
   const errorSummary: Map<Exclude<FetchError['type'], 'not_modified'>, number> | null = null;
+  const updateNotice = await getUpdateNotificationState();
 
   try {
     settings = await getSettings();
@@ -62,7 +64,7 @@ export default async function HomePage({params}: {params: Promise<{locale: strin
   return (
     <div className="min-h-screen w-full">
       <AutoRefresher intervalMinutes={settings.refreshInterval} />
-      <Header locale={locale} />
+      <Header locale={locale} updateNotice={updateNotice} />
       <main className="container mx-auto px-4 py-8 md:px-6">
         <HomePageClient
           repositories={repositories}

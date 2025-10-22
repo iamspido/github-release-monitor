@@ -286,7 +286,21 @@
     "toast_apprise_success_title": "Success!",
     "toast_apprise_success_description": "Apprise test notification sent.",
     "toast_apprise_error_title": "Error",
-    "toast_apprise_not_configured_error": "Apprise URL is not set in environment variables."
+    "toast_apprise_not_configured_error": "Apprise URL is not set in environment variables.",
+    "update_card_title": "Application Update",
+    "update_card_description": "Manually check for new GitHub Release Monitor versions.",
+    "update_current_version": "Current build: {version}",
+    "update_last_checked": "Last checked: {time}",
+    "update_last_checked_never": "Last checked: never",
+    "update_latest_known": "Latest known release: {version}",
+    "update_latest_known_none": "Latest known release: n/a",
+    "update_button_label": "Check for updates",
+    "update_available_status": "Update available: {version}",
+    "update_not_available_status": "No updates available.",
+    "update_error_status": "Last check failed: {error}",
+    "toast_update_available_description": "Update found: {version}",
+    "toast_update_not_available_description": "You already have the latest version.",
+    "toast_update_error_description": "Update check failed: {error}"
   },
   "Email": {
     "from_name_fallback": "GitHub Release Monitor",
@@ -396,6 +410,12 @@
     "apprise_basic_item_code": "Plain text does not support `code`.",
     "apprise_basic_blockquote": "Blockquotes are not specially formatted.",
     "apprise_basic_link_text": "Links will be displayed as plain URLs."
+  },
+  "UpdateNotice": {
+    "title": "Version {version} is available",
+    "description": "You are currently running version {currentVersion}.",
+    "cta_label": "View release",
+    "dismiss_label": "Dismiss"
   },
   "Apprise": {
     "title": "🚀 New Release for {repoId}: {tagName}",

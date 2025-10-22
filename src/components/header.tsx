@@ -13,8 +13,15 @@ import { Logo } from '@/components/logo';
 import { MobileMenu } from './mobile-menu';
 import { OfflineBanner } from '@/components/offline-banner';
 import { useNetworkStatus } from '@/hooks/use-network';
+import type { UpdateNotificationState } from '@/types';
+import { UpdateNoticeBanner } from '@/components/update-notice-banner';
 
-export function Header({ locale }: { locale: string }) {
+type HeaderProps = {
+  locale: string;
+  updateNotice?: UpdateNotificationState;
+};
+
+export function Header({ locale, updateNotice }: HeaderProps) {
   const t = useTranslations('HomePage');
   const pathname = usePathname();
   const [isLoggingOut, startLogoutTransition] = React.useTransition();
@@ -118,6 +125,7 @@ export function Header({ locale }: { locale: string }) {
           </div>
         </div>
         <OfflineBanner />
+        <UpdateNoticeBanner notice={updateNotice} />
       </header>
     </>
   );

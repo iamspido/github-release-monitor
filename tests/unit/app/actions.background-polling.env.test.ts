@@ -17,10 +17,11 @@ describe('background polling env gating', () => {
   it('does not re-initialize when BACKGROUND_POLLING_INITIALIZED is set', async () => {
     process.env.NODE_ENV = 'production'
     process.env.BACKGROUND_POLLING_INITIALIZED = 'true'
+    // Prevent the separate update checker from scheduling during this test scenario.
+    process.env.APP_UPDATE_CHECK_INITIALIZED = 'true'
     const timeoutSpy = vi.spyOn(global, 'setTimeout')
     await import('@/app/actions')
     expect(timeoutSpy).not.toHaveBeenCalled()
     timeoutSpy.mockRestore()
   })
 })
-

@@ -19,8 +19,8 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-import type { RateLimitResult, NotificationConfig, AppriseStatus } from '@/types';
-import { sendTestEmailAction, setupTestRepositoryAction, triggerReleaseCheckAction, sendTestAppriseAction, checkAppriseStatusAction } from '@/app/actions';
+import type { RateLimitResult, NotificationConfig, AppriseStatus, UpdateNotificationState } from '@/types';
+import { sendTestEmailAction, setupTestRepositoryAction, triggerReleaseCheckAction, sendTestAppriseAction, checkAppriseStatusAction, triggerAppUpdateCheckAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -41,6 +41,7 @@ interface TestPageClientProps {
   isTokenSet: boolean;
   notificationConfig: NotificationConfig;
   appriseStatus: AppriseStatus;
+  updateNotice: UpdateNotificationState;
 }
 
 function StatusIndicator({
@@ -77,6 +78,7 @@ export function TestPageClient({
   isTokenSet,
   notificationConfig,
   appriseStatus: initialAppriseStatus,
+  updateNotice: initialUpdateNotice,
 }: TestPageClientProps) {
   const t = useTranslations('TestPage');
   const [isSendingMail, startMailTransition] = React.useTransition();
@@ -84,6 +86,7 @@ export function TestPageClient({
   const [isTriggeringCheck, startTriggerCheckTransition] = React.useTransition();
   const [isSendingApprise, startAppriseTransition] = React.useTransition();
   const [isCheckingApprise, startAppriseCheckTransition] = React.useTransition();
+  const [isCheckingUpdate, startUpdateTransition] = React.useTransition();
 
   const { toast } = useToast();
   const [resetTime, setResetTime] = React.useState(t('not_available'));
@@ -91,6 +94,7 @@ export function TestPageClient({
   const [customEmail, setCustomEmail] = React.useState('');
   const [isEmailInvalid, setIsEmailInvalid] = React.useState(false);
   const [appriseStatus, setAppriseStatus] = React.useState(initialAppriseStatus);
+  const [updateNotice, setUpdateNotice] = React.useState(initialUpdateNotice);
 
   const rateLimitData = rateLimitResult.data;
   const rateLimitError = rateLimitResult.error;
@@ -99,6 +103,45 @@ export function TestPageClient({
 
   const isRateLimitHigh = rateLimit ? rateLimit.limit > 1000 : false;
   const requiredMailVars = ['MAIL_HOST', 'MAIL_PORT', 'MAIL_FROM_ADDRESS', 'MAIL_TO_ADDRESS'];
+  const formattedLastChecked = React.useMemo(() => {
+    if (!updateNotice.lastCheckedAt) {
+      return t('update_last_checked_never');
+    }
+
+    const date = new Date(updateNotice.lastCheckedAt);
+    if (Number.isNaN(date.getTime())) {
+      return t('update_last_checked_never');
+    }
+
+    return t('update_last_checked', { time: format(date, 'yyyy-MM-dd HH:mm:ss') });
+  }, [updateNotice.lastCheckedAt, t]);
+
+  const updateStatus = React.useMemo(() => {
+    if (updateNotice.lastCheckError) {
+      return {
+        status: 'error' as const,
+        text: t('update_error_status', { error: updateNotice.lastCheckError }),
+      };
+    }
+
+    if (updateNotice.shouldNotify) {
+      return {
+        status: 'warning' as const,
+        text: t('update_available_status', {
+          version: updateNotice.latestVersion ?? t('not_available'),
+        }),
+      };
+    }
+
+    return {
+      status: 'success' as const,
+      text: t('update_not_available_status'),
+    };
+  }, [updateNotice.lastCheckError, updateNotice.shouldNotify, updateNotice.latestVersion, t]);
+
+  const latestVersionText = updateNotice.latestVersion
+    ? t('update_latest_known', { version: updateNotice.latestVersion })
+    : t('update_latest_known_none');
 
   React.useEffect(() => {
     if (rateLimit) {
@@ -172,6 +215,44 @@ export function TestPageClient({
             variant: 'destructive',
           });
         }
+    });
+  };
+
+  const handleManualUpdateCheck = () => {
+    startUpdateTransition(async () => {
+      try {
+        const result = await triggerAppUpdateCheckAction();
+        setUpdateNotice(result.notice);
+
+        if (result.notice.lastCheckError) {
+          toast({
+            title: t('toast_error_title'),
+            description: t('toast_update_error_description', { error: result.notice.lastCheckError }),
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        if (result.notice.shouldNotify) {
+          toast({
+            title: t('toast_success_title'),
+            description: t('toast_update_available_description', {
+              version: result.notice.latestVersion ?? t('not_available'),
+            }),
+          });
+        } else {
+          toast({
+            title: t('toast_success_title'),
+            description: t('toast_update_not_available_description'),
+          });
+        }
+      } catch (err) {
+        toast({
+          title: t('toast_error_title'),
+          description: t('toast_update_error_description', { error: (err as Error)?.message ?? 'unknown' }),
+          variant: 'destructive',
+        });
+      }
     });
   };
 
@@ -285,6 +366,40 @@ export function TestPageClient({
                   {t('invalid_token_advice')}
               </p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <Zap className="size-8 text-muted-foreground" />
+            <div>
+              <CardTitle>{t('update_card_title')}</CardTitle>
+              <CardDescription>{t('update_card_description')}</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <StatusIndicator status={updateStatus.status} text={updateStatus.text} />
+          <div className="pl-7 text-sm text-muted-foreground space-y-1">
+            <p>{t('update_current_version', { version: updateNotice.currentVersion })}</p>
+            <p>{formattedLastChecked}</p>
+            <p>{latestVersionText}</p>
+          </div>
+          <div className="flex items-center pt-2">
+            <Button
+              onClick={handleManualUpdateCheck}
+              disabled={isCheckingUpdate || !isOnline}
+              size="sm"
+            >
+              {isCheckingUpdate ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+              <span>{t('update_button_label')}</span>
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

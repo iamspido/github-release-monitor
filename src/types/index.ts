@@ -125,6 +125,24 @@ export type AppSettings = {
   appriseFormat?: AppriseFormat;
 };
 
+export type SystemStatus = {
+  latestKnownVersion: string | null;
+  lastCheckedAt: string | null;
+  latestEtag: string | null;
+  dismissedVersion: string | null;
+  lastCheckError: string | null;
+};
+
+export type UpdateNotificationState = {
+  latestVersion: string | null;
+  currentVersion: string;
+  lastCheckedAt: string | null;
+  lastCheckError: string | null;
+  hasUpdate: boolean;
+  isDismissed: boolean;
+  shouldNotify: boolean;
+};
+
 // Session Data
 export type SessionData = {
     isLoggedIn?: boolean;
