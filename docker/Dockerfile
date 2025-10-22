@@ -88,7 +88,7 @@ COPY tests/ ./tests/
 RUN npm test
 
 # E2E Stage (Playwright)
-FROM mcr.microsoft.com/playwright:v1.55.0-jammy AS e2e
+FROM mcr.microsoft.com/playwright:v1.56.1-jammy AS e2e
 
 WORKDIR /app
 
@@ -103,8 +103,8 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
 
 # Copy minimal files for running tests and server
 COPY package*.json ./
-RUN npm install --omit=optional --no-audit --no-fund && npm cache clean --force \
- && npm install @playwright/test@1.55.0 playwright@1.55.0 --no-save --no-audit --no-fund
+RUN npm install --omit=optional --no-audit --no-fund --production=false \
+ && npm cache clean --force
 
 COPY playwright.config.ts ./
 COPY tests/e2e ./tests/e2e
