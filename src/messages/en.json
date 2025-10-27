@@ -164,6 +164,8 @@
     "release_channel_description_global": "These filters are applied if no 'Include' regex is defined.",
     "release_channel_description_repo": "These filters are ignored if an 'Include' regex is active for this repository.",
     "prerelease_subtype_description": "Select the specific pre-release types to monitor.",
+    "prerelease_select_all": "Select All",
+    "prerelease_deselect_all": "Deselect All",
     "release_channel_draft": "Draft",
     "release_channel_error_at_least_one": "At least one release type must be selected.",
     "regex_filter_title": "Regex Filters",

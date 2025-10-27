@@ -164,6 +164,8 @@
     "release_channel_description_global": "Diese Filter werden angewendet, wenn keine 'Inkludieren'-Regex definiert ist.",
     "release_channel_description_repo": "Diese Filter werden ignoriert, wenn eine 'Einschließen'-Regex für dieses Repository aktiv ist.",
     "prerelease_subtype_description": "Wählen Sie die spezifischen Pre-Release-Typen aus, die überwacht werden sollen.",
+    "prerelease_select_all": "Alle auswählen",
+    "prerelease_deselect_all": "Alle abwählen",
     "release_channel_draft": "Entwurf",
     "release_channel_error_at_least_one": "Es muss mindestens ein Release-Typ ausgewählt sein.",
     "regex_filter_title": "Regex-Filter",

@@ -774,7 +774,7 @@ export function SettingsForm({
                         !isOnline
                       }
                     >
-                      Select All
+                      {t("prerelease_select_all")}
                     </Button>
                     <Button
                       type="button"
@@ -787,7 +787,7 @@ export function SettingsForm({
                         !isOnline
                       }
                     >
-                      Deselect All
+                      {t("prerelease_deselect_all")}
                     </Button>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-3">

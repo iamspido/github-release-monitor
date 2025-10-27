@@ -175,8 +175,8 @@ export function RepoSettingsDialog({
     currentRepoSettings?.releaseChannels ?? [],
   );
   const [preReleaseSubChannels, setPreReleaseSubChannels] = React.useState<
-    PreReleaseChannelType[]
-  >(currentRepoSettings?.preReleaseSubChannels ?? []);
+    PreReleaseChannelType[] | undefined
+  >(currentRepoSettings?.preReleaseSubChannels);
   const [releasesPerPage, setReleasesPerPage] = React.useState<string | number>(
     currentRepoSettings?.releasesPerPage ?? "",
   );
@@ -222,7 +222,7 @@ export function RepoSettingsDialog({
     if (!wasOpen && isOpen) {
       const initialSettings = {
         releaseChannels: currentRepoSettings?.releaseChannels ?? [],
-        preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels ?? [],
+        preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels,
         releasesPerPage: currentRepoSettings?.releasesPerPage ?? null,
         includeRegex: currentRepoSettings?.includeRegex ?? undefined,
         excludeRegex: currentRepoSettings?.excludeRegex ?? undefined,
@@ -265,7 +265,7 @@ export function RepoSettingsDialog({
   }, [isOpen, currentRepoSettings, repoId]);
 
   const useGlobalChannels = channels.length === 0;
-  const useGlobalSubChannels = preReleaseSubChannels.length === 0;
+  const useGlobalSubChannels = preReleaseSubChannels === undefined;
   const useGlobalReleasesPerPage = String(releasesPerPage).trim() === "";
   const useGlobalIncludeRegex = includeRegex.trim() === "";
   const useGlobalExcludeRegex = excludeRegex.trim() === "";
@@ -302,7 +302,7 @@ export function RepoSettingsDialog({
 
     return {
       releaseChannels: channels,
-      preReleaseSubChannels,
+      preReleaseSubChannels: preReleaseSubChannels ?? [],
       releasesPerPage: finalReleasesPerPage,
       includeRegex: includeRegex.trim() || undefined,
       excludeRegex: excludeRegex.trim() || undefined,
@@ -504,12 +504,22 @@ export function RepoSettingsDialog({
     if (!isOnline) return;
     const baseSubChannels = useGlobalSubChannels
       ? globalSettings.preReleaseSubChannels || allPreReleaseTypes
-      : preReleaseSubChannels;
+      : preReleaseSubChannels || [];
 
     const newSubChannels = baseSubChannels.includes(subChannel)
       ? baseSubChannels.filter((sc) => sc !== subChannel)
       : [...baseSubChannels, subChannel];
     setPreReleaseSubChannels(newSubChannels);
+  };
+
+  const handleSelectAllPreRelease = () => {
+    if (!isOnline) return;
+    setPreReleaseSubChannels(allPreReleaseTypes);
+  };
+
+  const handleDeselectAllPreRelease = () => {
+    if (!isOnline) return;
+    setPreReleaseSubChannels([]);
   };
 
   const handleOpenChange = (open: boolean) => {
@@ -549,7 +559,7 @@ export function RepoSettingsDialog({
 
   const effectivePreReleaseSubChannels = useGlobalSubChannels
     ? globalSettings.preReleaseSubChannels || allPreReleaseTypes
-    : preReleaseSubChannels;
+    : preReleaseSubChannels || [];
 
   const isAppriseConfigured = !!globalSettings.appriseMaxCharacters;
 
@@ -646,7 +656,7 @@ export function RepoSettingsDialog({
                 className={cn(
                   "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
                   isPreReleaseChecked
-                    ? "mt-4 max-h-96 opacity-100"
+                    ? "mt-4 max-h-[600px] opacity-100"
                     : "max-h-0 opacity-0",
                 )}
               >
@@ -654,6 +664,34 @@ export function RepoSettingsDialog({
                   <p className="text-sm text-muted-foreground">
                     {tGlobal("prerelease_subtype_description")}
                   </p>
+                  <div className="flex gap-2 mb-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSelectAllPreRelease}
+                      disabled={
+                        !isPreReleaseChecked ||
+                        saveStatus === "saving" ||
+                        !isOnline
+                      }
+                    >
+                      {tGlobal("prerelease_select_all")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDeselectAllPreRelease}
+                      disabled={
+                        !isPreReleaseChecked ||
+                        saveStatus === "saving" ||
+                        !isOnline
+                      }
+                    >
+                      {tGlobal("prerelease_deselect_all")}
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
                     {allPreReleaseTypes.map((subType) => {
                       const subChannelId = `${prereleaseSubChannelBaseId}-${subType}`;
