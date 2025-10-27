@@ -190,7 +190,14 @@ export async function updateSettingsAction(newSettings: AppSettings) {
           .withScope("Settings")
           .info("Global settings saved (no changes).");
       }
-      checkForNewReleases({ skipCache: true });
+
+      // Only trigger refresh if filter/pagination settings changed (not UI or Apprise settings)
+      if (regexChanged || channelsChanged || preSubsChanged || rppChanged) {
+        logger
+          .withScope("Settings")
+          .info("Filter/API settings changed - triggering repository refresh");
+        checkForNewReleases({ skipCache: true });
+      }
 
       // Set the locale cookie for next-intl middleware to pick up.
       // This is now done on every save, not just on change, to ensure consistency.

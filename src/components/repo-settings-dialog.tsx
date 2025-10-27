@@ -204,6 +204,7 @@ export function RepoSettingsDialog({
   const { isOnline } = useNetworkStatus();
 
   const savedThisSessionRef = React.useRef(false);
+  const filterSettingsChangedRef = React.useRef(false);
 
   const mountedRef = React.useRef(true);
   React.useEffect(() => {
@@ -240,6 +241,7 @@ export function RepoSettingsDialog({
       setSaveStatus("idle");
 
       savedThisSessionRef.current = false;
+      filterSettingsChangedRef.current = false;
 
       prevSettingsRef.current = {
         ...initialSettings,
@@ -248,9 +250,13 @@ export function RepoSettingsDialog({
     }
 
     if (wasOpen && !isOpen) {
-      if (savedThisSessionRef.current) {
+      if (savedThisSessionRef.current && filterSettingsChangedRef.current) {
         // Fire and forget; avoid unhandled rejection on flaky connections
         refreshSingleRepositoryAction(repoId).catch(() => {});
+        savedThisSessionRef.current = false;
+        filterSettingsChangedRef.current = false;
+      } else if (savedThisSessionRef.current) {
+        // Settings were saved but no filter changes - no refresh needed
         savedThisSessionRef.current = false;
       }
     }
@@ -331,18 +337,26 @@ export function RepoSettingsDialog({
       setReleasesPerPageError(null);
     }
 
-    try {
-      if (includeRegex.trim()) new RegExp(includeRegex);
+    if (!includeRegex.trim()) {
       setIncludeRegexError(null);
-    } catch (e) {
-      setIncludeRegexError("invalid");
+    } else {
+      try {
+        new RegExp(includeRegex);
+        setIncludeRegexError(null);
+      } catch (e) {
+        setIncludeRegexError("invalid");
+      }
     }
 
-    try {
-      if (excludeRegex.trim()) new RegExp(excludeRegex);
+    if (!excludeRegex.trim()) {
       setExcludeRegexError(null);
-    } catch (e) {
-      setExcludeRegexError("invalid");
+    } else {
+      try {
+        new RegExp(excludeRegex);
+        setExcludeRegexError(null);
+      } catch (e) {
+        setExcludeRegexError("invalid");
+      }
     }
   }, [releasesPerPage, includeRegex, excludeRegex]);
 
@@ -379,8 +393,39 @@ export function RepoSettingsDialog({
         if (result.success) {
           if (mountedRef.current) {
             setSaveStatus("success");
-            prevSettingsRef.current = newSettings;
 
+            // Track if filter settings changed to determine if refresh is needed
+            const filtersChanged =
+              (prevSettingsRef.current.includeRegex ?? "").trim() !==
+                (newSettings.includeRegex ?? "").trim() ||
+              (prevSettingsRef.current.excludeRegex ?? "").trim() !==
+                (newSettings.excludeRegex ?? "").trim();
+
+            const channelsChanged =
+              JSON.stringify(
+                (prevSettingsRef.current.releaseChannels || []).sort(),
+              ) !== JSON.stringify((newSettings.releaseChannels || []).sort());
+
+            const preSubsChanged =
+              JSON.stringify(
+                (prevSettingsRef.current.preReleaseSubChannels || []).sort(),
+              ) !==
+              JSON.stringify((newSettings.preReleaseSubChannels || []).sort());
+
+            const rppChanged =
+              prevSettingsRef.current.releasesPerPage !==
+              newSettings.releasesPerPage;
+
+            if (
+              filtersChanged ||
+              channelsChanged ||
+              preSubsChanged ||
+              rppChanged
+            ) {
+              filterSettingsChangedRef.current = true;
+            }
+
+            prevSettingsRef.current = newSettings;
             savedThisSessionRef.current = true;
           } else {
             savedThisSessionRef.current = true;

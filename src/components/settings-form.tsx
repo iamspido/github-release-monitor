@@ -81,7 +81,7 @@ type ReleasesPerPageError = "too_low" | "too_high" | null;
 type ParallelRepoFetchError = "too_low" | "too_high" | null;
 type RegexError = "invalid" | null;
 
-function SaveStatusIndicator({ status }: { status: SaveStatus }) {
+function FloatingSaveIndicator({ status }: { status: SaveStatus }) {
   const t = useTranslations("SettingsForm");
 
   if (status === "idle") {
@@ -125,12 +125,12 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
   return (
     <div
       className={cn(
-        "flex items-center gap-2 text-sm transition-colors",
+        "fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg border bg-background shadow-lg transition-all duration-300 ease-in-out",
         current.className,
       )}
     >
       {current.icon}
-      <span>{current.text}</span>
+      <span className="text-sm font-medium">{current.text}</span>
     </div>
   );
 }
@@ -256,6 +256,19 @@ export function SettingsForm({
 
   const [isDeleting, startDeleteTransition] = React.useTransition();
 
+  // Check for saved state after locale change
+  React.useEffect(() => {
+    const savedAfterLocaleChange = sessionStorage.getItem(
+      "settingsSavedAfterLocaleChange",
+    );
+    if (savedAfterLocaleChange === "true") {
+      sessionStorage.removeItem("settingsSavedAfterLocaleChange");
+      setSaveStatus("success");
+      // Auto-hide success message after 3 seconds
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    }
+  }, []);
+
   const newSettings: AppSettings = React.useMemo(() => {
     const d = parseInt(days, 10) || 0;
     const h = parseInt(hours, 10) || 0;
@@ -315,6 +328,7 @@ export function SettingsForm({
     currentSettings.parallelRepoFetches,
   ]);
 
+  // Validation Effect
   React.useEffect(() => {
     const refreshFieldsFilled = days !== "" && hours !== "" && minutes !== "";
     const cacheFieldsFilled =
@@ -322,6 +336,7 @@ export function SettingsForm({
     const releasesPerPageFilled = releasesPerPage !== "";
     const parallelRepoFetchesFilled = parallelRepoFetches !== "";
 
+    // Refresh Interval Validation
     if (refreshFieldsFilled) {
       if (newSettings.refreshInterval < 1) {
         setIntervalError("too_low");
@@ -334,6 +349,7 @@ export function SettingsForm({
       setIntervalError(null);
     }
 
+    // Releases Per Page Validation
     if (releasesPerPageFilled) {
       const numReleases = parseInt(releasesPerPage, 10);
       if (numReleases < 1) {
@@ -347,6 +363,7 @@ export function SettingsForm({
       setReleasesPerPageError(null);
     }
 
+    // Parallel Repo Fetches Validation
     if (parallelRepoFetchesFilled) {
       const numParallel = parseInt(parallelRepoFetches, 10);
       if (numParallel < 1) {
@@ -360,20 +377,31 @@ export function SettingsForm({
       setParallelRepoFetchesError(null);
     }
 
-    try {
-      if (includeRegex.trim()) new RegExp(includeRegex);
+    // Include Regex Validation
+    if (!includeRegex.trim()) {
       setIncludeRegexError(null);
-    } catch (e) {
-      setIncludeRegexError("invalid");
+    } else {
+      try {
+        new RegExp(includeRegex);
+        setIncludeRegexError(null);
+      } catch (e) {
+        setIncludeRegexError("invalid");
+      }
     }
 
-    try {
-      if (excludeRegex.trim()) new RegExp(excludeRegex);
+    // Exclude Regex Validation
+    if (!excludeRegex.trim()) {
       setExcludeRegexError(null);
-    } catch (e) {
-      setExcludeRegexError("invalid");
+    } else {
+      try {
+        new RegExp(excludeRegex);
+        setExcludeRegexError(null);
+      } catch (e) {
+        setExcludeRegexError("invalid");
+      }
     }
 
+    // Cache Validation
     const isCacheEnabled = newSettings.cacheInterval > 0;
     const cacheIsLarger =
       newSettings.cacheInterval > newSettings.refreshInterval;
@@ -398,6 +426,8 @@ export function SettingsForm({
     excludeRegex,
   ]);
 
+  // Auto-Save Effect
+  // biome-ignore lint/correctness/useExhaustiveDependencies: router, toast, pathname, and t are stable functions from hooks
   React.useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
@@ -420,6 +450,7 @@ export function SettingsForm({
       parallelRepoFetches,
       appriseMaxCharacters,
     ].some((val) => val === "");
+
     if (
       hasEmptyFields ||
       intervalError ||
@@ -441,16 +472,19 @@ export function SettingsForm({
         const result = await updateSettingsAction(newSettings);
 
         if (result.success) {
-          setSaveStatus("success");
-          toast({
-            title: result.message.title,
-            description: result.message.description,
-          });
+          // On locale change: save flag and redirect immediately
           if (newSettings.locale !== currentSettings.locale) {
+            sessionStorage.setItem("settingsSavedAfterLocaleChange", "true");
             router.push(pathname, { locale: newSettings.locale });
+            return;
           }
+
+          // Normal save: show success status and auto-hide after 3 seconds
+          setSaveStatus("success");
+          setTimeout(() => setSaveStatus("idle"), 3000);
         } else {
           setSaveStatus("error");
+          // Toast only on error
           toast({
             title: result.message.title,
             description: result.message.description,
@@ -459,6 +493,7 @@ export function SettingsForm({
         }
       } catch (err) {
         setSaveStatus("error");
+        // Toast only on error
         toast({
           title: t("toast_error_title"),
           description: t("autosave_error"),
@@ -470,7 +505,6 @@ export function SettingsForm({
     return () => {
       clearTimeout(handler);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     newSettings,
     days,
@@ -488,9 +522,8 @@ export function SettingsForm({
     includeRegexError,
     excludeRegexError,
     appriseMaxCharacters,
-    appriseTags,
-    appriseFormat,
     isOnline,
+    currentSettings.locale,
   ]);
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -523,6 +556,14 @@ export function SettingsForm({
     );
   };
 
+  const handleSelectAllPreRelease = () => {
+    setPreReleaseSubChannels(allPreReleaseTypes);
+  };
+
+  const handleDeselectAllPreRelease = () => {
+    setPreReleaseSubChannels([]);
+  };
+
   const parsedParallelRepoFetches = Number.parseInt(parallelRepoFetches, 10);
   const hasValidParallelValue = !Number.isNaN(parsedParallelRepoFetches);
   const showParallelHighWarning =
@@ -552,627 +593,683 @@ export function SettingsForm({
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
-      <Card>
-        <CardHeader>
-          <CardTitle className="break-words">{t("title")}</CardTitle>
-          <CardDescription>{t("description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label>{t("time_format_label")}</Label>
-            <RadioGroup
-              value={timeFormat}
-              onValueChange={(value: TimeFormat) => setTimeFormat(value)}
-              className="flex items-center gap-4"
-              disabled={saveStatus === "saving" || !isOnline}
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="12h" id={ids.timeFormat12h} />
-                <Label htmlFor={ids.timeFormat12h}>
-                  {t("time_format_12h")}
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="24h" id={ids.timeFormat24h} />
-                <Label htmlFor={ids.timeFormat24h}>
-                  {t("time_format_24h")}
-                </Label>
-              </div>
-            </RadioGroup>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={ids.languageSelect}>{t("language_label")}</Label>
-            <Select
-              value={locale}
-              onValueChange={(value: Locale) => setLocale(value)}
-              disabled={saveStatus === "saving" || !isOnline}
-            >
-              <SelectTrigger
-                id={ids.languageSelect}
-                className="w-full sm:w-[180px]"
-              >
-                <SelectValue placeholder={t("language_placeholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="en">{t("language_en")}</SelectItem>
-                <SelectItem value="de">{t("language_de")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-4 pt-2">
-            <div className="flex items-start space-x-3">
-              <Checkbox
-                id={ids.showAcknowledge}
-                checked={showAcknowledge}
-                onCheckedChange={(checked) =>
-                  setShowAcknowledge(Boolean(checked))
-                }
+    <>
+      <FloatingSaveIndicator status={saveStatus} />
+
+      <div className="mx-auto max-w-2xl space-y-8">
+        <Card>
+          <CardHeader>
+            <CardDescription>{t("description")}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label>{t("time_format_label")}</Label>
+              <RadioGroup
+                value={timeFormat}
+                onValueChange={(value: TimeFormat) => setTimeFormat(value)}
+                className="flex items-center gap-4"
                 disabled={saveStatus === "saving" || !isOnline}
-                className="mt-1"
-              />
-              <div className="grid gap-1.5 leading-none">
-                <Label
-                  htmlFor={ids.showAcknowledge}
-                  className="font-medium cursor-pointer"
-                >
-                  {t("show_acknowledge_title")}
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  {t("show_acknowledge_description")}
-                </p>
-              </div>
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="12h" id={ids.timeFormat12h} />
+                  <Label htmlFor={ids.timeFormat12h}>
+                    {t("time_format_12h")}
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="24h" id={ids.timeFormat24h} />
+                  <Label htmlFor={ids.timeFormat24h}>
+                    {t("time_format_24h")}
+                  </Label>
+                </div>
+              </RadioGroup>
             </div>
-            <div
-              className={cn(
-                "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
-                showAcknowledge
-                  ? "mt-4 max-h-96 opacity-100"
-                  : "max-h-0 opacity-0",
-              )}
-            >
+            <div className="space-y-2">
+              <Label htmlFor={ids.languageSelect}>{t("language_label")}</Label>
+              <Select
+                value={locale}
+                onValueChange={(value: Locale) => setLocale(value)}
+                disabled={saveStatus === "saving" || !isOnline}
+              >
+                <SelectTrigger
+                  id={ids.languageSelect}
+                  className="w-full sm:w-[180px]"
+                >
+                  <SelectValue placeholder={t("language_placeholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en">{t("language_en")}</SelectItem>
+                  <SelectItem value="de">{t("language_de")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-4 pt-2">
               <div className="flex items-start space-x-3">
                 <Checkbox
-                  id={ids.showMarkAsNew}
-                  checked={showMarkAsNew}
+                  id={ids.showAcknowledge}
+                  checked={showAcknowledge}
                   onCheckedChange={(checked) =>
-                    setShowMarkAsNew(Boolean(checked))
+                    setShowAcknowledge(Boolean(checked))
                   }
-                  disabled={
-                    saveStatus === "saving" || !showAcknowledge || !isOnline
-                  }
+                  disabled={saveStatus === "saving" || !isOnline}
                   className="mt-1"
                 />
                 <div className="grid gap-1.5 leading-none">
                   <Label
-                    htmlFor={ids.showMarkAsNew}
+                    htmlFor={ids.showAcknowledge}
                     className="font-medium cursor-pointer"
                   >
-                    {t("show_mark_as_new_title")}
+                    {t("show_acknowledge_title")}
                   </Label>
                   <p className="text-sm text-muted-foreground">
-                    {t("show_mark_as_new_description")}
+                    {t("show_acknowledge_description")}
                   </p>
                 </div>
               </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("release_channel_title")}</CardTitle>
-          <CardDescription>{t("release_channel_description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <h3 className="font-medium">{t("release_channel_types_title")}</h3>
-            <p className="text-sm text-muted-foreground">
-              {t("release_channel_description_global")}
-            </p>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id={ids.stable}
-              checked={channels.includes("stable")}
-              onCheckedChange={() => handleChannelChange("stable")}
-              disabled={saveStatus === "saving" || !isOnline}
-            />
-            <Label htmlFor={ids.stable} className="font-normal cursor-pointer">
-              {t("release_channel_stable")}
-            </Label>
-          </div>
-
-          <div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id={ids.prerelease}
-                checked={isPreReleaseChecked}
-                onCheckedChange={() => handleChannelChange("prerelease")}
-                disabled={saveStatus === "saving" || !isOnline}
-              />
-              <Label
-                htmlFor={ids.prerelease}
-                className="font-normal cursor-pointer"
+              <div
+                className={cn(
+                  "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
+                  showAcknowledge
+                    ? "mt-4 max-h-96 opacity-100"
+                    : "max-h-0 opacity-0",
+                )}
               >
-                {t("release_channel_prerelease")}
-              </Label>
-            </div>
-
-            <div
-              className={cn(
-                "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
-                isPreReleaseChecked
-                  ? "mt-4 max-h-96 opacity-100"
-                  : "max-h-0 opacity-0",
-              )}
-            >
-              <div className="pb-2 space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  {t("prerelease_subtype_description")}
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-3">
-                  {allPreReleaseTypes.map((subType) => (
-                    <div key={subType} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`prerelease-${subType}`}
-                        checked={preReleaseSubChannels.includes(subType)}
-                        onCheckedChange={() =>
-                          handlePreReleaseSubChannelChange(subType)
-                        }
-                        disabled={
-                          !isPreReleaseChecked ||
-                          saveStatus === "saving" ||
-                          !isOnline
-                        }
-                      />
-                      <Label
-                        htmlFor={`prerelease-${subType}`}
-                        className="font-normal cursor-pointer text-sm"
-                      >
-                        {subType}
-                      </Label>
-                    </div>
-                  ))}
+                <div className="flex items-start space-x-3">
+                  <Checkbox
+                    id={ids.showMarkAsNew}
+                    checked={showMarkAsNew}
+                    onCheckedChange={(checked) =>
+                      setShowMarkAsNew(Boolean(checked))
+                    }
+                    disabled={
+                      saveStatus === "saving" || !showAcknowledge || !isOnline
+                    }
+                    className="mt-1"
+                  />
+                  <div className="grid gap-1.5 leading-none">
+                    <Label
+                      htmlFor={ids.showMarkAsNew}
+                      className="font-medium cursor-pointer"
+                    >
+                      {t("show_mark_as_new_title")}
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      {t("show_mark_as_new_description")}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          </CardContent>
+        </Card>
 
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id={ids.draft}
-              checked={channels.includes("draft")}
-              onCheckedChange={() => handleChannelChange("draft")}
-              disabled={saveStatus === "saving" || !isOnline}
-            />
-            <Label htmlFor={ids.draft} className="font-normal cursor-pointer">
-              {t("release_channel_draft")}
-            </Label>
-          </div>
-
-          <div className="space-y-2 pt-4">
-            <h3 className="font-medium">{t("regex_filter_title")}</h3>
-            <p className="text-sm text-muted-foreground">
-              {t("regex_filter_description")}
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={ids.includeRegex}>{t("include_regex_label")}</Label>
-            <Input
-              id={ids.includeRegex}
-              value={includeRegex}
-              onChange={(e) => setIncludeRegex(e.target.value)}
-              placeholder={t("regex_placeholder")}
-              disabled={saveStatus === "saving" || !isOnline}
-              className={cn(
-                !!includeRegexError &&
-                  "border-destructive focus-visible:ring-destructive",
-              )}
-            />
-            {includeRegexError && (
-              <p className="text-sm text-destructive">
-                {t("regex_error_invalid")}
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("release_channel_title")}</CardTitle>
+            <CardDescription>
+              {t("release_channel_description")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <h3 className="font-medium">
+                {t("release_channel_types_title")}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {t("release_channel_description_global")}
               </p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={ids.excludeRegex}>{t("exclude_regex_label")}</Label>
-            <Input
-              id={ids.excludeRegex}
-              value={excludeRegex}
-              onChange={(e) => setExcludeRegex(e.target.value)}
-              placeholder={t("regex_placeholder")}
-              disabled={saveStatus === "saving" || !isOnline}
-              className={cn(
-                !!excludeRegexError &&
-                  "border-destructive focus-visible:ring-destructive",
-              )}
-            />
-            {excludeRegexError && (
-              <p className="text-sm text-destructive">
-                {t("regex_error_invalid")}
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="break-words">
-            {t("automation_settings_title")}
-          </CardTitle>
-          <CardDescription>
-            {t("automation_settings_description")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div>
-            <Label>{t("refresh_interval_title")}</Label>
-            <div className="grid grid-cols-3 gap-4 mt-2">
-              <div className="space-y-2">
-                <Label htmlFor={ids.intervalMinutes}>
-                  {t("refresh_interval_minutes_label")}
-                </Label>
-                <Input
-                  id={ids.intervalMinutes}
-                  type="number"
-                  value={minutes}
-                  onChange={(e) => setMinutes(e.target.value)}
-                  min={0}
-                  max={59}
-                  disabled={saveStatus === "saving" || !isOnline}
-                  className={cn(
-                    !!intervalError &&
-                      "border-destructive focus-visible:ring-destructive",
-                  )}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor={ids.intervalHours}>
-                  {t("refresh_interval_hours_label")}
-                </Label>
-                <Input
-                  id={ids.intervalHours}
-                  type="number"
-                  value={hours}
-                  onChange={(e) => setHours(e.target.value)}
-                  min={0}
-                  max={23}
-                  disabled={saveStatus === "saving" || !isOnline}
-                  className={cn(
-                    !!intervalError &&
-                      "border-destructive focus-visible:ring-destructive",
-                  )}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor={ids.intervalDays}>
-                  {t("refresh_interval_days_label")}
-                </Label>
-                <Input
-                  id={ids.intervalDays}
-                  type="number"
-                  value={days}
-                  onChange={(e) => setDays(e.target.value)}
-                  min={0}
-                  max={3650}
-                  disabled={saveStatus === "saving" || !isOnline}
-                  className={cn(
-                    !!intervalError &&
-                      "border-destructive focus-visible:ring-destructive",
-                  )}
-                />
-              </div>
             </div>
-            {intervalError === "too_low" ? (
-              <p className="mt-2 text-sm text-destructive">
-                {t("refresh_interval_error_min")}
-              </p>
-            ) : intervalError === "too_high" ? (
-              <p className="mt-2 text-sm text-destructive">
-                {t("refresh_interval_error_max")}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("refresh_interval_hint")}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <Label>{t("cache_settings_title")}</Label>
-            <div className="grid grid-cols-3 gap-4 mt-2">
-              <div className="space-y-2">
-                <Label htmlFor={ids.cacheMinutes}>
-                  {t("refresh_interval_minutes_label")}
-                </Label>
-                <Input
-                  id={ids.cacheMinutes}
-                  type="number"
-                  value={cacheMinutes}
-                  onChange={(e) => setCacheMinutes(e.target.value)}
-                  min={0}
-                  max={59}
-                  disabled={saveStatus === "saving" || !isOnline}
-                  className={cn(
-                    isCacheInvalid &&
-                      "border-destructive focus-visible:ring-destructive",
-                  )}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor={ids.cacheHours}>
-                  {t("refresh_interval_hours_label")}
-                </Label>
-                <Input
-                  id={ids.cacheHours}
-                  type="number"
-                  value={cacheHours}
-                  onChange={(e) => setCacheHours(e.target.value)}
-                  min={0}
-                  max={23}
-                  disabled={saveStatus === "saving" || !isOnline}
-                  className={cn(
-                    isCacheInvalid &&
-                      "border-destructive focus-visible:ring-destructive",
-                  )}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor={ids.cacheDays}>
-                  {t("refresh_interval_days_label")}
-                </Label>
-                <Input
-                  id={ids.cacheDays}
-                  type="number"
-                  value={cacheDays}
-                  onChange={(e) => setCacheDays(e.target.value)}
-                  min={0}
-                  max={3650}
-                  disabled={saveStatus === "saving" || !isOnline}
-                  className={cn(
-                    isCacheInvalid &&
-                      "border-destructive focus-visible:ring-destructive",
-                  )}
-                />
-              </div>
-            </div>
-            {isCacheInvalid ? (
-              <p className="mt-2 text-sm text-destructive">
-                {t("cache_validation_error")}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("cache_settings_description")}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <Label htmlFor={ids.releasesPerPage}>
-              {t("releases_per_page_label")}
-            </Label>
-            <Input
-              id={ids.releasesPerPage}
-              type="number"
-              value={releasesPerPage}
-              onChange={(e) => setReleasesPerPage(e.target.value)}
-              min={1}
-              max={1000}
-              disabled={saveStatus === "saving" || !isOnline}
-              className={cn(
-                "mt-2 w-full sm:w-48",
-                !!releasesPerPageError &&
-                  "border-destructive focus-visible:ring-destructive",
-              )}
-            />
-            {releasesPerPageError === "too_low" ? (
-              <p className="mt-2 text-sm text-destructive">
-                {t("releases_per_page_error_min")}
-              </p>
-            ) : releasesPerPageError === "too_high" ? (
-              <p className="mt-2 text-sm text-destructive">
-                {t("releases_per_page_error_max_1000")}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("releases_per_page_hint_1000")}
-              </p>
-            )}
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t("releases_per_page_api_call_hint")}
-            </p>
-          </div>
-
-          <div>
-            <Label htmlFor={ids.parallelRepoFetches}>
-              {t("parallel_repo_fetches_label")}
-            </Label>
-            <Input
-              id={ids.parallelRepoFetches}
-              type="number"
-              value={parallelRepoFetches}
-              onChange={(e) => setParallelRepoFetches(e.target.value)}
-              min={1}
-              max={50}
-              disabled={saveStatus === "saving" || !isOnline}
-              className={cn(
-                "mt-2 w-full sm:w-48",
-                !!parallelRepoFetchesError &&
-                  "border-destructive focus-visible:ring-destructive",
-              )}
-            />
-            {parallelRepoFetchesError === "too_low" ? (
-              <p className="mt-2 text-sm text-destructive">
-                {t("parallel_repo_fetches_error_min")}
-              </p>
-            ) : parallelRepoFetchesError === "too_high" ? (
-              <p className="mt-2 text-sm text-destructive">
-                {t("parallel_repo_fetches_error_max")}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("parallel_repo_fetches_hint")}
-              </p>
-            )}
-            {showParallelTokenWarning && (
-              <p className="mt-2 text-xs text-yellow-600">
-                {t("parallel_repo_fetches_warning_token")}
-              </p>
-            )}
-            {showParallelHighWarning && (
-              <p className="mt-2 text-xs text-yellow-600">
-                {t("parallel_repo_fetches_warning_high")}
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("apprise_settings_title")}</CardTitle>
-          <CardDescription>{t("apprise_settings_description")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div>
-            <Label htmlFor={ids.appriseMaxChars}>
-              {t("apprise_max_chars_label")}
-            </Label>
-            <Input
-              id={ids.appriseMaxChars}
-              type="number"
-              value={appriseMaxCharacters}
-              onChange={(e) => setAppriseMaxCharacters(e.target.value)}
-              min={0}
-              disabled={
-                saveStatus === "saving" || !isAppriseConfigured || !isOnline
-              }
-              className="mt-2 w-full sm:w-48"
-            />
-            {isAppriseConfigured ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("apprise_max_chars_hint")}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("apprise_max_chars_disabled_hint")}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <Label htmlFor={ids.appriseFormat}>
-              {t("apprise_format_label")}
-            </Label>
-            <Select
-              value={appriseFormat}
-              onValueChange={(value: AppriseFormat) => setAppriseFormat(value)}
-              disabled={
-                saveStatus === "saving" || !isAppriseConfigured || !isOnline
-              }
-            >
-              <SelectTrigger
-                id={ids.appriseFormat}
-                className="w-full sm:w-[180px] mt-2"
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id={ids.stable}
+                checked={channels.includes("stable")}
+                onCheckedChange={() => handleChannelChange("stable")}
+                disabled={saveStatus === "saving" || !isOnline}
+              />
+              <Label
+                htmlFor={ids.stable}
+                className="font-normal cursor-pointer"
               >
-                <SelectValue placeholder={t("apprise_format_text")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="text">{t("apprise_format_text")}</SelectItem>
-                <SelectItem value="markdown">
-                  {t("apprise_format_markdown")}
-                </SelectItem>
-                <SelectItem value="html">{t("apprise_format_html")}</SelectItem>
-              </SelectContent>
-            </Select>
-            {isAppriseConfigured ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("apprise_format_hint")}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("apprise_format_disabled_hint")}
-              </p>
-            )}
-          </div>
+                {t("release_channel_stable")}
+              </Label>
+            </div>
 
-          <div>
-            <Label htmlFor={ids.appriseTags}>{t("apprise_tags_label")}</Label>
-            <Input
-              id={ids.appriseTags}
-              type="text"
-              value={appriseTags}
-              onChange={(e) => setAppriseTags(e.target.value)}
-              disabled={
-                saveStatus === "saving" || !isAppriseConfigured || !isOnline
-              }
-              className="mt-2 w-full"
-              placeholder={t("apprise_tags_placeholder")}
-            />
-            {isAppriseConfigured ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("apprise_tags_hint")}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("apprise_tags_disabled_hint")}
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            <div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id={ids.prerelease}
+                  checked={isPreReleaseChecked}
+                  onCheckedChange={() => handleChannelChange("prerelease")}
+                  disabled={saveStatus === "saving" || !isOnline}
+                />
+                <Label
+                  htmlFor={ids.prerelease}
+                  className="font-normal cursor-pointer"
+                >
+                  {t("release_channel_prerelease")}
+                </Label>
+              </div>
 
-      <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle className="text-destructive">
-            {t("danger_zone_title")}
-          </CardTitle>
-          <CardDescription className="text-destructive/80">
-            {t("danger_zone_description")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" disabled={isDeleting || !isOnline}>
-                {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                {t("delete_all_button_text")}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  {t("delete_all_dialog_title")}
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {t("delete_all_dialog_description")}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDeleting || !isOnline}>
-                  {t("cancel_button")}
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  onClick={handleDeleteAll}
+              <div
+                className={cn(
+                  "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
+                  isPreReleaseChecked
+                    ? "mt-4 max-h-[600px] opacity-100"
+                    : "max-h-0 opacity-0",
+                )}
+              >
+                <div className="pb-2 space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    {t("prerelease_subtype_description")}
+                  </p>
+                  <div className="flex gap-2 mb-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSelectAllPreRelease}
+                      disabled={
+                        !isPreReleaseChecked ||
+                        saveStatus === "saving" ||
+                        !isOnline
+                      }
+                    >
+                      Select All
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDeselectAllPreRelease}
+                      disabled={
+                        !isPreReleaseChecked ||
+                        saveStatus === "saving" ||
+                        !isOnline
+                      }
+                    >
+                      Deselect All
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-3">
+                    {allPreReleaseTypes.map((subType) => (
+                      <div
+                        key={subType}
+                        className="flex items-center space-x-2"
+                      >
+                        <Checkbox
+                          id={`prerelease-${subType}`}
+                          checked={preReleaseSubChannels.includes(subType)}
+                          onCheckedChange={() =>
+                            handlePreReleaseSubChannelChange(subType)
+                          }
+                          disabled={
+                            !isPreReleaseChecked ||
+                            saveStatus === "saving" ||
+                            !isOnline
+                          }
+                        />
+                        <Label
+                          htmlFor={`prerelease-${subType}`}
+                          className="font-normal cursor-pointer text-sm"
+                        >
+                          {subType}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id={ids.draft}
+                checked={channels.includes("draft")}
+                onCheckedChange={() => handleChannelChange("draft")}
+                disabled={saveStatus === "saving" || !isOnline}
+              />
+              <Label htmlFor={ids.draft} className="font-normal cursor-pointer">
+                {t("release_channel_draft")}
+              </Label>
+            </div>
+
+            <div className="space-y-2 pt-4">
+              <h3 className="font-medium">{t("regex_filter_title")}</h3>
+              <p className="text-sm text-muted-foreground">
+                {t("regex_filter_description")}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={ids.includeRegex}>
+                {t("include_regex_label")}
+              </Label>
+              <Input
+                id={ids.includeRegex}
+                value={includeRegex}
+                onChange={(e) => setIncludeRegex(e.target.value)}
+                placeholder={t("regex_placeholder")}
+                disabled={saveStatus === "saving" || !isOnline}
+                className={cn(
+                  !!includeRegexError &&
+                    "border-destructive focus-visible:ring-destructive",
+                )}
+              />
+              {includeRegexError && (
+                <p className="text-sm text-destructive">
+                  {t("regex_error_invalid")}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={ids.excludeRegex}>
+                {t("exclude_regex_label")}
+              </Label>
+              <Input
+                id={ids.excludeRegex}
+                value={excludeRegex}
+                onChange={(e) => setExcludeRegex(e.target.value)}
+                placeholder={t("regex_placeholder")}
+                disabled={saveStatus === "saving" || !isOnline}
+                className={cn(
+                  !!excludeRegexError &&
+                    "border-destructive focus-visible:ring-destructive",
+                )}
+              />
+              {excludeRegexError && (
+                <p className="text-sm text-destructive">
+                  {t("regex_error_invalid")}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="break-words">
+              {t("automation_settings_title")}
+            </CardTitle>
+            <CardDescription>
+              {t("automation_settings_description")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div>
+              <Label>{t("refresh_interval_title")}</Label>
+              <div className="grid grid-cols-3 gap-4 mt-2">
+                <div className="space-y-2">
+                  <Label htmlFor={ids.intervalMinutes}>
+                    {t("refresh_interval_minutes_label")}
+                  </Label>
+                  <Input
+                    id={ids.intervalMinutes}
+                    type="number"
+                    value={minutes}
+                    onChange={(e) => setMinutes(e.target.value)}
+                    min={0}
+                    max={59}
+                    disabled={saveStatus === "saving" || !isOnline}
+                    className={cn(
+                      !!intervalError &&
+                        "border-destructive focus-visible:ring-destructive",
+                    )}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={ids.intervalHours}>
+                    {t("refresh_interval_hours_label")}
+                  </Label>
+                  <Input
+                    id={ids.intervalHours}
+                    type="number"
+                    value={hours}
+                    onChange={(e) => setHours(e.target.value)}
+                    min={0}
+                    max={23}
+                    disabled={saveStatus === "saving" || !isOnline}
+                    className={cn(
+                      !!intervalError &&
+                        "border-destructive focus-visible:ring-destructive",
+                    )}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={ids.intervalDays}>
+                    {t("refresh_interval_days_label")}
+                  </Label>
+                  <Input
+                    id={ids.intervalDays}
+                    type="number"
+                    value={days}
+                    onChange={(e) => setDays(e.target.value)}
+                    min={0}
+                    max={3650}
+                    disabled={saveStatus === "saving" || !isOnline}
+                    className={cn(
+                      !!intervalError &&
+                        "border-destructive focus-visible:ring-destructive",
+                    )}
+                  />
+                </div>
+              </div>
+              {intervalError === "too_low" ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {t("refresh_interval_error_min")}
+                </p>
+              ) : intervalError === "too_high" ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {t("refresh_interval_error_max")}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("refresh_interval_hint")}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label>{t("cache_settings_title")}</Label>
+              <div className="grid grid-cols-3 gap-4 mt-2">
+                <div className="space-y-2">
+                  <Label htmlFor={ids.cacheMinutes}>
+                    {t("refresh_interval_minutes_label")}
+                  </Label>
+                  <Input
+                    id={ids.cacheMinutes}
+                    type="number"
+                    value={cacheMinutes}
+                    onChange={(e) => setCacheMinutes(e.target.value)}
+                    min={0}
+                    max={59}
+                    disabled={saveStatus === "saving" || !isOnline}
+                    className={cn(
+                      isCacheInvalid &&
+                        "border-destructive focus-visible:ring-destructive",
+                    )}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={ids.cacheHours}>
+                    {t("refresh_interval_hours_label")}
+                  </Label>
+                  <Input
+                    id={ids.cacheHours}
+                    type="number"
+                    value={cacheHours}
+                    onChange={(e) => setCacheHours(e.target.value)}
+                    min={0}
+                    max={23}
+                    disabled={saveStatus === "saving" || !isOnline}
+                    className={cn(
+                      isCacheInvalid &&
+                        "border-destructive focus-visible:ring-destructive",
+                    )}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={ids.cacheDays}>
+                    {t("refresh_interval_days_label")}
+                  </Label>
+                  <Input
+                    id={ids.cacheDays}
+                    type="number"
+                    value={cacheDays}
+                    onChange={(e) => setCacheDays(e.target.value)}
+                    min={0}
+                    max={3650}
+                    disabled={saveStatus === "saving" || !isOnline}
+                    className={cn(
+                      isCacheInvalid &&
+                        "border-destructive focus-visible:ring-destructive",
+                    )}
+                  />
+                </div>
+              </div>
+              {isCacheInvalid ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {t("cache_validation_error")}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("cache_settings_description")}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor={ids.releasesPerPage}>
+                {t("releases_per_page_label")}
+              </Label>
+              <Input
+                id={ids.releasesPerPage}
+                type="number"
+                value={releasesPerPage}
+                onChange={(e) => setReleasesPerPage(e.target.value)}
+                min={1}
+                max={1000}
+                disabled={saveStatus === "saving" || !isOnline}
+                className={cn(
+                  "mt-2 w-full sm:w-48",
+                  !!releasesPerPageError &&
+                    "border-destructive focus-visible:ring-destructive",
+                )}
+              />
+              {releasesPerPageError === "too_low" ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {t("releases_per_page_error_min")}
+                </p>
+              ) : releasesPerPageError === "too_high" ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {t("releases_per_page_error_max_1000")}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("releases_per_page_hint_1000")}
+                </p>
+              )}
+              <p className="mt-2 text-xs text-muted-foreground">
+                {t("releases_per_page_api_call_hint")}
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor={ids.parallelRepoFetches}>
+                {t("parallel_repo_fetches_label")}
+              </Label>
+              <Input
+                id={ids.parallelRepoFetches}
+                type="number"
+                value={parallelRepoFetches}
+                onChange={(e) => setParallelRepoFetches(e.target.value)}
+                min={1}
+                max={50}
+                disabled={saveStatus === "saving" || !isOnline}
+                className={cn(
+                  "mt-2 w-full sm:w-48",
+                  !!parallelRepoFetchesError &&
+                    "border-destructive focus-visible:ring-destructive",
+                )}
+              />
+              {parallelRepoFetchesError === "too_low" ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {t("parallel_repo_fetches_error_min")}
+                </p>
+              ) : parallelRepoFetchesError === "too_high" ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {t("parallel_repo_fetches_error_max")}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("parallel_repo_fetches_hint")}
+                </p>
+              )}
+              {showParallelTokenWarning && (
+                <p className="mt-2 text-xs text-yellow-600">
+                  {t("parallel_repo_fetches_warning_token")}
+                </p>
+              )}
+              {showParallelHighWarning && (
+                <p className="mt-2 text-xs text-yellow-600">
+                  {t("parallel_repo_fetches_warning_high")}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("apprise_settings_title")}</CardTitle>
+            <CardDescription>
+              {t("apprise_settings_description")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div>
+              <Label htmlFor={ids.appriseMaxChars}>
+                {t("apprise_max_chars_label")}
+              </Label>
+              <Input
+                id={ids.appriseMaxChars}
+                type="number"
+                value={appriseMaxCharacters}
+                onChange={(e) => setAppriseMaxCharacters(e.target.value)}
+                min={0}
+                disabled={
+                  saveStatus === "saving" || !isAppriseConfigured || !isOnline
+                }
+                className="mt-2 w-full sm:w-48"
+              />
+              {isAppriseConfigured ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("apprise_max_chars_hint")}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("apprise_max_chars_disabled_hint")}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor={ids.appriseFormat}>
+                {t("apprise_format_label")}
+              </Label>
+              <Select
+                value={appriseFormat}
+                onValueChange={(value: AppriseFormat) =>
+                  setAppriseFormat(value)
+                }
+                disabled={
+                  saveStatus === "saving" || !isAppriseConfigured || !isOnline
+                }
+              >
+                <SelectTrigger
+                  id={ids.appriseFormat}
+                  className="w-full sm:w-[180px] mt-2"
+                >
+                  <SelectValue placeholder={t("apprise_format_text")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">
+                    {t("apprise_format_text")}
+                  </SelectItem>
+                  <SelectItem value="markdown">
+                    {t("apprise_format_markdown")}
+                  </SelectItem>
+                  <SelectItem value="html">
+                    {t("apprise_format_html")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {isAppriseConfigured ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("apprise_format_hint")}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("apprise_format_disabled_hint")}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor={ids.appriseTags}>{t("apprise_tags_label")}</Label>
+              <Input
+                id={ids.appriseTags}
+                type="text"
+                value={appriseTags}
+                onChange={(e) => setAppriseTags(e.target.value)}
+                disabled={
+                  saveStatus === "saving" || !isAppriseConfigured || !isOnline
+                }
+                className="mt-2 w-full"
+                placeholder={t("apprise_tags_placeholder")}
+              />
+              {isAppriseConfigured ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("apprise_tags_hint")}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("apprise_tags_disabled_hint")}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-destructive/50">
+          <CardHeader>
+            <CardTitle className="text-destructive">
+              {t("danger_zone_title")}
+            </CardTitle>
+            <CardDescription className="text-destructive/80">
+              {t("danger_zone_description")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
                   disabled={isDeleting || !isOnline}
                 >
-                  {isDeleting && <Loader2 className="animate-spin" />}
-                  {t("confirm_delete_button")}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </CardContent>
-      </Card>
-
-      <div className="flex justify-end h-10 items-center">
-        <SaveStatusIndicator status={saveStatus} />
+                  {isDeleting ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Trash2 />
+                  )}
+                  {t("delete_all_button_text")}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {t("delete_all_dialog_title")}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {t("delete_all_dialog_description")}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDeleting || !isOnline}>
+                    {t("cancel_button")}
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={handleDeleteAll}
+                    disabled={isDeleting || !isOnline}
+                  >
+                    {isDeleting && <Loader2 className="animate-spin" />}
+                    {t("confirm_delete_button")}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </>
   );
 }
