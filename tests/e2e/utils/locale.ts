@@ -28,13 +28,14 @@ function extractLocaleFromUrl(urlString: string): string | null {
 
 export async function openSettingsForLocale(page: Page, locale: 'en' | 'de'): Promise<void> {
   await page.goto(settingsPaths[locale]);
-  await expect(page.locator('#language-select')).toBeVisible();
+  const languageSelect = page.getByLabel('Language').or(page.getByLabel('Sprache'));
+  await expect(languageSelect).toBeVisible();
 }
 
 async function selectLocale(page: Page, targetLocale: string): Promise<void> {
-  const trigger = page.locator('#language-select');
-  await expect(trigger).toBeVisible();
-  await trigger.click();
+  const languageSelect = page.getByLabel('Language').or(page.getByLabel('Sprache'));
+  await expect(languageSelect).toBeVisible();
+  await languageSelect.click();
 
   const labels = localeOptionLabels[targetLocale] ?? [targetLocale];
   for (const label of labels) {

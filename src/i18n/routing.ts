@@ -1,25 +1,25 @@
-import { Pathnames, defineRouting } from 'next-intl/routing';
+import { defineRouting, type Pathnames } from "next-intl/routing";
 
-export const locales = ['en', 'de'] as const;
-export const defaultLocale = 'en' as const;
+export const locales = ["en", "de"] as const;
+export const defaultLocale = "en" as const;
 
 // Centralized pathnames for the app (no side-effects)
 export const pathnames = {
-  '/': {
-    en: '/',
-    de: '/',
+  "/": {
+    en: "/",
+    de: "/",
   },
-  '/settings': {
-    en: '/settings',
-    de: '/einstellungen',
+  "/settings": {
+    en: "/settings",
+    de: "/einstellungen",
   },
-  '/login': {
-    en: '/login',
-    de: '/anmelden',
+  "/login": {
+    en: "/login",
+    de: "/anmelden",
   },
-  '/test': {
-    en: '/test',
-    de: '/test',
+  "/test": {
+    en: "/test",
+    de: "/test",
   },
 } satisfies Pathnames<typeof locales>;
 

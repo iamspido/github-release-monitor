@@ -28,8 +28,9 @@ test.describe('Global settings offline read-only + autosave pause', () => {
     await expect(page.getByLabel('Language')).toBeDisabled();
     await expect(page.getByLabel(/Mark as seen|Als gesehen markieren/)).toBeDisabled();
     await expect(page.getByLabel('Include Pattern').or(page.getByLabel('Einschließen-Muster (Include)'))).toBeDisabled();
-    // Use the control id since the label is a heading + nested labels for each field
-    await expect(page.locator('#interval-minutes')).toBeDisabled();
+    
+    const intervalMinutes = page.getByLabel('Minutes', { exact: true }).or(page.getByLabel('Minuten', { exact: true })).first();
+    await expect(intervalMinutes).toBeDisabled();
 
     // Danger zone button disabled
     const deleteAll = page.getByRole('button', { name: 'Delete All Repositories' }).or(page.getByRole('button', { name: 'Alle Repositories löschen' }));

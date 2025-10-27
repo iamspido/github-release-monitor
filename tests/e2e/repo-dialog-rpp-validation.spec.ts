@@ -9,8 +9,11 @@ test('repo dialog RPP > 1000 shows error and blocks autosave', async ({ page }) 
   // Open repo settings dialog on first card
   await page.getByRole('button', { name: 'Open settings for this repository' }).first().click();
 
+  const dialog = page.getByRole('dialog');
+  const rppInput = dialog.locator('input[type="number"]').first();
+
   // Set invalid value > 1000
-  await page.locator('#releases-per-page-repo').fill('1001');
+  await rppInput.fill('1001');
   await expect(page.getByText('The number cannot exceed 1000.')).toBeVisible();
 
   // No autosave while invalid

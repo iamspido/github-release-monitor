@@ -1,13 +1,17 @@
-'use client';
+"use client";
 
-import { useRouter } from '@/i18n/navigation';
-import { useEffect, useTransition } from 'react';
-import { refreshAndCheckAction } from '@/app/actions';
+import { useEffect, useTransition } from "react";
+import { refreshAndCheckAction } from "@/app/actions";
+import { useRouter } from "@/i18n/navigation";
 
 // This component uses the refreshInterval from settings to periodically
 // call router.refresh(), which re-fetches and re-renders Server Components
 // without a full page reload.
-export function AutoRefresher({ intervalMinutes }: { intervalMinutes: number }) {
+export function AutoRefresher({
+  intervalMinutes,
+}: {
+  intervalMinutes: number;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -22,7 +26,7 @@ export function AutoRefresher({ intervalMinutes }: { intervalMinutes: number }) 
 
       startTransition(async () => {
         // Skip when offline to avoid unhandled rejections.
-        if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+        if (typeof navigator !== "undefined" && !navigator.onLine) return;
         try {
           // By explicitly invalidating the cache on the server before refreshing,
           // we ensure that router.refresh() fetches the newest data
@@ -32,7 +36,7 @@ export function AutoRefresher({ intervalMinutes }: { intervalMinutes: number }) 
         } catch (err) {
           // Silently ignore transient network errors during background refreshes.
           // eslint-disable-next-line no-console
-          console.debug('Auto refresh skipped due to error:', err);
+          console.debug("Auto refresh skipped due to error:", err);
         }
       });
     }, intervalMs);

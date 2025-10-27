@@ -13,9 +13,12 @@ test('repo apprise format/tags reset-to-global buttons restore global hints', as
   await page.getByLabel('Global Apprise Format').click();
   await page.getByRole('option', { name: 'Markdown' }).click();
 
-  // Apprise tags: type custom value
-  const tags = page.locator('#apprise-tags-repo');
-  await tags.fill('foo,bar');
+  // Apprise tags: find all text inputs in dialog, apprise tags is the last one
+  const dialog = page.getByRole('dialog');
+  const allTextInputs = dialog.locator('input[type="text"]');
+  const tagsInput = allTextInputs.last();
+  
+  await tagsInput.fill('foo,bar');
 
   // Hint should indicate individual settings
   await expect(page.getByText('Using individual Apprise settings.')).toBeVisible();
@@ -24,9 +27,9 @@ test('repo apprise format/tags reset-to-global buttons restore global hints', as
   await page.getByLabel('Global Apprise Format').click();
   await page.getByRole('option', { name: /Use global/i }).click();
   // Clear tags to mimic reset-to-global
-  await tags.fill('');
+  await tagsInput.fill('');
 
   // Values should be cleared and hint switches to global
-  await expect(tags).toHaveValue('');
+  await expect(tagsInput).toHaveValue('');
   await expect(page.getByText('Using global Apprise settings.')).toBeVisible();
 });

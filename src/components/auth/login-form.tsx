@@ -1,59 +1,63 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import { useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
-import { useTranslations, useLocale } from 'next-intl';
-import { KeyRound, Loader2, LogIn } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { KeyRound, Loader2, LogIn } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import * as React from "react";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 
-import { login } from '@/app/auth/actions';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { login } from "@/app/auth/actions";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 function LoginButton() {
-    const { pending } = useFormStatus();
-    const t = useTranslations('LoginPage');
+  const { pending } = useFormStatus();
+  const t = useTranslations("LoginPage");
 
-    return (
-        <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-            <LogIn className="mr-2 h-4 w-4" />
-        )}
-        {t('login_button')}
-        </Button>
-    );
+  return (
+    <Button type="submit" className="w-full" disabled={pending}>
+      {pending ? (
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      ) : (
+        <LogIn className="mr-2 h-4 w-4" />
+      )}
+      {t("login_button")}
+    </Button>
+  );
 }
 
 export function LoginForm() {
   const [state, formAction] = useActionState(login, undefined);
-  const t = useTranslations('LoginPage');
+  const t = useTranslations("LoginPage");
   const searchParams = useSearchParams();
-  const next = searchParams.get('next');
+  const next = searchParams.get("next");
 
   const formRef = React.useRef<HTMLFormElement>(null);
-  const [username, setUsername] = React.useState('');
+  const [username, setUsername] = React.useState("");
   const usernameRef = React.useRef<HTMLInputElement>(null);
+  const usernameId = React.useId();
+  const passwordId = React.useId();
 
   React.useEffect(() => {
     if (state?.errorKey) {
       // Clear password field on error
       if (formRef.current) {
-        const passwordInput = formRef.current.elements.namedItem('password') as HTMLInputElement;
+        const passwordInput = formRef.current.elements.namedItem(
+          "password",
+        ) as HTMLInputElement;
         if (passwordInput) {
-          passwordInput.value = '';
+          passwordInput.value = "";
         }
       }
       // Return focus to the first field for accessibility
@@ -61,33 +65,34 @@ export function LoginForm() {
     }
   }, [state]);
 
+  const errorKey = state?.errorKey;
 
   return (
     <form
       ref={formRef}
       action={formAction}
       onSubmit={(e) => {
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
           e.preventDefault();
           // eslint-disable-next-line no-console
-          console.warn('Login prevented: offline');
+          console.warn("Login prevented: offline");
         }
       }}
     >
       <Card>
         <CardHeader>
-          <CardTitle>{t('form_title')}</CardTitle>
-          <CardDescription>{t('form_description')}</CardDescription>
+          <CardTitle>{t("form_title")}</CardTitle>
+          <CardDescription>{t("form_description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {next && <input type="hidden" name="next" value={next} />}
           <div className="space-y-2">
-            <Label htmlFor="username">{t('username_label')}</Label>
+            <Label htmlFor={usernameId}>{t("username_label")}</Label>
             <Input
-              id="username"
+              id={usernameId}
               name="username"
               type="text"
-              placeholder={t('username_placeholder')}
+              placeholder={t("username_placeholder")}
               required
               autoFocus
               ref={usernameRef}
@@ -96,13 +101,13 @@ export function LoginForm() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">{t('password_label')}</Label>
-            <Input id="password" name="password" type="password" required />
+            <Label htmlFor={passwordId}>{t("password_label")}</Label>
+            <Input id={passwordId} name="password" type="password" required />
           </div>
-          {state?.errorKey && (
+          {errorKey && (
             <Alert variant="destructive">
-                <KeyRound className="h-4 w-4" />
-                <AlertDescription>{t(state.errorKey as any)}</AlertDescription>
+              <KeyRound className="h-4 w-4" />
+              <AlertDescription>{t(errorKey)}</AlertDescription>
             </Alert>
           )}
         </CardContent>

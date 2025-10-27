@@ -14,7 +14,7 @@ test('autosave ends with All changes saved', async ({ page }) => {
   await login(page);
   await page.goto('/en/settings');
 
-  const rpp = page.locator('#releases-per-page');
+  const rpp = page.getByLabel('Number of releases to fetch per repository').or(page.getByLabel('Anzahl der pro Repository abzurufenden Releases'));
   // Change to a valid different value to trigger autosave
   await rpp.fill('31');
 
@@ -27,7 +27,8 @@ test('export button remains enabled during settings autosave', async ({ page }) 
   await login(page);
   await page.goto('/en/settings');
   // Trigger autosave
-  await page.locator('#releases-per-page').fill('32');
+  const rpp = page.getByLabel('Number of releases to fetch per repository').or(page.getByLabel('Anzahl der pro Repository abzurufenden Releases'));
+  await rpp.fill('32');
 
   // Immediately go to home and ensure Export is enabled
   await page.goto('/en');

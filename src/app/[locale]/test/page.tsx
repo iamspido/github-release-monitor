@@ -1,11 +1,18 @@
-import * as React from 'react';
-import { getGitHubRateLimit, checkAppriseStatusAction } from '@/app/actions';
-import { TestPageClient } from '@/components/test-page-client';
-import type { RateLimitResult, NotificationConfig, AppriseStatus, UpdateNotificationState } from '@/types';
-import { getTranslations } from 'next-intl/server';
-import { Header } from '@/components/header';
-import { logger } from '@/lib/logger';
-import { getUpdateNotificationState } from '@/app/actions';
+import { getTranslations } from "next-intl/server";
+import {
+  checkAppriseStatusAction,
+  getGitHubRateLimit,
+  getUpdateNotificationState,
+} from "@/app/actions";
+import { Header } from "@/components/header";
+import { TestPageClient } from "@/components/test-page-client";
+import { logger } from "@/lib/logger";
+import type {
+  AppriseStatus,
+  NotificationConfig,
+  RateLimitResult,
+  UpdateNotificationState,
+} from "@/types";
 
 function getNotificationConfig(): NotificationConfig {
   const {
@@ -19,7 +26,12 @@ function getNotificationConfig(): NotificationConfig {
     APPRISE_URL,
   } = process.env;
 
-  const isSmtpConfigured = !!(MAIL_HOST && MAIL_PORT && MAIL_FROM_ADDRESS && MAIL_TO_ADDRESS);
+  const isSmtpConfigured = !!(
+    MAIL_HOST &&
+    MAIL_PORT &&
+    MAIL_FROM_ADDRESS &&
+    MAIL_TO_ADDRESS
+  );
   const isAppriseConfigured = !!APPRISE_URL;
 
   return {
@@ -34,17 +46,22 @@ function getNotificationConfig(): NotificationConfig {
       MAIL_FROM_NAME: MAIL_FROM_NAME || null,
       MAIL_TO_ADDRESS: MAIL_TO_ADDRESS || null,
       APPRISE_URL: APPRISE_URL || null,
-    }
+    },
   };
 }
 
-export default async function TestPage({params}: {params: Promise<{locale: string}>}) {
+export default async function TestPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
   const { locale } = await params;
-  const t = await getTranslations({locale: locale, namespace: 'TestPage'});
+  const t = await getTranslations({ locale: locale, namespace: "TestPage" });
   const rateLimitResult: RateLimitResult = await getGitHubRateLimit();
   const githubTokenSet = !!process.env.GITHUB_ACCESS_TOKEN;
   const notificationConfig = getNotificationConfig();
-  const updateNotice: UpdateNotificationState = await getUpdateNotificationState();
+  const updateNotice: UpdateNotificationState =
+    await getUpdateNotificationState();
 
   let appriseStatus: AppriseStatus;
   try {
@@ -52,16 +69,22 @@ export default async function TestPage({params}: {params: Promise<{locale: strin
     appriseStatus = await checkAppriseStatusAction();
   } catch (error) {
     // This is a fallback safety net. The action itself should handle errors.
-    logger.withScope('WebServer').error("Critical error calling checkAppriseStatusAction:", error);
-    appriseStatus = { status: 'error', error: t('apprise_connection_error_fetch') };
+    logger
+      .withScope("WebServer")
+      .error("Critical error calling checkAppriseStatusAction:", error);
+    appriseStatus = {
+      status: "error",
+      error: t("apprise_connection_error_fetch"),
+    };
   }
-
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       <Header locale={locale} updateNotice={updateNotice} />
       <main className="container mx-auto px-4 py-8 md:px-6">
-        <h2 className="mb-8 text-3xl font-bold tracking-tight break-words">{t('title')}</h2>
+        <h2 className="mb-8 text-3xl font-bold tracking-tight break-words">
+          {t("title")}
+        </h2>
         <TestPageClient
           rateLimitResult={rateLimitResult}
           isTokenSet={githubTokenSet}

@@ -16,14 +16,22 @@ test('cache > refresh shows error and blocks autosave', async ({ page }) => {
   await page.goto('/en/settings');
 
   // Set refresh to 1 minute
-  await page.locator('#interval-minutes').fill('1');
-  await page.locator('#interval-hours').fill('0');
-  await page.locator('#interval-days').fill('0');
+  const refreshMinutes = page.getByLabel('Minutes', { exact: true }).or(page.getByLabel('Minuten', { exact: true })).first();
+  const refreshHours = page.getByLabel('Hours', { exact: true }).or(page.getByLabel('Stunden', { exact: true })).first();
+  const refreshDays = page.getByLabel('Days', { exact: true }).or(page.getByLabel('Tage', { exact: true })).first();
+  
+  await refreshMinutes.fill('1');
+  await refreshHours.fill('0');
+  await refreshDays.fill('0');
 
   // Set cache to 2 minutes (greater than refresh)
-  await page.locator('#cache-interval-minutes').fill('2');
-  await page.locator('#cache-interval-hours').fill('0');
-  await page.locator('#cache-interval-days').fill('0');
+  const cacheMinutes = page.getByLabel('Minutes', { exact: true }).or(page.getByLabel('Minuten', { exact: true })).nth(1);
+  const cacheHours = page.getByLabel('Hours', { exact: true }).or(page.getByLabel('Stunden', { exact: true })).nth(1);
+  const cacheDays = page.getByLabel('Days', { exact: true }).or(page.getByLabel('Tage', { exact: true })).nth(1);
+  
+  await cacheMinutes.fill('2');
+  await cacheHours.fill('0');
+  await cacheDays.fill('0');
 
   await expect(page.getByText('Cache duration cannot be longer than the refresh interval.')).toBeVisible();
 

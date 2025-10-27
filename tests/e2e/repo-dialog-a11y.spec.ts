@@ -17,6 +17,7 @@ test('repo settings dialog has dialog role, labelledby, and traps focus on open'
   await expect(title).toBeVisible();
 
   // Basic interaction inside dialog to ensure focusable elements are operable
-  await page.locator('#releases-per-page-repo').focus();
-  await expect(page.locator('#releases-per-page-repo')).toBeFocused();
+  const rppInput = dialog.locator('input[type="number"]').first();
+  await rppInput.focus();
+  await expect(rppInput).toBeFocused();
 });

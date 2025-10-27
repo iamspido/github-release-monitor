@@ -16,6 +16,7 @@ vi.mock('next-intl', () => ({
         autosave_saving: 'Saving...',
         autosave_success: 'All changes saved',
         autosave_success_short: 'Saved',
+        releases_per_page_label_repo: 'Releases per page',
       },
       SettingsForm: {
         offline_notice: 'Offline – changes are read-only and auto-save is paused.',
@@ -96,17 +97,37 @@ describe('RepoSettingsDialog offline behavior', () => {
       // Allow portal render/effects
       await Promise.resolve();
       await Promise.resolve();
-      const rpp = document.querySelector('#releases-per-page-repo') as HTMLInputElement | null;
+      
+      // Find input by type and context instead of static ID
+      // Look for the number input within the "Releases per page" section
+      const labels = Array.from(document.querySelectorAll('label'));
+      const releasesPerPageLabel = labels.find(label => 
+        label.textContent?.includes('Releases per page')
+      );
+      
+      let rpp: HTMLInputElement | null = null;
+      if (releasesPerPageLabel && releasesPerPageLabel.htmlFor) {
+        rpp = document.getElementById(releasesPerPageLabel.htmlFor) as HTMLInputElement;
+      }
+      
+      // Fallback: find by type="number" if label approach fails
+      if (!rpp) {
+        const numberInputs = Array.from(document.querySelectorAll('input[type="number"]'));
+        rpp = numberInputs[0] as HTMLInputElement;
+      }
+      
       expect(rpp).toBeTruthy();
       rpp!.value = '7';
       rpp!.dispatchEvent(new Event('input', { bubbles: true }));
       rpp!.dispatchEvent(new Event('change', { bubbles: true }));
+      
       // Proceed debounce and allow effects to run
       vi.advanceTimersByTime(2000);
       await Promise.resolve();
       await Promise.resolve();
+      
       // Assert the field reflects the new value (change handled without errors)
-      expect((document.querySelector('#releases-per-page-repo') as HTMLInputElement).value).toBe('7');
+      expect(rpp!.value).toBe('7');
     } finally {
       cleanup();
       vi.useRealTimers();

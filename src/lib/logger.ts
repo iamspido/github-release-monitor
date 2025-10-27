@@ -10,7 +10,7 @@
  * - Internally delegates to console.* so existing console spies in tests keep working.
  */
 
-type LevelName = 'error' | 'warn' | 'info' | 'debug' | 'silent';
+type LevelName = "error" | "warn" | "info" | "debug" | "silent";
 
 const LEVEL_ORDER: Record<LevelName, number> = {
   error: 0,
@@ -21,15 +21,15 @@ const LEVEL_ORDER: Record<LevelName, number> = {
 };
 
 function defaultLevel(): LevelName {
-  const env = (process.env.NODE_ENV || '').toLowerCase();
-  return env === 'production' ? 'warn' : 'debug';
+  const env = (process.env.NODE_ENV || "").toLowerCase();
+  return env === "production" ? "warn" : "debug";
 }
 
 function parseLevel(input: string | undefined): LevelName {
   if (!input) return defaultLevel();
   const v = input.toLowerCase().trim();
-  if (v === 'none') return 'silent';
-  if (v === 'verbose') return 'debug';
+  if (v === "none") return "silent";
+  if (v === "verbose") return "debug";
   if (v in LEVEL_ORDER) return v as LevelName;
   return defaultLevel();
 }
@@ -55,7 +55,7 @@ function formatLocalTimestamp(d = new Date()): string {
   // getTimezoneOffset returns minutes to add to local time to get UTC
   // e.g., Europe/Berlin in summer => -120 (UTC+02:00)
   const offsetMin = d.getTimezoneOffset();
-  const sign = offsetMin <= 0 ? '+' : '-';
+  const sign = offsetMin <= 0 ? "+" : "-";
   const abs = Math.abs(offsetMin);
   const offH = pad2(Math.floor(abs / 60));
   const offM = pad2(abs % 60);
@@ -70,37 +70,42 @@ export interface Logger {
   withScope: (scope: string) => Logger;
 }
 
-function emit(level: Exclude<LevelName, 'silent'>, scope: string, message: string, args: unknown[]): void {
+function emit(
+  level: Exclude<LevelName, "silent">,
+  scope: string,
+  message: string,
+  args: unknown[],
+): void {
   if (!shouldLog(level)) return;
   const ts = formatLocalTimestamp();
   const lvl = level.toUpperCase();
   const line = `[${ts}] [${lvl}] [${scope}] ${message}`;
   switch (level) {
-    case 'error':
+    case "error":
       // eslint-disable-next-line no-console
       console.error(line, ...args);
       break;
-    case 'warn':
+    case "warn":
       // eslint-disable-next-line no-console
       console.warn(line, ...args);
       break;
-    case 'info':
+    case "info":
       // eslint-disable-next-line no-console
       console.log(line, ...args);
       break;
-    case 'debug':
+    case "debug":
       // eslint-disable-next-line no-console
       console.debug ? console.debug(line, ...args) : console.log(line, ...args);
       break;
   }
 }
 
-function makeLogger(scope = 'App'): Logger {
+function makeLogger(scope = "App"): Logger {
   return {
-    error: (message, ...args) => emit('error', scope, message, args),
-    warn: (message, ...args) => emit('warn', scope, message, args),
-    info: (message, ...args) => emit('info', scope, message, args),
-    debug: (message, ...args) => emit('debug', scope, message, args),
+    error: (message, ...args) => emit("error", scope, message, args),
+    warn: (message, ...args) => emit("warn", scope, message, args),
+    info: (message, ...args) => emit("info", scope, message, args),
+    debug: (message, ...args) => emit("debug", scope, message, args),
     withScope: (s: string) => makeLogger(s || scope),
   };
 }

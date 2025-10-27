@@ -1,7 +1,8 @@
-import { logger } from '@/lib/logger';
+import { logger } from "@/lib/logger";
+
 // This promise is used to create a sequential task queue.
 // All actions that modify the repository list should be wrapped in `scheduleTask`.
-let currentUpdatePromise: Promise<any> = Promise.resolve();
+let currentUpdatePromise: Promise<unknown> = Promise.resolve();
 
 /**
  * Schedules a task to be executed sequentially, preventing race conditions
@@ -10,8 +11,11 @@ let currentUpdatePromise: Promise<any> = Promise.resolve();
  * @param taskFunction The async function to execute.
  * @returns A promise that resolves with the result of the task function.
  */
-export function scheduleTask<T>(taskName: string, taskFunction: () => Promise<T>): Promise<T> {
-  const log = logger.withScope('Scheduler');
+export function scheduleTask<T>(
+  taskName: string,
+  taskFunction: () => Promise<T>,
+): Promise<T> {
+  const log = logger.withScope("Scheduler");
   log.info(`Queuing task: ${taskName}`);
 
   const taskPromise = currentUpdatePromise.then(async () => {

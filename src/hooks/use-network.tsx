@@ -1,10 +1,12 @@
-'use client';
+"use client";
 
-import * as React from 'react';
+import * as React from "react";
 
 type NetworkContextValue = { isOnline: boolean };
 
-const NetworkContext = React.createContext<NetworkContextValue | undefined>(undefined);
+const NetworkContext = React.createContext<NetworkContextValue | undefined>(
+  undefined,
+);
 
 type Subscriber = () => void;
 
@@ -17,26 +19,28 @@ function notifySubscribers(online: boolean) {
     return;
   }
   storeIsOnline = online;
-  subscribers.forEach(listener => listener());
+  for (const listener of subscribers) {
+    listener();
+  }
 }
 
 function initializeListeners() {
-  if (listenersInitialized || typeof window === 'undefined') {
+  if (listenersInitialized || typeof window === "undefined") {
     return;
   }
 
   const handleOnline = () => notifySubscribers(true);
   const handleOffline = () => notifySubscribers(false);
 
-  window.addEventListener('online', handleOnline);
-  window.addEventListener('offline', handleOffline);
+  window.addEventListener("online", handleOnline);
+  window.addEventListener("offline", handleOffline);
 
   // Do not trust navigator.onLine blindly in headless CI; default remains true
   // unless an event flips it.
   listenersInitialized = true;
 }
 
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   initializeListeners();
 }
 
@@ -60,17 +64,19 @@ function useNetworkStore(): NetworkContextValue {
   const isOnline = React.useSyncExternalStore(
     subscribeStore,
     getClientSnapshot,
-    getServerSnapshot
+    getServerSnapshot,
   );
   return { isOnline };
 }
 
-export function NetworkStatusProvider({ children }: { children: React.ReactNode }) {
+export function NetworkStatusProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const value = useNetworkStore();
   return (
-    <NetworkContext.Provider value={value}>
-      {children}
-    </NetworkContext.Provider>
+    <NetworkContext.Provider value={value}>{children}</NetworkContext.Provider>
   );
 }
 

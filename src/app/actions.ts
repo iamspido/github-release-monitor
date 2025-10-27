@@ -1,61 +1,59 @@
-'use server';
+"use server";
 
+import crypto from "node:crypto";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
+import { getLocale, getTranslations } from "next-intl/server";
+import { sendTestEmail } from "@/lib/email";
+import { getJobStatus, type JobStatus, setJobStatus } from "@/lib/job-store";
+import { logger } from "@/lib/logger";
+import {
+  sendNotification,
+  sendTestAppriseNotification,
+} from "@/lib/notifications";
+import { getRepositories, saveRepositories } from "@/lib/repository-storage";
+import { getSettings } from "@/lib/settings-storage";
+import { getSystemStatus, updateSystemStatus } from "@/lib/system-status";
+import { scheduleTask } from "@/lib/task-scheduler";
+import { runApplicationUpdateCheck } from "@/lib/update-check";
 import type {
-  Repository,
-  GithubRelease,
-  EnrichedRelease,
-  RateLimitResult,
-  AppSettings,
-  PreReleaseChannelType,
-  FetchError,
   AppriseStatus,
+  AppSettings,
   CachedRelease,
+  EnrichedRelease,
+  FetchError,
+  GithubRelease,
+  PreReleaseChannelType,
+  RateLimitResult,
+  Repository,
   UpdateNotificationState,
-} from '@/types';
-import { allPreReleaseTypes } from '@/types';
-import {sendNotification, sendTestAppriseNotification} from '@/lib/notifications';
-import {getRepositories, saveRepositories} from '@/lib/repository-storage';
-import {revalidatePath, revalidateTag, unstable_cache} from 'next/cache';
-import { getSettings } from '@/lib/settings-storage';
-import { getTranslations } from 'next-intl/server';
-import { getLocale } from 'next-intl/server';
-import { getJobStatus, setJobStatus, type JobStatus } from '@/lib/job-store';
-import { remark } from 'remark';
-import remarkGfm from 'remark-gfm';
-import remarkHtml from 'remark-html';
-import { sendTestEmail } from '@/lib/email';
-import crypto from 'crypto';
+} from "@/types";
+import { allPreReleaseTypes } from "@/types";
 
-import { scheduleTask } from '@/lib/task-scheduler';
-import { logger } from '@/lib/logger';
-import { runApplicationUpdateCheck } from '@/lib/update-check';
-import { getSystemStatus, updateSystemStatus } from '@/lib/system-status';
-
-const log = logger.withScope('WebServer');
+const log = logger.withScope("WebServer");
 
 const DEFAULT_FETCH_RETRY_ATTEMPTS = 3;
 const DEFAULT_FETCH_RETRY_DELAY_MS = 500;
 const DEFAULT_RESPONSE_PARSE_ATTEMPTS = 3;
 const RETRYABLE_FETCH_ERROR_CODES = new Set([
-  'UND_ERR_SOCKET',
-  'UND_ERR_BODY_TIMEOUT',
-  'UND_ERR_CONNECT_TIMEOUT',
-  'UND_ERR_HEADERS_TIMEOUT',
-  'UND_ERR_RESPONSE_TIMEOUT',
-  'ECONNRESET',
-  'ECONNREFUSED',
-  'ETIMEDOUT',
+  "UND_ERR_SOCKET",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_RESPONSE_TIMEOUT",
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
 ]);
 
 function getErrorCode(error: unknown): string | undefined {
-  if (!error || typeof error !== 'object') return undefined;
+  if (!error || typeof error !== "object") return undefined;
   const maybeError = error as { code?: unknown; cause?: unknown };
-  if (typeof maybeError.code === 'string') {
+  if (typeof maybeError.code === "string") {
     return maybeError.code;
   }
-  if (maybeError.cause && typeof maybeError.cause === 'object') {
+  if (maybeError.cause && typeof maybeError.cause === "object") {
     const cause = maybeError.cause as { code?: unknown };
-    if (typeof cause.code === 'string') {
+    if (typeof cause.code === "string") {
       return cause.code;
     }
   }
@@ -88,11 +86,12 @@ type FetchRetryContext = {
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  context?: FetchRetryContext
+  context?: FetchRetryContext,
 ): Promise<Response> {
   const description = context?.description ?? url;
   const maxAttempts = context?.maxAttempts ?? DEFAULT_FETCH_RETRY_ATTEMPTS;
-  const initialDelayMs = context?.initialDelayMs ?? DEFAULT_FETCH_RETRY_DELAY_MS;
+  const initialDelayMs =
+    context?.initialDelayMs ?? DEFAULT_FETCH_RETRY_DELAY_MS;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
@@ -103,26 +102,30 @@ async function fetchWithRetry(
         throw error;
       }
 
-      const delayMs = initialDelayMs * Math.pow(2, attempt - 1);
+      const delayMs = initialDelayMs * 2 ** (attempt - 1);
       log.warn(
         `Retrying ${description} in ${delayMs}ms (attempt ${attempt + 1}/${maxAttempts}) due to fetch error.`,
-        error
+        error,
       );
       await wait(delayMs);
     }
   }
 
-  throw new Error(`Failed to fetch ${description} after ${maxAttempts} attempts.`);
+  throw new Error(
+    `Failed to fetch ${description} after ${maxAttempts} attempts.`,
+  );
 }
 
 async function fetchJsonResponseWithRetry<T>(
   url: string,
   options: RequestInit,
-  context?: FetchRetryContext
+  context?: FetchRetryContext,
 ): Promise<{ response: Response; data?: T }> {
   const description = context?.description ?? url;
-  const parseAttempts = context?.parseAttempts ?? DEFAULT_RESPONSE_PARSE_ATTEMPTS;
-  const initialDelayMs = context?.initialDelayMs ?? DEFAULT_FETCH_RETRY_DELAY_MS;
+  const parseAttempts =
+    context?.parseAttempts ?? DEFAULT_RESPONSE_PARSE_ATTEMPTS;
+  const initialDelayMs =
+    context?.initialDelayMs ?? DEFAULT_FETCH_RETRY_DELAY_MS;
 
   for (let attempt = 1; attempt <= parseAttempts; attempt += 1) {
     const response = await fetchWithRetry(url, options, context);
@@ -135,35 +138,39 @@ async function fetchJsonResponseWithRetry<T>(
       const data = (await response.json()) as T;
       return { response, data };
     } catch (error) {
-      const shouldRetry = attempt < parseAttempts && isRetryableFetchError(error);
+      const shouldRetry =
+        attempt < parseAttempts && isRetryableFetchError(error);
       if (!shouldRetry) {
         throw error;
       }
 
-      const delayMs = initialDelayMs * Math.pow(2, attempt - 1);
+      const delayMs = initialDelayMs * 2 ** (attempt - 1);
       log.warn(
         `Retrying ${description} JSON parse in ${delayMs}ms (attempt ${attempt + 1}/${parseAttempts}) due to response parse error.`,
-        error
+        error,
       );
       await wait(delayMs);
     }
   }
 
-  throw new Error(`Failed to parse JSON for ${description} after ${parseAttempts} attempts.`);
+  throw new Error(
+    `Failed to parse JSON for ${description} after ${parseAttempts} attempts.`,
+  );
 }
 
-
-function parseGitHubUrl(url: string): {owner: string; repo: string; id: string} | null {
+function parseGitHubUrl(
+  url: string,
+): { owner: string; repo: string; id: string } | null {
   try {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) return null;
     const urlObj = new URL(trimmedUrl);
-    if (urlObj.hostname !== 'github.com') return null;
+    if (urlObj.hostname !== "github.com") return null;
 
-    const pathParts = urlObj.pathname.split('/').filter(Boolean);
+    const pathParts = urlObj.pathname.split("/").filter(Boolean);
     if (pathParts.length >= 2) {
       const [owner, repo] = pathParts;
-      return {owner, repo, id: `${owner}/${repo}`.toLowerCase()};
+      return { owner, repo, id: `${owner}/${repo}`.toLowerCase() };
     }
     return null;
   } catch (error) {
@@ -173,20 +180,22 @@ function parseGitHubUrl(url: string): {owner: string; repo: string; id: string} 
 
 // Security: Validates the repoId format.
 function isValidRepoId(repoId: string): boolean {
-  if (typeof repoId !== 'string') return false;
+  if (typeof repoId !== "string") return false;
   // Allows letters, numbers, hyphens, dots, and underscores in the name.
   // Enforces the "owner/repo" structure.
   const repoIdRegex = /^[a-z0-9-._]+\/[a-z0-9-._]+$/i;
   return repoIdRegex.test(repoId);
 }
 
-
-function isPreReleaseByTagName(tagName: string, preReleaseSubChannels?: PreReleaseChannelType[]): boolean {
-  if (typeof tagName !== 'string' || !tagName) return false;
+function isPreReleaseByTagName(
+  tagName: string,
+  preReleaseSubChannels?: PreReleaseChannelType[],
+): boolean {
+  if (typeof tagName !== "string" || !tagName) return false;
 
   // If no sub-channels are provided or the array is empty, it can't match anything.
   if (!preReleaseSubChannels || preReleaseSubChannels.length === 0) {
-      return false;
+    return false;
   }
 
   // This regex looks for a separator (like - or .), then one of the keywords.
@@ -194,7 +203,10 @@ function isPreReleaseByTagName(tagName: string, preReleaseSubChannels?: PreRelea
   // following the keyword is NOT a letter, or it's the end of the string.
   // This correctly matches `-b3` (since 3 is not a letter) and `v1.0-beta` (end of string),
   // but prevents incorrectly matching `beta` in `v1.0-betamax`.
-  const preReleaseRegex = new RegExp(`[.-](${preReleaseSubChannels.join('|')})(?=[^a-zA-Z]|$)`, 'i');
+  const preReleaseRegex = new RegExp(
+    `[.-](${preReleaseSubChannels.join("|")})(?=[^a-zA-Z]|$)`,
+    "i",
+  );
   return preReleaseRegex.test(tagName);
 }
 
@@ -218,114 +230,117 @@ const jsCodeExample = `function greet(name) {
 
 greet('World');`;
 
+async function getComprehensiveMarkdownBody(
+  locale: string,
+): Promise<{ title: string; body: string }> {
+  const t = await getTranslations({ locale, namespace: "TestRelease" });
 
-async function getComprehensiveMarkdownBody(locale: string): Promise<{ title: string; body: string }> {
-  const t = await getTranslations({ locale, namespace: 'TestRelease' });
+  const body = `# ${t("title")}
 
-  const body = `# ${t('title')}
+${t("body_intro")}
 
-${t('body_intro')}
+## ${t("section_text_formatting")}
 
-## ${t('section_text_formatting')}
+- **${t("text_bold")}**
+- *${t("text_italic")}*
+- ***${t("text_bold_italic")}***
+- ~~${t("text_strikethrough")}~~
 
-- **${t('text_bold')}**
-- *${t('text_italic')}*
-- ***${t('text_bold_italic')}***
-- ~~${t('text_strikethrough')}~~
-
-> ${t('text_blockquote')}
-
----
-
-## ${t('section_lists')}
-
-### ${t('list_unordered_title')}
-*   ${t('list_item_1')}
-*   ${t('list_item_2')}
-    *   ${t('list_nested_item_1')}
-    *   ${t('list_nested_item_2')}
-
-### ${t('list_unordered_variations_title')}
-+ ${t('list_plus_item_1')}
-+ ${t('list_plus_item_2')}
-- ${t('list_hyphen_item_1')}
-- ${t('list_hyphen_item_2')}
-
-### ${t('list_ordered_title')}
-1.  ${t('list_ordered_item_1')}
-2.  ${t('list_ordered_item_2')}
-3.  ${t('list_ordered_item_3')}
-    1.  ${t('list_nested_ordered_1')}
-    2.  ${t('list_nested_ordered_2')}
+> ${t("text_blockquote")}
 
 ---
 
-## ${t('section_emojis')}
+## ${t("section_lists")}
 
-${t('emojis_text')} ✨ 🚀 💡
+### ${t("list_unordered_title")}
+*   ${t("list_item_1")}
+*   ${t("list_item_2")}
+    *   ${t("list_nested_item_1")}
+    *   ${t("list_nested_item_2")}
+
+### ${t("list_unordered_variations_title")}
++ ${t("list_plus_item_1")}
++ ${t("list_plus_item_2")}
+- ${t("list_hyphen_item_1")}
+- ${t("list_hyphen_item_2")}
+
+### ${t("list_ordered_title")}
+1.  ${t("list_ordered_item_1")}
+2.  ${t("list_ordered_item_2")}
+3.  ${t("list_ordered_item_3")}
+    1.  ${t("list_nested_ordered_1")}
+    2.  ${t("list_nested_ordered_2")}
 
 ---
 
-## ${t('section_footnotes')}
+## ${t("section_emojis")}
 
-${t('footnotes_text_1')}[^1]. ${t('footnotes_text_2')}[^2].
-
-[^1]: ${t('footnote_1_definition')}
-[^2]: ${t('footnote_2_definition')}
+${t("emojis_text")} ✨ 🚀 💡
 
 ---
 
-## ${t('section_links')}
+## ${t("section_footnotes")}
 
-${t('links_text_1')} [${t('links_text_2')}](https://www.markdownguide.org).
+${t("footnotes_text_1")}[^1]. ${t("footnotes_text_2")}[^2].
+
+[^1]: ${t("footnote_1_definition")}
+[^2]: ${t("footnote_2_definition")}
 
 ---
 
-## ${t('section_code_blocks')}
+## ${t("section_links")}
 
-### ${t('code_inline_title')}
-${t('code_inline_text', {
-  code: `\`${t('code_inline_code_word')}\``
+${t("links_text_1")} [${t("links_text_2")}](https://www.markdownguide.org).
+
+---
+
+## ${t("section_code_blocks")}
+
+### ${t("code_inline_title")}
+${t("code_inline_text", {
+  code: `\`${t("code_inline_code_word")}\``,
 })}
 
-### ${t('code_fenced_title')}
+### ${t("code_fenced_title")}
 \`\`\`javascript
-// ${t('code_fenced_js_comment')}
+// ${t("code_fenced_js_comment")}
 ${jsCodeExample}
 \`\`\`
 
 ---
 
-## ${t('section_table')}
+## ${t("section_table")}
 
-| ${t('table_header_feature')} | ${t('table_header_support')} | ${t('table_header_notes')} |
+| ${t("table_header_feature")} | ${t("table_header_support")} | ${t("table_header_notes")} |
 |-----------------|------------------|-------------------------------------|
-| ${t('table_row1_feature')} | ${t('table_row1_support')} | ${t('table_row1_notes')} |
-| ${t('table_row2_feature')} | ${t('table_row2_support')} | ${t('table_row2_notes')} |
-| ${t('table_row3_feature')} | ${t('table_row3_support')} | ${t('table_row3_notes')} |
-| ${t('table_row4_feature')} | ${t('table_row4_support')} | ${t('table_row4_notes')} |`;
+| ${t("table_row1_feature")} | ${t("table_row1_support")} | ${t("table_row1_notes")} |
+| ${t("table_row2_feature")} | ${t("table_row2_support")} | ${t("table_row2_notes")} |
+| ${t("table_row3_feature")} | ${t("table_row3_support")} | ${t("table_row3_notes")} |
+| ${t("table_row4_feature")} | ${t("table_row4_support")} | ${t("table_row4_notes")} |`;
 
   return {
-      title: t('title'),
-      body: body
-  }
+    title: t("title"),
+    body: body,
+  };
 }
 
-async function getBasicAppriseTestBody(locale: string): Promise<{ title: string; body: string }> {
-  const t = await getTranslations({ locale, namespace: 'TestRelease' });
+async function getBasicAppriseTestBody(
+  locale: string,
+): Promise<{ title: string; body: string }> {
+  const t = await getTranslations({ locale, namespace: "TestRelease" });
 
-  const body = `${t('apprise_basic_test_title')}
+  const body = `${t("apprise_basic_test_title")}
 
-- ${t('apprise_basic_item_bold')}
-- ${t('apprise_basic_item_italic')}
-- ${t('apprise_basic_item_code')}
+- ${t("apprise_basic_item_bold")}
+- ${t("apprise_basic_item_italic")}
+- ${t("apprise_basic_item_code")}
 
-> ${t('apprise_basic_blockquote')}
+> ${t("apprise_basic_blockquote")}
 
-${t('apprise_basic_link_text')} (https://github.com/iamspido/github-release-monitor)`;
+${t("apprise_basic_link_text")} (https://github.com/iamspido/github-release-monitor)`;
 
   return {
-    title: t('apprise_basic_test_notification_title'),
+    title: t("apprise_basic_test_notification_title"),
     body: body,
   };
 }
@@ -339,40 +354,59 @@ function resolveParallelRepoFetches(settings: AppSettings): number {
   return Math.min(Math.max(rounded, 1), 50);
 }
 
-
 async function fetchLatestRelease(
   owner: string,
   repo: string,
-  repoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'etag'>,
+  repoSettings: Pick<
+    Repository,
+    | "releaseChannels"
+    | "preReleaseSubChannels"
+    | "releasesPerPage"
+    | "includeRegex"
+    | "excludeRegex"
+    | "etag"
+  >,
   globalSettings: AppSettings,
-  locale: string
-): Promise<{ release: GithubRelease | null; error: FetchError | null, newEtag?: string }> {
+  locale: string,
+): Promise<{
+  release: GithubRelease | null;
+  error: FetchError | null;
+  newEtag?: string;
+}> {
   log.info(`Fetching release for ${owner}/${repo}`);
   const fetchedAtTimestamp = new Date().toISOString();
 
   // --- Determine effective settings ---
-  const effectiveReleaseChannels = (repoSettings.releaseChannels && repoSettings.releaseChannels.length > 0)
-    ? repoSettings.releaseChannels
-    : globalSettings.releaseChannels;
+  const effectiveReleaseChannels =
+    repoSettings.releaseChannels && repoSettings.releaseChannels.length > 0
+      ? repoSettings.releaseChannels
+      : globalSettings.releaseChannels;
 
-  const effectivePreReleaseSubChannels = (repoSettings.preReleaseSubChannels && repoSettings.preReleaseSubChannels.length > 0)
-    ? repoSettings.preReleaseSubChannels
-    : globalSettings.preReleaseSubChannels || allPreReleaseTypes;
+  const effectivePreReleaseSubChannels =
+    repoSettings.preReleaseSubChannels &&
+    repoSettings.preReleaseSubChannels.length > 0
+      ? repoSettings.preReleaseSubChannels
+      : globalSettings.preReleaseSubChannels || allPreReleaseTypes;
 
-  const totalReleasesToFetch = (typeof repoSettings.releasesPerPage === 'number' && repoSettings.releasesPerPage >= 1 && repoSettings.releasesPerPage <= 1000)
-    ? repoSettings.releasesPerPage
-    : globalSettings.releasesPerPage;
+  const totalReleasesToFetch =
+    typeof repoSettings.releasesPerPage === "number" &&
+    repoSettings.releasesPerPage >= 1 &&
+    repoSettings.releasesPerPage <= 1000
+      ? repoSettings.releasesPerPage
+      : globalSettings.releasesPerPage;
 
-  const effectiveIncludeRegex = repoSettings.includeRegex ?? globalSettings.includeRegex;
-  const effectiveExcludeRegex = repoSettings.excludeRegex ?? globalSettings.excludeRegex;
+  const effectiveIncludeRegex =
+    repoSettings.includeRegex ?? globalSettings.includeRegex;
+  const effectiveExcludeRegex =
+    repoSettings.excludeRegex ?? globalSettings.excludeRegex;
 
   // --- Special handling for the virtual test repository ---
-  if (owner === 'test' && repo === 'test') {
+  if (owner === "test" && repo === "test") {
     const { title, body } = await getComprehensiveMarkdownBody(locale);
     const release = {
       id: 1,
-      html_url: 'https://github.com/test/test/releases/tag/v1.0.0-simulated',
-      tag_name: 'v1.0.0-simulated',
+      html_url: "https://github.com/test/test/releases/tag/v1.0.0-simulated",
+      tag_name: "v1.0.0-simulated",
       name: title,
       body: body,
       created_at: new Date().toISOString(),
@@ -392,67 +426,87 @@ async function fetchLatestRelease(
   let newEtag: string | undefined;
 
   const headers: HeadersInit = {
-    Accept: 'application/vnd.github.v3+json',
-    'User-Agent': 'GitHubReleaseMonitorApp',
-    'X-GitHub-Api-Version': '2022-11-28',
+    Accept: "application/vnd.github.v3+json",
+    "User-Agent": "GitHubReleaseMonitorApp",
+    "X-GitHub-Api-Version": "2022-11-28",
   };
   if (process.env.GITHUB_ACCESS_TOKEN) {
-    headers['Authorization'] = `token ${process.env.GITHUB_ACCESS_TOKEN}`;
+    headers.Authorization = `token ${process.env.GITHUB_ACCESS_TOKEN}`;
   }
 
   try {
     for (let page = 1; page <= pagesToFetch; page++) {
-      const releasesOnThisPage = Math.min(MAX_PER_PAGE, totalReleasesToFetch - allReleases.length);
+      const releasesOnThisPage = Math.min(
+        MAX_PER_PAGE,
+        totalReleasesToFetch - allReleases.length,
+      );
       if (releasesOnThisPage <= 0) break;
 
       const url = `${GITHUB_API_BASE_URL}/releases?per_page=${releasesOnThisPage}&page=${page}`;
 
-      const currentHeaders = {...headers};
+      const currentHeaders = { ...headers };
       // Only use ETag for the first page request.
       if (page === 1 && repoSettings.etag) {
-          currentHeaders['If-None-Match'] = repoSettings.etag;
+        currentHeaders["If-None-Match"] = repoSettings.etag;
       }
-      const fetchOptions: RequestInit = { headers: currentHeaders, cache: 'no-store' };
+      const fetchOptions: RequestInit = {
+        headers: currentHeaders,
+        cache: "no-store",
+      };
 
-      const { response, data: pageReleases } = await fetchJsonResponseWithRetry<GithubRelease[]>(
-        url,
-        fetchOptions,
-        { description: `GitHub releases for ${owner}/${repo} page ${page}` }
-      );
+      const { response, data: pageReleases } = await fetchJsonResponseWithRetry<
+        GithubRelease[]
+      >(url, fetchOptions, {
+        description: `GitHub releases for ${owner}/${repo} page ${page}`,
+      });
 
       // For the first page, check for 304 Not Modified.
       if (page === 1) {
-        newEtag = response.headers.get('etag') || undefined;
+        newEtag = response.headers.get("etag") || undefined;
         if (response.status === 304) {
-            log.info(`[ETag] No changes for ${owner}/${repo}.`);
-            return { release: null, error: { type: 'not_modified' }, newEtag: repoSettings.etag };
+          log.info(`[ETag] No changes for ${owner}/${repo}.`);
+          return {
+            release: null,
+            error: { type: "not_modified" },
+            newEtag: repoSettings.etag,
+          };
         }
       }
 
       if (!response.ok) {
         if (response.status === 404) {
-          log.error(`GitHub API error for ${owner}/${repo}: Not Found (404). The repository may not exist or is private.`);
-          return { release: null, error: { type: 'repo_not_found' }, newEtag };
+          log.error(
+            `GitHub API error for ${owner}/${repo}: Not Found (404). The repository may not exist or is private.`,
+          );
+          return { release: null, error: { type: "repo_not_found" }, newEtag };
         }
         if (response.status === 403) {
-          const rateLimitLimit = response.headers.get('x-ratelimit-limit');
-          const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
-          const rateLimitReset = response.headers.get('x-ratelimit-reset');
-          const resetTime = rateLimitReset ? new Date(parseInt(rateLimitReset, 10) * 1000).toISOString() : 'N/A';
+          const rateLimitLimit = response.headers.get("x-ratelimit-limit");
+          const rateLimitRemaining = response.headers.get(
+            "x-ratelimit-remaining",
+          );
+          const rateLimitReset = response.headers.get("x-ratelimit-reset");
+          const resetTime = rateLimitReset
+            ? new Date(parseInt(rateLimitReset, 10) * 1000).toISOString()
+            : "N/A";
 
           log.error(
             `GitHub API rate limit exceeded for ${owner}/${repo}. ` +
-            `Limit: ${rateLimitLimit}, Remaining: ${rateLimitRemaining}, Resets at: ${resetTime}. ` +
-            'Please add or check your GITHUB_ACCESS_TOKEN.'
+              `Limit: ${rateLimitLimit}, Remaining: ${rateLimitRemaining}, Resets at: ${resetTime}. ` +
+              "Please add or check your GITHUB_ACCESS_TOKEN.",
           );
-          return { release: null, error: { type: 'rate_limit' }, newEtag };
+          return { release: null, error: { type: "rate_limit" }, newEtag };
         }
-        log.error(`GitHub API error for ${owner}/${repo}: ${response.status} ${response.statusText}`);
-        return { release: null, error: { type: 'api_error' }, newEtag };
+        log.error(
+          `GitHub API error for ${owner}/${repo}: ${response.status} ${response.statusText}`,
+        );
+        return { release: null, error: { type: "api_error" }, newEtag };
       }
 
       if (!pageReleases) {
-        throw new Error(`GitHub API returned an empty body for ${owner}/${repo} releases page ${page}.`);
+        throw new Error(
+          `GitHub API returned an empty body for ${owner}/${repo} releases page ${page}.`,
+        );
       }
 
       allReleases = [...allReleases, ...pageReleases];
@@ -463,174 +517,208 @@ async function fetchLatestRelease(
     }
 
     if (allReleases.length === 0) {
-          log.info(`No formal releases found for ${owner}/${repo}. Falling back to tags.`);
-      const { response: tagsResponse, data: tags } = await fetchJsonResponseWithRetry<
-        { name: string; commit: { sha: string } }[]
-      >(
-        `${GITHUB_API_BASE_URL}/tags?per_page=1`,
-        { headers, cache: 'no-store' },
-        { description: `GitHub tags for ${owner}/${repo}` }
+      log.info(
+        `No formal releases found for ${owner}/${repo}. Falling back to tags.`,
       );
+      const { response: tagsResponse, data: tags } =
+        await fetchJsonResponseWithRetry<
+          { name: string; commit: { sha: string } }[]
+        >(
+          `${GITHUB_API_BASE_URL}/tags?per_page=1`,
+          { headers, cache: "no-store" },
+          { description: `GitHub tags for ${owner}/${repo}` },
+        );
 
       if (!tagsResponse.ok) {
-          log.error(`Failed to fetch tags for ${owner}/${repo} after failing to find releases.`);
-          return { release: null, error: { type: 'no_releases_found' }, newEtag };
+        log.error(
+          `Failed to fetch tags for ${owner}/${repo} after failing to find releases.`,
+        );
+        return { release: null, error: { type: "no_releases_found" }, newEtag };
       }
 
       if (!tags || tags.length === 0) {
-          log.info(`No tags found for ${owner}/${repo}.`);
-          return { release: null, error: { type: 'no_releases_found' }, newEtag };
+        log.info(`No tags found for ${owner}/${repo}.`);
+        return { release: null, error: { type: "no_releases_found" }, newEtag };
       }
 
       const latestTag = tags[0];
-      const t = await getTranslations({ locale, namespace: 'Actions' });
+      const t = await getTranslations({ locale, namespace: "Actions" });
 
-      let bodyContent = '';
+      let bodyContent = "";
       let publicationDate = new Date().toISOString();
 
       try {
-        const { response: refResponse, data: refData } = await fetchJsonResponseWithRetry<{
-          object: { type: string; sha: string; url: string };
-        }>(
-          `${GITHUB_API_BASE_URL}/git/ref/tags/${latestTag.name}`,
-          { headers, cache: 'no-store' },
-          { description: `Git reference for ${owner}/${repo} tag ${latestTag.name}` }
-        );
+        const { response: refResponse, data: refData } =
+          await fetchJsonResponseWithRetry<{
+            object: { type: string; sha: string; url: string };
+          }>(
+            `${GITHUB_API_BASE_URL}/git/ref/tags/${latestTag.name}`,
+            { headers, cache: "no-store" },
+            {
+              description: `Git reference for ${owner}/${repo} tag ${latestTag.name}`,
+            },
+          );
 
         if (refResponse.ok && refData) {
-            // If it's an annotated tag, the object type is 'tag'.
-            if (refData.object.type === 'tag') {
-                const {
-                  response: annotatedTagResponse,
-                  data: annotatedTagData,
-                } = await fetchJsonResponseWithRetry<{
-                  message?: string;
-                  tagger?: { date?: string };
-                }>(
-                  refData.object.url,
-                  { headers, cache: 'no-store' },
-                  { description: `Annotated tag for ${owner}/${repo} tag ${latestTag.name}` }
-                );
-                if (annotatedTagResponse.ok && annotatedTagData) {
-                    if (annotatedTagData.message) {
-                        bodyContent = `### ${t('tag_message_fallback_title')}\n\n---\n\n${annotatedTagData.message}`;
-                    }
-                    publicationDate = annotatedTagData.tagger?.date || publicationDate;
-                }
+          // If it's an annotated tag, the object type is 'tag'.
+          if (refData.object.type === "tag") {
+            const { response: annotatedTagResponse, data: annotatedTagData } =
+              await fetchJsonResponseWithRetry<{
+                message?: string;
+                tagger?: { date?: string };
+              }>(
+                refData.object.url,
+                { headers, cache: "no-store" },
+                {
+                  description: `Annotated tag for ${owner}/${repo} tag ${latestTag.name}`,
+                },
+              );
+            if (annotatedTagResponse.ok && annotatedTagData) {
+              if (annotatedTagData.message) {
+                bodyContent = `### ${t("tag_message_fallback_title")}\n\n---\n\n${annotatedTagData.message}`;
+              }
+              publicationDate =
+                annotatedTagData.tagger?.date || publicationDate;
             }
+          }
         }
 
         // If no annotated tag message was found (either lightweight tag or error), fall back to commit message.
         if (!bodyContent) {
-          const {
-            response: commitResponse,
-            data: commitData,
-          } = await fetchJsonResponseWithRetry<{
-            commit: { message: string; committer: { date: string } };
-          }>(
-            `${GITHUB_API_BASE_URL}/commits/${latestTag.commit.sha}`,
-            { headers, cache: 'no-store' },
-            { description: `GitHub commit ${latestTag.commit.sha} for ${owner}/${repo}` }
-          );
+          const { response: commitResponse, data: commitData } =
+            await fetchJsonResponseWithRetry<{
+              commit: { message: string; committer: { date: string } };
+            }>(
+              `${GITHUB_API_BASE_URL}/commits/${latestTag.commit.sha}`,
+              { headers, cache: "no-store" },
+              {
+                description: `GitHub commit ${latestTag.commit.sha} for ${owner}/${repo}`,
+              },
+            );
           if (commitResponse.ok && commitData) {
-            bodyContent = `### ${t('commit_message_fallback_title')}\n\n---\n\n${commitData.commit.message}`;
+            bodyContent = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commitData.commit.message}`;
             publicationDate = commitData.commit.committer.date;
           } else {
-             log.error(`Failed to fetch commit for tag ${latestTag.name} in ${owner}/${repo}.`);
-             return { release: null, error: { type: 'api_error' }, newEtag };
+            log.error(
+              `Failed to fetch commit for tag ${latestTag.name} in ${owner}/${repo}.`,
+            );
+            return { release: null, error: { type: "api_error" }, newEtag };
           }
         }
       } catch (e) {
-         log.error(`Error during tag fallback for ${owner}/${repo}:`, e);
-         return { release: null, error: { type: 'api_error' } };
+        log.error(`Error during tag fallback for ${owner}/${repo}:`, e);
+        return { release: null, error: { type: "api_error" } };
       }
 
       const virtualRelease: GithubRelease = {
-          id: 0, // Virtual release has no ID
-          html_url: `https://github.com/${owner}/${repo}/releases/tag/${latestTag.name}`,
-          tag_name: latestTag.name,
-          name: `Tag: ${latestTag.name}`,
-          body: bodyContent,
-          created_at: publicationDate,
-          published_at: publicationDate,
-          prerelease: false,
-          draft: false,
+        id: 0, // Virtual release has no ID
+        html_url: `https://github.com/${owner}/${repo}/releases/tag/${latestTag.name}`,
+        tag_name: latestTag.name,
+        name: `Tag: ${latestTag.name}`,
+        body: bodyContent,
+        created_at: publicationDate,
+        published_at: publicationDate,
+        prerelease: false,
+        draft: false,
       };
       allReleases = [virtualRelease];
     }
 
     // Filter releases according to configured channels/regex
-    const filteredReleases = allReleases.filter(r => {
+    const filteredReleases = allReleases.filter((r) => {
       try {
         if (effectiveExcludeRegex) {
-          const exclude = new RegExp(effectiveExcludeRegex, 'i');
+          const exclude = new RegExp(effectiveExcludeRegex, "i");
           if (exclude.test(r.tag_name)) return false;
         }
         if (effectiveIncludeRegex) {
-          const include = new RegExp(effectiveIncludeRegex, 'i');
+          const include = new RegExp(effectiveIncludeRegex, "i");
           return include.test(r.tag_name);
         }
       } catch (e) {
-        log.error(`Invalid regex for repo ${owner}/${repo}. Regex filters will be ignored. Error:`, e);
+        log.error(
+          `Invalid regex for repo ${owner}/${repo}. Regex filters will be ignored. Error:`,
+          e,
+        );
       }
 
       if (r.draft) {
-        return effectiveReleaseChannels.includes('draft');
+        return effectiveReleaseChannels.includes("draft");
       }
 
-      const isConsideredPreRelease = r.prerelease || isPreReleaseByTagName(r.tag_name, allPreReleaseTypes);
+      const isConsideredPreRelease =
+        r.prerelease || isPreReleaseByTagName(r.tag_name, allPreReleaseTypes);
 
       if (isConsideredPreRelease) {
-        if (!effectiveReleaseChannels.includes('prerelease')) return false;
-        return isPreReleaseByTagName(r.tag_name, effectivePreReleaseSubChannels);
+        if (!effectiveReleaseChannels.includes("prerelease")) return false;
+        return isPreReleaseByTagName(
+          r.tag_name,
+          effectivePreReleaseSubChannels,
+        );
       } else {
-        return effectiveReleaseChannels.includes('stable');
+        return effectiveReleaseChannels.includes("stable");
       }
     });
 
     if (filteredReleases.length === 0) {
-      return { release: null, error: { type: 'no_matching_releases' }, newEtag };
+      return {
+        release: null,
+        error: { type: "no_matching_releases" },
+        newEtag,
+      };
     }
 
     // Sort by published_at (fallback to created_at) desc to ensure stability
-    const sortedReleases = filteredReleases
-      .slice()
-      .sort((a, b) => {
-        const aTime = new Date(a.published_at || a.created_at).getTime();
-        const bTime = new Date(b.published_at || b.created_at).getTime();
-        return bTime - aTime;
-      });
+    const sortedReleases = filteredReleases.slice().sort((a, b) => {
+      const aTime = new Date(a.published_at || a.created_at).getTime();
+      const bTime = new Date(b.published_at || b.created_at).getTime();
+      return bTime - aTime;
+    });
 
     let latestRelease = sortedReleases[0];
 
     // This check is for formal releases that have an empty body.
     // The tag fallback already populates the body with a commit message.
-    if (latestRelease.id !== 0 && (!latestRelease.body || latestRelease.body.trim() === '')) {
-        log.info(`Release body for ${owner}/${repo} tag ${latestRelease.tag_name} is empty. Attempting to fetch commit message.`);
-        const commitApiUrl = `${GITHUB_API_BASE_URL}/commits/${latestRelease.tag_name}`;
-        try {
-            const {
-              response: commitResponse,
-              data: commitData,
-            } = await fetchJsonResponseWithRetry<{
-              commit?: { message?: string };
-            }>(
-              commitApiUrl,
-              { headers, cache: 'no-store' },
-              { description: `GitHub commit for ${owner}/${repo} tag ${latestRelease.tag_name}` }
-            );
-            if (commitResponse.ok && commitData?.commit?.message) {
-                const t = await getTranslations({ locale, namespace: 'Actions' });
-                latestRelease.body = `### ${t('commit_message_fallback_title')}\n\n---\n\n${commitData.commit.message}`;
-                log.info(`Successfully fetched commit message for ${owner}/${repo} tag ${latestRelease.tag_name}.`);
-            } else if (commitResponse.ok) {
-                 log.info(`Commit message for ${owner}/${repo} tag ${latestRelease.tag_name} could not be retrieved from commit data.`);
-            } else {
-                log.error(`Failed to fetch commit for ${owner}/${repo} tag ${latestRelease.tag_name}: ${commitResponse.status} ${commitResponse.statusText}`);
-            }
-        } catch (error) {
-            log.error(`Error fetching commit for tag ${latestRelease.tag_name} in ${owner}/${repo}:`, error);
+    if (
+      latestRelease.id !== 0 &&
+      (!latestRelease.body || latestRelease.body.trim() === "")
+    ) {
+      log.info(
+        `Release body for ${owner}/${repo} tag ${latestRelease.tag_name} is empty. Attempting to fetch commit message.`,
+      );
+      const commitApiUrl = `${GITHUB_API_BASE_URL}/commits/${latestRelease.tag_name}`;
+      try {
+        const { response: commitResponse, data: commitData } =
+          await fetchJsonResponseWithRetry<{
+            commit?: { message?: string };
+          }>(
+            commitApiUrl,
+            { headers, cache: "no-store" },
+            {
+              description: `GitHub commit for ${owner}/${repo} tag ${latestRelease.tag_name}`,
+            },
+          );
+        if (commitResponse.ok && commitData?.commit?.message) {
+          const t = await getTranslations({ locale, namespace: "Actions" });
+          latestRelease.body = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commitData.commit.message}`;
+          log.info(
+            `Successfully fetched commit message for ${owner}/${repo} tag ${latestRelease.tag_name}.`,
+          );
+        } else if (commitResponse.ok) {
+          log.info(
+            `Commit message for ${owner}/${repo} tag ${latestRelease.tag_name} could not be retrieved from commit data.`,
+          );
+        } else {
+          log.error(
+            `Failed to fetch commit for ${owner}/${repo} tag ${latestRelease.tag_name}: ${commitResponse.status} ${commitResponse.statusText}`,
+          );
         }
+      } catch (error) {
+        log.error(
+          `Error fetching commit for tag ${latestRelease.tag_name} in ${owner}/${repo}:`,
+          error,
+        );
+      }
     }
 
     if (latestRelease) {
@@ -638,49 +726,82 @@ async function fetchLatestRelease(
     }
 
     return { release: latestRelease, error: null, newEtag };
-
   } catch (error) {
     log.error(`Failed to fetch releases for ${owner}/${repo}:`, error);
-    return { release: null, error: { type: 'api_error' } };
+    return { release: null, error: { type: "api_error" } };
   }
 }
 
 async function fetchLatestReleaseWithCache(
   owner: string,
   repo: string,
-  repoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'etag'>,
+  repoSettings: Pick<
+    Repository,
+    | "releaseChannels"
+    | "preReleaseSubChannels"
+    | "releasesPerPage"
+    | "includeRegex"
+    | "excludeRegex"
+    | "etag"
+  >,
   globalSettings: AppSettings,
   locale: string,
-  options?: { skipCache?: boolean }
-): Promise<{ release: GithubRelease | null; error: FetchError | null; newEtag?: string }> {
+  options?: { skipCache?: boolean },
+): Promise<{
+  release: GithubRelease | null;
+  error: FetchError | null;
+  newEtag?: string;
+}> {
   if (globalSettings.cacheInterval <= 0 || options?.skipCache) {
-    return fetchLatestRelease(owner, repo, repoSettings, globalSettings, locale);
+    return fetchLatestRelease(
+      owner,
+      repo,
+      repoSettings,
+      globalSettings,
+      locale,
+    );
   }
 
   const cacheIntervalSeconds = globalSettings.cacheInterval * 60;
 
-  const effectiveReleasesPerPage = (typeof repoSettings.releasesPerPage === 'number' && repoSettings.releasesPerPage >= 1 && repoSettings.releasesPerPage <= 1000)
-    ? repoSettings.releasesPerPage
-    : globalSettings.releasesPerPage;
+  const effectiveReleasesPerPage =
+    typeof repoSettings.releasesPerPage === "number" &&
+    repoSettings.releasesPerPage >= 1 &&
+    repoSettings.releasesPerPage <= 1000
+      ? repoSettings.releasesPerPage
+      : globalSettings.releasesPerPage;
 
   const cachedFetch = unstable_cache(
-    (ownerArg, repoArg, repoSettingsArg, globalSettingsArg, localeArg) => fetchLatestRelease(ownerArg, repoArg, repoSettingsArg, globalSettingsArg, localeArg),
-    ['github-release', owner, repo, locale, JSON.stringify(repoSettings), String(effectiveReleasesPerPage)],
+    (ownerArg, repoArg, repoSettingsArg, globalSettingsArg, localeArg) =>
+      fetchLatestRelease(
+        ownerArg,
+        repoArg,
+        repoSettingsArg,
+        globalSettingsArg,
+        localeArg,
+      ),
+    [
+      "github-release",
+      owner,
+      repo,
+      locale,
+      JSON.stringify(repoSettings),
+      String(effectiveReleasesPerPage),
+    ],
     {
       revalidate: cacheIntervalSeconds,
-      tags: ['github-releases'],
-    }
+      tags: ["github-releases"],
+    },
   );
 
   return cachedFetch(owner, repo, repoSettings, globalSettings, locale);
 }
 
-
 export async function getLatestReleasesForRepos(
   repositories: Repository[],
   settings: AppSettings,
   locale: string,
-  options?: { skipCache?: boolean }
+  options?: { skipCache?: boolean },
 ): Promise<EnrichedRelease[]> {
   if (repositories.length === 0) {
     return [];
@@ -688,19 +809,23 @@ export async function getLatestReleasesForRepos(
 
   const configuredParallel = resolveParallelRepoFetches(settings);
   const effectiveBatchSize = Math.min(configuredParallel, repositories.length);
-  const tokenConfigured = !!(process.env.GITHUB_ACCESS_TOKEN && process.env.GITHUB_ACCESS_TOKEN.trim());
+  const tokenConfigured = !!(
+    process.env.GITHUB_ACCESS_TOKEN && process.env.GITHUB_ACCESS_TOKEN.trim()
+  );
   log.info(
-    `Fetching ${repositories.length} repositories with parallel batch size ${effectiveBatchSize} (configured=${configuredParallel}, token configured=${tokenConfigured ? 'yes' : 'no'}).`
+    `Fetching ${repositories.length} repositories with parallel batch size ${effectiveBatchSize} (configured=${configuredParallel}, token configured=${tokenConfigured ? "yes" : "no"}).`,
   );
 
-  const buildEnrichedRelease = async (repo: Repository): Promise<EnrichedRelease> => {
+  const buildEnrichedRelease = async (
+    repo: Repository,
+  ): Promise<EnrichedRelease> => {
     const parsed = parseGitHubUrl(repo.url);
     if (!parsed) {
       log.warn(`Skipping invalid GitHub URL for repoId=${repo.id}`);
       return {
         repoId: repo.id,
         repoUrl: repo.url,
-        error: { type: 'invalid_url' },
+        error: { type: "invalid_url" },
         isNew: repo.isNew,
       };
     }
@@ -716,16 +841,20 @@ export async function getLatestReleasesForRepos(
       etag: repo.etag,
     };
 
-    const { release: latestRelease, error, newEtag } = await fetchLatestReleaseWithCache(
+    const {
+      release: latestRelease,
+      error,
+      newEtag,
+    } = await fetchLatestReleaseWithCache(
       parsed.owner,
       parsed.repo,
       repoSettings,
       settings,
       locale,
-      options
+      options,
     );
 
-    if (error?.type === 'not_modified') {
+    if (error?.type === "not_modified") {
       const cached: CachedRelease | undefined = repo.latestRelease;
       const reconstructedRelease: GithubRelease | undefined = cached
         ? {
@@ -766,7 +895,7 @@ export async function getLatestReleasesForRepos(
       return {
         repoId: repo.id,
         repoUrl: repo.url,
-        error: { type: 'api_error' },
+        error: { type: "api_error" },
         isNew: repo.isNew,
         repoSettings: repoSettings,
         newEtag: newEtag,
@@ -785,13 +914,17 @@ export async function getLatestReleasesForRepos(
 
   const results: EnrichedRelease[] = new Array(repositories.length);
 
-  for (let start = 0; start < repositories.length; start += effectiveBatchSize) {
+  for (
+    let start = 0;
+    start < repositories.length;
+    start += effectiveBatchSize
+  ) {
     const batch = repositories.slice(start, start + effectiveBatchSize);
     await Promise.all(
       batch.map(async (repo, offset) => {
         const result = await buildEnrichedRelease(repo);
         results[start + offset] = result;
-      })
+      }),
     );
   }
 
@@ -800,67 +933,83 @@ export async function getLatestReleasesForRepos(
 
 export async function addRepositoriesAction(
   prevState: any,
-  formData: FormData
+  formData: FormData,
 ): Promise<{
   success: boolean;
-  toast?: {title: string; description: string};
+  toast?: { title: string; description: string };
   error?: string;
   jobId?: string;
 }> {
-  return scheduleTask('addRepositoriesAction', async () => {
+  return scheduleTask("addRepositoriesAction", async () => {
     const locale = await getLocale();
-    const t = await getTranslations({locale, namespace: 'RepositoryForm'});
+    const t = await getTranslations({ locale, namespace: "RepositoryForm" });
 
-    const urls = formData.get('urls');
-    if (typeof urls !== 'string' || !urls.trim()) {
-      return {success: false, error: t('toast_fail_description_manual', {failed: 1})};
+    const urls = formData.get("urls");
+    if (typeof urls !== "string" || !urls.trim()) {
+      return {
+        success: false,
+        error: t("toast_fail_description_manual", { failed: 1 }),
+      };
     }
 
-    const urlList = urls.split('\n').filter(u => u.trim() !== '');
+    const urlList = urls.split("\n").filter((u) => u.trim() !== "");
     const newRepos: Repository[] = [];
     let failedCount = 0;
 
     for (const url of urlList) {
       const parsed = parseGitHubUrl(url);
       if (parsed) {
-        newRepos.push({id: parsed.id, url: `https://github.com/${parsed.id}`});
+        newRepos.push({
+          id: parsed.id,
+          url: `https://github.com/${parsed.id}`,
+        });
       } else {
         failedCount++;
       }
     }
 
     if (newRepos.length === 0 && failedCount > 0) {
-      return {success: false, error: t('toast_fail_description_manual', {failed: failedCount})};
+      return {
+        success: false,
+        error: t("toast_fail_description_manual", { failed: failedCount }),
+      };
     }
 
     try {
       const currentRepos = await getRepositories();
-      const existingIds = new Set(currentRepos.map(r => r.id));
-      const uniqueNewRepos = newRepos.filter(r => !existingIds.has(r.id));
+      const existingIds = new Set(currentRepos.map((r) => r.id));
+      const uniqueNewRepos = newRepos.filter((r) => !existingIds.has(r.id));
       let jobId: string | undefined;
 
       if (uniqueNewRepos.length > 0) {
         await saveRepositories([...currentRepos, ...uniqueNewRepos]);
-        revalidatePath('/');
+        revalidatePath("/");
 
         jobId = crypto.randomUUID();
-        setJobStatus(jobId, 'pending');
-        refreshMultipleRepositoriesAction(uniqueNewRepos.map(r => r.id), jobId);
+        setJobStatus(jobId, "pending");
+        refreshMultipleRepositoriesAction(
+          uniqueNewRepos.map((r) => r.id),
+          jobId,
+        );
       }
 
       const addedCount = uniqueNewRepos.length;
       const skippedCount = newRepos.length - addedCount;
 
-      log.info(`Add repositories: added=${addedCount} skipped=${skippedCount} failed=${failedCount}`);
+      log.info(
+        `Add repositories: added=${addedCount} skipped=${skippedCount} failed=${failedCount}`,
+      );
       if (addedCount > 0 && jobId) {
-        log.debug(`Queued background refresh jobId=${jobId} for ${addedCount} repos`);
+        log.debug(
+          `Queued background refresh jobId=${jobId} for ${addedCount} repos`,
+        );
       }
 
       return {
         success: true,
         toast: {
-          title: t('toast_success_title'),
-          description: t('toast_success_description_manual', {
+          title: t("toast_success_title"),
+          description: t("toast_success_description_manual", {
             added: addedCount,
             skipped: skippedCount,
             failed: failedCount,
@@ -869,29 +1018,31 @@ export async function addRepositoriesAction(
         jobId: addedCount > 0 ? jobId : undefined,
       };
     } catch (error: any) {
-      log.error('Failed to add repositories:', error);
+      log.error("Failed to add repositories:", error);
       return {
         success: false,
-        error: t('toast_save_error_generic'),
+        error: t("toast_save_error_generic"),
       };
     }
   });
 }
 
-export async function importRepositoriesAction(importedData: Repository[]): Promise<{
+export async function importRepositoriesAction(
+  importedData: Repository[],
+): Promise<{
   success: boolean;
   message: string;
   jobId?: string;
 }> {
-  return scheduleTask('importRepositoriesAction', async () => {
+  return scheduleTask("importRepositoriesAction", async () => {
     const locale = await getLocale();
-    const t = await getTranslations({locale, namespace: 'RepositoryForm'});
+    const t = await getTranslations({ locale, namespace: "RepositoryForm" });
     const settings = await getSettings();
 
     try {
       const currentRepos = await getRepositories();
-      const currentRepoIds = new Set(currentRepos.map(repo => repo.id));
-      const currentReposMap = new Map(currentRepos.map(r => [r.id, r]));
+      const currentRepoIds = new Set(currentRepos.map((repo) => repo.id));
+      const currentReposMap = new Map(currentRepos.map((r) => [r.id, r]));
 
       const validImportedRepos: Repository[] = [];
       for (const repo of importedData) {
@@ -914,7 +1065,10 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
         const repoToSave: Repository = {
           ...currentReposMap.get(importedRepo.id),
           ...importedRepo,
-          isNew: (settings.showAcknowledge ?? true) ? (importedRepo.isNew ?? false) : false,
+          isNew:
+            (settings.showAcknowledge ?? true)
+              ? (importedRepo.isNew ?? false)
+              : false,
         };
         currentReposMap.set(importedRepo.id, repoToSave);
         reposToFetch.push(repoToSave);
@@ -922,31 +1076,32 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
 
       const finalList = Array.from(currentReposMap.values());
       await saveRepositories(finalList);
-      revalidatePath('/');
+      revalidatePath("/");
 
       let jobId: string | undefined;
       if (reposToFetch.length > 0) {
         jobId = crypto.randomUUID();
-        setJobStatus(jobId, 'pending');
-        const repoIds = reposToFetch.map(r => r.id);
+        setJobStatus(jobId, "pending");
+        const repoIds = reposToFetch.map((r) => r.id);
         refreshMultipleRepositoriesAction(repoIds, jobId);
       }
 
-      log.info(`Import repositories: added=${addedCount} updated=${updatedCount}`);
+      log.info(
+        `Import repositories: added=${addedCount} updated=${updatedCount}`,
+      );
       return {
         success: true,
-        message: t('toast_import_success_description', {
+        message: t("toast_import_success_description", {
           addedCount,
-          updatedCount
+          updatedCount,
         }),
         jobId: reposToFetch.length > 0 ? jobId : undefined,
       };
-
     } catch (error: any) {
-      log.error('Failed to import repositories:', error);
+      log.error("Failed to import repositories:", error);
       return {
         success: false,
-        message: t('toast_save_error_generic'),
+        message: t("toast_save_error_generic"),
       };
     }
   });
@@ -955,7 +1110,7 @@ export async function importRepositoriesAction(importedData: Repository[]): Prom
 export async function refreshSingleRepositoryAction(repoId: string) {
   return scheduleTask(`refreshSingleRepositoryAction: ${repoId}`, async () => {
     if (!isValidRepoId(repoId)) {
-      log.error('Invalid repoId format for refresh:', repoId);
+      log.error("Invalid repoId format for refresh:", repoId);
       return;
     }
 
@@ -964,7 +1119,7 @@ export async function refreshSingleRepositoryAction(repoId: string) {
     const settings = await getSettings();
     const locale = settings.locale;
     const allRepos = await getRepositories();
-    const repoToRefresh = allRepos.find(r => r.id === repoId);
+    const repoToRefresh = allRepos.find((r) => r.id === repoId);
 
     if (!repoToRefresh) {
       log.error(`Repository ${repoId} not found for refresh.`);
@@ -975,7 +1130,7 @@ export async function refreshSingleRepositoryAction(repoId: string) {
       [repoToRefresh],
       settings,
       locale,
-      { skipCache: true }
+      { skipCache: true },
     );
 
     const enrichedRelease = enrichedReleases[0];
@@ -984,7 +1139,7 @@ export async function refreshSingleRepositoryAction(repoId: string) {
       return;
     }
 
-    const repoIndex = allRepos.findIndex(r => r.id === repoId);
+    const repoIndex = allRepos.findIndex((r) => r.id === repoId);
     if (repoIndex === -1) return; // Should not happen
 
     if (enrichedRelease.newEtag) {
@@ -996,36 +1151,45 @@ export async function refreshSingleRepositoryAction(repoId: string) {
       // Avoid overwriting existing real release data with virtual (tag-fallback) data
       if (!isVirtual || !allRepos[repoIndex].latestRelease) {
         allRepos[repoIndex].latestRelease = newCached;
-      } else if (isVirtual && allRepos[repoIndex].latestRelease && newCached.fetched_at) {
+      } else if (
+        isVirtual &&
+        allRepos[repoIndex].latestRelease &&
+        newCached.fetched_at
+      ) {
         // Update last successful fetch time on 304 not modified
         allRepos[repoIndex].latestRelease.fetched_at = newCached.fetched_at;
       }
     }
 
     await saveRepositories(allRepos);
-    revalidatePath('/'); // Revalidate the home page to show the new data
+    revalidatePath("/"); // Revalidate the home page to show the new data
   });
 }
 
-export async function refreshMultipleRepositoriesAction(repoIds: string[], jobId: string) {
+export async function refreshMultipleRepositoriesAction(
+  repoIds: string[],
+  jobId: string,
+) {
   try {
-    log.info(`Refresh multiple repositories start: count=${repoIds.length} jobId=${jobId}`);
+    log.info(
+      `Refresh multiple repositories start: count=${repoIds.length} jobId=${jobId}`,
+    );
     const settings = await getSettings();
     const locale = settings.locale;
     const allRepos = await getRepositories();
-    const reposToRefresh = allRepos.filter(r => repoIds.includes(r.id));
+    const reposToRefresh = allRepos.filter((r) => repoIds.includes(r.id));
 
     if (reposToRefresh.length > 0) {
       const enrichedReleases = await getLatestReleasesForRepos(
         reposToRefresh,
         settings,
         locale,
-        { skipCache: true }
+        { skipCache: true },
       );
 
-      const enrichedMap = new Map(enrichedReleases.map(r => [r.repoId, r]));
+      const enrichedMap = new Map(enrichedReleases.map((r) => [r.repoId, r]));
 
-      const updatedRepos = allRepos.map(repo => {
+      const updatedRepos = allRepos.map((repo) => {
         const enriched = enrichedMap.get(repo.id);
         if (enriched) {
           if (enriched.release) {
@@ -1034,7 +1198,11 @@ export async function refreshMultipleRepositoriesAction(repoIds: string[], jobId
             // Avoid overwriting existing real release data with virtual (tag-fallback) data
             if (!isVirtual || !repo.latestRelease) {
               repo.latestRelease = newCached;
-            } else if (isVirtual && repo.latestRelease && newCached.fetched_at) {
+            } else if (
+              isVirtual &&
+              repo.latestRelease &&
+              newCached.fetched_at
+            ) {
               // Update last successful fetch time on 304 not modified
               repo.latestRelease.fetched_at = newCached.fetched_at;
             }
@@ -1051,91 +1219,100 @@ export async function refreshMultipleRepositoriesAction(repoIds: string[], jobId
       });
       await saveRepositories(updatedRepos);
     }
-    setJobStatus(jobId, 'complete');
+    setJobStatus(jobId, "complete");
     log.info(`Refresh multiple repositories complete: jobId=${jobId}`);
   } catch (error) {
     log.error(`[Job ${jobId}] Failed to refresh repositories:`, error);
-    setJobStatus(jobId, 'error');
+    setJobStatus(jobId, "error");
   }
 }
 
 export async function removeRepositoryAction(repoId: string) {
   return scheduleTask(`removeRepositoryAction: ${repoId}`, async () => {
     if (!isValidRepoId(repoId)) {
-      log.error('Invalid repoId format for removal:', repoId);
+      log.error("Invalid repoId format for removal:", repoId);
       return;
     }
     const currentRepos = await getRepositories();
-    const newRepos = currentRepos.filter(r => r.id !== repoId);
+    const newRepos = currentRepos.filter((r) => r.id !== repoId);
     await saveRepositories(newRepos);
     log.info(`Removed repository: ${repoId}`);
-    revalidatePath('/');
+    revalidatePath("/");
   });
 }
 
-export async function acknowledgeNewReleaseAction(repoId: string): Promise<{ success: boolean; error?: string }> {
+export async function acknowledgeNewReleaseAction(
+  repoId: string,
+): Promise<{ success: boolean; error?: string }> {
   return scheduleTask(`acknowledgeNewReleaseAction: ${repoId}`, async () => {
     if (!isValidRepoId(repoId)) {
-      return { success: false, error: 'Invalid repository ID format.' };
+      return { success: false, error: "Invalid repository ID format." };
     }
     const locale = await getLocale();
-    const t = await getTranslations({locale, namespace: 'ReleaseCard'});
+    const t = await getTranslations({ locale, namespace: "ReleaseCard" });
     try {
       const currentRepos = await getRepositories();
-      const repoIndex = currentRepos.findIndex(r => r.id === repoId);
+      const repoIndex = currentRepos.findIndex((r) => r.id === repoId);
 
       if (repoIndex !== -1) {
         currentRepos[repoIndex].isNew = false;
         await saveRepositories(currentRepos);
-        revalidatePath('/');
+        revalidatePath("/");
         log.info(`Acknowledged new release for ${repoId}`);
         return { success: true };
       }
 
-      return { success: false, error: t('toast_acknowledge_error_not_found') };
-
+      return { success: false, error: t("toast_acknowledge_error_not_found") };
     } catch (error: any) {
-      log.error('Failed to acknowledge release:', error);
-      return { success: false, error: t('toast_acknowledge_error_generic') };
+      log.error("Failed to acknowledge release:", error);
+      return { success: false, error: t("toast_acknowledge_error_generic") };
     }
   });
 }
 
-export async function markAsNewAction(repoId: string): Promise<{ success: boolean; error?: string }> {
+export async function markAsNewAction(
+  repoId: string,
+): Promise<{ success: boolean; error?: string }> {
   return scheduleTask(`markAsNewAction: ${repoId}`, async () => {
     if (!isValidRepoId(repoId)) {
-      return { success: false, error: 'Invalid repository ID format.' };
+      return { success: false, error: "Invalid repository ID format." };
     }
     const locale = await getLocale();
-    const t = await getTranslations({locale, namespace: 'ReleaseCard'});
+    const t = await getTranslations({ locale, namespace: "ReleaseCard" });
     try {
       const currentRepos = await getRepositories();
-      const repoIndex = currentRepos.findIndex(r => r.id === repoId);
+      const repoIndex = currentRepos.findIndex((r) => r.id === repoId);
 
       if (repoIndex !== -1) {
         currentRepos[repoIndex].isNew = true;
         await saveRepositories(currentRepos);
-        revalidatePath('/');
+        revalidatePath("/");
         log.info(`Marked release as new for ${repoId}`);
         return { success: true };
       }
 
-      return { success: false, error: t('toast_mark_as_new_error_not_found') };
-
+      return { success: false, error: t("toast_mark_as_new_error_not_found") };
     } catch (error: any) {
-      log.error('Failed to mark release as new:', error);
-      return { success: false, error: t('toast_mark_as_new_error_generic') };
+      log.error("Failed to mark release as new:", error);
+      return { success: false, error: t("toast_mark_as_new_error_generic") };
     }
   });
 }
 
-async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: string, skipCache?: boolean }) {
+async function _checkForNewReleasesUnscheduled(options?: {
+  overrideLocale?: string;
+  skipCache?: boolean;
+}) {
   log.info(`Running check for new releases...`);
   const settings = await getSettings();
   const effectiveLocale = options?.overrideLocale || settings.locale;
   const parallelLimit = resolveParallelRepoFetches(settings);
-  const tokenConfigured = !!(process.env.GITHUB_ACCESS_TOKEN && process.env.GITHUB_ACCESS_TOKEN.trim());
-  log.info(`Parallel fetch batch size set to ${parallelLimit} (GitHub token configured=${tokenConfigured ? 'yes' : 'no'}).`);
+  const tokenConfigured = !!(
+    process.env.GITHUB_ACCESS_TOKEN && process.env.GITHUB_ACCESS_TOKEN.trim()
+  );
+  log.info(
+    `Parallel fetch batch size set to ${parallelLimit} (GitHub token configured=${tokenConfigured ? "yes" : "no"}).`,
+  );
 
   const originalRepos = await getRepositories();
   if (originalRepos.length === 0) {
@@ -1147,7 +1324,7 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
     originalRepos,
     settings,
     effectiveLocale,
-    { skipCache: options?.skipCache }
+    { skipCache: options?.skipCache },
   );
 
   const updatedRepos = [...originalRepos];
@@ -1155,61 +1332,84 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
   let notificationsSent = 0;
 
   for (const enrichedRelease of enrichedReleases) {
-    const repoIndex = updatedRepos.findIndex(r => r.id === enrichedRelease.repoId);
+    const repoIndex = updatedRepos.findIndex(
+      (r) => r.id === enrichedRelease.repoId,
+    );
     if (repoIndex === -1) continue;
 
     const repo = updatedRepos[repoIndex];
     let repoWasUpdated = false;
 
     if (enrichedRelease.newEtag && repo.etag !== enrichedRelease.newEtag) {
-        repo.etag = enrichedRelease.newEtag;
-        repoWasUpdated = true;
+      repo.etag = enrichedRelease.newEtag;
+      repoWasUpdated = true;
     }
 
     if (enrichedRelease.release) {
-        const isVirtual = enrichedRelease.release.id === 0; // tag-fallback or reconstructed data
-        const newCachedRelease = toCachedRelease(enrichedRelease.release);
+      const isVirtual = enrichedRelease.release.id === 0; // tag-fallback or reconstructed data
+      const newCachedRelease = toCachedRelease(enrichedRelease.release);
 
-        // Do not overwrite an existing real release with a virtual one.
-        if (!isVirtual || !repo.latestRelease) {
-            if (JSON.stringify(repo.latestRelease) !== JSON.stringify(newCachedRelease)) {
-                repoWasUpdated = true;
-            }
-            repo.latestRelease = newCachedRelease;
-        } else if (isVirtual && repo.latestRelease && newCachedRelease.fetched_at) {
-            // Still update the last successful fetch time when ETag says not modified
-            if (repo.latestRelease.fetched_at !== newCachedRelease.fetched_at) {
-              repo.latestRelease.fetched_at = newCachedRelease.fetched_at;
-              repoWasUpdated = true;
-            }
-        }
-
-        const newTag = enrichedRelease.release.tag_name;
-        const isNewRelease = !isVirtual && repo.lastSeenReleaseTag && repo.lastSeenReleaseTag !== newTag;
-
-        if (isNewRelease) {
-          log.info(`New release detected for ${repo.id}: ${newTag} (previously ${repo.lastSeenReleaseTag})`);
-
-          const shouldHighlight = settings.showAcknowledge ?? true;
-          repo.lastSeenReleaseTag = newTag;
-          repo.isNew = shouldHighlight;
+      // Do not overwrite an existing real release with a virtual one.
+      if (!isVirtual || !repo.latestRelease) {
+        if (
+          JSON.stringify(repo.latestRelease) !==
+          JSON.stringify(newCachedRelease)
+        ) {
           repoWasUpdated = true;
-
-          try {
-              await sendNotification(repo, enrichedRelease.release, effectiveLocale, settings);
-              notificationsSent++;
-    } catch(e: any) {
-            log.error(`Failed to send notification for ${repo.id}. The release tag HAS been updated to prevent repeated failures for the same release. Error: ${e.message}`);
+        }
+        repo.latestRelease = newCachedRelease;
+      } else if (
+        isVirtual &&
+        repo.latestRelease &&
+        newCachedRelease.fetched_at
+      ) {
+        // Still update the last successful fetch time when ETag says not modified
+        if (repo.latestRelease.fetched_at !== newCachedRelease.fetched_at) {
+          repo.latestRelease.fetched_at = newCachedRelease.fetched_at;
+          repoWasUpdated = true;
+        }
       }
-        } else if (!repo.lastSeenReleaseTag && !isVirtual) {
-          log.info(`First fetch for ${repo.id}, setting initial release tag to ${newTag}. No notification will be sent.`);
-          repo.lastSeenReleaseTag = newTag;
-          repo.isNew = false;
-          repoWasUpdated = true;
+
+      const newTag = enrichedRelease.release.tag_name;
+      const isNewRelease =
+        !isVirtual &&
+        repo.lastSeenReleaseTag &&
+        repo.lastSeenReleaseTag !== newTag;
+
+      if (isNewRelease) {
+        log.info(
+          `New release detected for ${repo.id}: ${newTag} (previously ${repo.lastSeenReleaseTag})`,
+        );
+
+        const shouldHighlight = settings.showAcknowledge ?? true;
+        repo.lastSeenReleaseTag = newTag;
+        repo.isNew = shouldHighlight;
+        repoWasUpdated = true;
+
+        try {
+          await sendNotification(
+            repo,
+            enrichedRelease.release,
+            effectiveLocale,
+            settings,
+          );
+          notificationsSent++;
+        } catch (e: any) {
+          log.error(
+            `Failed to send notification for ${repo.id}. The release tag HAS been updated to prevent repeated failures for the same release. Error: ${e.message}`,
+          );
         }
+      } else if (!repo.lastSeenReleaseTag && !isVirtual) {
+        log.info(
+          `First fetch for ${repo.id}, setting initial release tag to ${newTag}. No notification will be sent.`,
+        );
+        repo.lastSeenReleaseTag = newTag;
+        repo.isNew = false;
+        repoWasUpdated = true;
+      }
     }
     if (repoWasUpdated) {
-        changed = true;
+      changed = true;
     }
   }
 
@@ -1219,23 +1419,30 @@ async function _checkForNewReleasesUnscheduled(options?: { overrideLocale?: stri
   } else {
     log.info(`No new releases found.`);
   }
-   log.info(`Summary: notificationsSent=${notificationsSent} checked=${originalRepos.length}`);
-   return { notificationsSent, checked: originalRepos.length };
+  log.info(
+    `Summary: notificationsSent=${notificationsSent} checked=${originalRepos.length}`,
+  );
+  return { notificationsSent, checked: originalRepos.length };
 }
 
-export async function checkForNewReleases(options?: { overrideLocale?: string, skipCache?: boolean }) {
-  return scheduleTask('checkForNewReleases', () => _checkForNewReleasesUnscheduled(options));
+export async function checkForNewReleases(options?: {
+  overrideLocale?: string;
+  skipCache?: boolean;
+}) {
+  return scheduleTask("checkForNewReleases", () =>
+    _checkForNewReleasesUnscheduled(options),
+  );
 }
 
 function normalizeVersion(value: string | null | undefined): string | null {
   if (!value) return null;
-  return value.trim().replace(/^v/i, '').replace(/\+.*$/, '');
+  return value.trim().replace(/^v/i, "").replace(/\+.*$/, "");
 }
 
 function compareSemanticVersions(a: string, b: string): number {
   const parse = (version: string) => {
-    const [core, preRelease] = version.split('-', 2);
-    const parts = core.split('.').map(part => {
+    const [core, preRelease] = version.split("-", 2);
+    const parts = core.split(".").map((part) => {
       const numeric = Number(part);
       return Number.isNaN(numeric) ? 0 : numeric;
     });
@@ -1265,7 +1472,7 @@ function compareSemanticVersions(a: string, b: string): number {
 
 export async function getUpdateNotificationState(): Promise<UpdateNotificationState> {
   const status = await getSystemStatus();
-  const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0';
+  const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0";
   const latestVersion = status.latestKnownVersion;
   const normalizedCurrent = normalizeVersion(currentVersion);
   const normalizedLatest = normalizeVersion(latestVersion);
@@ -1273,14 +1480,15 @@ export async function getUpdateNotificationState(): Promise<UpdateNotificationSt
   let hasUpdate = false;
 
   if (normalizedCurrent && normalizedLatest) {
-    hasUpdate = compareSemanticVersions(normalizedLatest, normalizedCurrent) === 1;
+    hasUpdate =
+      compareSemanticVersions(normalizedLatest, normalizedCurrent) === 1;
   } else if (latestVersion) {
     hasUpdate = latestVersion !== currentVersion;
   }
 
   const isDismissed =
     hasUpdate &&
-    typeof status.dismissedVersion === 'string' &&
+    typeof status.dismissedVersion === "string" &&
     status.dismissedVersion === latestVersion;
 
   return {
@@ -1294,9 +1502,11 @@ export async function getUpdateNotificationState(): Promise<UpdateNotificationSt
   };
 }
 
-export async function dismissUpdateNotificationAction(): Promise<{ success: boolean }> {
-  return scheduleTask('dismissUpdateNotification', async () => {
-    await updateSystemStatus(current => {
+export async function dismissUpdateNotificationAction(): Promise<{
+  success: boolean;
+}> {
+  return scheduleTask("dismissUpdateNotification", async () => {
+    await updateSystemStatus((current) => {
       const latestVersion = current.latestKnownVersion;
       if (!latestVersion) {
         return {
@@ -1317,13 +1527,13 @@ export async function triggerAppUpdateCheckAction(): Promise<{
   success: boolean;
   notice: UpdateNotificationState;
 }> {
-  return scheduleTask('triggerAppUpdateCheck', async () => {
-    await updateSystemStatus(current => ({
+  return scheduleTask("triggerAppUpdateCheck", async () => {
+    await updateSystemStatus((current) => ({
       ...current,
       dismissedVersion: null,
     }));
 
-    const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0';
+    const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0";
     await runApplicationUpdateCheck(currentVersion);
     const notice = await getUpdateNotificationState();
     return { success: true, notice };
@@ -1346,17 +1556,19 @@ async function backgroundPollingLoop() {
 
     const pollingIntervalMs = pollingIntervalMinutes * 60 * 1000;
 
-    log.info(`Next background check scheduled in ${pollingIntervalMinutes} minutes.`);
+    log.info(
+      `Next background check scheduled in ${pollingIntervalMinutes} minutes.`,
+    );
     setTimeout(backgroundPollingLoop, pollingIntervalMs);
   }
 }
 
 if (
-  process.env.NODE_ENV === 'production' &&
+  process.env.NODE_ENV === "production" &&
   !process.env.BACKGROUND_POLLING_INITIALIZED
 ) {
   log.info(`Initializing dynamic background polling.`);
-  process.env.BACKGROUND_POLLING_INITIALIZED = 'true';
+  process.env.BACKGROUND_POLLING_INITIALIZED = "true";
   setTimeout(backgroundPollingLoop, 5000);
 }
 
@@ -1366,47 +1578,54 @@ const UPDATE_CHECK_INITIAL_DELAY_MS = 10_000;
 async function backgroundUpdateCheckLoop() {
   const intervalMinutes = Math.max(UPDATE_CHECK_INTERVAL_MINUTES, 1);
   const intervalMs = intervalMinutes * 60 * 1000;
-  const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.0.0';
+  const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0";
 
   try {
     await runApplicationUpdateCheck(currentVersion);
   } catch (error) {
-    log.error('Error during application update check:', error);
+    log.error("Error during application update check:", error);
   } finally {
-    log.info(`Next application update check scheduled in ${intervalMinutes} minutes.`);
+    log.info(
+      `Next application update check scheduled in ${intervalMinutes} minutes.`,
+    );
     setTimeout(backgroundUpdateCheckLoop, intervalMs);
   }
 }
 
 if (
-  process.env.NODE_ENV !== 'test' &&
+  process.env.NODE_ENV !== "test" &&
   !process.env.APP_UPDATE_CHECK_INITIALIZED
 ) {
-  log.info('Initializing application update checker.');
-  process.env.APP_UPDATE_CHECK_INITIALIZED = 'true';
+  log.info("Initializing application update checker.");
+  process.env.APP_UPDATE_CHECK_INITIALIZED = "true";
   setTimeout(backgroundUpdateCheckLoop, UPDATE_CHECK_INITIAL_DELAY_MS);
 }
 
-const TEST_REPO_ID = 'test/test';
+const TEST_REPO_ID = "test/test";
 
-export async function setupTestRepositoryAction(): Promise<{ success: boolean; message: string; }> {
-  return scheduleTask('setupTestRepositoryAction', async () => {
+export async function setupTestRepositoryAction(): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  return scheduleTask("setupTestRepositoryAction", async () => {
     const locale = await getLocale();
-    const t = await getTranslations({locale, namespace: 'TestPage'});
+    const t = await getTranslations({ locale, namespace: "TestPage" });
     // Prepare a readable title/body so the card renders nicely before the first check
     const { title, body } = await getComprehensiveMarkdownBody(locale);
 
     try {
       const currentRepos = await getRepositories();
-      const testRepoIndex = currentRepos.findIndex(r => r.id === TEST_REPO_ID);
+      const testRepoIndex = currentRepos.findIndex(
+        (r) => r.id === TEST_REPO_ID,
+      );
 
       if (testRepoIndex > -1) {
-        currentRepos[testRepoIndex].lastSeenReleaseTag = 'v0.9.0-reset';
+        currentRepos[testRepoIndex].lastSeenReleaseTag = "v0.9.0-reset";
         currentRepos[testRepoIndex].isNew = false;
         // Ensure a cached release exists so the UI shows a proper card immediately
         currentRepos[testRepoIndex].latestRelease = {
           html_url: `https://github.com/${TEST_REPO_ID}/releases/tag/v0.9.0-reset`,
-          tag_name: 'v0.9.0-reset',
+          tag_name: "v0.9.0-reset",
           name: title,
           body: body,
           created_at: new Date().toISOString(),
@@ -1417,96 +1636,127 @@ export async function setupTestRepositoryAction(): Promise<{ success: boolean; m
         currentRepos.push({
           id: TEST_REPO_ID,
           url: `https://github.com/${TEST_REPO_ID}`,
-          lastSeenReleaseTag: 'v0.9.0-initial',
+          lastSeenReleaseTag: "v0.9.0-initial",
           isNew: false,
           latestRelease: {
             html_url: `https://github.com/${TEST_REPO_ID}/releases/tag/v0.9.0-initial`,
-            tag_name: 'v0.9.0-initial',
+            tag_name: "v0.9.0-initial",
             name: title,
             body: body,
             created_at: new Date().toISOString(),
             published_at: new Date().toISOString(),
             fetched_at: new Date().toISOString(),
-          }
+          },
         });
       }
 
       await saveRepositories(currentRepos);
-      revalidatePath('/');
-      revalidatePath('/test');
-      revalidateTag('github-releases');
-      return { success: true, message: t('toast_setup_test_repo_success') };
+      revalidatePath("/");
+      revalidatePath("/test");
+      revalidateTag("github-releases");
+      return { success: true, message: t("toast_setup_test_repo_success") };
     } catch (error: any) {
-      log.error('setupTestRepositoryAction failed:', error);
-      return { success: false, message: error.message || t('toast_setup_test_repo_error') };
+      log.error("setupTestRepositoryAction failed:", error);
+      return {
+        success: false,
+        message: error.message || t("toast_setup_test_repo_error"),
+      };
     }
   });
 }
 
-export async function triggerReleaseCheckAction(): Promise<{ success: boolean; message: string; }> {
+export async function triggerReleaseCheckAction(): Promise<{
+  success: boolean;
+  message: string;
+}> {
   const locale = await getLocale();
-  const t = await getTranslations({locale, namespace: 'TestPage'});
+  const t = await getTranslations({ locale, namespace: "TestPage" });
 
-  const {MAIL_HOST, MAIL_PORT, MAIL_FROM_ADDRESS, MAIL_TO_ADDRESS, APPRISE_URL} = process.env;
-  const isSmtpConfigured = !!(MAIL_HOST && MAIL_PORT && MAIL_FROM_ADDRESS && MAIL_TO_ADDRESS);
+  const {
+    MAIL_HOST,
+    MAIL_PORT,
+    MAIL_FROM_ADDRESS,
+    MAIL_TO_ADDRESS,
+    APPRISE_URL,
+  } = process.env;
+  const isSmtpConfigured = !!(
+    MAIL_HOST &&
+    MAIL_PORT &&
+    MAIL_FROM_ADDRESS &&
+    MAIL_TO_ADDRESS
+  );
   const isAppriseConfigured = !!APPRISE_URL;
 
   if (!isSmtpConfigured && !isAppriseConfigured) {
     return {
       success: false,
-      message: t('toast_no_notification_service_configured'),
+      message: t("toast_no_notification_service_configured"),
     };
   }
 
   try {
-    const result = await checkForNewReleases({ overrideLocale: locale, skipCache: true });
+    const result = await checkForNewReleases({
+      overrideLocale: locale,
+      skipCache: true,
+    });
 
     if (result && result.notificationsSent > 0) {
-      return { success: true, message: t('toast_trigger_check_success_email_sent') };
+      return {
+        success: true,
+        message: t("toast_trigger_check_success_email_sent"),
+      };
     } else {
-      return { success: true, message: t('toast_trigger_check_success_no_email') };
+      return {
+        success: true,
+        message: t("toast_trigger_check_success_no_email"),
+      };
     }
   } catch (error: any) {
-    log.error('triggerReleaseCheckAction failed:', error);
-    return { success: false, message: error.message || t('toast_trigger_check_error') };
+    log.error("triggerReleaseCheckAction failed:", error);
+    return {
+      success: false,
+      message: error.message || t("toast_trigger_check_error"),
+    };
   }
 }
 
 export async function getGitHubRateLimit(): Promise<RateLimitResult> {
-  const GITHUB_API_URL = 'https://api.github.com/rate_limit';
+  const GITHUB_API_URL = "https://api.github.com/rate_limit";
   const headers: HeadersInit = {
-    Accept: 'application/vnd.github.v3+json',
-    'User-Agent': 'GitHubReleaseMonitorApp',
-    'X-GitHub-Api-Version': '2022-11-28',
+    Accept: "application/vnd.github.v3+json",
+    "User-Agent": "GitHubReleaseMonitorApp",
+    "X-GitHub-Api-Version": "2022-11-28",
   };
 
   if (process.env.GITHUB_ACCESS_TOKEN) {
-    headers['Authorization'] = `token ${process.env.GITHUB_ACCESS_TOKEN}`;
+    headers.Authorization = `token ${process.env.GITHUB_ACCESS_TOKEN}`;
   }
 
   try {
-    const { response, data } = await fetchJsonResponseWithRetry<RateLimitResult['data']>(
+    const { response, data } = await fetchJsonResponseWithRetry<
+      RateLimitResult["data"]
+    >(
       GITHUB_API_URL,
       {
         headers,
-        cache: 'no-store',
+        cache: "no-store",
       },
-      { description: 'GitHub rate limit endpoint' }
+      { description: "GitHub rate limit endpoint" },
     );
 
     if (!response.ok) {
       log.error(
-        `GitHub API error for rate_limit: ${response.status} ${response.statusText}`
+        `GitHub API error for rate_limit: ${response.status} ${response.statusText}`,
       );
       if (response.status === 401) {
-        return {data: null, error: 'invalid_token'};
+        return { data: null, error: "invalid_token" };
       }
-      return {data: null, error: 'api_error'};
+      return { data: null, error: "api_error" };
     }
-    return {data: data ?? null, error: undefined};
+    return { data: data ?? null, error: undefined };
   } catch (error) {
-    log.error('Failed to fetch GitHub rate limit:', error);
-    return {data: null, error: 'api_error'};
+    log.error("Failed to fetch GitHub rate limit:", error);
+    return { data: null, error: "api_error" };
   }
 }
 
@@ -1515,40 +1765,38 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
   error?: string;
 }> {
   const locale = await getLocale();
-  const t = await getTranslations({locale, namespace: 'TestPage'});
-  const tEmail = await getTranslations({locale, namespace: 'Email'});
+  const t = await getTranslations({ locale, namespace: "TestPage" });
+  const tEmail = await getTranslations({ locale, namespace: "Email" });
 
   const trimmedEmail = customEmail.trim();
   const recipient = trimmedEmail || process.env.MAIL_TO_ADDRESS;
 
-  const {MAIL_HOST, MAIL_PORT, MAIL_FROM_ADDRESS} =
-    process.env;
+  const { MAIL_HOST, MAIL_PORT, MAIL_FROM_ADDRESS } = process.env;
   if (!MAIL_HOST || !MAIL_PORT || !MAIL_FROM_ADDRESS || !recipient) {
     return {
       success: false,
-      error: tEmail('error_config_incomplete'),
+      error: tEmail("error_config_incomplete"),
     };
   }
 
   if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
     return {
       success: false,
-      error: t('invalid_email_format'),
+      error: t("invalid_email_format"),
     };
   }
 
-
   const testRepo: Repository = {
-    id: 'test/test',
-    url: 'https://github.com/test/test',
+    id: "test/test",
+    url: "https://github.com/test/test",
   };
 
   const { title, body } = await getComprehensiveMarkdownBody(locale);
 
   const testRelease: GithubRelease = {
     id: 12345,
-    html_url: 'https://github.com/test/test/releases/tag/v1.0.0',
-    tag_name: 'v1.0.0-test',
+    html_url: "https://github.com/test/test/releases/tag/v1.0.0",
+    tag_name: "v1.0.0-test",
     name: title,
     body: body,
     created_at: new Date().toISOString(),
@@ -1559,13 +1807,19 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
 
   try {
     const settings = await getSettings();
-    await sendTestEmail(testRepo, testRelease, locale, settings.timeFormat, recipient);
-    return {success: true};
+    await sendTestEmail(
+      testRepo,
+      testRelease,
+      locale,
+      settings.timeFormat,
+      recipient,
+    );
+    return { success: true };
   } catch (error: any) {
-    log.error('sendTestEmailAction failed:', error);
+    log.error("sendTestEmailAction failed:", error);
     return {
       success: false,
-      error: error.message || t('toast_email_error_description'),
+      error: error.message || t("toast_email_error_description"),
     };
   }
 }
@@ -1575,28 +1829,28 @@ export async function sendTestAppriseAction(): Promise<{
   error?: string;
 }> {
   const locale = await getLocale();
-  const t = await getTranslations({locale, namespace: 'TestPage'});
+  const t = await getTranslations({ locale, namespace: "TestPage" });
 
   const { APPRISE_URL } = process.env;
   if (!APPRISE_URL) {
-      log.warn('sendTestAppriseAction called but APPRISE_URL is not configured');
-      return {
-          success: false,
-          error: t('toast_apprise_not_configured_error'),
-      };
+    log.warn("sendTestAppriseAction called but APPRISE_URL is not configured");
+    return {
+      success: false,
+      error: t("toast_apprise_not_configured_error"),
+    };
   }
 
   const testRepo: Repository = {
-    id: 'test/test',
-    url: 'https://github.com/test/test',
+    id: "test/test",
+    url: "https://github.com/test/test",
   };
 
   const { title, body } = await getBasicAppriseTestBody(locale);
 
   const testRelease: GithubRelease = {
     id: 12345,
-    html_url: 'https://github.com/test/test/releases/tag/v1.0.0',
-    tag_name: 'v1.0.0-test',
+    html_url: "https://github.com/test/test/releases/tag/v1.0.0",
+    tag_name: "v1.0.0-test",
     name: title,
     body: body,
     created_at: new Date().toISOString(),
@@ -1620,11 +1874,11 @@ export async function sendTestAppriseAction(): Promise<{
 export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
   const { APPRISE_URL } = process.env;
   if (!APPRISE_URL) {
-    return { status: 'not_configured' };
+    return { status: "not_configured" };
   }
 
   const locale = await getLocale();
-  const t = await getTranslations({ locale, namespace: 'TestPage' });
+  const t = await getTranslations({ locale, namespace: "TestPage" });
 
   try {
     const urlObject = new URL(APPRISE_URL);
@@ -1632,93 +1886,121 @@ export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
 
     const response = await fetch(statusUrl, {
       headers: {
-        'Accept': 'application/json'
+        Accept: "application/json",
       },
-      cache: 'no-store'
+      cache: "no-store",
     });
 
     if (response.ok) {
-      return { status: 'ok' };
+      return { status: "ok" };
     } else {
       return {
-        status: 'error',
-        error: t('apprise_connection_error_status', {status: response.status}),
+        status: "error",
+        error: t("apprise_connection_error_status", {
+          status: response.status,
+        }),
       };
     }
   } catch (error) {
     return {
-      status: 'error',
-      error: t('apprise_connection_error_fetch')
+      status: "error",
+      error: t("apprise_connection_error_fetch"),
     };
   }
 }
 
-
 export async function refreshAndCheckAction(): Promise<{
   success: boolean;
-  messageKey: 'toast_refresh_success_description' | 'toast_refresh_found_new';
+  messageKey: "toast_refresh_success_description" | "toast_refresh_found_new";
 }> {
   const locale = await getLocale();
-  log.info('Manual refresh triggered by user');
-  const result = await checkForNewReleases({ overrideLocale: locale, skipCache: true });
+  log.info("Manual refresh triggered by user");
+  const result = await checkForNewReleases({
+    overrideLocale: locale,
+    skipCache: true,
+  });
 
-  const messageKey = result.notificationsSent > 0 ? 'toast_refresh_found_new' : 'toast_refresh_success_description';
+  const messageKey =
+    result.notificationsSent > 0
+      ? "toast_refresh_found_new"
+      : "toast_refresh_success_description";
 
-  log.info(`Manual refresh result: notificationsSent=${result.notificationsSent} checked=${result.checked}`);
+  log.info(
+    `Manual refresh result: notificationsSent=${result.notificationsSent} checked=${result.checked}`,
+  );
   return { success: true, messageKey };
 }
 
-export async function getRepositoriesForExport(): Promise<{ success: boolean; data?: Repository[]; error?: string; }> {
+export async function getRepositoriesForExport(): Promise<{
+  success: boolean;
+  data?: Repository[];
+  error?: string;
+}> {
   try {
     const repos = await getRepositories();
     return { success: true, data: repos };
   } catch (error: any) {
     log.error("Failed to get repositories for export:", error);
-    return { success: false, error: 'Failed to read repository data.' };
+    return { success: false, error: "Failed to read repository data." };
   }
 }
 
 export async function updateRepositorySettingsAction(
   repoId: string,
-  settings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags' | 'appriseFormat'>
+  settings: Pick<
+    Repository,
+    | "releaseChannels"
+    | "preReleaseSubChannels"
+    | "releasesPerPage"
+    | "includeRegex"
+    | "excludeRegex"
+    | "appriseTags"
+    | "appriseFormat"
+  >,
 ): Promise<{ success: boolean; error?: string }> {
   return scheduleTask(`updateRepositorySettingsAction: ${repoId}`, async () => {
     if (!isValidRepoId(repoId)) {
-      return { success: false, error: 'Invalid repository ID format.' };
+      return { success: false, error: "Invalid repository ID format." };
     }
 
     const locale = await getLocale();
-    const t = await getTranslations({ locale, namespace: 'RepoSettingsDialog' });
+    const t = await getTranslations({
+      locale,
+      namespace: "RepoSettingsDialog",
+    });
 
     try {
       const currentRepos = await getRepositories();
-      const repoIndex = currentRepos.findIndex(r => r.id === repoId);
+      const repoIndex = currentRepos.findIndex((r) => r.id === repoId);
 
       if (repoIndex === -1) {
-        return { success: false, error: t('toast_error_not_found') };
+        return { success: false, error: t("toast_error_not_found") };
       }
 
       const existing = currentRepos[repoIndex];
 
-      const prevInclude = (existing.includeRegex ?? '').trim() || undefined;
-      const prevExclude = (existing.excludeRegex ?? '').trim() || undefined;
-      const newInclude = (settings.includeRegex ?? '').trim() || undefined;
-      const newExclude = (settings.excludeRegex ?? '').trim() || undefined;
+      const prevInclude = (existing.includeRegex ?? "").trim() || undefined;
+      const prevExclude = (existing.excludeRegex ?? "").trim() || undefined;
+      const newInclude = (settings.includeRegex ?? "").trim() || undefined;
+      const newExclude = (settings.excludeRegex ?? "").trim() || undefined;
 
-      const filtersChanged = prevInclude !== newInclude || prevExclude !== newExclude;
+      const filtersChanged =
+        prevInclude !== newInclude || prevExclude !== newExclude;
 
       // Normalize arrays for comparison (treat empty array as undefined/global)
-      const normArray = <T,>(arr?: T[] | null) => {
+      const normArray = <T>(arr?: T[] | null) => {
         if (!arr || arr.length === 0) return undefined;
         return [...arr].sort();
       };
       const prevChannels = normArray(existing.releaseChannels);
       const newChannels = normArray(settings.releaseChannels);
-      const channelsChanged = JSON.stringify(prevChannels) !== JSON.stringify(newChannels);
+      const channelsChanged =
+        JSON.stringify(prevChannels) !== JSON.stringify(newChannels);
 
       const prevPreSubs = normArray(existing.preReleaseSubChannels);
       const newPreSubs = normArray(settings.preReleaseSubChannels);
-      const preSubsChanged = JSON.stringify(prevPreSubs) !== JSON.stringify(newPreSubs);
+      const preSubsChanged =
+        JSON.stringify(prevPreSubs) !== JSON.stringify(newPreSubs);
 
       const prevRpp = existing.releasesPerPage ?? undefined;
       const newRpp = settings.releasesPerPage ?? undefined;
@@ -1726,16 +2008,34 @@ export async function updateRepositorySettingsAction(
 
       // Build change summary for logging
       const changes: string[] = [];
-      const fmt = (v: any) => v === undefined ? 'undefined' : Array.isArray(v) ? JSON.stringify(v) : JSON.stringify(v);
-      const cmpArr = (a?: any[] | null, b?: any[] | null) => JSON.stringify((a || []).slice().sort()) === JSON.stringify((b || []).slice().sort());
+      const fmt = (v: any) =>
+        v === undefined
+          ? "undefined"
+          : Array.isArray(v)
+            ? JSON.stringify(v)
+            : JSON.stringify(v);
+      const cmpArr = (a?: any[] | null, b?: any[] | null) =>
+        JSON.stringify((a || []).slice().sort()) ===
+        JSON.stringify((b || []).slice().sort());
       if (!cmpArr(existing.releaseChannels, settings.releaseChannels)) {
-        changes.push(`releaseChannels: ${fmt(existing.releaseChannels)} -> ${fmt(settings.releaseChannels)}`);
+        changes.push(
+          `releaseChannels: ${fmt(existing.releaseChannels)} -> ${fmt(settings.releaseChannels)}`,
+        );
       }
-      if (!cmpArr(existing.preReleaseSubChannels, settings.preReleaseSubChannels)) {
-        changes.push(`preReleaseSubChannels: ${fmt(existing.preReleaseSubChannels)} -> ${fmt(settings.preReleaseSubChannels)}`);
+      if (
+        !cmpArr(existing.preReleaseSubChannels, settings.preReleaseSubChannels)
+      ) {
+        changes.push(
+          `preReleaseSubChannels: ${fmt(existing.preReleaseSubChannels)} -> ${fmt(settings.preReleaseSubChannels)}`,
+        );
       }
-      if ((existing.releasesPerPage ?? undefined) !== (settings.releasesPerPage ?? undefined)) {
-        changes.push(`releasesPerPage: ${fmt(existing.releasesPerPage)} -> ${fmt(settings.releasesPerPage)}`);
+      if (
+        (existing.releasesPerPage ?? undefined) !==
+        (settings.releasesPerPage ?? undefined)
+      ) {
+        changes.push(
+          `releasesPerPage: ${fmt(existing.releasesPerPage)} -> ${fmt(settings.releasesPerPage)}`,
+        );
       }
       if (prevInclude !== newInclude) {
         changes.push(`includeRegex: ${fmt(prevInclude)} -> ${fmt(newInclude)}`);
@@ -1743,14 +2043,25 @@ export async function updateRepositorySettingsAction(
       if (prevExclude !== newExclude) {
         changes.push(`excludeRegex: ${fmt(prevExclude)} -> ${fmt(newExclude)}`);
       }
-      if ((existing.appriseTags ?? undefined) !== (settings.appriseTags ?? undefined)) {
-        changes.push(`appriseTags: ${fmt(existing.appriseTags)} -> ${fmt(settings.appriseTags)}`);
+      if (
+        (existing.appriseTags ?? undefined) !==
+        (settings.appriseTags ?? undefined)
+      ) {
+        changes.push(
+          `appriseTags: ${fmt(existing.appriseTags)} -> ${fmt(settings.appriseTags)}`,
+        );
       }
-      if ((existing.appriseFormat ?? undefined) !== (settings.appriseFormat ?? undefined)) {
-        changes.push(`appriseFormat: ${fmt(existing.appriseFormat)} -> ${fmt(settings.appriseFormat)}`);
+      if (
+        (existing.appriseFormat ?? undefined) !==
+        (settings.appriseFormat ?? undefined)
+      ) {
+        changes.push(
+          `appriseFormat: ${fmt(existing.appriseFormat)} -> ${fmt(settings.appriseFormat)}`,
+        );
       }
 
-      const etagInvalidated = (filtersChanged || channelsChanged || preSubsChanged || rppChanged);
+      const etagInvalidated =
+        filtersChanged || channelsChanged || preSubsChanged || rppChanged;
 
       currentRepos[repoIndex] = {
         ...existing,
@@ -1766,34 +2077,39 @@ export async function updateRepositorySettingsAction(
       };
 
       await saveRepositories(currentRepos);
-      revalidatePath('/');
+      revalidatePath("/");
       if (etagInvalidated) {
         const reasons: string[] = [];
-        if (filtersChanged) reasons.push('filtersChanged');
-        if (channelsChanged) reasons.push('releaseChannelsChanged');
-        if (preSubsChanged) reasons.push('preReleaseSubChannelsChanged');
-        if (rppChanged) reasons.push('releasesPerPageChanged');
-        log.info(`Cleared ETag for ${repoId} due to: ${reasons.join(', ')}`);
+        if (filtersChanged) reasons.push("filtersChanged");
+        if (channelsChanged) reasons.push("releaseChannelsChanged");
+        if (preSubsChanged) reasons.push("preReleaseSubChannelsChanged");
+        if (rppChanged) reasons.push("releasesPerPageChanged");
+        log.info(`Cleared ETag for ${repoId} due to: ${reasons.join(", ")}`);
       }
       if (changes.length > 0) {
-        log.info(`Updated repository settings for ${repoId}: ${changes.join('; ')}`);
+        log.info(
+          `Updated repository settings for ${repoId}: ${changes.join("; ")}`,
+        );
       } else {
         log.info(`Updated repository settings for ${repoId}: no changes.`);
       }
       return { success: true };
-
-    } catch (error: any)
-    {
+    } catch (error: any) {
       log.error(`Failed to update settings for ${repoId}:`, error);
-      return { success: false, error: error.message || t('toast_error_generic') };
+      return {
+        success: false,
+        error: error.message || t("toast_error_generic"),
+      };
     }
   });
 }
 
 export async function revalidateReleasesAction() {
-  revalidateTag('github-releases');
+  revalidateTag("github-releases");
 }
 
-export async function getJobStatusAction(jobId: string): Promise<{ status: JobStatus | undefined }> {
-    return { status: getJobStatus(jobId) };
+export async function getJobStatusAction(
+  jobId: string,
+): Promise<{ status: JobStatus | undefined }> {
+  return { status: getJobStatus(jobId) };
 }

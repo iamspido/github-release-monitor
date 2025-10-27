@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 // This layout is required by Next.js.
 // We return children directly to avoid nested <html> and <body> tags,

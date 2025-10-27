@@ -219,7 +219,31 @@ describe('RepoSettingsDialog autosave behaviour', () => {
 
   async function getIncludeInput() {
     await flushEffects();
-    const input = container.querySelector('input[id="include-regex-repo"]') as HTMLInputElement | null;
+
+    // Find input by its associated label instead of static ID
+    const labels = Array.from(container.querySelectorAll('label'));
+    const includeRegexLabel = labels.find(label => 
+      label.textContent?.includes('Include regex')
+    );
+
+    let input: HTMLInputElement | null = null;
+
+    if (includeRegexLabel && includeRegexLabel.htmlFor) {
+      // Use getElementById which handles special characters in IDs correctly
+      input = document.getElementById(includeRegexLabel.htmlFor) as HTMLInputElement;
+    }
+
+    // Fallback: find by placeholder text
+    if (!input) {
+      const allInputs = Array.from(container.querySelectorAll('input[type="text"]')) as HTMLInputElement[];
+      // The include regex input comes before exclude regex input
+      // and should be in the "Regex filter" section
+      input = allInputs.find(inp => {
+        const placeholder = inp.placeholder;
+        return placeholder && (placeholder.includes('Regex') || placeholder === '');
+      }) || allInputs[0];
+    }
+
     if (!input) {
       throw new Error('include-regex-repo input not rendered');
     }

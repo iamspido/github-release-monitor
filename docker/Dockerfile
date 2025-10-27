@@ -27,7 +27,7 @@ COPY src/ ./src/
 # Build the application
 RUN npm run build
 
-# Lint Stage (only ESLint)
+# Lint Stage (Biome)
 FROM node:24-alpine AS lint
 
 WORKDIR /app
@@ -37,7 +37,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY package*.json ./
 RUN npm ci && npm cache clean --force
 
-COPY .eslintrc.json ./
+COPY biome.json ./
 COPY tsconfig.json ./
 COPY src/ ./src/
 
@@ -72,7 +72,7 @@ RUN npm ci && npm cache clean --force
 # Copy config and source
 COPY components.json \
      next.config.mjs \
-     .eslintrc.json \
+     biome.json \
      postcss.config.mjs \
      tailwind.config.mjs \
      tsconfig.json \
@@ -163,6 +163,7 @@ COPY components.json \
      postcss.config.mjs \
      tailwind.config.mjs \
      tsconfig.json \
+     biome.json \
      vitest.config.ts \
      vitest.setup.ts \
      ./

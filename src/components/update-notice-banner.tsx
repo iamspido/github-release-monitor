@@ -1,21 +1,22 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import { Megaphone, Loader2 } from 'lucide-react';
-import { useTranslations } from 'next-intl';
-import type { UpdateNotificationState } from '@/types';
-import { Button } from '@/components/ui/button';
-import { dismissUpdateNotificationAction } from '@/app/actions';
+import { Loader2, Megaphone } from "lucide-react";
+import { useTranslations } from "next-intl";
+import * as React from "react";
+
+import { dismissUpdateNotificationAction } from "@/app/actions";
+import { Button } from "@/components/ui/button";
+import type { UpdateNotificationState } from "@/types";
 
 type UpdateNoticeBannerProps = {
   notice?: UpdateNotificationState;
 };
 
 export function UpdateNoticeBanner({ notice }: UpdateNoticeBannerProps) {
-  const t = useTranslations('UpdateNotice');
+  const t = useTranslations("UpdateNotice");
   const [isPending, startTransition] = React.useTransition();
   const [isVisible, setIsVisible] = React.useState<boolean>(
-    notice?.shouldNotify ?? false
+    notice?.shouldNotify ?? false,
   );
 
   React.useEffect(() => {
@@ -29,7 +30,7 @@ export function UpdateNoticeBanner({ notice }: UpdateNoticeBannerProps) {
   const trimmedVersion = notice.latestVersion?.trim();
   const releaseUrl = trimmedVersion
     ? `https://github.com/iamspido/github-release-monitor/releases/tag/${encodeURIComponent(trimmedVersion)}`
-    : 'https://github.com/iamspido/github-release-monitor/releases';
+    : "https://github.com/iamspido/github-release-monitor/releases";
 
   const handleDismiss = () => {
     setIsVisible(false);
@@ -38,7 +39,7 @@ export function UpdateNoticeBanner({ notice }: UpdateNoticeBannerProps) {
         await dismissUpdateNotificationAction();
       } catch (error) {
         // eslint-disable-next-line no-console
-        console.error('Failed to dismiss update notice:', error);
+        console.error("Failed to dismiss update notice:", error);
       }
     });
   };
@@ -50,10 +51,10 @@ export function UpdateNoticeBanner({ notice }: UpdateNoticeBannerProps) {
           <Megaphone className="mt-1 size-4 shrink-0 text-blue-200" />
           <div className="space-y-1">
             <p className="font-semibold">
-              {t('title', { version: notice.latestVersion ?? '—' })}
+              {t("title", { version: notice.latestVersion ?? "—" })}
             </p>
             <p className="text-blue-200/80">
-              {t('description', {
+              {t("description", {
                 currentVersion: notice.currentVersion,
               })}
             </p>
@@ -62,7 +63,7 @@ export function UpdateNoticeBanner({ notice }: UpdateNoticeBannerProps) {
         <div className="flex items-center gap-2">
           <a href={releaseUrl} target="_blank" rel="noopener noreferrer">
             <Button size="sm" variant="secondary">
-              {t('cta_label')}
+              {t("cta_label")}
             </Button>
           </a>
           <Button
@@ -74,7 +75,7 @@ export function UpdateNoticeBanner({ notice }: UpdateNoticeBannerProps) {
             {isPending ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
-              t('dismiss_label')
+              t("dismiss_label")
             )}
           </Button>
         </div>

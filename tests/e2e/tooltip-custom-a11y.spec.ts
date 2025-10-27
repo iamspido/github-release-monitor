@@ -9,7 +9,11 @@ test('custom badge tooltip is accessible via hover/focus text', async ({ page })
   const settingsButton = page.getByRole('button', { name: 'Open settings for this repository' }).first();
   await expect(settingsButton).toBeVisible({ timeout: 10_000 });
   await settingsButton.click();
-  await page.locator('#releases-per-page-repo').fill('9');
+  
+  const dialog = page.getByRole('dialog');
+  const rppInput = dialog.locator('input[type="number"]').first();
+  
+  await rppInput.fill('9');
   await waitForAutosave(page);
   await page.keyboard.press('Escape');
 

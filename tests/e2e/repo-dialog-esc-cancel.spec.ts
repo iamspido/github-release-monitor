@@ -12,18 +12,28 @@ test('repo dialog ESC closes without saving pending changes', async ({ page }) =
   await expect(settingsButton).toBeVisible({ timeout: 10_000 });
   await settingsButton.click();
 
+  const dialog = page.getByRole('dialog');
+  const rppInput = dialog.locator('input[type="number"]').first();
+  const allTextInputs = dialog.locator('input[type="text"]');
+  const includeInput = allTextInputs.first(); // Include regex is the first text input
+
   // Capture current persisted values to compare later
-  const beforeRpp = await page.locator('#releases-per-page-repo').inputValue();
-  const beforeInc = await page.locator('#include-regex-repo').inputValue();
+  const beforeRpp = await rppInput.inputValue();
+  const beforeInc = await includeInput.inputValue();
 
   // Change some fields but close immediately before autosave debounce (1.5s)
-  await page.locator('#releases-per-page-repo').fill('77');
-  await page.locator('#include-regex-repo').fill('^v$');
+  await rppInput.fill('77');
+  await includeInput.fill('^v$');
   await page.keyboard.press('Escape');
 
   // Reopen and ensure values were not saved (empty means global)
   await expect(settingsButton).toBeVisible({ timeout: 10_000 });
   await settingsButton.click();
-  await expect(page.locator('#releases-per-page-repo')).toHaveValue(beforeRpp);
-  await expect(page.locator('#include-regex-repo')).toHaveValue(beforeInc);
+  
+  const dialogAfter = page.getByRole('dialog');
+  const rppInputAfter = dialogAfter.locator('input[type="number"]').first();
+  const includeInputAfter = dialogAfter.locator('input[type="text"]').first();
+  
+  await expect(rppInputAfter).toHaveValue(beforeRpp);
+  await expect(includeInputAfter).toHaveValue(beforeInc);
 });

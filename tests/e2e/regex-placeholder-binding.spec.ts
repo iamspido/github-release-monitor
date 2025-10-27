@@ -7,8 +7,11 @@ test('global include/exclude regex reflected as placeholders in repo dialog', as
 
   // Set global include/exclude regex
   await page.goto('/en/settings');
-  await page.locator('#include-regex').fill('^foo$');
-  await page.locator('#exclude-regex').fill('^bar$');
+  const includeRegexInput = page.getByLabel('Include Pattern').or(page.getByLabel('Einschließen-Muster (Include)'));
+  const excludeRegexInput = page.getByLabel('Exclude Pattern').or(page.getByLabel('Ausschließen-Muster (Exclude)'));
+  
+  await includeRegexInput.fill('^foo$');
+  await excludeRegexInput.fill('^bar$');
   await waitForAutosave(page);
 
   // Open repo dialog and check placeholders
@@ -17,6 +20,12 @@ test('global include/exclude regex reflected as placeholders in repo dialog', as
   const settingsButton = page.getByRole('button', { name: 'Open settings for this repository' }).first();
   await expect(settingsButton).toBeVisible({ timeout: 10_000 });
   await settingsButton.click();
-  await expect(page.locator('#include-regex-repo')).toHaveAttribute('placeholder', '^foo$');
-  await expect(page.locator('#exclude-regex-repo')).toHaveAttribute('placeholder', '^bar$');
+  
+  // Find inputs by placeholder text since they should contain the global values
+  const dialog = page.getByRole('dialog');
+  const includeInput = dialog.getByPlaceholder('^foo$');
+  const excludeInput = dialog.getByPlaceholder('^bar$');
+  
+  await expect(includeInput).toHaveAttribute('placeholder', '^foo$');
+  await expect(excludeInput).toHaveAttribute('placeholder', '^bar$');
 });

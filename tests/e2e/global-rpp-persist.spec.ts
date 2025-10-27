@@ -7,7 +7,8 @@ test('global releases-per-page persists and reflects in repo dialog placeholder'
 
   // Change global RPP to 55
   await page.goto('/en/settings');
-  await page.locator('#releases-per-page').fill('55');
+  const releasesPerPageInput = page.getByLabel('Number of releases to fetch per repository').or(page.getByLabel('Anzahl der pro Repository abzurufenden Releases'));
+  await releasesPerPageInput.fill('55');
   await waitForAutosave(page);
 
   // Open repo dialog and check placeholder reflects 55
@@ -16,7 +17,12 @@ test('global releases-per-page persists and reflects in repo dialog placeholder'
   const settingsButton = page.getByRole('button', { name: 'Open settings for this repository' }).first();
   await expect(settingsButton).toBeVisible({ timeout: 10_000 });
   await settingsButton.click();
-  const placeholder = await page.locator('#releases-per-page-repo').getAttribute('placeholder');
+
+  // Find the releases-per-page input in the dialog by type="number"
+  const dialog = page.getByRole('dialog');
+  const rppInput = dialog.locator('input[type="number"]').first();
+
+  const placeholder = await rppInput.getAttribute('placeholder');
   expect(placeholder || '').toMatch(/Global default \(55\)/);
 
   // Ensure cards render without error

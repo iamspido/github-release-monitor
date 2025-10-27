@@ -27,8 +27,10 @@ test.describe('Repo dialog offline read-only + autosave pause', () => {
     await expect(dialog.getByLabel('Pre-release')).toBeDisabled();
     await expect(dialog.getByLabel('Include Pattern').or(dialog.getByLabel('Einschließen-Muster (Include)'))).toBeDisabled();
     await expect(dialog.getByLabel('Exclude Pattern').or(dialog.getByLabel('Ausschließen-Muster (Exclude)'))).toBeDisabled();
-    // The releases-per-page field uses a heading as title, so use the input id directly
-    await expect(dialog.locator('#releases-per-page-repo')).toBeDisabled();
+
+    // The releases-per-page field - find by type
+    const rppInput = dialog.locator('input[type="number"]').first();
+    await expect(rppInput).toBeDisabled();
 
     // All "Reset" buttons should be disabled while offline
     const resetButtonsEn = dialog.getByRole('button', { name: 'Reset' });
@@ -50,7 +52,7 @@ test.describe('Repo dialog offline read-only + autosave pause', () => {
     await expect(dialog.getByLabel('Stable')).toBeEnabled();
 
     // Make a small change to trigger autosave
-    const rpp = dialog.locator('#releases-per-page-repo');
+    const rpp = dialog.locator('input[type="number"]').first();
     await rpp.fill('7');
     await waitForAutosave(page);
   });

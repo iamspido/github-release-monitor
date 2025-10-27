@@ -1,22 +1,19 @@
-'use client';
-
-import * as React from 'react';
-import { useTranslations } from 'next-intl';
-import { Loader2, Save, CheckCircle, AlertCircle, RotateCcw, WifiOff } from 'lucide-react';
-import type { Repository, ReleaseChannel, PreReleaseChannelType, AppSettings, AppriseFormat } from '@/types';
-import { allPreReleaseTypes } from '@/types';
-import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
-import { updateRepositorySettingsAction, refreshSingleRepositoryAction } from '@/app/actions';
+"use client";
 
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter
-} from '@/components/ui/dialog';
+  AlertCircle,
+  CheckCircle,
+  Loader2,
+  RotateCcw,
+  Save,
+  WifiOff,
+} from "lucide-react";
+import { useTranslations } from "next-intl";
+import * as React from "react";
+import {
+  refreshSingleRepositoryAction,
+  updateRepositorySettingsAction,
+} from "@/app/actions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,95 +25,182 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
-import { useNetworkStatus } from '@/hooks/use-network';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { Input } from './ui/input';
+} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useNetworkStatus } from "@/hooks/use-network";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import type {
+  AppriseFormat,
+  AppSettings,
+  PreReleaseChannelType,
+  ReleaseChannel,
+  Repository,
+} from "@/types";
+import { allPreReleaseTypes } from "@/types";
+import { Input } from "./ui/input";
 
-
-type SaveStatus = 'idle' | 'waiting' | 'saving' | 'success' | 'error' | 'paused';
-type ReleasesPerPageError = 'too_low' | 'too_high' | null;
-type RegexError = 'invalid' | null;
-
+type SaveStatus =
+  | "idle"
+  | "waiting"
+  | "saving"
+  | "success"
+  | "error"
+  | "paused";
+type ReleasesPerPageError = "too_low" | "too_high" | null;
+type RegexError = "invalid" | null;
 
 function SaveStatusIndicator({ status }: { status: SaveStatus }) {
-    const t = useTranslations('RepoSettingsDialog');
-    const tLong = useTranslations('SettingsForm');
+  const t = useTranslations("RepoSettingsDialog");
+  const tLong = useTranslations("SettingsForm");
 
-    if (status === 'idle') {
-        return null;
-    }
+  if (status === "idle") {
+    return null;
+  }
 
-    const messages: Record<SaveStatus, { text: React.ReactNode; icon: React.ReactNode; className: string }> = {
-        idle: { text: '', icon: null, className: '' },
-        waiting: { text: t('autosave_waiting'), icon: <Save className="size-4" />, className: 'text-muted-foreground' },
-        saving: { text: t('autosave_saving'), icon: <Loader2 className="size-4 animate-spin" />, className: 'text-muted-foreground' },
-        success: {
-            text: (
-                <>
-                    <span className="sm:hidden">{t('autosave_success_short')}</span>
-                    <span className="hidden sm:inline">{tLong('autosave_success')}</span>
-                </>
-            ),
-            icon: <CheckCircle className="size-4" />,
-            className: 'text-green-500'
-        },
-        error: { text: t('autosave_error'), icon: <AlertCircle className="size-4" />, className: 'text-destructive' },
-        paused: { text: t('autosave_paused_offline'), icon: <WifiOff className="size-4" />, className: 'text-yellow-500' },
-    };
+  const messages: Record<
+    SaveStatus,
+    { text: React.ReactNode; icon: React.ReactNode; className: string }
+  > = {
+    idle: { text: "", icon: null, className: "" },
+    waiting: {
+      text: t("autosave_waiting"),
+      icon: <Save className="size-4" />,
+      className: "text-muted-foreground",
+    },
+    saving: {
+      text: t("autosave_saving"),
+      icon: <Loader2 className="size-4 animate-spin" />,
+      className: "text-muted-foreground",
+    },
+    success: {
+      text: (
+        <>
+          <span className="sm:hidden">{t("autosave_success_short")}</span>
+          <span className="hidden sm:inline">{tLong("autosave_success")}</span>
+        </>
+      ),
+      icon: <CheckCircle className="size-4" />,
+      className: "text-green-500",
+    },
+    error: {
+      text: t("autosave_error"),
+      icon: <AlertCircle className="size-4" />,
+      className: "text-destructive",
+    },
+    paused: {
+      text: t("autosave_paused_offline"),
+      icon: <WifiOff className="size-4" />,
+      className: "text-yellow-500",
+    },
+  };
 
-    const current = messages[status];
+  const current = messages[status];
 
-    return (
-        <div className={cn("flex items-center justify-end gap-2 text-sm transition-colors", current.className)}>
-            {current.icon}
-            <span>{current.text}</span>
-        </div>
-    );
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-end gap-2 text-sm transition-colors",
+        current.className,
+      )}
+    >
+      {current.icon}
+      <span>{current.text}</span>
+    </div>
+  );
 }
 
 interface RepoSettingsDialogProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   repoId: string;
-  currentRepoSettings?: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags' | 'appriseFormat'>;
+  currentRepoSettings?: Pick<
+    Repository,
+    | "releaseChannels"
+    | "preReleaseSubChannels"
+    | "releasesPerPage"
+    | "includeRegex"
+    | "excludeRegex"
+    | "appriseTags"
+    | "appriseFormat"
+  >;
   globalSettings: AppSettings;
 }
 
-export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSettings, globalSettings }: RepoSettingsDialogProps) {
-  const t = useTranslations('RepoSettingsDialog');
-  const tGlobal = useTranslations('SettingsForm');
+export function RepoSettingsDialog({
+  isOpen,
+  setIsOpen,
+  repoId,
+  currentRepoSettings,
+  globalSettings,
+}: RepoSettingsDialogProps) {
+  const t = useTranslations("RepoSettingsDialog");
+  const tGlobal = useTranslations("SettingsForm");
   const { toast } = useToast();
 
-  const [channels, setChannels] = React.useState<ReleaseChannel[]>(currentRepoSettings?.releaseChannels ?? []);
-  const [preReleaseSubChannels, setPreReleaseSubChannels] = React.useState<PreReleaseChannelType[]>(
-    currentRepoSettings?.preReleaseSubChannels ?? []
+  // Generate unique IDs for form elements
+  const stableId = React.useId();
+  const prereleaseId = React.useId();
+  const draftId = React.useId();
+  const includeRegexId = React.useId();
+  const excludeRegexId = React.useId();
+  const releasesPerPageId = React.useId();
+  const appriseFormatId = React.useId();
+  const appriseTagsId = React.useId();
+  const prereleaseSubChannelBaseId = React.useId();
+
+  const [channels, setChannels] = React.useState<ReleaseChannel[]>(
+    currentRepoSettings?.releaseChannels ?? [],
   );
-  const [releasesPerPage, setReleasesPerPage] = React.useState<string | number>(currentRepoSettings?.releasesPerPage ?? '');
-  const [includeRegex, setIncludeRegex] = React.useState(currentRepoSettings?.includeRegex ?? '');
-  const [excludeRegex, setExcludeRegex] = React.useState(currentRepoSettings?.excludeRegex ?? '');
-  const [appriseTags, setAppriseTags] = React.useState(currentRepoSettings?.appriseTags ?? '');
-  const [appriseFormat, setAppriseFormat] = React.useState<AppriseFormat | ''>(currentRepoSettings?.appriseFormat ?? '');
+  const [preReleaseSubChannels, setPreReleaseSubChannels] = React.useState<
+    PreReleaseChannelType[]
+  >(currentRepoSettings?.preReleaseSubChannels ?? []);
+  const [releasesPerPage, setReleasesPerPage] = React.useState<string | number>(
+    currentRepoSettings?.releasesPerPage ?? "",
+  );
+  const [includeRegex, setIncludeRegex] = React.useState(
+    currentRepoSettings?.includeRegex ?? "",
+  );
+  const [excludeRegex, setExcludeRegex] = React.useState(
+    currentRepoSettings?.excludeRegex ?? "",
+  );
+  const [appriseTags, setAppriseTags] = React.useState(
+    currentRepoSettings?.appriseTags ?? "",
+  );
+  const [appriseFormat, setAppriseFormat] = React.useState<AppriseFormat | "">(
+    currentRepoSettings?.appriseFormat ?? "",
+  );
 
-  const [releasesPerPageError, setReleasesPerPageError] = React.useState<ReleasesPerPageError>(null);
-  const [includeRegexError, setIncludeRegexError] = React.useState<RegexError>(null);
-  const [excludeRegexError, setExcludeRegexError] = React.useState<RegexError>(null);
+  const [releasesPerPageError, setReleasesPerPageError] =
+    React.useState<ReleasesPerPageError>(null);
+  const [includeRegexError, setIncludeRegexError] =
+    React.useState<RegexError>(null);
+  const [excludeRegexError, setExcludeRegexError] =
+    React.useState<RegexError>(null);
 
-  const [saveStatus, setSaveStatus] = React.useState<SaveStatus>('idle');
+  const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
   const { isOnline } = useNetworkStatus();
 
   const savedThisSessionRef = React.useRef(false);
@@ -124,7 +208,9 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
   const mountedRef = React.useRef(true);
   React.useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const prevIsOpenRef = React.useRef(isOpen);
@@ -145,13 +231,13 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
 
       setChannels(initialSettings.releaseChannels);
       setPreReleaseSubChannels(initialSettings.preReleaseSubChannels);
-      setReleasesPerPage(initialSettings.releasesPerPage ?? '');
-      setIncludeRegex(initialSettings.includeRegex ?? '');
-      setExcludeRegex(initialSettings.excludeRegex ?? '');
-      setAppriseTags(initialSettings.appriseTags ?? '');
-      setAppriseFormat(initialSettings.appriseFormat ?? '');
+      setReleasesPerPage(initialSettings.releasesPerPage ?? "");
+      setIncludeRegex(initialSettings.includeRegex ?? "");
+      setExcludeRegex(initialSettings.excludeRegex ?? "");
+      setAppriseTags(initialSettings.appriseTags ?? "");
+      setAppriseFormat(initialSettings.appriseFormat ?? "");
 
-      setSaveStatus('idle');
+      setSaveStatus("idle");
 
       savedThisSessionRef.current = false;
 
@@ -174,19 +260,34 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
 
   const useGlobalChannels = channels.length === 0;
   const useGlobalSubChannels = preReleaseSubChannels.length === 0;
-  const useGlobalReleasesPerPage = String(releasesPerPage).trim() === '';
-  const useGlobalIncludeRegex = includeRegex.trim() === '';
-  const useGlobalExcludeRegex = excludeRegex.trim() === '';
-  const useGlobalAppriseTags = appriseTags.trim() === '';
-  const useGlobalAppriseFormat = appriseFormat === '';
+  const useGlobalReleasesPerPage = String(releasesPerPage).trim() === "";
+  const useGlobalIncludeRegex = includeRegex.trim() === "";
+  const useGlobalExcludeRegex = excludeRegex.trim() === "";
+  const useGlobalAppriseTags = appriseTags.trim() === "";
+  const useGlobalAppriseFormat = appriseFormat === "";
 
-  const isUsingAllGlobalSettings = useGlobalChannels && useGlobalReleasesPerPage && useGlobalIncludeRegex && useGlobalExcludeRegex && useGlobalAppriseTags && useGlobalAppriseFormat;
+  const isUsingAllGlobalSettings =
+    useGlobalChannels &&
+    useGlobalReleasesPerPage &&
+    useGlobalIncludeRegex &&
+    useGlobalExcludeRegex &&
+    useGlobalAppriseTags &&
+    useGlobalAppriseFormat;
 
-  const newSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags' | 'appriseFormat'> = React.useMemo(() => {
+  const newSettings: Pick<
+    Repository,
+    | "releaseChannels"
+    | "preReleaseSubChannels"
+    | "releasesPerPage"
+    | "includeRegex"
+    | "excludeRegex"
+    | "appriseTags"
+    | "appriseFormat"
+  > = React.useMemo(() => {
     let finalReleasesPerPage: number | null = null;
     const releasesPerPageStr = String(releasesPerPage).trim();
 
-    if (releasesPerPageStr !== '') {
+    if (releasesPerPageStr !== "") {
       const parsed = parseInt(releasesPerPageStr, 10);
       if (!isNaN(parsed)) {
         finalReleasesPerPage = parsed;
@@ -202,171 +303,207 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
       appriseTags: appriseTags.trim() || undefined,
       appriseFormat: appriseFormat || undefined,
     };
-  }, [channels, preReleaseSubChannels, releasesPerPage, includeRegex, excludeRegex, appriseTags, appriseFormat]);
+  }, [
+    channels,
+    preReleaseSubChannels,
+    releasesPerPage,
+    includeRegex,
+    excludeRegex,
+    appriseTags,
+    appriseFormat,
+  ]);
 
   const prevSettingsRef = React.useRef(newSettings);
 
   React.useEffect(() => {
-    if (String(releasesPerPage).trim() !== '') {
+    if (String(releasesPerPage).trim() !== "") {
       const numReleases = parseInt(String(releasesPerPage), 10);
       if (isNaN(numReleases)) {
         setReleasesPerPageError(null);
       } else if (numReleases < 1) {
-          setReleasesPerPageError('too_low');
+        setReleasesPerPageError("too_low");
       } else if (numReleases > 1000) {
-          setReleasesPerPageError('too_high');
+        setReleasesPerPageError("too_high");
       } else {
-          setReleasesPerPageError(null);
+        setReleasesPerPageError(null);
       }
     } else {
-        setReleasesPerPageError(null);
+      setReleasesPerPageError(null);
     }
 
     try {
-        if (includeRegex.trim()) new RegExp(includeRegex);
-        setIncludeRegexError(null);
+      if (includeRegex.trim()) new RegExp(includeRegex);
+      setIncludeRegexError(null);
     } catch (e) {
-        setIncludeRegexError('invalid');
+      setIncludeRegexError("invalid");
     }
 
     try {
-        if (excludeRegex.trim()) new RegExp(excludeRegex);
-        setExcludeRegexError(null);
+      if (excludeRegex.trim()) new RegExp(excludeRegex);
+      setExcludeRegexError(null);
     } catch (e) {
-        setExcludeRegexError('invalid');
+      setExcludeRegexError("invalid");
     }
-
   }, [releasesPerPage, includeRegex, excludeRegex]);
 
   React.useEffect(() => {
     if (!isOpen) return;
 
     if (!isOnline) {
-      setSaveStatus('paused');
+      setSaveStatus("paused");
       return;
     }
 
-    if (JSON.stringify(newSettings) === JSON.stringify(prevSettingsRef.current)) {
-        return;
+    if (
+      JSON.stringify(newSettings) === JSON.stringify(prevSettingsRef.current)
+    ) {
+      return;
     }
 
     if (releasesPerPageError || includeRegexError || excludeRegexError) {
-      setSaveStatus('idle');
+      setSaveStatus("idle");
       return;
     }
 
-    setSaveStatus('waiting');
+    setSaveStatus("waiting");
 
     const handler = setTimeout(async () => {
-        if (mountedRef.current) setSaveStatus('saving');
+      if (mountedRef.current) setSaveStatus("saving");
 
-        try {
-            const result = await updateRepositorySettingsAction(repoId, newSettings);
+      try {
+        const result = await updateRepositorySettingsAction(
+          repoId,
+          newSettings,
+        );
 
-            if (result.success) {
-                if (mountedRef.current) {
-                    setSaveStatus('success');
-                    prevSettingsRef.current = newSettings;
+        if (result.success) {
+          if (mountedRef.current) {
+            setSaveStatus("success");
+            prevSettingsRef.current = newSettings;
 
-                    savedThisSessionRef.current = true;
-                } else {
-                    savedThisSessionRef.current = true;
-                }
-            } else {
-                if (mountedRef.current) {
-                    setSaveStatus('error');
-                    toast({
-                      title: t('toast_error_title'),
-                      description: result.error,
-                      variant: 'destructive',
-                    });
-                }
-            }
-        } catch (err) {
-            if (mountedRef.current) {
-                setSaveStatus('error');
-                toast({ title: t('toast_error_title'), description: String(err), variant: 'destructive' });
-            }
+            savedThisSessionRef.current = true;
+          } else {
+            savedThisSessionRef.current = true;
+          }
+        } else {
+          if (mountedRef.current) {
+            setSaveStatus("error");
+            toast({
+              title: t("toast_error_title"),
+              description: result.error,
+              variant: "destructive",
+            });
+          }
         }
+      } catch (err) {
+        if (mountedRef.current) {
+          setSaveStatus("error");
+          toast({
+            title: t("toast_error_title"),
+            description: String(err),
+            variant: "destructive",
+          });
+        }
+      }
     }, 1500);
 
     return () => clearTimeout(handler);
-  }, [newSettings, repoId, isOpen, releasesPerPageError, includeRegexError, excludeRegexError, toast, t, isOnline]);
-
+  }, [
+    newSettings,
+    repoId,
+    isOpen,
+    releasesPerPageError,
+    includeRegexError,
+    excludeRegexError,
+    toast,
+    t,
+    isOnline,
+  ]);
 
   const handleChannelChange = (channel: ReleaseChannel) => {
     if (!isOnline) return;
-    const baseChannels = useGlobalChannels ? globalSettings.releaseChannels : channels;
+    const baseChannels = useGlobalChannels
+      ? globalSettings.releaseChannels
+      : channels;
 
     const newChannels = baseChannels.includes(channel)
-        ? baseChannels.filter(c => c !== channel)
-        : [...baseChannels, channel];
+      ? baseChannels.filter((c) => c !== channel)
+      : [...baseChannels, channel];
 
     if (newChannels.length === 0) {
-        toast({
-            title: t('toast_error_title'),
-            description: t('release_channel_error_at_least_one'),
-            variant: 'destructive',
-        });
-        return;
+      toast({
+        title: t("toast_error_title"),
+        description: t("release_channel_error_at_least_one"),
+        variant: "destructive",
+      });
+      return;
     }
 
     setChannels(newChannels);
 
-    if (useGlobalChannels && useGlobalSubChannels && channel === 'prerelease' && newChannels.includes('prerelease')) {
-      setPreReleaseSubChannels(globalSettings.preReleaseSubChannels || allPreReleaseTypes);
+    if (
+      useGlobalChannels &&
+      useGlobalSubChannels &&
+      channel === "prerelease" &&
+      newChannels.includes("prerelease")
+    ) {
+      setPreReleaseSubChannels(
+        globalSettings.preReleaseSubChannels || allPreReleaseTypes,
+      );
     }
   };
 
-  const handlePreReleaseSubChannelChange = (subChannel: PreReleaseChannelType) => {
+  const handlePreReleaseSubChannelChange = (
+    subChannel: PreReleaseChannelType,
+  ) => {
     if (!isOnline) return;
     const baseSubChannels = useGlobalSubChannels
-        ? (globalSettings.preReleaseSubChannels || allPreReleaseTypes)
-        : preReleaseSubChannels;
+      ? globalSettings.preReleaseSubChannels || allPreReleaseTypes
+      : preReleaseSubChannels;
 
     const newSubChannels = baseSubChannels.includes(subChannel)
-        ? baseSubChannels.filter(sc => sc !== subChannel)
-        : [...baseSubChannels, subChannel];
+      ? baseSubChannels.filter((sc) => sc !== subChannel)
+      : [...baseSubChannels, subChannel];
     setPreReleaseSubChannels(newSubChannels);
   };
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
-  }
+  };
 
   const handleResetAll = () => {
     if (!isOnline) return;
     setChannels([]);
     setPreReleaseSubChannels([]);
-    setReleasesPerPage('');
-    setIncludeRegex('');
-    setExcludeRegex('');
-    setAppriseTags('');
-    setAppriseFormat('');
-  }
+    setReleasesPerPage("");
+    setIncludeRegex("");
+    setExcludeRegex("");
+    setAppriseTags("");
+    setAppriseFormat("");
+  };
 
   const handleResetFilters = () => {
     if (!isOnline) return;
     setChannels([]);
     setPreReleaseSubChannels([]);
-    setIncludeRegex('');
-    setExcludeRegex('');
+    setIncludeRegex("");
+    setExcludeRegex("");
   };
 
   const isStableChecked = useGlobalChannels
-    ? globalSettings.releaseChannels.includes('stable')
-    : channels.includes('stable');
+    ? globalSettings.releaseChannels.includes("stable")
+    : channels.includes("stable");
 
   const isPreReleaseChecked = useGlobalChannels
-    ? globalSettings.releaseChannels.includes('prerelease')
-    : channels.includes('prerelease');
+    ? globalSettings.releaseChannels.includes("prerelease")
+    : channels.includes("prerelease");
 
   const isDraftChecked = useGlobalChannels
-    ? globalSettings.releaseChannels.includes('draft')
-    : channels.includes('draft');
+    ? globalSettings.releaseChannels.includes("draft")
+    : channels.includes("draft");
 
   const effectivePreReleaseSubChannels = useGlobalSubChannels
-    ? (globalSettings.preReleaseSubChannels || allPreReleaseTypes)
+    ? globalSettings.preReleaseSubChannels || allPreReleaseTypes
     : preReleaseSubChannels;
 
   const isAppriseConfigured = !!globalSettings.appriseMaxCharacters;
@@ -378,84 +515,127 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>{t('title')}</DialogTitle>
+          <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>
-            {t.rich('description_flexible', {
-              repoId: () => <span className="font-semibold text-foreground">{repoId}</span>
+            {t.rich("description_flexible", {
+              repoId: () => (
+                <span className="font-semibold text-foreground">{repoId}</span>
+              ),
             })}
           </DialogDescription>
         </DialogHeader>
 
         {!isOnline && (
           <div className="mb-3 mt-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-300">
-            {tGlobal('offline_notice')}
+            {tGlobal("offline_notice")}
           </div>
         )}
 
         <div className="space-y-6 pt-2 max-h-[60vh] overflow-y-auto pr-2 -mr-4 pb-4">
           <div className="space-y-4 p-4 border rounded-md">
             <div className="flex justify-between items-center">
-              <h4 className="font-semibold text-base">{tGlobal('release_channel_title')}</h4>
+              <h4 className="font-semibold text-base">
+                {tGlobal("release_channel_title")}
+              </h4>
               <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={handleResetFilters} className="size-8 shrink-0" disabled={!isOnline} aria-disabled={!isOnline}>
-                          <RotateCcw className="size-4" />
-                          <span className="sr-only">{t('reset_to_global_button')}</span>
-                        </Button>
-                    </TooltipTrigger>
-                      <TooltipContent>
-                          <p>{t('reset_to_global_tooltip')}</p>
-                      </TooltipContent>
-                  </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleResetFilters}
+                      className="size-8 shrink-0"
+                      disabled={!isOnline}
+                      aria-disabled={!isOnline}
+                    >
+                      <RotateCcw className="size-4" />
+                      <span className="sr-only">
+                        {t("reset_to_global_button")}
+                      </span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{t("reset_to_global_tooltip")}</p>
+                  </TooltipContent>
+                </Tooltip>
               </TooltipProvider>
             </div>
             <p className="text-xs text-muted-foreground">
-              {useGlobalChannels ? t('channels_hint_global') : t('channels_hint_individual')}
+              {useGlobalChannels
+                ? t("channels_hint_global")
+                : t("channels_hint_individual")}
             </p>
             <p className="text-xs text-muted-foreground">
-              {tGlobal('release_channel_description_repo')}
+              {tGlobal("release_channel_description_repo")}
             </p>
 
             <div className="flex items-center space-x-2">
               <Checkbox
-                id="stable-repo"
+                id={stableId}
                 checked={isStableChecked}
-                onCheckedChange={() => handleChannelChange('stable')}
+                onCheckedChange={() => handleChannelChange("stable")}
                 disabled={!isOnline}
               />
-              <Label htmlFor="stable-repo" className="font-normal cursor-pointer">{tGlobal('release_channel_stable')}</Label>
+              <Label htmlFor={stableId} className="font-normal cursor-pointer">
+                {tGlobal("release_channel_stable")}
+              </Label>
             </div>
 
             <div>
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id="prerelease-repo"
+                  id={prereleaseId}
                   checked={isPreReleaseChecked}
-                  onCheckedChange={() => handleChannelChange('prerelease')}
+                  onCheckedChange={() => handleChannelChange("prerelease")}
                   disabled={!isOnline}
                 />
-                <Label htmlFor="prerelease-repo" className="font-normal cursor-pointer">{tGlobal('release_channel_prerelease')}</Label>
+                <Label
+                  htmlFor={prereleaseId}
+                  className="font-normal cursor-pointer"
+                >
+                  {tGlobal("release_channel_prerelease")}
+                </Label>
               </div>
 
-              <div className={cn(
-                "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
-                isPreReleaseChecked ? 'mt-4 max-h-96 opacity-100' : 'max-h-0 opacity-0'
-              )}>
+              <div
+                className={cn(
+                  "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
+                  isPreReleaseChecked
+                    ? "mt-4 max-h-96 opacity-100"
+                    : "max-h-0 opacity-0",
+                )}
+              >
                 <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">{tGlobal('prerelease_subtype_description')}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {tGlobal("prerelease_subtype_description")}
+                  </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
-                    {allPreReleaseTypes.map((subType) => (
-                      <div key={subType} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`prerelease-repo-${subType}`}
-                          checked={effectivePreReleaseSubChannels.includes(subType)}
-                          onCheckedChange={() => handlePreReleaseSubChannelChange(subType)}
-                          disabled={!isPreReleaseChecked || !isOnline}
-                        />
-                        <Label htmlFor={`prerelease-repo-${subType}`} className="font-normal cursor-pointer text-sm">{subType}</Label>
-                      </div>
-                    ))}
+                    {allPreReleaseTypes.map((subType) => {
+                      const subChannelId = `${prereleaseSubChannelBaseId}-${subType}`;
+                      return (
+                        <div
+                          key={subType}
+                          className="flex items-center space-x-2"
+                        >
+                          <Checkbox
+                            id={subChannelId}
+                            checked={effectivePreReleaseSubChannels.includes(
+                              subType,
+                            )}
+                            onCheckedChange={() =>
+                              handlePreReleaseSubChannelChange(subType)
+                            }
+                            disabled={!isPreReleaseChecked || !isOnline}
+                          />
+                          <Label
+                            htmlFor={subChannelId}
+                            className="font-normal cursor-pointer text-sm"
+                          >
+                            {subType}
+                          </Label>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -463,192 +643,297 @@ export function RepoSettingsDialog({ isOpen, setIsOpen, repoId, currentRepoSetti
 
             <div className="flex items-center space-x-2">
               <Checkbox
-                id="draft-repo"
+                id={draftId}
                 checked={isDraftChecked}
-                onCheckedChange={() => handleChannelChange('draft')}
+                onCheckedChange={() => handleChannelChange("draft")}
                 disabled={!isOnline}
               />
-              <Label htmlFor="draft-repo" className="font-normal cursor-pointer">{tGlobal('release_channel_draft')}</Label>
+              <Label htmlFor={draftId} className="font-normal cursor-pointer">
+                {tGlobal("release_channel_draft")}
+              </Label>
             </div>
 
             <div className="space-y-2 pt-4">
-                <h4 className="font-medium text-base">{tGlobal('regex_filter_title')}</h4>
-                 <p className="text-xs text-muted-foreground">
-                    {tGlobal('regex_filter_description_repo')}
+              <h4 className="font-medium text-base">
+                {tGlobal("regex_filter_title")}
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                {tGlobal("regex_filter_description_repo")}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={includeRegexId}>
+                {tGlobal("include_regex_label")}
+              </Label>
+              <Input
+                id={includeRegexId}
+                value={includeRegex}
+                onChange={(e) => setIncludeRegex(e.target.value)}
+                placeholder={
+                  globalSettings.includeRegex || tGlobal("regex_placeholder")
+                }
+                className={cn(
+                  !!includeRegexError &&
+                    "border-destructive focus-visible:ring-destructive",
+                )}
+                disabled={!isOnline}
+              />
+              {includeRegexError && (
+                <p className="text-sm text-destructive">
+                  {tGlobal("regex_error_invalid")}
                 </p>
+              )}
             </div>
             <div className="space-y-2">
-                <Label htmlFor="include-regex-repo">{tGlobal('include_regex_label')}</Label>
-                <Input
-                    id="include-regex-repo"
-                    value={includeRegex}
-                    onChange={(e) => setIncludeRegex(e.target.value)}
-                    placeholder={globalSettings.includeRegex || tGlobal('regex_placeholder')}
-                    className={cn(!!includeRegexError && 'border-destructive focus-visible:ring-destructive')}
-                    disabled={!isOnline}
-                />
-                {includeRegexError && <p className="text-sm text-destructive">{tGlobal('regex_error_invalid')}</p>}
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="exclude-regex-repo">{tGlobal('exclude_regex_label')}</Label>
-                <Input
-                    id="exclude-regex-repo"
-                    value={excludeRegex}
-                    onChange={(e) => setExcludeRegex(e.target.value)}
-                    placeholder={globalSettings.excludeRegex || tGlobal('regex_placeholder')}
-                    className={cn(!!excludeRegexError && 'border-destructive focus-visible:ring-destructive')}
-                    disabled={!isOnline}
-                />
-                 {excludeRegexError && <p className="text-sm text-destructive">{tGlobal('regex_error_invalid')}</p>}
+              <Label htmlFor={excludeRegexId}>
+                {tGlobal("exclude_regex_label")}
+              </Label>
+              <Input
+                id={excludeRegexId}
+                value={excludeRegex}
+                onChange={(e) => setExcludeRegex(e.target.value)}
+                placeholder={
+                  globalSettings.excludeRegex || tGlobal("regex_placeholder")
+                }
+                className={cn(
+                  !!excludeRegexError &&
+                    "border-destructive focus-visible:ring-destructive",
+                )}
+                disabled={!isOnline}
+              />
+              {excludeRegexError && (
+                <p className="text-sm text-destructive">
+                  {tGlobal("regex_error_invalid")}
+                </p>
+              )}
             </div>
           </div>
 
           <div className="space-y-4 p-4 border rounded-md">
             <div className="flex justify-between items-center">
-              <h4 className="font-semibold text-base">{t('releases_per_page_label_repo')}</h4>
+              <h4 className="font-semibold text-base">
+                {t("releases_per_page_label_repo")}
+              </h4>
             </div>
-              <p className="text-xs text-muted-foreground">
-              {useGlobalReleasesPerPage ? t('releases_per_page_hint_global') : t('releases_per_page_hint_individual')}
-              </p>
-              <div className="flex items-center gap-2">
+            <p className="text-xs text-muted-foreground">
+              {useGlobalReleasesPerPage
+                ? t("releases_per_page_hint_global")
+                : t("releases_per_page_hint_individual")}
+            </p>
+            <div className="flex items-center gap-2">
               <Input
-                id="releases-per-page-repo"
+                id={releasesPerPageId}
                 type="number"
                 value={releasesPerPage}
                 onChange={(e) => setReleasesPerPage(e.target.value)}
                 min={1}
                 max={1000}
-                placeholder={t('releases_per_page_placeholder', { count: globalSettings.releasesPerPage })}
-                className={cn(!!releasesPerPageError && 'border-destructive focus-visible:ring-destructive')}
+                placeholder={t("releases_per_page_placeholder", {
+                  count: globalSettings.releasesPerPage,
+                })}
+                className={cn(
+                  !!releasesPerPageError &&
+                    "border-destructive focus-visible:ring-destructive",
+                )}
                 disabled={!isOnline}
               />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => setReleasesPerPage('')} className="size-8 shrink-0" disabled={!isOnline}>
-                          <RotateCcw className="size-4" />
-                          <span className="sr-only">{t('reset_to_global_button')}</span>
-                        </Button>
-                    </TooltipTrigger>
-                      <TooltipContent>
-                          <p>{t('reset_to_global_tooltip')}</p>
-                      </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            {releasesPerPageError === 'too_low' ? (
-                <p className="mt-2 text-sm text-destructive">{tGlobal('releases_per_page_error_min')}</p>
-            ) : releasesPerPageError === 'too_high' ? (
-                <p className="mt-2 text-sm text-destructive">{tGlobal('releases_per_page_error_max_1000')}</p>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setReleasesPerPage("")}
+                      className="size-8 shrink-0"
+                      disabled={!isOnline}
+                    >
+                      <RotateCcw className="size-4" />
+                      <span className="sr-only">
+                        {t("reset_to_global_button")}
+                      </span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{t("reset_to_global_tooltip")}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            {releasesPerPageError === "too_low" ? (
+              <p className="mt-2 text-sm text-destructive">
+                {tGlobal("releases_per_page_error_min")}
+              </p>
+            ) : releasesPerPageError === "too_high" ? (
+              <p className="mt-2 text-sm text-destructive">
+                {tGlobal("releases_per_page_error_max_1000")}
+              </p>
             ) : (
-                <p className="mt-2 text-xs text-muted-foreground">{tGlobal('releases_per_page_hint_1000')}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {tGlobal("releases_per_page_hint_1000")}
+              </p>
             )}
-             <p className="mt-2 text-xs text-muted-foreground">{tGlobal('releases_per_page_api_call_hint')}</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {tGlobal("releases_per_page_api_call_hint")}
+            </p>
           </div>
 
           <div className="space-y-4 p-4 border rounded-md">
             <div className="flex justify-between items-center">
-              <h4 className="font-semibold text-base">{tGlobal('apprise_settings_title')}</h4>
+              <h4 className="font-semibold text-base">
+                {tGlobal("apprise_settings_title")}
+              </h4>
             </div>
 
             <p className="text-xs text-muted-foreground">
-              {useGlobalAppriseTags && useGlobalAppriseFormat ? t('apprise_settings_hint_global') : t('apprise_settings_hint_individual')}
+              {useGlobalAppriseTags && useGlobalAppriseFormat
+                ? t("apprise_settings_hint_global")
+                : t("apprise_settings_hint_individual")}
             </p>
 
-            <div className='space-y-2'>
-                <Label htmlFor="apprise-format-repo">{tGlobal('apprise_format_label')}</Label>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={appriseFormat}
-                    onValueChange={(value: AppriseFormat | 'global') => setAppriseFormat(value === 'global' ? '' : value)}
-                    disabled={!isAppriseConfigured || !isOnline}
-                  >
-                    <SelectTrigger id="apprise-format-repo">
-                        <SelectValue placeholder={t('apprise_format_placeholder', {format: globalSettings.appriseFormat || 'text'})} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="global">{t('apprise_format_option_global', {format: globalSettings.appriseFormat || 'text'})}</SelectItem>
-                        <SelectItem value="text">{tGlobal('apprise_format_text')}</SelectItem>
-                        <SelectItem value="markdown">{tGlobal('apprise_format_markdown')}</SelectItem>
-                        <SelectItem value="html">{tGlobal('apprise_format_html')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" onClick={() => setAppriseFormat('')} className="size-8 shrink-0" disabled={!isOnline}>
-                            <RotateCcw className="size-4" />
-                            <span className="sr-only">{t('reset_to_global_button')}</span>
-                          </Button>
-                      </TooltipTrigger>
-                        <TooltipContent>
-                            <p>{t('reset_to_global_tooltip')}</p>
-                        </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                 {!isAppriseConfigured && (
-                    <p className="mt-2 text-xs text-muted-foreground">{tGlobal('apprise_format_disabled_hint')}</p>
-                )}
+            <div className="space-y-2">
+              <Label htmlFor={appriseFormatId}>
+                {tGlobal("apprise_format_label")}
+              </Label>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={appriseFormat}
+                  onValueChange={(value: AppriseFormat | "global") =>
+                    setAppriseFormat(value === "global" ? "" : value)
+                  }
+                  disabled={!isAppriseConfigured || !isOnline}
+                >
+                  <SelectTrigger id={appriseFormatId}>
+                    <SelectValue
+                      placeholder={t("apprise_format_placeholder", {
+                        format: globalSettings.appriseFormat || "text",
+                      })}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="global">
+                      {t("apprise_format_option_global", {
+                        format: globalSettings.appriseFormat || "text",
+                      })}
+                    </SelectItem>
+                    <SelectItem value="text">
+                      {tGlobal("apprise_format_text")}
+                    </SelectItem>
+                    <SelectItem value="markdown">
+                      {tGlobal("apprise_format_markdown")}
+                    </SelectItem>
+                    <SelectItem value="html">
+                      {tGlobal("apprise_format_html")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setAppriseFormat("")}
+                        className="size-8 shrink-0"
+                        disabled={!isOnline}
+                      >
+                        <RotateCcw className="size-4" />
+                        <span className="sr-only">
+                          {t("reset_to_global_button")}
+                        </span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{t("reset_to_global_tooltip")}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              {!isAppriseConfigured && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {tGlobal("apprise_format_disabled_hint")}
+                </p>
+              )}
             </div>
 
-            <div className='space-y-2'>
-              <Label htmlFor="apprise-tags-repo">{t('apprise_tags_label')}</Label>
+            <div className="space-y-2">
+              <Label htmlFor={appriseTagsId}>{t("apprise_tags_label")}</Label>
               <div className="flex items-center gap-2">
                 <Input
-                  id="apprise-tags-repo"
+                  id={appriseTagsId}
                   type="text"
                   value={appriseTags}
                   onChange={(e) => setAppriseTags(e.target.value)}
-                  placeholder={t('apprise_tags_placeholder', { tags: globalSettings.appriseTags || '...' })}
+                  placeholder={t("apprise_tags_placeholder", {
+                    tags: globalSettings.appriseTags || "...",
+                  })}
                   disabled={!isAppriseConfigured || !isOnline}
                 />
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" onClick={() => setAppriseTags('')} className="size-8 shrink-0" disabled={!isOnline}>
-                          <RotateCcw className="size-4" />
-                          <span className="sr-only">{t('reset_to_global_button')}</span>
-                        </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setAppriseTags("")}
+                        className="size-8 shrink-0"
+                        disabled={!isOnline}
+                      >
+                        <RotateCcw className="size-4" />
+                        <span className="sr-only">
+                          {t("reset_to_global_button")}
+                        </span>
+                      </Button>
                     </TooltipTrigger>
-                      <TooltipContent>
-                          <p>{t('reset_to_global_tooltip')}</p>
-                        </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
+                    <TooltipContent>
+                      <p>{t("reset_to_global_tooltip")}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               {!isAppriseConfigured && (
-                <p className="mt-2 text-xs text-muted-foreground">{tGlobal('apprise_tags_disabled_hint')}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {tGlobal("apprise_tags_disabled_hint")}
+                </p>
               )}
             </div>
           </div>
 
           <div className="pt-2">
             <AlertDialog>
-                <AlertDialogTrigger asChild>
-                <Button variant="outline" className="w-full" disabled={isUsingAllGlobalSettings || !isOnline}>
-                    <RotateCcw className="mr-2 size-4" />
-                    {t('reset_all_button_text')}
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled={isUsingAllGlobalSettings || !isOnline}
+                >
+                  <RotateCcw className="mr-2 size-4" />
+                  {t("reset_all_button_text")}
                 </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle>{t('reset_all_dialog_title')}</AlertDialogTitle>
-                    <AlertDialogDescription>{t('reset_all_dialog_description')}</AlertDialogDescription>
+                  <AlertDialogTitle>
+                    {t("reset_all_dialog_title")}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {t("reset_all_dialog_description")}
+                  </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel>{tGlobal('cancel_button')}</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleResetAll}>
-                    {t('reset_all_confirm_button')}
-                    </AlertDialogAction>
+                  <AlertDialogCancel>
+                    {tGlobal("cancel_button")}
+                  </AlertDialogCancel>
+                  <AlertDialogAction onClick={handleResetAll}>
+                    {t("reset_all_confirm_button")}
+                  </AlertDialogAction>
                 </AlertDialogFooter>
-                </AlertDialogContent>
+              </AlertDialogContent>
             </AlertDialog>
           </div>
         </div>
 
         <DialogFooter className="pt-4">
-            <SaveStatusIndicator status={saveStatus} />
+          <SaveStatusIndicator status={saveStatus} />
         </DialogFooter>
       </DialogContent>
     </Dialog>

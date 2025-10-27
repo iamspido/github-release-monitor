@@ -1,18 +1,16 @@
 "use client";
 
-import * as React from "react";
-import { Plus, Loader2, Upload } from "lucide-react";
+import { Loader2, Plus, Upload } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import * as React from "react";
 import { useActionState } from "react";
 
-import type { Repository } from "@/types";
-import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { addRepositoriesAction, getJobStatusAction, importRepositoriesAction } from "@/app/actions";
-import { useRouter } from "next/navigation";
-import { useNetworkStatus } from "@/hooks/use-network";
+import {
+  addRepositoriesAction,
+  getJobStatusAction,
+  importRepositoriesAction,
+} from "@/app/actions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,19 +21,40 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { useNetworkStatus } from "@/hooks/use-network";
+import { useToast } from "@/hooks/use-toast";
+import type { Repository } from "@/types";
 
-
-function SubmitButton({ isDisabled, isPending }: { isDisabled: boolean; isPending: boolean }) {
-  const t = useTranslations('RepositoryForm');
+function SubmitButton({
+  isDisabled,
+  isPending,
+}: {
+  isDisabled: boolean;
+  isPending: boolean;
+}) {
+  const t = useTranslations("RepositoryForm");
 
   return (
-    <Button type="submit" className="w-full sm:w-auto" disabled={isPending || isDisabled}>
+    <Button
+      type="submit"
+      className="w-full sm:w-auto"
+      disabled={isPending || isDisabled}
+    >
       {isPending ? (
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
       ) : (
         <Plus className="mr-2 h-4 w-4" />
       )}
-      {t('button_add')}
+      {t("button_add")}
     </Button>
   );
 }
@@ -51,13 +70,16 @@ interface RepositoryFormProps {
 }
 
 export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
-  const t = useTranslations('RepositoryForm');
+  const t = useTranslations("RepositoryForm");
   const [urls, setUrls] = React.useState("");
   const { toast } = useToast();
   const router = useRouter();
   const { isOnline } = useNetworkStatus();
 
-  const [state, formAction, isPending] = useActionState(addRepositoriesAction, initialState);
+  const [state, formAction, isPending] = useActionState(
+    addRepositoriesAction,
+    initialState,
+  );
   const [jobId, setJobId] = React.useState<string | undefined>(undefined);
   const hasProcessedResult = React.useRef(true);
 
@@ -66,8 +88,13 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
 
   const [isImporting, startImportTransition] = React.useTransition();
   const [isDialogVisible, setIsDialogVisible] = React.useState(false);
-  const [reposToImport, setReposToImport] = React.useState<Repository[] | null>(null);
-  const [importStats, setImportStats] = React.useState<{ newCount: number, existingCount: number } | null>(null);
+  const [reposToImport, setReposToImport] = React.useState<Repository[] | null>(
+    null,
+  );
+  const [importStats, setImportStats] = React.useState<{
+    newCount: number;
+    existingCount: number;
+  } | null>(null);
   const [fileInputKey, setFileInputKey] = React.useState(Date.now());
 
   React.useEffect(() => {
@@ -79,9 +106,9 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
   React.useEffect(() => {
     if (state.error) {
       toast({
-        title: t('toast_fail_title'),
+        title: t("toast_fail_title"),
         description: state.error,
-        variant: 'destructive',
+        variant: "destructive",
       });
       hasProcessedResult.current = true;
     }
@@ -93,7 +120,7 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
     }
     if (state.success && !hasProcessedResult.current) {
       hasProcessedResult.current = true;
-      setUrls('');
+      setUrls("");
       if (state.jobId) {
         setJobId(state.jobId);
       }
@@ -112,9 +139,9 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
       if (Date.now() - startTime > POLLING_TIMEOUT) {
         clearInterval(intervalId);
         toast({
-          title: t('toast_refresh_timeout_title'),
-          description: t('toast_refresh_timeout_description'),
-          variant: 'destructive'
+          title: t("toast_refresh_timeout_title"),
+          description: t("toast_refresh_timeout_description"),
+          variant: "destructive",
         });
         setJobId(undefined);
         return;
@@ -123,29 +150,29 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
       try {
         const { status } = await getJobStatusAction(jobId);
 
-        if (status === 'complete') {
+        if (status === "complete") {
           clearInterval(intervalId);
           toast({
-            title: t('toast_refresh_success_title'),
-            description: t('toast_refresh_success_description'),
+            title: t("toast_refresh_success_title"),
+            description: t("toast_refresh_success_description"),
           });
           router.refresh();
           setJobId(undefined);
-        } else if (status === 'error') {
+        } else if (status === "error") {
           clearInterval(intervalId);
           toast({
-            title: t('toast_refresh_error_title'),
-            description: t('toast_refresh_error_description'),
-            variant: 'destructive'
+            title: t("toast_refresh_error_title"),
+            description: t("toast_refresh_error_description"),
+            variant: "destructive",
           });
           setJobId(undefined);
         }
-      } catch (err) {
+      } catch (_err) {
         clearInterval(intervalId);
         toast({
-          title: t('toast_refresh_error_title'),
-          description: t('toast_refresh_error_description'),
-          variant: 'destructive'
+          title: t("toast_refresh_error_title"),
+          description: t("toast_refresh_error_description"),
+          variant: "destructive",
         });
         setJobId(undefined);
       }
@@ -156,9 +183,13 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
 
   React.useEffect(() => {
     const textarea = textareaRef.current;
-    if (textarea) {
-        textarea.style.height = 'auto';
-        textarea.style.height = `${textarea.scrollHeight}px`;
+    if (!textarea) return;
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+
+    if (!urls) {
+      textarea.scrollTop = 0;
     }
   }, [urls]);
 
@@ -166,53 +197,69 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = async (e) => {
-        try {
-            const content = e.target?.result as string;
-            const importedData = JSON.parse(content);
+      try {
+        const content = e.target?.result as string;
+        const importedData = JSON.parse(content);
 
-            if (Array.isArray(importedData)) {
-                const isValidFormat = importedData.every(item =>
-                  typeof item === 'object' && item !== null && 'id' in item && 'url' in item
-                );
+        if (Array.isArray(importedData)) {
+          const isValidFormat = importedData.every(
+            (item) =>
+              typeof item === "object" &&
+              item !== null &&
+              "id" in item &&
+              "url" in item,
+          );
 
-                if (!isValidFormat) {
-                    throw new Error(t('toast_import_error_invalid_format'));
-                }
+          if (!isValidFormat) {
+            throw new Error(t("toast_import_error_invalid_format"));
+          }
 
-                const existingIds = new Set(currentRepositories.map(repo => repo.id));
-                const newRepos = importedData.filter(repo => !existingIds.has(repo.id));
-                const existingCount = importedData.length - newRepos.length;
+          const existingIds = new Set(
+            currentRepositories.map((repo) => repo.id),
+          );
+          const newRepos = importedData.filter(
+            (repo) => !existingIds.has(repo.id),
+          );
+          const existingCount = importedData.length - newRepos.length;
 
-                setReposToImport(importedData);
-                setImportStats({ newCount: newRepos.length, existingCount });
-                setIsDialogVisible(true);
-            } else {
-                 toast({
-                    title: t('toast_import_error_title'),
-                    description: t('toast_import_error_invalid_format'),
-                    variant: 'destructive',
-                });
-            }
-        } catch (error: any) {
-            toast({
-                title: t('toast_import_error_title'),
-                description: error.message || t('toast_import_error_parsing'),
-                variant: 'destructive',
-            });
+          setReposToImport(importedData);
+          setImportStats({ newCount: newRepos.length, existingCount });
+          setIsDialogVisible(true);
+        } else {
+          toast({
+            title: t("toast_import_error_title"),
+            description: t("toast_import_error_invalid_format"),
+            variant: "destructive",
+          });
         }
+      } catch (error: unknown) {
+        const description =
+          error instanceof Error && error.message
+            ? error.message
+            : typeof error === "string"
+              ? error
+              : t("toast_import_error_parsing");
+        toast({
+          title: t("toast_import_error_title"),
+          description,
+          variant: "destructive",
+        });
+      }
     };
     reader.onerror = () => {
-        toast({
-            title: t('toast_import_error_title'),
-            description: t('toast_import_error_reading'),
-            variant: 'destructive',
-        });
+      toast({
+        title: t("toast_import_error_title"),
+        description: t("toast_import_error_reading"),
+        variant: "destructive",
+      });
     };
     reader.readAsText(file);
     setFileInputKey(Date.now());
@@ -226,7 +273,7 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
 
       if (result.success) {
         toast({
-          title: t('toast_import_success_title'),
+          title: t("toast_import_success_title"),
           description: result.message,
         });
         if (result.jobId) {
@@ -234,9 +281,9 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
         }
       } else {
         toast({
-          title: t('toast_import_error_title'),
+          title: t("toast_import_error_title"),
           description: result.message,
-          variant: 'destructive',
+          variant: "destructive",
         });
       }
       setIsDialogVisible(false);
@@ -249,19 +296,19 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>{t('title')}</CardTitle>
-          <CardDescription>{t('description')}</CardDescription>
+          <CardTitle>{t("title")}</CardTitle>
+          <CardDescription>{t("description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form
             action={formAction}
             onSubmit={(e) => {
-              if (typeof navigator !== 'undefined' && !navigator.onLine) {
+              if (typeof navigator !== "undefined" && !navigator.onLine) {
                 e.preventDefault();
                 toast({
-                  title: t('toast_fail_title'),
-                  description: t('toast_generic_error'),
-                  variant: 'destructive',
+                  title: t("toast_fail_title"),
+                  description: t("toast_generic_error"),
+                  variant: "destructive",
                 });
               }
             }}
@@ -270,7 +317,7 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
               <Textarea
                 ref={textareaRef}
                 name="urls"
-                placeholder={t('placeholder')}
+                placeholder={t("placeholder")}
                 value={urls}
                 onChange={(e) => setUrls(e.target.value)}
                 rows={4}
@@ -279,19 +326,32 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
                 disabled={isPending || !!jobId}
               />
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:gap-2">
-                  <input
-                      key={fileInputKey}
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileChange}
-                      accept=".json"
-                      className="hidden"
-                  />
-              <Button type="button" variant="outline" onClick={handleImportClick} className="w-full sm:w-auto mt-2 sm:mt-0" disabled={isPending || isImporting || !!jobId || !isOnline}>
-                  {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                  {t('button_import')}
-              </Button>
-              <SubmitButton isDisabled={!urls.trim() || !isOnline} isPending={isPending || !!jobId} />
+                <input
+                  key={fileInputKey}
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept=".json"
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleImportClick}
+                  className="mt-2 w-full sm:mt-0 sm:w-auto"
+                  disabled={isPending || isImporting || !!jobId || !isOnline}
+                >
+                  {isImporting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="mr-2 h-4 w-4" />
+                  )}
+                  {t("button_import")}
+                </Button>
+                <SubmitButton
+                  isDisabled={!urls.trim() || !isOnline}
+                  isPending={isPending || !!jobId}
+                />
               </div>
             </div>
           </form>
@@ -301,19 +361,27 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
       <AlertDialog open={isDialogVisible} onOpenChange={setIsDialogVisible}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('import_dialog_title')}</AlertDialogTitle>
+            <AlertDialogTitle>{t("import_dialog_title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {importStats && t('import_dialog_description', {
-                newCount: importStats.newCount,
-                existingCount: importStats.existingCount
-              })}
+              {importStats &&
+                t("import_dialog_description", {
+                  newCount: importStats.newCount,
+                  existingCount: importStats.existingCount,
+                })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isImporting}>{t('cancel_button')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmImport} disabled={isImporting}>
-              {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {t('import_dialog_confirm_button')}
+            <AlertDialogCancel disabled={isImporting}>
+              {t("cancel_button")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmImport}
+              disabled={isImporting}
+            >
+              {isImporting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              {t("import_dialog_confirm_button")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

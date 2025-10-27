@@ -10,8 +10,10 @@ test('repo dialog RPP sets Custom badge; Reset All removes it', async ({ page })
   await page.getByRole('button', { name: 'Open settings for this repository' }).first().click();
 
   // Set releases-per-page for repo to make it custom
-  const rppRepo = page.locator('#releases-per-page-repo');
-  await rppRepo.fill('10');
+  const dialog = page.getByRole('dialog');
+  const rppInput = dialog.locator('input[type="number"]').first();
+  
+  await rppInput.fill('10');
   // Wait for autosave debounce & save in the dialog
   await page.waitForTimeout(1700);
 

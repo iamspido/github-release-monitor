@@ -1,13 +1,13 @@
-'use server';
+"use server";
 
-import { promises as fs } from 'fs';
-import path from 'path';
-import { logger } from '@/lib/logger';
-import type { SystemStatus } from '@/types';
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { logger } from "@/lib/logger";
+import type { SystemStatus } from "@/types";
 
-const dataFilePath = path.join(process.cwd(), 'data', 'system-status.json');
+const dataFilePath = path.join(process.cwd(), "data", "system-status.json");
 const dataDirPath = path.dirname(dataFilePath);
-const log = logger.withScope('SystemStatus');
+const log = logger.withScope("SystemStatus");
 
 const defaultStatus: SystemStatus = {
   latestKnownVersion: null,
@@ -23,9 +23,9 @@ async function ensureDataFileExists() {
   } catch (error) {
     log.error(
       `Failed to create system status data directory at ${dataDirPath}:`,
-      error
+      error,
     );
-    throw new Error('Unable to initialize system status storage directory.');
+    throw new Error("Unable to initialize system status storage directory.");
   }
 
   try {
@@ -35,15 +35,15 @@ async function ensureDataFileExists() {
       await fs.writeFile(
         dataFilePath,
         JSON.stringify(defaultStatus, null, 2),
-        'utf8'
+        "utf8",
       );
       log.info(`Created system status data file at: ${dataFilePath}`);
     } catch (error) {
       log.error(
         `Failed to write initial system status data file at ${dataFilePath}:`,
-        error
+        error,
       );
-      throw new Error('Unable to initialize system status data file.');
+      throw new Error("Unable to initialize system status data file.");
     }
   }
 }
@@ -51,15 +51,15 @@ async function ensureDataFileExists() {
 export async function getSystemStatus(): Promise<SystemStatus> {
   await ensureDataFileExists();
   try {
-    const raw = await fs.readFile(dataFilePath, 'utf8');
+    const raw = await fs.readFile(dataFilePath, "utf8");
     const parsed = JSON.parse(raw) as Partial<SystemStatus>;
     return {
       ...defaultStatus,
       ...parsed,
     };
   } catch (error) {
-    log.error('Failed to read system-status.json:', error);
-    return { ...defaultStatus, lastCheckError: 'read_error' };
+    log.error("Failed to read system-status.json:", error);
+    return { ...defaultStatus, lastCheckError: "read_error" };
   }
 }
 
@@ -70,15 +70,15 @@ export async function saveSystemStatus(status: SystemStatus): Promise<void> {
       ...defaultStatus,
       ...status,
     };
-    await fs.writeFile(dataFilePath, JSON.stringify(merged, null, 2), 'utf8');
+    await fs.writeFile(dataFilePath, JSON.stringify(merged, null, 2), "utf8");
   } catch (error) {
-    log.error('Failed to write system-status.json:', error);
-    throw new Error('Could not persist system status.');
+    log.error("Failed to write system-status.json:", error);
+    throw new Error("Could not persist system status.");
   }
 }
 
 export async function updateSystemStatus(
-  updater: (current: SystemStatus) => SystemStatus | Promise<SystemStatus>
+  updater: (current: SystemStatus) => SystemStatus | Promise<SystemStatus>,
 ): Promise<SystemStatus> {
   const current = await getSystemStatus();
   const updated = await updater(current);

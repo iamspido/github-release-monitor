@@ -1,40 +1,43 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import { NextIntlClientProvider } from 'next-intl';
-import { getMessages, getTranslations } from 'next-intl/server';
-import { notFound } from 'next/navigation';
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import { notFound } from "next/navigation";
+import { NextIntlClientProvider } from "next-intl";
+import { getMessages, getTranslations } from "next-intl/server";
 
 import { Toaster } from "@/components/ui/toaster";
-import { NetworkStatusProvider } from '@/hooks/use-network';
-import { locales } from '@/i18n/routing';
-import '../globals.css';
+import { NetworkStatusProvider } from "@/hooks/use-network";
+import { locales } from "@/i18n/routing";
+import "../globals.css";
 
 const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
+  subsets: ["latin"],
+  variable: "--font-inter",
 });
 
-export async function generateMetadata({params: { locale }}: {params: {locale: string}}): Promise<Metadata> {
-  const t = await getTranslations({locale, namespace: 'Metadata'});
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
+  const t = await getTranslations({ locale, namespace: "Metadata" });
 
   return {
-    title: t('title'),
-    description: t('description')
+    title: t("title"),
+    description: t("description"),
   };
 }
 
 export default async function LocaleLayout({
   children,
-  params: { locale }
+  params: { locale },
 }: {
   children: React.ReactNode;
   params: { locale: string };
 }) {
   // Validate that the incoming `locale` parameter is valid
-  if (!locales.includes(locale as any)) {
+  if (!locales.includes(locale as never)) {
     notFound();
   }
-
 
   const messages = await getMessages();
 

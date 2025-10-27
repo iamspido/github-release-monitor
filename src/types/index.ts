@@ -40,8 +40,15 @@ export type CachedRelease = {
 };
 
 export type FetchError = {
-  type: 'rate_limit' | 'repo_not_found' | 'no_releases_found' | 'no_matching_releases' | 'invalid_url' | 'api_error' | 'not_modified';
-}
+  type:
+    | "rate_limit"
+    | "repo_not_found"
+    | "no_releases_found"
+    | "no_matching_releases"
+    | "invalid_url"
+    | "api_error"
+    | "not_modified";
+};
 
 export type EnrichedRelease = {
   repoId: string;
@@ -58,7 +65,7 @@ export type EnrichedRelease = {
     excludeRegex?: string;
     appriseTags?: string;
     appriseFormat?: AppriseFormat;
-  }
+  };
 };
 
 // Types for the test page
@@ -80,7 +87,7 @@ export interface GitHubRateLimit {
 
 export type RateLimitResult = {
   data: GitHubRateLimit | null;
-  error?: 'invalid_token' | 'api_error';
+  error?: "invalid_token" | "api_error";
 };
 
 export type NotificationConfig = {
@@ -92,19 +99,56 @@ export type NotificationConfig = {
 };
 
 export type AppriseStatus = {
-  status: 'ok' | 'error' | 'not_configured';
+  status: "ok" | "error" | "not_configured";
   error?: string;
 };
 
-
 // App Settings
-export type Locale = 'en' | 'de';
-export type TimeFormat = '12h' | '24h';
-export type ReleaseChannel = 'stable' | 'prerelease' | 'draft';
-export type PreReleaseChannelType = 'a' | 'alpha' | 'b' | 'beta' | 'canary' | 'cr' | 'dev' | 'eap' | 'm' | 'milestone' | 'next' | 'nightly' | 'pre' | 'preview' | 'pr' | 'rc' | 'snapshot' | 'sp' | 'tp';
-export const allPreReleaseTypes: PreReleaseChannelType[] = ['a', 'alpha', 'b', 'beta', 'canary', 'cr', 'dev', 'eap', 'm', 'milestone', 'next', 'nightly', 'pre', 'preview', 'pr', 'rc', 'snapshot', 'sp', 'tp'];
-export type AppriseFormat = 'text' | 'markdown' | 'html';
-
+export type Locale = "en" | "de";
+export type TimeFormat = "12h" | "24h";
+export type ReleaseChannel = "stable" | "prerelease" | "draft";
+export type PreReleaseChannelType =
+  | "a"
+  | "alpha"
+  | "b"
+  | "beta"
+  | "canary"
+  | "cr"
+  | "dev"
+  | "eap"
+  | "m"
+  | "milestone"
+  | "next"
+  | "nightly"
+  | "pre"
+  | "preview"
+  | "pr"
+  | "rc"
+  | "snapshot"
+  | "sp"
+  | "tp";
+export const allPreReleaseTypes: PreReleaseChannelType[] = [
+  "a",
+  "alpha",
+  "b",
+  "beta",
+  "canary",
+  "cr",
+  "dev",
+  "eap",
+  "m",
+  "milestone",
+  "next",
+  "nightly",
+  "pre",
+  "preview",
+  "pr",
+  "rc",
+  "snapshot",
+  "sp",
+  "tp",
+];
+export type AppriseFormat = "text" | "markdown" | "html";
 
 export type AppSettings = {
   timeFormat: TimeFormat;
@@ -146,6 +190,6 @@ export type UpdateNotificationState = {
 
 // Session Data
 export type SessionData = {
-    isLoggedIn?: boolean;
-    username?: string;
+  isLoggedIn?: boolean;
+  username?: string;
 };

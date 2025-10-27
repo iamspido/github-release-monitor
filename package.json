@@ -9,7 +9,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "biome check --max-diagnostics=200",
+    "lint:fix": "biome check --write",
+    "format": "biome format",
+    "format:fix": "biome format --write",
     "typecheck": "tsc --noEmit",
     "typecheck:tests": "tsc -p tests/tsconfig.json --noEmit",
     "test": "vitest run --reporter=dot",
@@ -45,6 +48,7 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.2.7",
     "@playwright/test": "^1.56.1",
     "@tailwindcss/postcss": "^4.1.15",
     "@tailwindcss/typography": "^0.5.19",
@@ -53,8 +57,6 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitest/coverage-v8": "^3.2.4",
-    "eslint": "^9.38.0",
-    "eslint-config-next": "^15.5.6",
     "jsdom": "^27.0.1",
     "postcss": "^8.5.6",
     "playwright": "^1.56.1",
