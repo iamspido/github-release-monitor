@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.2.7/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.1/schema.json",
   "javascript": {
     "globals": ["React"]
   },
@@ -14,6 +14,11 @@
     "indentStyle": "space",
     "indentWidth": 2,
     "lineEnding": "lf"
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
   },
   "overrides": [
     {
