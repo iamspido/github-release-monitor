@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const locale = await getLocaleSetting();
     return NextResponse.json({ locale });
-  } catch (_error) {
+  } catch {
     return NextResponse.json(
       { locale: undefined, error: "settings_unavailable" },
       { status: 500 },

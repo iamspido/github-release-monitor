@@ -103,8 +103,8 @@ async function generateAppriseBody(
         settings,
         maxChars,
       );
-    case "text":
     default: {
+      // Treat "text" and any unexpected formats as plain text notifications.
       const title = tApprise("title", {
         repoId: repository.id,
         tagName: release.tag_name,
@@ -202,13 +202,16 @@ async function sendAppriseNotification(
           `Apprise notification sent successfully for ${repository.id} ${release.tag_name}`,
         );
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : String(error ?? "unknown");
     logger
       .withScope("Notifications")
       .error(
-        `Failed to send Apprise notification for ${repository.id}. Please check if the service is running and the URL is correct. Error: ${error.message}`,
+        `Failed to send Apprise notification for ${repository.id}. Please check if the service is running and the URL is correct. Error: ${message}`,
+        error instanceof Error ? error : undefined,
       );
-    throw error;
+    throw error instanceof Error ? error : new Error(message);
   }
 }
 

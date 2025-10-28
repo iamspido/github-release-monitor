@@ -210,7 +210,7 @@ export function TestPageClient({
             variant: "destructive",
           });
         }
-      } catch (_err) {
+      } catch {
         toast({
           title: t("toast_email_error_title"),
           description: t("toast_email_error_description"),
@@ -236,7 +236,7 @@ export function TestPageClient({
             variant: "destructive",
           });
         }
-      } catch (_err) {
+      } catch {
         toast({
           title: t("toast_apprise_error_title"),
           description: t("toast_apprise_not_configured_error"),
@@ -276,9 +276,9 @@ export function TestPageClient({
             description: t("toast_update_not_available_description"),
           });
         }
-      } catch (_err) {
+      } catch (error) {
         const errorMessage =
-          _err instanceof Error ? _err.message : String(_err ?? "unknown");
+          error instanceof Error ? error.message : String(error ?? "unknown");
         toast({
           title: t("toast_error_title"),
           description: t("toast_update_error_description", {
@@ -301,7 +301,7 @@ export function TestPageClient({
           description: result.message,
           variant: result.success ? "default" : "destructive",
         });
-      } catch (_err) {
+      } catch {
         toast({
           title: t("toast_error_title"),
           description: t("toast_setup_test_repo_error"),
@@ -322,7 +322,7 @@ export function TestPageClient({
           description: result.message,
           variant: result.success ? "default" : "destructive",
         });
-      } catch (_err) {
+      } catch {
         toast({
           title: t("toast_error_title"),
           description: t("toast_trigger_check_error"),
@@ -337,7 +337,7 @@ export function TestPageClient({
       try {
         const status = await checkAppriseStatusAction();
         setAppriseStatus(status);
-      } catch (_err) {
+      } catch {
         // Keep previous state, just inform user.
         toast({
           title: t("toast_error_title"),

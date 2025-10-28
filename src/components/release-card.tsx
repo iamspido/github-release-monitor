@@ -21,7 +21,6 @@ import {
   acknowledgeNewReleaseAction,
   markAsNewAction,
   removeRepositoryAction,
-  revalidateReleasesAction,
 } from "@/app/actions";
 import {
   AlertDialog,
@@ -57,7 +56,10 @@ import { cn } from "@/lib/utils";
 import type { AppSettings, EnrichedRelease, FetchError } from "@/types";
 import { RepoSettingsDialog } from "./repo-settings-dialog";
 
-function getErrorMessage(error: FetchError, t: (key: any) => string): string {
+function getErrorMessage(
+  error: FetchError,
+  t: (key: string) => string,
+): string {
   switch (error.type) {
     case "rate_limit":
       return t("error_rate_limit");
@@ -146,7 +148,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
     startRemoveTransition(async () => {
       try {
         await removeRepositoryAction(repoId);
-      } catch (_err) {
+      } catch {
         toast({
           title: t("toast_error_title"),
           variant: "destructive",
@@ -166,7 +168,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
             variant: "destructive",
           });
         }
-      } catch (_err) {
+      } catch {
         toast({
           title: t("toast_error_title"),
           description: t("toast_acknowledge_error_generic"),
@@ -192,7 +194,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
             variant: "destructive",
           });
         }
-      } catch (_err) {
+      } catch {
         toast({
           title: t("toast_error_title"),
           description: t("toast_mark_as_new_error_generic"),

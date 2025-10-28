@@ -47,10 +47,10 @@ export async function getFormattedDate(
   };
   const dateParts = new Intl.DateTimeFormat(locale, htmlDatePartsOptions)
     .formatToParts(date)
-    .reduce(
-      (acc, part) => ({ ...acc, [part.type]: part.value }),
-      {} as Record<string, string>,
-    );
+    .reduce<Record<string, string>>((acc, part) => {
+      acc[part.type] = part.value;
+      return acc;
+    }, {});
   const timeString = new Intl.DateTimeFormat(locale, htmlTimeOptions).format(
     date,
   );
@@ -344,11 +344,13 @@ export async function sendNewReleaseEmail(
       .info(
         `Email notification sent to ${recipient} for ${repository.id} ${release.tag_name}`,
       );
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger
       .withScope("Email")
       .error(`Failed to send email for ${repository.id}:`, error);
-    throw new Error(t("error_send_failed", { details: error.message }));
+    const message =
+      error instanceof Error ? error.message : String(error ?? "unknown");
+    throw new Error(t("error_send_failed", { details: message }));
   }
 }
 
@@ -359,7 +361,6 @@ export async function sendTestEmail(
   timeFormat: TimeFormat,
   toAddress?: string,
 ) {
-  const t = await getTranslations({ locale, namespace: "Email" });
   const recipient = toAddress || process.env.MAIL_TO_ADDRESS;
   logger.withScope("Email").info(`Sending test email to ${recipient}...`);
   return sendNewReleaseEmail(

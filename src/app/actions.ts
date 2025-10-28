@@ -173,7 +173,7 @@ function parseGitHubUrl(
       return { owner, repo, id: `${owner}/${repo}`.toLowerCase() };
     }
     return null;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -675,7 +675,7 @@ async function fetchLatestRelease(
       return bTime - aTime;
     });
 
-    let latestRelease = sortedReleases[0];
+    const latestRelease = sortedReleases[0];
 
     // This check is for formal releases that have an empty body.
     // The tag fallback already populates the body with a commit message.
@@ -809,9 +809,7 @@ export async function getLatestReleasesForRepos(
 
   const configuredParallel = resolveParallelRepoFetches(settings);
   const effectiveBatchSize = Math.min(configuredParallel, repositories.length);
-  const tokenConfigured = !!(
-    process.env.GITHUB_ACCESS_TOKEN && process.env.GITHUB_ACCESS_TOKEN.trim()
-  );
+  const tokenConfigured = !!process.env.GITHUB_ACCESS_TOKEN?.trim();
   log.info(
     `Fetching ${repositories.length} repositories with parallel batch size ${effectiveBatchSize} (configured=${configuredParallel}, token configured=${tokenConfigured ? "yes" : "no"}).`,
   );
@@ -932,7 +930,7 @@ export async function getLatestReleasesForRepos(
 }
 
 export async function addRepositoriesAction(
-  prevState: any,
+  _prevState: unknown,
   formData: FormData,
 ): Promise<{
   success: boolean;
@@ -1017,7 +1015,7 @@ export async function addRepositoriesAction(
         },
         jobId: addedCount > 0 ? jobId : undefined,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       log.error("Failed to add repositories:", error);
       return {
         success: false,
@@ -1097,7 +1095,7 @@ export async function importRepositoriesAction(
         }),
         jobId: reposToFetch.length > 0 ? jobId : undefined,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       log.error("Failed to import repositories:", error);
       return {
         success: false,
@@ -1263,7 +1261,7 @@ export async function acknowledgeNewReleaseAction(
       }
 
       return { success: false, error: t("toast_acknowledge_error_not_found") };
-    } catch (error: any) {
+    } catch (error: unknown) {
       log.error("Failed to acknowledge release:", error);
       return { success: false, error: t("toast_acknowledge_error_generic") };
     }
@@ -1292,7 +1290,7 @@ export async function markAsNewAction(
       }
 
       return { success: false, error: t("toast_mark_as_new_error_not_found") };
-    } catch (error: any) {
+    } catch (error: unknown) {
       log.error("Failed to mark release as new:", error);
       return { success: false, error: t("toast_mark_as_new_error_generic") };
     }
@@ -1307,9 +1305,7 @@ async function _checkForNewReleasesUnscheduled(options?: {
   const settings = await getSettings();
   const effectiveLocale = options?.overrideLocale || settings.locale;
   const parallelLimit = resolveParallelRepoFetches(settings);
-  const tokenConfigured = !!(
-    process.env.GITHUB_ACCESS_TOKEN && process.env.GITHUB_ACCESS_TOKEN.trim()
-  );
+  const tokenConfigured = !!process.env.GITHUB_ACCESS_TOKEN?.trim();
   log.info(
     `Parallel fetch batch size set to ${parallelLimit} (GitHub token configured=${tokenConfigured ? "yes" : "no"}).`,
   );
@@ -1394,9 +1390,12 @@ async function _checkForNewReleasesUnscheduled(options?: {
             settings,
           );
           notificationsSent++;
-        } catch (e: any) {
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error ? error.message : String(error ?? "unknown");
           log.error(
-            `Failed to send notification for ${repo.id}. The release tag HAS been updated to prevent repeated failures for the same release. Error: ${e.message}`,
+            `Failed to send notification for ${repo.id}. The release tag HAS been updated to prevent repeated failures for the same release. Error: ${message}`,
+            error instanceof Error ? error : undefined,
           );
         }
       } else if (!repo.lastSeenReleaseTag && !isVirtual) {
@@ -1655,11 +1654,14 @@ export async function setupTestRepositoryAction(): Promise<{
       revalidatePath("/test");
       revalidateTag("github-releases");
       return { success: true, message: t("toast_setup_test_repo_success") };
-    } catch (error: any) {
+    } catch (error: unknown) {
       log.error("setupTestRepositoryAction failed:", error);
       return {
         success: false,
-        message: error.message || t("toast_setup_test_repo_error"),
+        message:
+          error instanceof Error
+            ? error.message || t("toast_setup_test_repo_error")
+            : t("toast_setup_test_repo_error"),
       };
     }
   });
@@ -1711,11 +1713,14 @@ export async function triggerReleaseCheckAction(): Promise<{
         message: t("toast_trigger_check_success_no_email"),
       };
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     log.error("triggerReleaseCheckAction failed:", error);
     return {
       success: false,
-      message: error.message || t("toast_trigger_check_error"),
+      message:
+        error instanceof Error
+          ? error.message || t("toast_trigger_check_error")
+          : t("toast_trigger_check_error"),
     };
   }
 }
@@ -1815,11 +1820,14 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
       recipient,
     );
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     log.error("sendTestEmailAction failed:", error);
     return {
       success: false,
-      error: error.message || t("toast_email_error_description"),
+      error:
+        error instanceof Error
+          ? error.message || t("toast_email_error_description")
+          : t("toast_email_error_description"),
     };
   }
 }
@@ -1863,10 +1871,11 @@ export async function sendTestAppriseAction(): Promise<{
     const settings = await getSettings();
     await sendTestAppriseNotification(testRepo, testRelease, locale, settings);
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      error:
+        error instanceof Error ? error.message : String(error ?? "unknown"),
     };
   }
 }
@@ -1901,7 +1910,7 @@ export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
         }),
       };
     }
-  } catch (error) {
+  } catch {
     return {
       status: "error",
       error: t("apprise_connection_error_fetch"),
@@ -1939,7 +1948,7 @@ export async function getRepositoriesForExport(): Promise<{
   try {
     const repos = await getRepositories();
     return { success: true, data: repos };
-  } catch (error: any) {
+  } catch (error: unknown) {
     log.error("Failed to get repositories for export:", error);
     return { success: false, error: "Failed to read repository data." };
   }
@@ -2008,13 +2017,9 @@ export async function updateRepositorySettingsAction(
 
       // Build change summary for logging
       const changes: string[] = [];
-      const fmt = (v: any) =>
-        v === undefined
-          ? "undefined"
-          : Array.isArray(v)
-            ? JSON.stringify(v)
-            : JSON.stringify(v);
-      const cmpArr = (a?: any[] | null, b?: any[] | null) =>
+      const fmt = (value: unknown) =>
+        value === undefined ? "undefined" : JSON.stringify(value);
+      const cmpArr = (a?: unknown[] | null, b?: unknown[] | null) =>
         JSON.stringify((a || []).slice().sort()) ===
         JSON.stringify((b || []).slice().sort());
       if (!cmpArr(existing.releaseChannels, settings.releaseChannels)) {
@@ -2094,11 +2099,13 @@ export async function updateRepositorySettingsAction(
         log.info(`Updated repository settings for ${repoId}: no changes.`);
       }
       return { success: true };
-    } catch (error: any) {
+    } catch (error: unknown) {
       log.error(`Failed to update settings for ${repoId}:`, error);
+      const message =
+        error instanceof Error ? error.message : String(error ?? "unknown");
       return {
         success: false,
-        error: error.message || t("toast_error_generic"),
+        error: message || t("toast_error_generic"),
       };
     }
   });

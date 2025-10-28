@@ -47,14 +47,19 @@ export async function saveRepositories(
   try {
     const fileContent = JSON.stringify(repositories, null, 2);
     await fs.writeFile(dataFilePath, fileContent, "utf8");
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code)
+        : undefined;
     logger
       .withScope("Repositories")
       .error("Error writing to repositories.json:", error);
     // Throw a more specific error that can be caught by the server action
     throw new Error(
       `Failed to write to repository file. Please check file permissions. Server Error: ${
-        error.code || error.message
+        code || message
       }`,
     );
   }

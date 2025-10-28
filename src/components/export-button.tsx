@@ -60,7 +60,7 @@ export function ExportButton() {
             variant: "destructive",
           });
         }
-      } catch (_err) {
+      } catch {
         toast({
           title: t("toast_export_error_title"),
           description: t("toast_export_error_description"),

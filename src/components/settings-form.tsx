@@ -299,7 +299,7 @@ export function SettingsForm({
       showMarkAsNew,
       includeRegex: includeRegex,
       excludeRegex: excludeRegex,
-      appriseMaxCharacters: isNaN(parsedAppriseChars)
+      appriseMaxCharacters: Number.isNaN(parsedAppriseChars)
         ? 1800
         : parsedAppriseChars,
       appriseTags,
@@ -384,7 +384,7 @@ export function SettingsForm({
       try {
         new RegExp(includeRegex);
         setIncludeRegexError(null);
-      } catch (e) {
+      } catch {
         setIncludeRegexError("invalid");
       }
     }
@@ -396,7 +396,7 @@ export function SettingsForm({
       try {
         new RegExp(excludeRegex);
         setExcludeRegexError(null);
-      } catch (e) {
+      } catch {
         setExcludeRegexError("invalid");
       }
     }
@@ -491,7 +491,7 @@ export function SettingsForm({
             variant: "destructive",
           });
         }
-      } catch (err) {
+      } catch {
         setSaveStatus("error");
         // Toast only on error
         toast({

@@ -15,8 +15,19 @@ import type { SessionData } from "./types";
 const localeSet = new Set<string>(locales as readonly string[]);
 type IronSessionCookieStore = Extract<
   Parameters<typeof getIronSession>[0],
-  { get: (...args: any[]) => unknown }
+  { get: (...args: unknown[]) => unknown }
 >;
+
+function isIronSessionCookieStore(
+  value: unknown,
+): value is IronSessionCookieStore {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "get" in value &&
+    typeof (value as { get?: unknown }).get === "function"
+  );
+}
 
 type LocaleKey = (typeof locales)[number];
 type RouteKey = keyof typeof pathnames;
@@ -97,7 +108,12 @@ export async function middleware(request: NextRequest) {
     loginPaths[currentLocale as "en" | "de"] || loginPaths.en;
   const isLoginPage = request.nextUrl.pathname.endsWith(loginPathForLocale);
 
-  const cookieStore = request.cookies as unknown as IronSessionCookieStore;
+  const cookieStore = request.cookies;
+  if (!isIronSessionCookieStore(cookieStore)) {
+    throw new TypeError(
+      "NextRequest.cookies is missing an expected get method",
+    );
+  }
   const session = await getIronSession<SessionData>(
     cookieStore,
     sessionOptions,

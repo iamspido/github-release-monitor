@@ -295,7 +295,7 @@ export function RepoSettingsDialog({
 
     if (releasesPerPageStr !== "") {
       const parsed = parseInt(releasesPerPageStr, 10);
-      if (!isNaN(parsed)) {
+      if (!Number.isNaN(parsed)) {
         finalReleasesPerPage = parsed;
       }
     }
@@ -324,7 +324,7 @@ export function RepoSettingsDialog({
   React.useEffect(() => {
     if (String(releasesPerPage).trim() !== "") {
       const numReleases = parseInt(String(releasesPerPage), 10);
-      if (isNaN(numReleases)) {
+      if (Number.isNaN(numReleases)) {
         setReleasesPerPageError(null);
       } else if (numReleases < 1) {
         setReleasesPerPageError("too_low");
@@ -343,7 +343,7 @@ export function RepoSettingsDialog({
       try {
         new RegExp(includeRegex);
         setIncludeRegexError(null);
-      } catch (e) {
+      } catch {
         setIncludeRegexError("invalid");
       }
     }
@@ -354,7 +354,7 @@ export function RepoSettingsDialog({
       try {
         new RegExp(excludeRegex);
         setExcludeRegexError(null);
-      } catch (e) {
+      } catch {
         setExcludeRegexError("invalid");
       }
     }

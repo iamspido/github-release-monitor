@@ -167,7 +167,7 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
           });
           setJobId(undefined);
         }
-      } catch (_err) {
+      } catch {
         clearInterval(intervalId);
         toast({
           title: t("toast_refresh_error_title"),

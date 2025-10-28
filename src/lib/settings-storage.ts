@@ -113,7 +113,10 @@ async function ensureCache() {
 
 export async function getSettings(): Promise<AppSettings> {
   await ensureCache();
-  return cloneSettings(cachedSettings!);
+  if (!cachedSettings) {
+    throw new Error("Settings cache is not available");
+  }
+  return cloneSettings(cachedSettings);
 }
 
 export async function getLocaleSetting(): Promise<Locale> {
