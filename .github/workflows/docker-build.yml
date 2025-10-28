@@ -25,7 +25,7 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Run ESLint in Docker (lint stage)
+    - name: Run Biome in Docker (lint stage)
       uses: docker/build-push-action@v5
       with:
         context: .
