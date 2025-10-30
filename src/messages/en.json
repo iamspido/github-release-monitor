@@ -340,6 +340,7 @@
     "username_label": "Username",
     "username_placeholder": "admin",
     "password_label": "Password",
+    "password_placeholder": "Password",
     "login_button": "Login",
     "error_invalid_credentials": "Invalid credentials. Please try again."
   },

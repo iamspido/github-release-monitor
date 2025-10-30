@@ -340,6 +340,7 @@
     "username_label": "Benutzername",
     "username_placeholder": "admin",
     "password_label": "Passwort",
+    "password_placeholder": "Passwort",
     "login_button": "Anmelden",
     "error_invalid_credentials": "Ungültige Anmeldedaten. Bitte versuchen Sie es erneut."
   },

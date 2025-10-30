@@ -93,6 +93,7 @@ export function LoginForm() {
               name="username"
               type="text"
               placeholder={t("username_placeholder")}
+              autoComplete="username"
               required
               autoFocus
               ref={usernameRef}
@@ -102,7 +103,14 @@ export function LoginForm() {
           </div>
           <div className="space-y-2">
             <Label htmlFor={passwordId}>{t("password_label")}</Label>
-            <Input id={passwordId} name="password" type="password" required />
+            <Input
+              id={passwordId}
+              name="password"
+              type="password"
+              placeholder={t("password_placeholder")}
+              autoComplete="current-password"
+              required
+            />
           </div>
           {errorKey && (
             <Alert variant="destructive">
