@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages, getTranslations } from "next-intl/server";
 
+import { AppClientInitializer } from "@/components/app-client-initializer";
 import { Toaster } from "@/components/ui/toaster";
 import { NetworkStatusProvider } from "@/hooks/use-network";
 import { locales } from "@/i18n/routing";
@@ -46,8 +47,10 @@ export default async function LocaleLayout({
       <body className="font-body antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
           <NetworkStatusProvider>
-            {children}
-            <Toaster />
+            <AppClientInitializer>
+              {children}
+              <Toaster />
+            </AppClientInitializer>
           </NetworkStatusProvider>
         </NextIntlClientProvider>
       </body>

@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type {
   AppriseStatus,
@@ -210,7 +211,10 @@ export function TestPageClient({
             variant: "destructive",
           });
         }
-      } catch {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         toast({
           title: t("toast_email_error_title"),
           description: t("toast_email_error_description"),
@@ -236,7 +240,10 @@ export function TestPageClient({
             variant: "destructive",
           });
         }
-      } catch {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         toast({
           title: t("toast_apprise_error_title"),
           description: t("toast_apprise_not_configured_error"),
@@ -276,7 +283,10 @@ export function TestPageClient({
             description: t("toast_update_not_available_description"),
           });
         }
-      } catch (error) {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         const errorMessage =
           error instanceof Error ? error.message : String(error ?? "unknown");
         toast({
@@ -301,7 +311,10 @@ export function TestPageClient({
           description: result.message,
           variant: result.success ? "default" : "destructive",
         });
-      } catch {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         toast({
           title: t("toast_error_title"),
           description: t("toast_setup_test_repo_error"),
@@ -322,7 +335,10 @@ export function TestPageClient({
           description: result.message,
           variant: result.success ? "default" : "destructive",
         });
-      } catch {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         toast({
           title: t("toast_error_title"),
           description: t("toast_trigger_check_error"),
@@ -337,7 +353,10 @@ export function TestPageClient({
       try {
         const status = await checkAppriseStatusAction();
         setAppriseStatus(status);
-      } catch {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         // Keep previous state, just inform user.
         toast({
           title: t("toast_error_title"),

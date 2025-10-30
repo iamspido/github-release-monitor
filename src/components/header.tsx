@@ -18,6 +18,7 @@ import { UpdateNoticeBanner } from "@/components/update-notice-banner";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { Link, usePathname } from "@/i18n/navigation";
 import { pathnames } from "@/i18n/routing";
+import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type { UpdateNotificationState } from "@/types";
 import { MobileMenu } from "./mobile-menu";
@@ -45,9 +46,12 @@ export function Header({ locale, updateNotice }: HeaderProps) {
       try {
         // Prevent unhandled rejections on flaky connections
         await logout();
-      } catch (err) {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         // eslint-disable-next-line no-console
-        console.error("Logout failed:", err);
+        console.error("Logout failed:", error);
       }
     });
   };

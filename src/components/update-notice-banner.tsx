@@ -6,6 +6,7 @@ import * as React from "react";
 
 import { dismissUpdateNotificationAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
+import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import type { UpdateNotificationState } from "@/types";
 
 type UpdateNoticeBannerProps = {
@@ -37,7 +38,10 @@ export function UpdateNoticeBanner({ notice }: UpdateNoticeBannerProps) {
     startTransition(async () => {
       try {
         await dismissUpdateNotificationAction();
-      } catch (error) {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         // eslint-disable-next-line no-console
         console.error("Failed to dismiss update notice:", error);
       }

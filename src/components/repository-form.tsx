@@ -32,6 +32,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import type { Repository } from "@/types";
 
 function SubmitButton({
@@ -167,8 +168,11 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
           });
           setJobId(undefined);
         }
-      } catch {
+      } catch (error: unknown) {
         clearInterval(intervalId);
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         toast({
           title: t("toast_refresh_error_title"),
           description: t("toast_refresh_error_description"),
@@ -269,26 +273,38 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
     if (!reposToImport) return;
 
     startImportTransition(async () => {
-      const result = await importRepositoriesAction(reposToImport);
+      try {
+        const result = await importRepositoriesAction(reposToImport);
 
-      if (result.success) {
-        toast({
-          title: t("toast_import_success_title"),
-          description: result.message,
-        });
-        if (result.jobId) {
-          setJobId(result.jobId);
+        if (result.success) {
+          toast({
+            title: t("toast_import_success_title"),
+            description: result.message,
+          });
+          if (result.jobId) {
+            setJobId(result.jobId);
+          }
+        } else {
+          toast({
+            title: t("toast_import_error_title"),
+            description: result.message,
+            variant: "destructive",
+          });
         }
-      } else {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         toast({
           title: t("toast_import_error_title"),
-          description: result.message,
+          description: t("toast_import_error_description"),
           variant: "destructive",
         });
+      } finally {
+        setIsDialogVisible(false);
+        setReposToImport(null);
+        setImportStats(null);
       }
-      setIsDialogVisible(false);
-      setReposToImport(null);
-      setImportStats(null);
     });
   };
 

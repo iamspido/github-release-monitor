@@ -8,6 +8,7 @@ import { getRepositoriesForExport } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { reloadIfServerActionStale } from "@/lib/server-action-error";
 
 export function ExportButton() {
   const t = useTranslations("HomePage");
@@ -45,7 +46,7 @@ export function ExportButton() {
               title: t("toast_export_success_title"),
               description: t("toast_export_success_description"),
             });
-          } catch (error) {
+          } catch (error: unknown) {
             console.error("Client-side export failed:", error);
             toast({
               title: t("toast_export_error_title"),
@@ -60,7 +61,10 @@ export function ExportButton() {
             variant: "destructive",
           });
         }
-      } catch {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         toast({
           title: t("toast_export_error_title"),
           description: t("toast_export_error_description"),

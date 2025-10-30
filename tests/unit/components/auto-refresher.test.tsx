@@ -116,4 +116,49 @@ describe('AutoRefresher', () => {
       restore();
     }
   });
+
+  it('reloads the page when a stale server action error occurs', async () => {
+    vi.resetModules();
+    vi.doMock('react', async (importOriginal) => {
+      const actual: any = await importOriginal();
+      return { ...actual, useTransition: () => [false, (cb: any) => cb()] };
+    });
+    vi.doMock('@/hooks/use-network', () => ({ useNetworkStatus: () => ({ isOnline: true }) }));
+    const error = new Error('Failed to find Server Action "abc"');
+    vi.doMock('@/app/actions', () => ({ refreshAndCheckAction: vi.fn().mockRejectedValue(error) }));
+    const reloadStub = vi.fn().mockReturnValue(true);
+    vi.doMock('@/lib/server-action-error', () => ({
+      reloadIfServerActionStale: reloadStub,
+    }));
+    const routerRef = { refresh: vi.fn() };
+    vi.doMock('@/i18n/navigation', () => ({ useRouter: () => routerRef }));
+    const { AutoRefresher } = await import('@/components/auto-refresher');
+    const { reloadIfServerActionStale } = await import('@/lib/server-action-error');
+
+    const { restore } = mockIntervalImmediate();
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    const root = ReactDOM.createRoot(div);
+    const originalOnLine = Object.getOwnPropertyDescriptor(window.navigator, 'onLine');
+    Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true } as any);
+    try {
+      flushSync(() => {
+        root.render(<AutoRefresher intervalMinutes={1} />);
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(reloadIfServerActionStale).toHaveBeenCalledTimes(1);
+      expect(reloadIfServerActionStale).toHaveBeenCalledWith(error);
+      expect(routerRef.refresh).not.toHaveBeenCalled();
+    } finally {
+      flushSync(() => { root.unmount(); });
+      div.remove();
+      if (originalOnLine) {
+        Object.defineProperty(window.navigator, 'onLine', originalOnLine);
+      } else {
+        delete (window.navigator as any).onLine;
+      }
+      restore();
+    }
+  });
 });

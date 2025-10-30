@@ -47,6 +47,7 @@ import {
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { usePathname, useRouter } from "@/i18n/navigation";
+import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type {
   AppriseFormat,
@@ -491,7 +492,10 @@ export function SettingsForm({
             variant: "destructive",
           });
         }
-      } catch {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         setSaveStatus("error");
         // Toast only on error
         toast({
@@ -580,14 +584,25 @@ export function SettingsForm({
 
   const handleDeleteAll = () => {
     startDeleteTransition(async () => {
-      const result = await deleteAllRepositoriesAction();
-      toast({
-        title: result.message.title,
-        description: result.message.description,
-        variant: result.success ? "default" : "destructive",
-      });
-      if (result.success) {
-        router.push("/");
+      try {
+        const result = await deleteAllRepositoriesAction();
+        toast({
+          title: result.message.title,
+          description: result.message.description,
+          variant: result.success ? "default" : "destructive",
+        });
+        if (result.success) {
+          router.push("/");
+        }
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
+        toast({
+          title: t("toast_error_title"),
+          description: t("toast_delete_all_error_description"),
+          variant: "destructive",
+        });
       }
     });
   };

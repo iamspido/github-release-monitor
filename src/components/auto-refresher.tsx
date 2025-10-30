@@ -3,6 +3,7 @@
 import { useEffect, useTransition } from "react";
 import { refreshAndCheckAction } from "@/app/actions";
 import { useRouter } from "@/i18n/navigation";
+import { reloadIfServerActionStale } from "@/lib/server-action-error";
 
 // This component uses the refreshInterval from settings to periodically
 // call router.refresh(), which re-fetches and re-renders Server Components
@@ -33,10 +34,13 @@ export function AutoRefresher({
           // instead of potentially serving a stale version while revalidating.
           await refreshAndCheckAction();
           router.refresh();
-        } catch (err) {
+        } catch (error: unknown) {
+          if (reloadIfServerActionStale(error)) {
+            return;
+          }
           // Silently ignore transient network errors during background refreshes.
           // eslint-disable-next-line no-console
-          console.debug("Auto refresh skipped due to error:", err);
+          console.debug("Auto refresh skipped due to error:", error);
         }
       });
     }, intervalMs);

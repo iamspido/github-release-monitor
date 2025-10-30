@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type { AppSettings, EnrichedRelease, FetchError } from "@/types";
 import { RepoSettingsDialog } from "./repo-settings-dialog";
@@ -148,7 +149,10 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
     startRemoveTransition(async () => {
       try {
         await removeRepositoryAction(repoId);
-      } catch {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         toast({
           title: t("toast_error_title"),
           variant: "destructive",
@@ -168,7 +172,10 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
             variant: "destructive",
           });
         }
-      } catch {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         toast({
           title: t("toast_error_title"),
           description: t("toast_acknowledge_error_generic"),
@@ -194,7 +201,10 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
             variant: "destructive",
           });
         }
-      } catch {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         toast({
           title: t("toast_error_title"),
           description: t("toast_mark_as_new_error_generic"),

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "@/i18n/navigation";
+import { reloadIfServerActionStale } from "@/lib/server-action-error";
 
 export function RefreshButton() {
   const t = useTranslations("HomePage");
@@ -28,7 +29,10 @@ export function RefreshButton() {
           title: t("toast_refresh_success_title"),
           description: t(result.messageKey),
         });
-      } catch (error) {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         console.error("Manual refresh failed:", error);
         toast({
           title: t("toast_refresh_error_title"),

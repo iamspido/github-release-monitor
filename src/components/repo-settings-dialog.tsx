@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type {
   AppriseFormat,
@@ -252,7 +253,11 @@ export function RepoSettingsDialog({
     if (wasOpen && !isOpen) {
       if (savedThisSessionRef.current && filterSettingsChangedRef.current) {
         // Fire and forget; avoid unhandled rejection on flaky connections
-        refreshSingleRepositoryAction(repoId).catch(() => {});
+        refreshSingleRepositoryAction(repoId).catch((error: unknown) => {
+          if (reloadIfServerActionStale(error)) {
+            return;
+          }
+        });
         savedThisSessionRef.current = false;
         filterSettingsChangedRef.current = false;
       } else if (savedThisSessionRef.current) {
@@ -440,12 +445,15 @@ export function RepoSettingsDialog({
             });
           }
         }
-      } catch (err) {
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
         if (mountedRef.current) {
           setSaveStatus("error");
           toast({
             title: t("toast_error_title"),
-            description: String(err),
+            description: String(error),
             variant: "destructive",
           });
         }
