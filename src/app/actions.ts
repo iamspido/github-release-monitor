@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { sendTestEmail } from "@/lib/email";
+import { isRetryableFetchError } from "@/lib/fetch-retry";
 import { getJobStatus, type JobStatus, setJobStatus } from "@/lib/job-store";
 import { logger } from "@/lib/logger";
 import {
@@ -30,47 +31,11 @@ import type {
 import { allPreReleaseTypes } from "@/types";
 
 const log = logger.withScope("WebServer");
+const warnRetry = (message: string) => log.warn(message);
 
 const DEFAULT_FETCH_RETRY_ATTEMPTS = 3;
 const DEFAULT_FETCH_RETRY_DELAY_MS = 500;
 const DEFAULT_RESPONSE_PARSE_ATTEMPTS = 3;
-const RETRYABLE_FETCH_ERROR_CODES = new Set([
-  "UND_ERR_SOCKET",
-  "UND_ERR_BODY_TIMEOUT",
-  "UND_ERR_CONNECT_TIMEOUT",
-  "UND_ERR_HEADERS_TIMEOUT",
-  "UND_ERR_RESPONSE_TIMEOUT",
-  "ECONNRESET",
-  "ECONNREFUSED",
-  "ETIMEDOUT",
-]);
-
-function getErrorCode(error: unknown): string | undefined {
-  if (!error || typeof error !== "object") return undefined;
-  const maybeError = error as { code?: unknown; cause?: unknown };
-  if (typeof maybeError.code === "string") {
-    return maybeError.code;
-  }
-  if (maybeError.cause && typeof maybeError.cause === "object") {
-    const cause = maybeError.cause as { code?: unknown };
-    if (typeof cause.code === "string") {
-      return cause.code;
-    }
-  }
-  return undefined;
-}
-
-function isRetryableFetchError(error: unknown): boolean {
-  if (error instanceof TypeError) {
-    const code = getErrorCode(error);
-    if (!code) {
-      return true;
-    }
-    return RETRYABLE_FETCH_ERROR_CODES.has(code);
-  }
-  const code = getErrorCode(error);
-  return !!(code && RETRYABLE_FETCH_ERROR_CODES.has(code));
-}
 
 async function wait(delayMs: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
@@ -97,7 +62,9 @@ async function fetchWithRetry(
     try {
       return await fetch(url, options);
     } catch (error) {
-      const shouldRetry = attempt < maxAttempts && isRetryableFetchError(error);
+      const shouldRetry =
+        attempt < maxAttempts &&
+        isRetryableFetchError(error, { warn: warnRetry });
       if (!shouldRetry) {
         throw error;
       }
@@ -139,7 +106,8 @@ async function fetchJsonResponseWithRetry<T>(
       return { response, data };
     } catch (error) {
       const shouldRetry =
-        attempt < parseAttempts && isRetryableFetchError(error);
+        attempt < parseAttempts &&
+        isRetryableFetchError(error, { warn: warnRetry });
       if (!shouldRetry) {
         throw error;
       }

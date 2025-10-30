@@ -17,6 +17,5 @@ test('import invalid-format JSON shows error toast', async ({ page }) => {
   const fileInput = page.locator('input[type="file"][accept=".json"]');
   const invalidPath = path.resolve(__dirname, 'fixtures', 'invalid-format.json');
   await fileInput.setInputFiles(invalidPath);
-  await expect(page.getByText('Import Failed')).toBeVisible();
+  await expect(page.getByText('Import Failed', { exact: true })).toBeVisible();
 });
-
