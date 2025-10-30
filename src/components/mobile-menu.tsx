@@ -100,7 +100,7 @@ export function MobileMenu({ onLogout, isLoggingOut }: MobileMenuProps) {
 
   return (
     <div className="md:hidden">
-      <DropdownMenu>
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon">
             <Menu className="size-5" />
