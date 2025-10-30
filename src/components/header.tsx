@@ -40,17 +40,31 @@ export function Header({ locale, updateNotice }: HeaderProps) {
   const pathname = usePathname();
   const [isLoggingOut, startLogoutTransition] = React.useTransition();
   const { isOnline } = useNetworkStatus();
+  const isNextRedirectError = (error: unknown) => {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+    const digest =
+      typeof (error as { digest?: unknown }).digest === "string"
+        ? (error as { digest?: unknown }).digest
+        : undefined;
+    return (
+      error.message === "NEXT_REDIRECT" ||
+      (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT"))
+    );
+  };
 
   const handleLogout = () => {
     startLogoutTransition(async () => {
       try {
-        // Prevent unhandled rejections on flaky connections
         await logout();
       } catch (error: unknown) {
+        if (isNextRedirectError(error)) {
+          return;
+        }
         if (reloadIfServerActionStale(error)) {
           return;
         }
-        // eslint-disable-next-line no-console
         console.error("Logout failed:", error);
       }
     });
