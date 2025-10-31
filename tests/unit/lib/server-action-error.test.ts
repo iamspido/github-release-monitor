@@ -2,7 +2,10 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { reloadIfServerActionStale } from '@/lib/server-action-error';
+import {
+  isStaleServerActionError,
+  reloadIfServerActionStale,
+} from '@/lib/server-action-error';
 
 const ORIGINAL_WINDOW = globalThis.window;
 
@@ -27,6 +30,32 @@ describe('reloadIfServerActionStale', () => {
     expect(reloadSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('reloads the page when Next 15 reports an unrecognized server action', () => {
+    const reloadSpy = vi.fn();
+    (globalThis as any).window = { location: { reload: reloadSpy } };
+
+    const result = reloadIfServerActionStale(
+      new Error(
+        'UnrecognizedActionError: Server Action "abc" was not found on the server.',
+      ),
+    );
+
+    expect(result).toBe(true);
+    expect(reloadSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads the page when the error digest marks the action as undefined', () => {
+    const reloadSpy = vi.fn();
+    (globalThis as any).window = { location: { reload: reloadSpy } };
+    const error = new Error('Some error');
+    (error as any).digest = 'NEXT_UNDEFINED_ACTION_123';
+
+    const result = reloadIfServerActionStale(error);
+
+    expect(result).toBe(true);
+    expect(reloadSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('returns false and does not reload for other errors', () => {
     const reloadSpy = vi.fn();
     (globalThis as any).window = { location: { reload: reloadSpy } };
@@ -44,5 +73,25 @@ describe('reloadIfServerActionStale', () => {
     );
 
     expect(result).toBe(false);
+  });
+});
+
+describe('isStaleServerActionError', () => {
+  it('detects stale server action error by message', () => {
+    expect(
+      isStaleServerActionError(
+        new Error('Failed to find Server Action "abc"'),
+      ),
+    ).toBe(true);
+  });
+
+  it('detects stale server action error by digest', () => {
+    const error = new Error('Some error');
+    (error as any).digest = 'NEXT_UNDEFINED_ACTION_XYZ';
+    expect(isStaleServerActionError(error)).toBe(true);
+  });
+
+  it('returns false for unrelated errors', () => {
+    expect(isStaleServerActionError(new Error('Other error'))).toBe(false);
   });
 });
