@@ -449,7 +449,9 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
                   components={{
                     table: ({ node, ...props }) => (
                       <div className="overflow-x-auto">
-                        <table {...props} className="table-fixed" />
+                        <table {...props} className="table-fixed">
+                          {props.children}
+                        </table>
                       </div>
                     ),
                   }}
