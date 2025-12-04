@@ -14,7 +14,8 @@ test('release markdown renders table, code, links, and emojis', async ({ page })
 
   // Table exists and has expected header cell (ReactMarkdown may expose <th> as role=cell)
   await expect(content.locator('table')).toBeVisible();
-  await expect(content.getByRole('cell', { name: 'Feature' }).first()).toBeVisible();
+  const featureHeader = content.locator('th:has-text("Feature"), td:has-text("Feature")').first();
+  await expect(featureHeader).toBeVisible();
 
   // Code block contains function signature
   await expect(content.locator('pre')).toContainText('function greet(name)');

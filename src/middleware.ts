@@ -181,7 +181,8 @@ function getSecurityHeaders() {
     "default-src 'self'",
     "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https://placehold.co",
+    // Allow images from any HTTPS origin to support arbitrary release note assets.
+    "img-src 'self' https:",
     "connect-src 'self' https://api.github.com",
     "font-src 'self'",
     "object-src 'none'",
