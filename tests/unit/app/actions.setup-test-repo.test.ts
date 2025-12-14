@@ -8,7 +8,7 @@ vi.mock('next-intl/server', () => ({
 // Cache stubs for revalidation calls
 vi.mock('next/cache', () => ({
   revalidatePath: () => {},
-  revalidateTag: () => {},
+  updateTag: () => {},
 }));
 
 // In-memory storage for repositories manipulated by setupTestRepositoryAction

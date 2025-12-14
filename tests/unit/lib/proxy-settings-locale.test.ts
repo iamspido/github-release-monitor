@@ -72,7 +72,7 @@ vi.mock('@/lib/logger', () => {
 
 let fetchSettingsLocale: (request: any, options?: { fetchImpl?: typeof fetch }) => Promise<string>;
 let buildSettingsLocaleApiUrls: (request: any) => URL[];
-let middlewareFn: ((request: any) => Promise<Response>) | undefined;
+let proxyFn: ((request: any) => Promise<Response>) | undefined;
 
 type MockRequest = {
   headers: Headers;
@@ -116,10 +116,10 @@ const createResponse = (overrides: Partial<Response> & { json?: () => Promise<an
   }) as Response;
 
 beforeAll(async () => {
-  const middlewareModule = await import('@/middleware');
-  fetchSettingsLocale = middlewareModule.__test__.fetchSettingsLocale;
-  buildSettingsLocaleApiUrls = middlewareModule.__test__.buildSettingsLocaleApiUrls;
-  middlewareFn = middlewareModule.middleware;
+  const proxyModule = await import('@/proxy');
+  fetchSettingsLocale = proxyModule.__test__.fetchSettingsLocale;
+  buildSettingsLocaleApiUrls = proxyModule.__test__.buildSettingsLocaleApiUrls;
+  proxyFn = proxyModule.proxy;
 });
 
 describe('fetchSettingsLocale', () => {
@@ -188,7 +188,7 @@ describe('buildSettingsLocaleApiUrls', () => {
   });
 });
 
-describe('middleware', () => {
+describe('proxy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     handleI18nMock.mockReset();
@@ -197,7 +197,7 @@ describe('middleware', () => {
   });
 
   it('redirects unauthenticated users to locale login and sets cookies', async () => {
-    expect(middlewareFn).toBeDefined();
+    expect(proxyFn).toBeDefined();
     const { NextResponse } = await import('next/server');
 
     const baseResponse = new NextResponse(null, { status: 200 });
@@ -213,7 +213,7 @@ describe('middleware', () => {
       { [SETTINGS_LOCALE_COOKIE]: 'de' },
     );
 
-    const response = await middlewareFn!(request as any);
+    const response = await proxyFn!(request as any);
 
     expect(createIntlMiddlewareMock).toHaveBeenCalledTimes(1);
     expect(handleI18nMock).toHaveBeenCalledTimes(1);
@@ -229,7 +229,7 @@ describe('middleware', () => {
   });
 
   it('redirects logged-in users away from the login page', async () => {
-    expect(middlewareFn).toBeDefined();
+    expect(proxyFn).toBeDefined();
     const { NextResponse } = await import('next/server');
 
     const baseResponse = new NextResponse(null, { status: 200 });
@@ -245,7 +245,7 @@ describe('middleware', () => {
       { [SETTINGS_LOCALE_COOKIE]: 'de' },
     );
 
-    const response = await middlewareFn!(request as any);
+    const response = await proxyFn!(request as any);
 
     expect(response.status).toBe(307);
     expect(response.headers.get('location')).toBe('https://example.com/de');
@@ -254,7 +254,7 @@ describe('middleware', () => {
   });
 
   it('blocks disallowed origins during development', async () => {
-    expect(middlewareFn).toBeDefined();
+    expect(proxyFn).toBeDefined();
     const { NextResponse } = await import('next/server');
 
     const baseResponse = new NextResponse(null, { status: 200 });
@@ -279,7 +279,7 @@ describe('middleware', () => {
         { [SETTINGS_LOCALE_COOKIE]: 'de' },
       );
 
-      const response = await middlewareFn!(request as any);
+      const response = await proxyFn!(request as any);
 
       expect(response.status).toBe(403);
       expect(await response.text()).toBe('Forbidden');
@@ -290,7 +290,7 @@ describe('middleware', () => {
   });
 
   it('applies security headers on successful responses', async () => {
-    expect(middlewareFn).toBeDefined();
+    expect(proxyFn).toBeDefined();
     const { NextResponse } = await import('next/server');
 
     const baseResponse = new NextResponse(null, { status: 200 });
@@ -312,7 +312,7 @@ describe('middleware', () => {
         { [SETTINGS_LOCALE_COOKIE]: 'de' },
       );
 
-      const response = await middlewareFn!(request as any);
+      const response = await proxyFn!(request as any);
 
       expect(response.status).toBe(200);
       expect(response.headers.get('Content-Security-Policy')).toContain("default-src 'self'");

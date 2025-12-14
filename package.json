@@ -1,6 +1,6 @@
 {
   "name": "github-release-monitor",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "An application to monitor GitHub repository releases.",
   "private": true,
   "license": "AGPL-3.0-only",
@@ -34,7 +34,7 @@
     "date-fns": "^4.1.0",
     "iron-session": "^8.0.4",
     "lucide-react": "^0.561.0",
-    "next": "^15.5.9",
+    "next": "^16.0.10",
     "next-intl": "^4.5.8",
     "nodemailer": "^7.0.11",
     "react": "^19.2.3",

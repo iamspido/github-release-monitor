@@ -2,17 +2,17 @@
 
 const { cacheMocks } = vi.hoisted(() => ({
   cacheMocks: {
-    revalidateTag: vi.fn(),
+    updateTag: vi.fn(),
   },
 }));
 
 vi.mock('next/cache', () => cacheMocks);
 
 describe('simple actions', () => {
-  it('revalidateReleasesAction calls revalidateTag("github-releases")', async () => {
+  it('revalidateReleasesAction calls updateTag("github-releases")', async () => {
     const { revalidateReleasesAction } = await import('@/app/actions');
     await revalidateReleasesAction();
-    expect(cacheMocks.revalidateTag).toHaveBeenCalledWith('github-releases');
+    expect(cacheMocks.updateTag).toHaveBeenCalledWith('github-releases');
   });
 
   it('getJobStatusAction returns stored status', async () => {

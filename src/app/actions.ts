@@ -1,7 +1,7 @@
 "use server";
 
 import crypto from "node:crypto";
-import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
+import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { sendTestEmail } from "@/lib/email";
 import { isRetryableFetchError } from "@/lib/fetch-retry";
@@ -1620,7 +1620,7 @@ export async function setupTestRepositoryAction(): Promise<{
       await saveRepositories(currentRepos);
       revalidatePath("/");
       revalidatePath("/test");
-      revalidateTag("github-releases");
+      updateTag("github-releases");
       return { success: true, message: t("toast_setup_test_repo_success") };
     } catch (error: unknown) {
       log.error("setupTestRepositoryAction failed:", error);
@@ -2080,7 +2080,7 @@ export async function updateRepositorySettingsAction(
 }
 
 export async function revalidateReleasesAction() {
-  revalidateTag("github-releases");
+  updateTag("github-releases");
 }
 
 export async function getJobStatusAction(

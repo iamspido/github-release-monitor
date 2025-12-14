@@ -54,7 +54,7 @@ for (const routeKey of Object.keys(pathnames) as RouteKey[]) {
 const logSettings = logger.withScope("Settings");
 const SETTINGS_LOCALE_API_PATH = "/api/settings-locale";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const logAuth = logger.withScope("Auth");
   const logSecurity = logger.withScope("Security");
 
