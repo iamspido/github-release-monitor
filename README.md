@@ -94,7 +94,7 @@ Navigate to the `example/` directory. You will need to configure the environment
    ```
 
    **Codeberg API (Optional)**
-   Codeberg runs on Gitea/Forgejo and exposes a Gitea-compatible REST API. If you hit rate limits or want to monitor private repos, set a token:
+   Codeberg runs on Gitea/Forgejo and exposes a Gitea-compatible REST API. If you want to monitor private repos, set a token:
    - For private repositories, the token typically needs `read:repository`.
    - `read:user` is only needed for diagnostics (e.g. showing the authenticated username on the test page).
    - API limit: 2000 requests per 5 minutes (applies with or without a token).
@@ -333,7 +333,7 @@ GITHUB_ACCESS_TOKEN=your_github_pat_here
 
 #### **Codeberg API (Optional)**
 
-Codeberg runs on Gitea/Forgejo and exposes a Gitea-compatible REST API. If you hit rate limits or want to monitor private repos, set a token:
+Codeberg runs on Gitea/Forgejo and exposes a Gitea-compatible REST API. If you want to monitor private repos, set a token:
  - For private repositories, the token typically needs `read:repository`.
  - `read:user` is only needed for diagnostics (e.g. showing the authenticated username on the test page).
  - API limit: 2000 requests per 5 minutes (applies with or without a token).
@@ -421,7 +421,7 @@ Here is a complete list of all environment variables used by the application.
 | `AUTH_PASSWORD`       | The password for logging into the application.                                                            | **Yes**                | -                          |
 | `AUTH_SECRET`         | A secret key (at least 32 characters) for encrypting user sessions.                                       | **Yes**                | -                          |
 | `AUTH_USERNAME`       | The username for logging into the application.                                                            | **Yes**                | -                          |
-| `CODEBERG_ACCESS_TOKEN` | A Codeberg access token (Gitea API) for higher rate limits / private repos. Typically needs `read:repository`; `read:user` only for diagnostics. | No                     | -                          |
+| `CODEBERG_ACCESS_TOKEN` | A Codeberg access token (Gitea API) for private repos. Typically needs `read:repository`; `read:user` only for diagnostics. | No                     | -                          |
 | `GITHUB_ACCESS_TOKEN` | A GitHub Personal Access Token to increase the API rate limit. A token with no scopes is sufficient.      | No (but recommended)   | -                          |
 | `HTTPS`               | Set to `false` to run in HTTP mode. Defaults to `true` for secure operation.                              | No                     | `true`                     |
 | `LOG_LEVEL`           | Controls server log verbosity: `error`, `warn`, `info`, `debug`, `silent`.                                | No                     | `warn` (prod), `debug` (dev) |

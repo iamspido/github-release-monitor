@@ -1,6 +1,6 @@
 {
   "name": "github-release-monitor",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "An application to monitor GitHub repository releases.",
   "private": true,
   "license": "AGPL-3.0-only",
@@ -35,7 +35,7 @@
     "iron-session": "^8.0.4",
     "lucide-react": "^0.561.0",
     "next": "^16.0.10",
-    "next-intl": "^4.5.8",
+    "next-intl": "^4.6.1",
     "nodemailer": "^7.0.11",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
@@ -50,22 +50,22 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.8",
+    "@biomejs/biome": "^2.3.10",
     "@playwright/test": "^1.57.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@tailwindcss/typography": "^0.5.19",
     "@swc/helpers": "^0.5.17",
-    "@types/node": "^25.0.1",
+    "@types/node": "^25.0.3",
     "@types/nodemailer": "^7.0.4",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react-swc": "^4.2.2",
-    "@vitest/coverage-v8": "^4.0.15",
+    "@vitest/coverage-v8": "^4.0.16",
     "jsdom": "^27.3.0",
     "postcss": "^8.5.6",
     "playwright": "^1.57.0",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.15"
+    "vitest": "^4.0.16"
   }
 }
