@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import {
   checkAppriseStatusAction,
+  getCodebergTokenCheck,
   getGitHubRateLimit,
   getUpdateNotificationState,
 } from "@/app/actions";
@@ -59,6 +60,7 @@ export default async function TestPage({
   const t = await getTranslations({ locale: locale, namespace: "TestPage" });
   const rateLimitResult: RateLimitResult = await getGitHubRateLimit();
   const githubTokenSet = !!process.env.GITHUB_ACCESS_TOKEN;
+  const codebergTokenCheck = await getCodebergTokenCheck();
   const notificationConfig = getNotificationConfig();
   const updateNotice: UpdateNotificationState =
     await getUpdateNotificationState();
@@ -88,6 +90,7 @@ export default async function TestPage({
         <TestPageClient
           rateLimitResult={rateLimitResult}
           isTokenSet={githubTokenSet}
+          codebergTokenCheck={codebergTokenCheck}
           notificationConfig={notificationConfig}
           appriseStatus={appriseStatus}
           updateNotice={updateNotice}

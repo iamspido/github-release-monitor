@@ -24,7 +24,8 @@ const translationMap: Record<string, Record<string, string>> = {
     confirm_dialog_description_long: 'Remove {repoId}?',
     confirm_button: 'Confirm removal',
     cancel_button: 'Cancel',
-    view_on_github: 'View on GitHub',
+    view_on_github: 'Open release',
+    view_tag: 'Open tag',
     released_ago: 'Released {time}',
     checked_ago: 'Checked {time}',
     no_release_notes: 'No release notes available',
@@ -175,7 +176,7 @@ let ReleaseCardComponent: typeof import('@/components/release-card').ReleaseCard
 
 beforeAll(async () => {
   ({ ReleaseCard: ReleaseCardComponent } = await import('@/components/release-card'));
-});
+}, 30000);
 
 afterEach(() => {
   vi.useRealTimers();
@@ -225,6 +226,22 @@ function getButtonBySpanText(text: string) {
 }
 
 describe('ReleaseCard component', () => {
+  it('shows remove button even when release data is missing', async () => {
+    const enrichedRelease: EnrichedRelease = {
+      repoId: 'owner/repo',
+      repoUrl: 'https://github.com/owner/repo',
+      repoSettings: {},
+    };
+
+    render(<ReleaseCardComponent enrichedRelease={enrichedRelease} settings={baseSettings} />);
+
+    expect(getElementByText('a', 'owner/repo')).toBeTruthy();
+    const removeButton = Array.from(container?.querySelectorAll('button') ?? []).find(btn =>
+      btn.textContent?.includes('Remove repository'),
+    );
+    expect(removeButton).toBeTruthy();
+  });
+
   it('renders error state with translated message and custom settings badge', async () => {
     const enrichedRelease: EnrichedRelease = {
       repoId: 'owner/repo',

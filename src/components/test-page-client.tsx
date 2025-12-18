@@ -8,6 +8,7 @@ import {
   Eye,
   EyeOff,
   Github,
+  Globe,
   Loader2,
   Mail,
   PackagePlus,
@@ -42,6 +43,7 @@ import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type {
   AppriseStatus,
+  CodebergTokenCheckResult,
   NotificationConfig,
   RateLimitResult,
   UpdateNotificationState,
@@ -50,6 +52,7 @@ import type {
 interface TestPageClientProps {
   rateLimitResult: RateLimitResult;
   isTokenSet: boolean;
+  codebergTokenCheck: CodebergTokenCheckResult;
   notificationConfig: NotificationConfig;
   appriseStatus: AppriseStatus;
   updateNotice: UpdateNotificationState;
@@ -87,6 +90,7 @@ function StatusIndicator({
 export function TestPageClient({
   rateLimitResult,
   isTokenSet,
+  codebergTokenCheck,
   notificationConfig,
   appriseStatus: initialAppriseStatus,
   updateNotice: initialUpdateNotice,
@@ -180,6 +184,74 @@ export function TestPageClient({
       setResetTime(clientFormattedTime);
     }
   }, [rateLimit]);
+
+  const isCodebergTokenSet = codebergTokenCheck.status !== "not_set";
+  const codebergTokenStatusText = isCodebergTokenSet
+    ? t("codeberg_token_set")
+    : t("codeberg_token_not_set");
+  const codebergTokenStatus: "success" | "warning" = isCodebergTokenSet
+    ? "success"
+    : "warning";
+
+  const codebergAuthStatus = (() => {
+    switch (codebergTokenCheck.status) {
+      case "not_set":
+        return { status: "warning" as const, text: t("unauth_access") };
+      case "valid":
+        return codebergTokenCheck.diagnosticsLimited
+          ? {
+              status: "warning" as const,
+              text: t("codeberg_token_valid_limited"),
+            }
+          : { status: "success" as const, text: t("auth_access_confirmed") };
+      case "invalid_token":
+        return { status: "error" as const, text: t("codeberg_token_invalid") };
+      case "api_error":
+        return {
+          status: "error" as const,
+          text: t("codeberg_token_check_error"),
+        };
+    }
+  })();
+
+  const codebergDetails: React.ReactNode[] = [];
+  if (codebergTokenCheck.status === "valid") {
+    if (codebergTokenCheck.login) {
+      codebergDetails.push(
+        <p key="codeberg-auth-as">
+          {t("codeberg_authenticated_as", {
+            login: codebergTokenCheck.login,
+          })}
+        </p>,
+      );
+    }
+
+    if (codebergTokenCheck.diagnosticsLimited) {
+      codebergDetails.push(
+        <p key="codeberg-limited-advice">
+          {t("codeberg_token_valid_limited_advice")}
+        </p>,
+      );
+    }
+  }
+
+  if (codebergTokenCheck.status === "invalid_token") {
+    codebergDetails.push(
+      <p key="codeberg-invalid-advice">{t("codeberg_invalid_token_advice")}</p>,
+    );
+  }
+
+  if (codebergTokenCheck.status === "api_error") {
+    codebergDetails.push(
+      <p key="codeberg-api-error-advice">
+        {t("codeberg_token_check_error_advice")}
+      </p>,
+    );
+  }
+
+  codebergDetails.push(
+    <p key="codeberg-api-limit">{t("codeberg_api_limit", { limit: 2000 })}</p>,
+  );
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const email = e.target.value;
@@ -425,6 +497,40 @@ export function TestPageClient({
               {t("invalid_token_advice")}
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <Globe className="size-8 text-muted-foreground" />
+            <div>
+              <CardTitle>{t("codeberg_card_title")}</CardTitle>
+              <CardDescription>
+                {t("codeberg_card_description")}
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <StatusIndicator
+            status={codebergTokenStatus}
+            text={codebergTokenStatusText}
+          />
+          {codebergTokenCheck.status === "not_set" && (
+            <p className="pl-7 text-sm text-muted-foreground">
+              {t("codeberg_token_advice")}
+            </p>
+          )}
+          <div>
+            <StatusIndicator
+              status={codebergAuthStatus.status}
+              text={codebergAuthStatus.text}
+            />
+            <div className="mt-2 pl-7 text-sm text-muted-foreground space-y-1">
+              {codebergDetails}
+            </div>
+          </div>
         </CardContent>
       </Card>
 

@@ -3,6 +3,7 @@
 const { cacheMocks } = vi.hoisted(() => ({
   cacheMocks: {
     revalidatePath: vi.fn(),
+    updateTag: vi.fn(),
   },
 }));
 
@@ -38,4 +39,3 @@ describe('updateRepositorySettingsAction catch path', () => {
     saveSpy.mockRestore();
   });
 });
-

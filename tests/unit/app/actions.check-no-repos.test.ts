@@ -3,6 +3,7 @@
 // Minimal stubs; early-return path should avoid deeper dependencies
 vi.mock('next/cache', () => ({
   unstable_cache: (fn: any) => fn,
+  updateTag: () => {},
 }));
 
 vi.mock('@/lib/repository-storage', () => ({
@@ -21,4 +22,3 @@ describe('checkForNewReleases with no repositories', () => {
     expect(res).toEqual({ notificationsSent: 0, checked: 0 });
   });
 });
-

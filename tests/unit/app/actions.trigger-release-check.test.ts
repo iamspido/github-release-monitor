@@ -8,6 +8,7 @@ vi.mock('next-intl/server', () => ({
 // Basic cache stubs
 vi.mock('next/cache', () => ({
   unstable_cache: (fn: any) => fn,
+  updateTag: () => {},
 }));
 
 // In-memory storage by default
@@ -74,4 +75,3 @@ describe('triggerReleaseCheckAction', () => {
     expect(res.message).toBe('boom');
   });
 });
-

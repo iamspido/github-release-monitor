@@ -32,7 +32,10 @@ describe('repository-storage', () => {
     await saveRepositories(list);
 
     const after = await getRepositories();
-    expect(after).toEqual(list);
+    expect(after).toEqual([
+      { id: 'github:owner1/repo1', url: 'https://github.com/owner1/repo1' },
+      { id: 'github:owner2/repo2', url: 'https://github.com/owner2/repo2', isNew: true },
+    ]);
   });
 
   it('returns empty array on corrupt json and throws detailed write error', async () => {
@@ -54,4 +57,3 @@ describe('repository-storage', () => {
     writeSpy.mockRestore();
   });
 });
-

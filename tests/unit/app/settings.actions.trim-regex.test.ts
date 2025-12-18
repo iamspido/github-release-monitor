@@ -8,7 +8,7 @@ const mem = {
   },
 }
 
-vi.mock('next/cache', () => ({ revalidatePath: () => {} }))
+vi.mock('next/cache', () => ({ revalidatePath: () => {}, updateTag: () => {} }))
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (k: string) => k,
   getLocale: async () => 'en',

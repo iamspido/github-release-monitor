@@ -150,6 +150,11 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         newS.showAcknowledge,
       );
       pushValueChange("showMarkAsNew", oldS.showMarkAsNew, newS.showMarkAsNew);
+      pushValueChange(
+        "showProviderPrefixInRepoId",
+        oldS.showProviderPrefixInRepoId,
+        newS.showProviderPrefixInRepoId,
+      );
       pushValueChange("includeRegex", oldS.includeRegex, newS.includeRegex);
       pushValueChange("excludeRegex", oldS.excludeRegex, newS.excludeRegex);
       pushValueChange(

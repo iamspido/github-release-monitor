@@ -1,6 +1,6 @@
 // vitest globals enabled
 
-vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
+vi.mock('next/cache', () => ({ revalidatePath: () => {}, updateTag: () => {} }));
 
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,
@@ -30,4 +30,3 @@ describe('updateRepositorySettingsAction edge cases', () => {
     expect(res.error).toBe('toast_error_not_found');
   });
 });
-

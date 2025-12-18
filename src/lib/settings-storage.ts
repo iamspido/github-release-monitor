@@ -25,6 +25,7 @@ const defaultSettings: AppSettings = {
   preReleaseSubChannels: allPreReleaseTypes,
   showAcknowledge: true,
   showMarkAsNew: true,
+  showProviderPrefixInRepoId: true,
   includeRegex: undefined,
   excludeRegex: undefined,
   appriseMaxCharacters: 1800,

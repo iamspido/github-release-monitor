@@ -2,6 +2,7 @@
 
 vi.mock('next/cache', () => ({
   unstable_cache: (fn: any) => fn,
+  updateTag: () => {},
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -81,6 +82,87 @@ describe('filters: include/exclude/channels/subchannels', () => {
     // Settings allow only beta/rc
     const enriched = await actions.getLatestReleasesForRepos([repo], baseSettings, 'en', { skipCache: true });
     expect(enriched[0].release?.tag_name).toBe('v1.0.0-beta');
+  });
+
+  it('prerelease API flag does not require pre-release keyword in tag', async () => {
+    const actions = await import('@/app/actions');
+    const repo: Repository = {
+      id: 'o/r',
+      url: 'https://github.com/o/r',
+      releaseChannels: ['prerelease'],
+    } as any;
+
+    // Tag name does not include beta/rc, but prerelease flag is true.
+    // @ts-ignore
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ([
+        {
+          id: 1,
+          html_url: '#',
+          tag_name: 'v1.0.0-1',
+          name: null,
+          body: '',
+          created_at: new Date().toISOString(),
+          published_at: new Date().toISOString(),
+          prerelease: true,
+          draft: false,
+        },
+      ]),
+    });
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      'en',
+      { skipCache: true },
+    );
+    expect(enriched[0].release?.tag_name).toBe('v1.0.0-1');
+  });
+
+  it('empty preReleaseSubChannels does not break prerelease tags', async () => {
+    const actions = await import('@/app/actions');
+    const repo: Repository = {
+      id: 'o/r',
+      url: 'https://github.com/o/r',
+      releaseChannels: ['prerelease'],
+    } as any;
+
+    // Tag includes a prerelease marker; global preReleaseSubChannels is empty.
+    // @ts-ignore
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ([
+        {
+          id: 1,
+          html_url: '#',
+          tag_name: 'v1.0.0-rc1',
+          name: null,
+          body: '',
+          created_at: new Date().toISOString(),
+          published_at: new Date().toISOString(),
+          prerelease: false,
+          draft: false,
+        },
+      ]),
+    });
+
+    const settingsWithEmptySubs: AppSettings = {
+      ...baseSettings,
+      preReleaseSubChannels: [],
+    } as any;
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      settingsWithEmptySubs,
+      'en',
+      { skipCache: true },
+    );
+    expect(enriched[0].release?.tag_name).toBe('v1.0.0-rc1');
   });
 
   it('draft releases included only when channel allows', async () => {

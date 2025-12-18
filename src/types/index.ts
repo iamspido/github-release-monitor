@@ -1,5 +1,7 @@
 export type Repository = {
-  id: string; // Should be in the format "owner/repo"
+  // Unique identifier for a monitored repository.
+  // Uses `<provider>:owner/repo` (e.g. `github:owner/repo`, `codeberg:owner/repo`).
+  id: string;
   url: string;
   lastSeenReleaseTag?: string;
   isNew?: boolean;
@@ -90,6 +92,17 @@ export type RateLimitResult = {
   error?: "invalid_token" | "api_error";
 };
 
+export type CodebergTokenCheckResult =
+  | { status: "not_set" }
+  | {
+      status: "valid";
+      login: string | null;
+      fullName: string | null;
+      diagnosticsLimited?: boolean;
+    }
+  | { status: "invalid_token" }
+  | { status: "api_error" };
+
 export type NotificationConfig = {
   isSmtpConfigured: boolean;
   isAppriseConfigured: boolean;
@@ -163,6 +176,7 @@ export type AppSettings = {
   preReleaseSubChannels?: PreReleaseChannelType[];
   showAcknowledge?: boolean;
   showMarkAsNew?: boolean;
+  showProviderPrefixInRepoId?: boolean;
   includeRegex?: string;
   excludeRegex?: string;
   appriseMaxCharacters?: number;

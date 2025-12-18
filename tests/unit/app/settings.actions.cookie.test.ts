@@ -1,6 +1,6 @@
 // vitest globals enabled
 
-vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
+vi.mock('next/cache', () => ({ revalidatePath: () => {}, updateTag: () => {} }));
 
 const cookieSetMock = vi.fn();
 vi.mock('next/headers', () => ({ cookies: async () => ({ set: cookieSetMock }) }));

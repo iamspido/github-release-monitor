@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import { describe, it, expect, vi } from 'vitest';
 import { SettingsForm } from '@/components/settings-form';
 
@@ -24,23 +25,25 @@ describe('SettingsForm offline autosave paused', () => {
     document.body.appendChild(div);
     const root = ReactDOM.createRoot(div);
     window.dispatchEvent(new Event(isOnline ? 'online' : 'offline'));
-    root.render(
-      <SettingsForm
-        currentSettings={{
-          timeFormat: '24h',
-          locale: 'en',
-          refreshInterval: 10,
-          cacheInterval: 5,
-          releasesPerPage: 30,
-          parallelRepoFetches: parallelFetches,
-          releaseChannels: ['stable'],
-          preReleaseSubChannels: undefined,
-          showAcknowledge: true,
-        } as any}
-        isAppriseConfigured={true}
-        isGithubTokenSet={isTokenSet}
-      />
-    );
+    flushSync(() => {
+      root.render(
+        <SettingsForm
+          currentSettings={{
+            timeFormat: '24h',
+            locale: 'en',
+            refreshInterval: 10,
+            cacheInterval: 5,
+            releasesPerPage: 30,
+            parallelRepoFetches: parallelFetches,
+            releaseChannels: ['stable'],
+            preReleaseSubChannels: undefined,
+            showAcknowledge: true,
+          } as any}
+          isAppriseConfigured={true}
+          isGithubTokenSet={isTokenSet}
+        />,
+      );
+    });
     return {
       div,
       cleanup: () => {

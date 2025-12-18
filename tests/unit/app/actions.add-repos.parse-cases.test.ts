@@ -2,6 +2,7 @@
 
 vi.mock('next/cache', () => ({
   revalidatePath: () => {},
+  updateTag: () => {},
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -34,7 +35,10 @@ describe('addRepositoriesAction parsing cases', () => {
     expect(res.success).toBe(true);
     // All valid parsed, normalized to lowercase
     const ids = mem.repos.map(r => r.id).sort();
-    expect(ids).toEqual(['owner---/r_e.p.o', 'owner-name/re.po', 'owner.name/my_repo']);
+    expect(ids).toEqual([
+      'github:owner---/r_e.p.o',
+      'github:owner-name/re.po',
+      'github:owner.name/my_repo',
+    ]);
   });
 });
-

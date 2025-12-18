@@ -2,6 +2,7 @@
 
 vi.mock('next/cache', () => ({
   revalidatePath: () => {},
+  updateTag: () => {},
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -71,4 +72,3 @@ describe('updateRepositorySettingsAction', () => {
     expect(mem.repos[0].etag).toBe('W/"keep"');
   });
 });
-

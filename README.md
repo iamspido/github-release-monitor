@@ -1,10 +1,10 @@
 # GitHub Release Monitor
 
-A powerful, self-hostable application to automatically monitor GitHub repository releases and receive instant email or Apprise notifications. Keep track of your favorite projects without manually checking for updates.
+A powerful, self-hostable application to automatically monitor GitHub and Codeberg repository releases and receive instant email or Apprise notifications. Keep track of your favorite projects without manually checking for updates.
 
 ## ✨ Key Features
 
-- **Automated Release Monitoring**: Add public GitHub repositories and let the app automatically check for new releases in the background.
+- **Automated Release Monitoring**: Add public GitHub and Codeberg repositories and let the app automatically check for new releases in the background.
 - **Flexible Notifications**:
   - **Email**: Configure SMTP settings to receive detailed email notifications.
   - **Apprise**: Integrate with [Apprise](https://github.com/caronc/apprise) to send notifications to over 70 services like Discord, Telegram, Slack, and more.
@@ -91,6 +91,15 @@ Navigate to the `example/` directory. You will need to configure the environment
    # Your GitHub Personal Access Token to increase the API rate limit from 60 to 5000 requests/hour.
    # Create a token with no scopes (public repo access) for better security.
    GITHUB_ACCESS_TOKEN=your_github_pat_here
+   ```
+
+   **Codeberg API (Optional)**
+   Codeberg runs on Gitea/Forgejo and exposes a Gitea-compatible REST API. If you hit rate limits or want to monitor private repos, set a token:
+   - For private repositories, the token typically needs `read:repository`.
+   - `read:user` is only needed for diagnostics (e.g. showing the authenticated username on the test page).
+   - API limit: 2000 requests per 5 minutes (applies with or without a token).
+   ```env
+   CODEBERG_ACCESS_TOKEN=your_codeberg_token_here
    ```
 
    **Localization**
@@ -322,6 +331,17 @@ To avoid being rate-limited by the GitHub API, it is highly recommended to creat
 GITHUB_ACCESS_TOKEN=your_github_pat_here
 ```
 
+#### **Codeberg API (Optional)**
+
+Codeberg runs on Gitea/Forgejo and exposes a Gitea-compatible REST API. If you hit rate limits or want to monitor private repos, set a token:
+ - For private repositories, the token typically needs `read:repository`.
+ - `read:user` is only needed for diagnostics (e.g. showing the authenticated username on the test page).
+ - API limit: 2000 requests per 5 minutes (applies with or without a token).
+
+```env
+CODEBERG_ACCESS_TOKEN=your_codeberg_token_here
+```
+
 #### **Localization**
 Set the timezone for date and log formatting.
 ```env
@@ -401,6 +421,7 @@ Here is a complete list of all environment variables used by the application.
 | `AUTH_PASSWORD`       | The password for logging into the application.                                                            | **Yes**                | -                          |
 | `AUTH_SECRET`         | A secret key (at least 32 characters) for encrypting user sessions.                                       | **Yes**                | -                          |
 | `AUTH_USERNAME`       | The username for logging into the application.                                                            | **Yes**                | -                          |
+| `CODEBERG_ACCESS_TOKEN` | A Codeberg access token (Gitea API) for higher rate limits / private repos. Typically needs `read:repository`; `read:user` only for diagnostics. | No                     | -                          |
 | `GITHUB_ACCESS_TOKEN` | A GitHub Personal Access Token to increase the API rate limit. A token with no scopes is sufficient.      | No (but recommended)   | -                          |
 | `HTTPS`               | Set to `false` to run in HTTP mode. Defaults to `true` for secure operation.                              | No                     | `true`                     |
 | `LOG_LEVEL`           | Controls server log verbosity: `error`, `warn`, `info`, `debug`, `silent`.                                | No                     | `warn` (prod), `debug` (dev) |

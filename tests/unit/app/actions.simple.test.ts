@@ -9,10 +9,11 @@ const { cacheMocks } = vi.hoisted(() => ({
 vi.mock('next/cache', () => cacheMocks);
 
 describe('simple actions', () => {
-  it('revalidateReleasesAction calls updateTag("github-releases")', async () => {
+  it('revalidateReleasesAction calls updateTag for all release caches', async () => {
     const { revalidateReleasesAction } = await import('@/app/actions');
     await revalidateReleasesAction();
     expect(cacheMocks.updateTag).toHaveBeenCalledWith('github-releases');
+    expect(cacheMocks.updateTag).toHaveBeenCalledWith('codeberg-releases');
   });
 
   it('getJobStatusAction returns stored status', async () => {

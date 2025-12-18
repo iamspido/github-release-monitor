@@ -3,6 +3,7 @@
 vi.mock('next/cache', () => ({
   unstable_cache: (fn: any) => fn,
   revalidatePath: () => {},
+  updateTag: () => {},
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -42,4 +43,3 @@ describe('ETag updates repo on successful fetch', () => {
     expect(mem.repos[0].etag).toBe('W/"123"');
   });
 });
-

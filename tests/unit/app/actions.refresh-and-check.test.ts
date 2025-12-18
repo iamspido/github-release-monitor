@@ -10,6 +10,7 @@ vi.mock('next/cache', () => ({
   unstable_cache: (fn: any) => fn,
   revalidatePath: () => {},
   revalidateTag: () => {},
+  updateTag: () => {},
 }));
 
 // In-memory repository store used by storage mocks

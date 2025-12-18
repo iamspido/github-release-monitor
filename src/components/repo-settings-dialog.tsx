@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type {
@@ -160,6 +161,9 @@ export function RepoSettingsDialog({
   const t = useTranslations("RepoSettingsDialog");
   const tGlobal = useTranslations("SettingsForm");
   const { toast } = useToast();
+  const displayRepoId = formatRepoIdForDisplay(repoId, {
+    showProviderPrefix: globalSettings.showProviderPrefixInRepoId ?? true,
+  });
 
   // Generate unique IDs for form elements
   const stableId = React.useId();
@@ -582,7 +586,9 @@ export function RepoSettingsDialog({
           <DialogDescription>
             {t.rich("description_flexible", {
               repoId: () => (
-                <span className="font-semibold text-foreground">{repoId}</span>
+                <span className="font-semibold text-foreground">
+                  {displayRepoId}
+                </span>
               ),
             })}
           </DialogDescription>

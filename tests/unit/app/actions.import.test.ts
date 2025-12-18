@@ -3,6 +3,7 @@
 vi.mock('next/cache', () => ({
   unstable_cache: (fn: any) => fn,
   revalidatePath: () => {},
+  updateTag: () => {},
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -39,7 +40,13 @@ vi.mock('@/app/actions', async () => {
 describe('importRepositoriesAction idempotency', () => {
   beforeEach(() => {
     vi.resetModules();
-    mem.repos = [ { id: 'owner1/repo1', url: 'https://github.com/owner1/repo1', isNew: false } ];
+    mem.repos = [
+      {
+        id: 'github:owner1/repo1',
+        url: 'https://github.com/owner1/repo1',
+        isNew: false,
+      },
+    ];
   });
 
   it('adds new and updates existing repos idempotently', async () => {
@@ -53,7 +60,7 @@ describe('importRepositoriesAction idempotency', () => {
     const res = await actions.importRepositoriesAction(imported as any);
     expect(res.success).toBe(true);
     // Final list contains both, with merged fields
-    expect(mem.repos.find(r => r.id === 'owner1/repo1')).toBeTruthy();
-    expect(mem.repos.find(r => r.id === 'owner2/repo2')).toBeTruthy();
+    expect(mem.repos.find(r => r.id === 'github:owner1/repo1')).toBeTruthy();
+    expect(mem.repos.find(r => r.id === 'github:owner2/repo2')).toBeTruthy();
   });
 });

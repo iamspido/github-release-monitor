@@ -2,6 +2,7 @@
 
 vi.mock('next/cache', () => ({
   revalidatePath: () => {},
+  updateTag: () => {},
 }));
 
 vi.mock('@/i18n/navigation', () => ({

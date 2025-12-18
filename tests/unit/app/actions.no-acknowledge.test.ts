@@ -4,6 +4,7 @@ vi.mock('next/cache', () => ({
   unstable_cache: (fn: any) => fn,
   revalidatePath: () => {},
   revalidateTag: () => {},
+  updateTag: () => {},
 }));
 
 vi.mock('next-intl/server', () => ({

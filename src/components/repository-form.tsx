@@ -10,6 +10,7 @@ import {
   addRepositoriesAction,
   getJobStatusAction,
   importRepositoriesAction,
+  resolveRepoProvidersAction,
 } from "@/app/actions";
 import {
   AlertDialog,
@@ -66,6 +67,15 @@ const initialState = {
   error: undefined,
 };
 
+const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim());
+const isOwnerRepoShorthand = (value: string) =>
+  /^[a-z0-9-._]+\/[a-z0-9-._]+$/i.test(value.trim());
+
+type ProviderChoiceCandidate = {
+  provider: "github" | "codeberg";
+  canonicalRepoUrl: string;
+};
+
 interface RepositoryFormProps {
   currentRepositories: Repository[];
 }
@@ -83,6 +93,20 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
   );
   const [jobId, setJobId] = React.useState<string | undefined>(undefined);
   const hasProcessedResult = React.useRef(true);
+  const [isResolvingProviders, startProviderResolveTransition] =
+    React.useTransition();
+  const [providerDialogOpen, setProviderDialogOpen] = React.useState(false);
+  const [providerDialogRepo, setProviderDialogRepo] = React.useState<
+    string | null
+  >(null);
+  const [providerDialogCandidates, setProviderDialogCandidates] =
+    React.useState<ProviderChoiceCandidate[]>([]);
+  const [providerDialogPendingState, setProviderDialogPendingState] =
+    React.useState<{
+      lines: string[];
+      nextIndex: number;
+      resolvedLines: string[];
+    } | null>(null);
 
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -196,6 +220,93 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
       textarea.scrollTop = 0;
     }
   }, [urls]);
+
+  const submitResolvedLines = React.useCallback(
+    (lines: string[]) => {
+      const fd = new FormData();
+      fd.set("urls", lines.join("\n"));
+      formAction(fd);
+    },
+    [formAction],
+  );
+
+  const resolveLinesAndSubmit = React.useCallback(
+    async (lines: string[], startIndex = 0, seedResolved: string[] = []) => {
+      const resolved: string[] = [...seedResolved];
+
+      for (let i = startIndex; i < lines.length; i += 1) {
+        const raw = lines[i]?.trim() ?? "";
+        if (!raw) continue;
+
+        if (isHttpUrl(raw)) {
+          resolved.push(raw);
+          continue;
+        }
+
+        if (!isOwnerRepoShorthand(raw)) {
+          resolved.push(raw);
+          continue;
+        }
+
+        const result = await resolveRepoProvidersAction(raw);
+        const candidates = result.candidates.map((c) => ({
+          provider: c.provider,
+          canonicalRepoUrl: c.canonicalRepoUrl,
+        }));
+
+        if (candidates.length === 1) {
+          resolved.push(candidates[0].canonicalRepoUrl);
+          continue;
+        }
+
+        if (candidates.length > 1) {
+          setProviderDialogRepo(raw);
+          setProviderDialogCandidates(candidates);
+          setProviderDialogPendingState({
+            lines,
+            nextIndex: i + 1,
+            resolvedLines: resolved,
+          });
+          setProviderDialogOpen(true);
+          return;
+        }
+
+        // No matching provider found: keep the shorthand so the server action can report it as invalid.
+        resolved.push(raw);
+      }
+
+      submitResolvedLines(resolved);
+    },
+    [submitResolvedLines],
+  );
+
+  const handleChooseProvider = (candidateUrl: string) => {
+    const pending = providerDialogPendingState;
+    if (!pending) return;
+
+    setProviderDialogOpen(false);
+    setProviderDialogRepo(null);
+    setProviderDialogCandidates([]);
+    setProviderDialogPendingState(null);
+
+    hasProcessedResult.current = false;
+    startProviderResolveTransition(async () => {
+      await resolveLinesAndSubmit(pending.lines, pending.nextIndex, [
+        ...pending.resolvedLines,
+        candidateUrl,
+      ]);
+    });
+  };
+
+  const orderedProviderCandidates = React.useMemo(() => {
+    const order: Record<ProviderChoiceCandidate["provider"], number> = {
+      codeberg: 0,
+      github: 1,
+    };
+    return [...providerDialogCandidates].sort(
+      (a, b) => order[a.provider] - order[b.provider],
+    );
+  }, [providerDialogCandidates]);
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
@@ -317,7 +428,6 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
         </CardHeader>
         <CardContent>
           <form
-            action={formAction}
             onSubmit={(e) => {
               if (typeof navigator !== "undefined" && !navigator.onLine) {
                 e.preventDefault();
@@ -326,7 +436,25 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
                   description: t("toast_generic_error"),
                   variant: "destructive",
                 });
+                return;
               }
+
+              e.preventDefault();
+              if (!urls.trim()) return;
+              if (isPending || isResolvingProviders || providerDialogOpen) {
+                return;
+              }
+              if (jobId) return;
+
+              hasProcessedResult.current = false;
+              const lines = urls
+                .split("\n")
+                .map((u) => u.trim())
+                .filter((u) => u !== "");
+
+              startProviderResolveTransition(async () => {
+                await resolveLinesAndSubmit(lines);
+              });
             }}
           >
             <div className="grid w-full gap-2">
@@ -339,7 +467,12 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
                 rows={4}
                 wrap="off"
                 className="resize-none overflow-y-auto overflow-x-auto max-h-80"
-                disabled={isPending || !!jobId}
+                disabled={
+                  isPending ||
+                  isResolvingProviders ||
+                  !!jobId ||
+                  providerDialogOpen
+                }
               />
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:gap-2">
                 <input
@@ -365,14 +498,62 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
                   {t("button_import")}
                 </Button>
                 <SubmitButton
-                  isDisabled={!urls.trim() || !isOnline}
-                  isPending={isPending || !!jobId}
+                  isDisabled={
+                    !urls.trim() ||
+                    !isOnline ||
+                    isResolvingProviders ||
+                    providerDialogOpen
+                  }
+                  isPending={isPending || !!jobId || isResolvingProviders}
                 />
               </div>
             </div>
           </form>
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={providerDialogOpen}
+        onOpenChange={(open) => {
+          setProviderDialogOpen(open);
+          if (!open) {
+            setProviderDialogRepo(null);
+            setProviderDialogCandidates([]);
+            setProviderDialogPendingState(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("provider_select_title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {providerDialogRepo
+                ? t("provider_select_description", { repo: providerDialogRepo })
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between sm:space-x-0">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-start">
+              {orderedProviderCandidates.map((candidate) => (
+                <AlertDialogAction
+                  key={candidate.provider}
+                  onClick={() =>
+                    handleChooseProvider(candidate.canonicalRepoUrl)
+                  }
+                  disabled={isResolvingProviders || isPending}
+                >
+                  {candidate.provider === "codeberg"
+                    ? t("provider_select_codeberg")
+                    : t("provider_select_github")}
+                </AlertDialogAction>
+              ))}
+            </div>
+            <AlertDialogCancel disabled={isResolvingProviders || isPending}>
+              {t("cancel_button")}
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={isDialogVisible} onOpenChange={setIsDialogVisible}>
         <AlertDialogContent>

@@ -3,6 +3,7 @@
 const { cacheMocks } = vi.hoisted(() => ({
   cacheMocks: {
     revalidatePath: vi.fn(),
+    updateTag: vi.fn(),
   },
 }));
 
@@ -38,4 +39,3 @@ describe('acknowledgeNewReleaseAction', () => {
     expect(res.error).toBe('toast_acknowledge_error_not_found');
   });
 });
-

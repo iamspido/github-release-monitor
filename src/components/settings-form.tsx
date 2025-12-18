@@ -162,6 +162,7 @@ export function SettingsForm({
       languageSelect: `${baseId}-language`,
       showAcknowledge: `${baseId}-show-acknowledge`,
       showMarkAsNew: `${baseId}-show-mark-new`,
+      showProviderPrefixInRepoId: `${baseId}-show-provider-prefix-in-repo-id`,
       stable: `${baseId}-stable`,
       prerelease: `${baseId}-prerelease`,
       draft: `${baseId}-draft`,
@@ -204,6 +205,8 @@ export function SettingsForm({
   const [showMarkAsNew, setShowMarkAsNew] = React.useState<boolean>(
     currentSettings.showMarkAsNew ?? true,
   );
+  const [showProviderPrefixInRepoId, setShowProviderPrefixInRepoId] =
+    React.useState<boolean>(currentSettings.showProviderPrefixInRepoId ?? true);
   const [includeRegex, setIncludeRegex] = React.useState(
     currentSettings.includeRegex ?? "",
   );
@@ -298,6 +301,7 @@ export function SettingsForm({
       preReleaseSubChannels,
       showAcknowledge,
       showMarkAsNew,
+      showProviderPrefixInRepoId,
       includeRegex: includeRegex,
       excludeRegex: excludeRegex,
       appriseMaxCharacters: Number.isNaN(parsedAppriseChars)
@@ -321,6 +325,7 @@ export function SettingsForm({
     preReleaseSubChannels,
     showAcknowledge,
     showMarkAsNew,
+    showProviderPrefixInRepoId,
     includeRegex,
     excludeRegex,
     appriseMaxCharacters,
@@ -712,6 +717,28 @@ export function SettingsForm({
                       {t("show_mark_as_new_description")}
                     </p>
                   </div>
+                </div>
+              </div>
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id={ids.showProviderPrefixInRepoId}
+                  checked={showProviderPrefixInRepoId}
+                  onCheckedChange={(checked) =>
+                    setShowProviderPrefixInRepoId(Boolean(checked))
+                  }
+                  disabled={saveStatus === "saving" || !isOnline}
+                  className="mt-1"
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label
+                    htmlFor={ids.showProviderPrefixInRepoId}
+                    className="font-medium cursor-pointer"
+                  >
+                    {t("show_provider_prefix_in_repo_id_title")}
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t("show_provider_prefix_in_repo_id_description")}
+                  </p>
                 </div>
               </div>
             </div>

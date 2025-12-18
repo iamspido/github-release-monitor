@@ -2,6 +2,7 @@
 
 vi.mock('next/cache', () => ({
   revalidatePath: () => {},
+  updateTag: () => {},
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -20,7 +21,9 @@ describe('addRepositoriesAction mixed inputs', () => {
 
   it('adds one new, skips duplicate existing, ignores invalid; jobId set for additions', async () => {
     // existing
-    mem.repos = [{ id: 'owner/repo', url: 'https://github.com/owner/repo' }];
+    mem.repos = [
+      { id: 'github:owner/repo', url: 'https://github.com/owner/repo' },
+    ];
     const { addRepositoriesAction } = await import('@/app/actions');
     const fd = new FormData();
     fd.set('urls', [
@@ -33,11 +36,13 @@ describe('addRepositoriesAction mixed inputs', () => {
     expect(res.success).toBe(true);
     expect(typeof res.jobId).toBe('string');
     const ids = mem.repos.map(r => r.id).sort();
-    expect(ids).toEqual(['another/repo', 'owner/repo']);
+    expect(ids).toEqual(['github:another/repo', 'github:owner/repo']);
   });
 
   it('no additions: only invalid/duplicates → no jobId', async () => {
-    mem.repos = [{ id: 'owner/repo', url: 'https://github.com/owner/repo' }];
+    mem.repos = [
+      { id: 'github:owner/repo', url: 'https://github.com/owner/repo' },
+    ];
     const { addRepositoriesAction } = await import('@/app/actions');
     const fd = new FormData();
     fd.set('urls', [
@@ -50,4 +55,3 @@ describe('addRepositoriesAction mixed inputs', () => {
     expect(mem.repos.length).toBe(1);
   });
 });
-

@@ -20,6 +20,7 @@ import type {
   AppriseStatus,
   AppSettings,
   CachedRelease,
+  CodebergTokenCheckResult,
   EnrichedRelease,
   FetchError,
   GithubRelease,
@@ -36,6 +37,27 @@ const warnRetry = (message: string) => log.warn(message);
 const DEFAULT_FETCH_RETRY_ATTEMPTS = 3;
 const DEFAULT_FETCH_RETRY_DELAY_MS = 500;
 const DEFAULT_RESPONSE_PARSE_ATTEMPTS = 3;
+
+function normalizeEnvToken(value?: string): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  const first = trimmed[0];
+  const last = trimmed[trimmed.length - 1];
+  const isWrappedInQuotes =
+    (first === '"' && last === '"') || (first === "'" && last === "'");
+  const raw = isWrappedInQuotes ? trimmed.slice(1, -1).trim() : trimmed;
+  if (!raw) return null;
+
+  // Defensive: some env providers may inject newlines/whitespace into tokens.
+  // Token formats are typically alphanumeric and do not include whitespace.
+  return raw.replace(/\s+/g, "");
+}
+
+function updateReleaseCacheTags(): void {
+  updateTag("github-releases");
+  updateTag("codeberg-releases");
+}
 
 async function wait(delayMs: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
@@ -126,9 +148,112 @@ async function fetchJsonResponseWithRetry<T>(
   );
 }
 
-function parseGitHubUrl(
+type AuthMode = "none" | "token" | "bearer";
+
+async function fetchJsonResponseWithRetryAuthChain<T>(
   url: string,
-): { owner: string; repo: string; id: string } | null {
+  chain: Array<{ mode: AuthMode; options: RequestInit }>,
+  context?: FetchRetryContext,
+): Promise<{ response: Response; data?: T; mode: AuthMode }> {
+  if (chain.length === 0) {
+    throw new Error("fetchJsonResponseWithRetryAuthChain: empty chain");
+  }
+
+  const description = context?.description ?? url;
+
+  for (let i = 0; i < chain.length; i += 1) {
+    const candidate = chain[i];
+    const isLast = i === chain.length - 1;
+
+    const result = await fetchJsonResponseWithRetry<T>(url, candidate.options, {
+      ...context,
+      description:
+        candidate.mode === "none"
+          ? description
+          : `${description} (${candidate.mode})`,
+    });
+
+    // `304 Not Modified` is a valid response for our ETag usage; don't fall back.
+    if (result.response.status === 304) {
+      return { ...result, mode: candidate.mode };
+    }
+
+    // For auth-related errors, try the next candidate (if any).
+    if (
+      !isLast &&
+      (result.response.status === 401 || result.response.status === 403)
+    ) {
+      continue;
+    }
+
+    return { ...result, mode: candidate.mode };
+  }
+
+  // Should never happen due to early return.
+  return {
+    response: new Response(null, { status: 500, statusText: "Unknown Error" }),
+    mode: "none",
+  };
+}
+
+async function fetchResponseWithRetryAuthChain(
+  url: string,
+  chain: Array<{ mode: AuthMode; options: RequestInit }>,
+  context?: FetchRetryContext,
+): Promise<{ response: Response; mode: AuthMode }> {
+  if (chain.length === 0) {
+    throw new Error("fetchResponseWithRetryAuthChain: empty chain");
+  }
+
+  const description = context?.description ?? url;
+
+  for (let i = 0; i < chain.length; i += 1) {
+    const candidate = chain[i];
+    const isLast = i === chain.length - 1;
+
+    const response = await fetchWithRetry(url, candidate.options, {
+      ...context,
+      description:
+        candidate.mode === "none"
+          ? description
+          : `${description} (${candidate.mode})`,
+    });
+
+    // `304 Not Modified` is a valid response for our ETag usage; don't fall back.
+    if (response.status === 304) {
+      return { response, mode: candidate.mode };
+    }
+
+    // For auth-related errors, try the next candidate (if any).
+    if (!isLast && (response.status === 401 || response.status === 403)) {
+      continue;
+    }
+
+    return { response, mode: candidate.mode };
+  }
+
+  // Should never happen due to early return.
+  return {
+    response: new Response(null, { status: 500, statusText: "Unknown Error" }),
+    mode: "none",
+  };
+}
+
+type RepoProvider = "github" | "codeberg";
+
+type ParsedRepoUrl = {
+  provider: RepoProvider;
+  owner: string;
+  repo: string;
+  id: string;
+  canonicalRepoUrl: string;
+};
+
+function normalizeRepoName(repo: string): string {
+  return repo.endsWith(".git") ? repo.slice(0, -4) : repo;
+}
+
+function parseGitHubUrl(url: string): ParsedRepoUrl | null {
   try {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) return null;
@@ -137,8 +262,15 @@ function parseGitHubUrl(
 
     const pathParts = urlObj.pathname.split("/").filter(Boolean);
     if (pathParts.length >= 2) {
-      const [owner, repo] = pathParts;
-      return { owner, repo, id: `${owner}/${repo}`.toLowerCase() };
+      const [owner, repoRaw] = pathParts;
+      const repo = normalizeRepoName(repoRaw);
+      return {
+        provider: "github",
+        owner,
+        repo,
+        id: `github:${owner}/${repo}`.toLowerCase(),
+        canonicalRepoUrl: `https://github.com/${owner}/${repo}`,
+      };
     }
     return null;
   } catch {
@@ -146,12 +278,175 @@ function parseGitHubUrl(
   }
 }
 
+function parseCodebergUrl(url: string): ParsedRepoUrl | null {
+  try {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) return null;
+    const urlObj = new URL(trimmedUrl);
+    if (urlObj.hostname !== "codeberg.org") return null;
+
+    const pathParts = urlObj.pathname.split("/").filter(Boolean);
+    if (pathParts.length >= 2) {
+      // Support both web URLs (`/owner/repo`) and API URLs (`/api/v1/repos/owner/repo`).
+      if (pathParts[0] === "api" && pathParts[1] === "v1") {
+        const reposIndex = pathParts.indexOf("repos");
+        if (reposIndex !== -1 && pathParts.length >= reposIndex + 3) {
+          const owner = pathParts[reposIndex + 1];
+          const repoRaw = pathParts[reposIndex + 2];
+          if (!owner || !repoRaw) return null;
+          const repo = normalizeRepoName(repoRaw);
+          return {
+            provider: "codeberg",
+            owner,
+            repo,
+            id: `codeberg:${owner}/${repo}`.toLowerCase(),
+            canonicalRepoUrl: `https://codeberg.org/${owner}/${repo}`,
+          };
+        }
+      }
+
+      const [owner, repoRaw] = pathParts;
+      const repo = normalizeRepoName(repoRaw);
+      return {
+        provider: "codeberg",
+        owner,
+        repo,
+        id: `codeberg:${owner}/${repo}`.toLowerCase(),
+        canonicalRepoUrl: `https://codeberg.org/${owner}/${repo}`,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function parseSupportedRepoUrl(url: string): ParsedRepoUrl | null {
+  return parseGitHubUrl(url) ?? parseCodebergUrl(url);
+}
+
+type RepoProviderResolutionCandidate = Pick<
+  ParsedRepoUrl,
+  "provider" | "id" | "canonicalRepoUrl"
+>;
+
+function parseOwnerRepoShorthand(
+  input: string,
+): { owner: string; repo: string } | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  if (trimmed.includes("://")) return null;
+  if (trimmed.includes(" ")) return null;
+
+  // If the user already supplied a provider prefix (e.g. github:owner/repo),
+  // we consider it a different input path and don't try to auto-resolve here.
+  if (trimmed.includes(":")) return null;
+
+  const match = trimmed.match(/^([a-z0-9-._]+)\/([a-z0-9-._]+)$/i);
+  if (!match) return null;
+
+  const owner = match[1];
+  const repo = normalizeRepoName(match[2]);
+  return owner && repo ? { owner, repo } : null;
+}
+
+export async function resolveRepoProvidersAction(input: string): Promise<{
+  success: boolean;
+  candidates: RepoProviderResolutionCandidate[];
+}> {
+  const parsed = parseOwnerRepoShorthand(input);
+  if (!parsed) {
+    log.debug(
+      `Repo provider resolution skipped (not shorthand input): ${input.trim()}`,
+    );
+    return { success: true, candidates: [] };
+  }
+
+  const { owner, repo } = parsed;
+  const candidates: RepoProviderResolutionCandidate[] = [];
+  const githubTokenConfigured = Boolean(
+    normalizeEnvToken(process.env.GITHUB_ACCESS_TOKEN),
+  );
+  const codebergTokenConfigured = Boolean(
+    normalizeEnvToken(process.env.CODEBERG_ACCESS_TOKEN),
+  );
+
+  log.debug(
+    `Resolving providers for shorthand repo ${owner}/${repo} (GitHub token=${githubTokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}).`,
+  );
+
+  // GitHub lookup
+  try {
+    const githubToken = normalizeEnvToken(process.env.GITHUB_ACCESS_TOKEN);
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "GitHubReleaseMonitorApp",
+    };
+    if (githubToken) {
+      headers.Authorization = `token ${githubToken}`;
+    }
+
+    const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    const response = await fetchWithRetry(
+      url,
+      { headers, cache: "no-store" },
+      { description: `GitHub repo lookup for ${owner}/${repo}` },
+    );
+    log.debug(
+      `GitHub repo lookup for ${owner}/${repo}: ${response.status} ${response.statusText}`,
+    );
+    if (response.ok) {
+      candidates.push({
+        provider: "github",
+        id: `github:${owner}/${repo}`.toLowerCase(),
+        canonicalRepoUrl: `https://github.com/${owner}/${repo}`,
+      });
+    }
+  } catch (error) {
+    log.debug(`GitHub repo lookup threw for ${owner}/${repo}:`, error);
+  }
+
+  // Codeberg lookup
+  try {
+    const headersWithoutAuth: Record<string, string> = {
+      Accept: "application/json",
+      "User-Agent": "GitHubReleaseMonitorApp",
+    };
+    const codebergToken = normalizeEnvToken(process.env.CODEBERG_ACCESS_TOKEN);
+    const chain = buildCodebergAuthChain(headersWithoutAuth, codebergToken);
+    const url = `https://codeberg.org/api/v1/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    const { response, mode } = await fetchResponseWithRetryAuthChain(
+      url,
+      chain,
+      { description: `Codeberg repo lookup for ${owner}/${repo}` },
+    );
+    log.debug(
+      `Codeberg repo lookup for ${owner}/${repo}: ${response.status} ${response.statusText} (auth=${mode})`,
+    );
+    if (response.ok) {
+      candidates.push({
+        provider: "codeberg",
+        id: `codeberg:${owner}/${repo}`.toLowerCase(),
+        canonicalRepoUrl: `https://codeberg.org/${owner}/${repo}`,
+      });
+    }
+  } catch (error) {
+    log.debug(`Codeberg repo lookup threw for ${owner}/${repo}:`, error);
+  }
+
+  log.debug(
+    `Repo provider resolution for ${owner}/${repo}: candidates=${candidates.map((c) => c.provider).join(",") || "none"}`,
+  );
+  return { success: true, candidates };
+}
+
 // Security: Validates the repoId format.
 function isValidRepoId(repoId: string): boolean {
   if (typeof repoId !== "string") return false;
   // Allows letters, numbers, hyphens, dots, and underscores in the name.
   // Enforces the "owner/repo" structure.
-  const repoIdRegex = /^[a-z0-9-._]+\/[a-z0-9-._]+$/i;
+  // Allows an optional provider prefix like `codeberg:`.
+  const repoIdRegex = /^(?:[a-z0-9-._]+:)?[a-z0-9-._]+\/[a-z0-9-._]+$/i;
   return repoIdRegex.test(repoId);
 }
 
@@ -322,7 +617,62 @@ function resolveParallelRepoFetches(settings: AppSettings): number {
   return Math.min(Math.max(rounded, 1), 50);
 }
 
-async function fetchLatestRelease(
+function resolveEffectiveRepoFilters(
+  repoSettings: Pick<
+    Repository,
+    | "releaseChannels"
+    | "preReleaseSubChannels"
+    | "releasesPerPage"
+    | "includeRegex"
+    | "excludeRegex"
+    | "etag"
+  >,
+  globalSettings: AppSettings,
+): {
+  effectiveReleaseChannels: AppSettings["releaseChannels"];
+  effectivePreReleaseSubChannels: PreReleaseChannelType[];
+  totalReleasesToFetch: number;
+  effectiveIncludeRegex: string | undefined;
+  effectiveExcludeRegex: string | undefined;
+} {
+  const effectiveReleaseChannels =
+    repoSettings.releaseChannels && repoSettings.releaseChannels.length > 0
+      ? repoSettings.releaseChannels
+      : globalSettings.releaseChannels;
+
+  const preReleaseSubChannelCandidate =
+    repoSettings.preReleaseSubChannels &&
+    repoSettings.preReleaseSubChannels.length > 0
+      ? repoSettings.preReleaseSubChannels
+      : globalSettings.preReleaseSubChannels;
+
+  const effectivePreReleaseSubChannels =
+    preReleaseSubChannelCandidate && preReleaseSubChannelCandidate.length > 0
+      ? preReleaseSubChannelCandidate
+      : allPreReleaseTypes;
+
+  const totalReleasesToFetch =
+    typeof repoSettings.releasesPerPage === "number" &&
+    repoSettings.releasesPerPage >= 1 &&
+    repoSettings.releasesPerPage <= 1000
+      ? repoSettings.releasesPerPage
+      : globalSettings.releasesPerPage;
+
+  const effectiveIncludeRegex =
+    repoSettings.includeRegex ?? globalSettings.includeRegex;
+  const effectiveExcludeRegex =
+    repoSettings.excludeRegex ?? globalSettings.excludeRegex;
+
+  return {
+    effectiveReleaseChannels,
+    effectivePreReleaseSubChannels,
+    totalReleasesToFetch,
+    effectiveIncludeRegex,
+    effectiveExcludeRegex,
+  };
+}
+
+async function fetchLatestReleaseFromGitHub(
   owner: string,
   repo: string,
   repoSettings: Pick<
@@ -341,32 +691,16 @@ async function fetchLatestRelease(
   error: FetchError | null;
   newEtag?: string;
 }> {
-  log.info(`Fetching release for ${owner}/${repo}`);
+  log.info(`Fetching GitHub release for ${owner}/${repo}`);
   const fetchedAtTimestamp = new Date().toISOString();
 
-  // --- Determine effective settings ---
-  const effectiveReleaseChannels =
-    repoSettings.releaseChannels && repoSettings.releaseChannels.length > 0
-      ? repoSettings.releaseChannels
-      : globalSettings.releaseChannels;
-
-  const effectivePreReleaseSubChannels =
-    repoSettings.preReleaseSubChannels &&
-    repoSettings.preReleaseSubChannels.length > 0
-      ? repoSettings.preReleaseSubChannels
-      : globalSettings.preReleaseSubChannels || allPreReleaseTypes;
-
-  const totalReleasesToFetch =
-    typeof repoSettings.releasesPerPage === "number" &&
-    repoSettings.releasesPerPage >= 1 &&
-    repoSettings.releasesPerPage <= 1000
-      ? repoSettings.releasesPerPage
-      : globalSettings.releasesPerPage;
-
-  const effectiveIncludeRegex =
-    repoSettings.includeRegex ?? globalSettings.includeRegex;
-  const effectiveExcludeRegex =
-    repoSettings.excludeRegex ?? globalSettings.excludeRegex;
+  const {
+    effectiveReleaseChannels,
+    effectivePreReleaseSubChannels,
+    totalReleasesToFetch,
+    effectiveIncludeRegex,
+    effectiveExcludeRegex,
+  } = resolveEffectiveRepoFilters(repoSettings, globalSettings);
 
   // --- Special handling for the virtual test repository ---
   if (owner === "test" && repo === "test") {
@@ -398,8 +732,9 @@ async function fetchLatestRelease(
     "User-Agent": "GitHubReleaseMonitorApp",
     "X-GitHub-Api-Version": "2022-11-28",
   };
-  if (process.env.GITHUB_ACCESS_TOKEN) {
-    headers.Authorization = `token ${process.env.GITHUB_ACCESS_TOKEN}`;
+  const githubToken = normalizeEnvToken(process.env.GITHUB_ACCESS_TOKEN);
+  if (githubToken) {
+    headers.Authorization = `token ${githubToken}`;
   }
 
   try {
@@ -614,18 +949,28 @@ async function fetchLatestRelease(
         return effectiveReleaseChannels.includes("draft");
       }
 
-      const isConsideredPreRelease =
-        r.prerelease || isPreReleaseByTagName(r.tag_name, allPreReleaseTypes);
+      const isTagMarkedPreRelease = isPreReleaseByTagName(
+        r.tag_name,
+        allPreReleaseTypes,
+      );
+      const isConsideredPreRelease = r.prerelease || isTagMarkedPreRelease;
 
       if (isConsideredPreRelease) {
         if (!effectiveReleaseChannels.includes("prerelease")) return false;
-        return isPreReleaseByTagName(
-          r.tag_name,
-          effectivePreReleaseSubChannels,
-        );
-      } else {
-        return effectiveReleaseChannels.includes("stable");
+
+        // If the tag explicitly includes a pre-release marker (e.g. -beta/-rc),
+        // apply the configured sub-channel filter. Otherwise, fall back to the API flag.
+        if (isTagMarkedPreRelease) {
+          return isPreReleaseByTagName(
+            r.tag_name,
+            effectivePreReleaseSubChannels,
+          );
+        }
+
+        return true;
       }
+
+      return effectiveReleaseChannels.includes("stable");
     });
 
     if (filteredReleases.length === 0) {
@@ -700,34 +1045,550 @@ async function fetchLatestRelease(
   }
 }
 
-async function fetchLatestReleaseWithCache(
-  owner: string,
-  repo: string,
-  repoSettings: Pick<
-    Repository,
-    | "releaseChannels"
-    | "preReleaseSubChannels"
-    | "releasesPerPage"
-    | "includeRegex"
-    | "excludeRegex"
-    | "etag"
-  >,
-  globalSettings: AppSettings,
-  locale: string,
-  options?: { skipCache?: boolean },
-): Promise<{
+type RepoSettingsForFetch = Pick<
+  Repository,
+  | "releaseChannels"
+  | "preReleaseSubChannels"
+  | "releasesPerPage"
+  | "includeRegex"
+  | "excludeRegex"
+  | "etag"
+>;
+
+type LatestReleaseFetchResult = {
   release: GithubRelease | null;
   error: FetchError | null;
   newEtag?: string;
-}> {
-  if (globalSettings.cacheInterval <= 0 || options?.skipCache) {
-    return fetchLatestRelease(
-      owner,
-      repo,
-      repoSettings,
-      globalSettings,
-      locale,
+};
+
+type CodebergReleaseApi = {
+  id: number;
+  html_url?: string;
+  tag_name: string;
+  name: string | null;
+  body: string | null;
+  created_at: string;
+  published_at: string | null;
+  prerelease?: boolean;
+  draft?: boolean;
+};
+
+type CodebergTagApi = {
+  name: string;
+  message?: string | null;
+  commit?: {
+    sha?: string | null;
+    id?: string | null;
+    url?: string | null;
+  } | null;
+};
+
+type CodebergCommitApi = {
+  message?: string | null;
+  author?: { date?: string | null } | null;
+  committer?: { date?: string | null } | null;
+  commit?: {
+    message?: string | null;
+    committer?: { date?: string | null } | null;
+  } | null;
+};
+
+type CodebergRepoApi = {
+  has_releases?: boolean | null;
+  release_counter?: number | null;
+};
+
+function extractCodebergTagCommitSha(tag: CodebergTagApi): string | undefined {
+  const commit = tag.commit;
+  const sha =
+    (typeof commit?.sha === "string" && commit.sha.trim()) ||
+    (typeof commit?.id === "string" && commit.id.trim()) ||
+    undefined;
+  if (sha) return sha;
+
+  if (typeof commit?.url === "string") {
+    try {
+      const url = new URL(commit.url);
+      const parts = url.pathname.split("/").filter(Boolean);
+      const last = parts.at(-1);
+      if (last) return last;
+    } catch {
+      // ignore
+    }
+  }
+
+  return undefined;
+}
+
+function buildCodebergAuthChain(
+  headersWithoutAuth: Record<string, string>,
+  authToken: string | null,
+): Array<{ mode: AuthMode; options: RequestInit }> {
+  const chain: Array<{ mode: AuthMode; options: RequestInit }> = [];
+
+  if (authToken) {
+    chain.push({
+      mode: "token",
+      options: {
+        headers: {
+          ...headersWithoutAuth,
+          Authorization: `token ${authToken}`,
+        },
+        cache: "no-store",
+      },
+    });
+    chain.push({
+      mode: "bearer",
+      options: {
+        headers: {
+          ...headersWithoutAuth,
+          Authorization: `Bearer ${authToken}`,
+        },
+        cache: "no-store",
+      },
+    });
+  }
+
+  chain.push({
+    mode: "none",
+    options: { headers: headersWithoutAuth, cache: "no-store" },
+  });
+
+  return chain;
+}
+
+async function tryFetchCodebergCommitMessage(
+  apiBaseUrl: string,
+  headersWithoutAuth: Record<string, string>,
+  authToken: string | null,
+  refOrSha: string,
+): Promise<{ message?: string; date?: string } | null> {
+  const candidates = [
+    `${apiBaseUrl}/commits/${refOrSha}`,
+    `${apiBaseUrl}/git/commits/${refOrSha}`,
+  ];
+
+  const chain = buildCodebergAuthChain(headersWithoutAuth, authToken);
+
+  for (const url of candidates) {
+    try {
+      const { response, data } =
+        await fetchJsonResponseWithRetryAuthChain<CodebergCommitApi>(
+          url,
+          chain,
+          { description: `Codeberg commit (${refOrSha})` },
+        );
+      if (!response.ok || !data) continue;
+
+      const message: string | undefined =
+        typeof data.message === "string"
+          ? data.message
+          : typeof data.commit?.message === "string"
+            ? data.commit.message
+            : undefined;
+
+      const date: string | undefined =
+        typeof data.author?.date === "string"
+          ? data.author.date
+          : typeof data.committer?.date === "string"
+            ? data.committer.date
+            : typeof data.commit?.committer?.date === "string"
+              ? data.commit.committer.date
+              : undefined;
+
+      if (message) return { message, date };
+    } catch {
+      // best-effort only
+    }
+  }
+
+  return null;
+}
+
+async function fetchCodebergRepoInfo(
+  apiBaseUrl: string,
+  headersWithoutAuth: Record<string, string>,
+  authToken: string | null,
+  owner: string,
+  repo: string,
+): Promise<
+  | { ok: true; data: CodebergRepoApi }
+  | { ok: false; status: number; statusText: string }
+> {
+  const chain = buildCodebergAuthChain(headersWithoutAuth, authToken);
+
+  const { response, data } =
+    await fetchJsonResponseWithRetryAuthChain<CodebergRepoApi>(
+      apiBaseUrl,
+      chain,
+      { description: `Codeberg repo info for ${owner}/${repo}` },
     );
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: response.status,
+      statusText: response.statusText,
+    };
+  }
+
+  return { ok: true, data: data ?? {} };
+}
+
+async function fetchLatestReleaseFromCodeberg(
+  owner: string,
+  repo: string,
+  repoSettings: RepoSettingsForFetch,
+  globalSettings: AppSettings,
+  locale: string,
+): Promise<LatestReleaseFetchResult> {
+  log.info(`Fetching Codeberg release for ${owner}/${repo}`);
+  const fetchedAtTimestamp = new Date().toISOString();
+
+  const {
+    effectiveReleaseChannels,
+    effectivePreReleaseSubChannels,
+    totalReleasesToFetch,
+    effectiveIncludeRegex,
+    effectiveExcludeRegex,
+  } = resolveEffectiveRepoFilters(repoSettings, globalSettings);
+
+  const CODEBERG_API_BASE_URL = `https://codeberg.org/api/v1/repos/${owner}/${repo}`;
+  const MAX_PER_PAGE = 50;
+  const pagesToFetch = Math.ceil(totalReleasesToFetch / MAX_PER_PAGE);
+  let allReleases: GithubRelease[] = [];
+  let newEtag: string | undefined;
+  let tagFallbackReason: string | undefined;
+
+  const headersWithoutAuth: Record<string, string> = {
+    Accept: "application/json",
+    "User-Agent": "GitHubReleaseMonitorApp",
+  };
+  const codebergToken = normalizeEnvToken(process.env.CODEBERG_ACCESS_TOKEN);
+
+  try {
+    for (let page = 1; page <= pagesToFetch; page++) {
+      const releasesOnThisPage = Math.min(
+        MAX_PER_PAGE,
+        totalReleasesToFetch - allReleases.length,
+      );
+      if (releasesOnThisPage <= 0) break;
+
+      const url = `${CODEBERG_API_BASE_URL}/releases?limit=${releasesOnThisPage}&page=${page}`;
+
+      const currentHeadersWithoutAuth = { ...headersWithoutAuth };
+      if (page === 1 && repoSettings.etag) {
+        currentHeadersWithoutAuth["If-None-Match"] = repoSettings.etag;
+      }
+
+      const chain = buildCodebergAuthChain(
+        currentHeadersWithoutAuth,
+        codebergToken,
+      );
+
+      const { response, data: pageReleases } =
+        await fetchJsonResponseWithRetryAuthChain<CodebergReleaseApi[]>(
+          url,
+          chain,
+          {
+            description: `Codeberg releases for ${owner}/${repo} page ${page}`,
+          },
+        );
+
+      if (page === 1) {
+        newEtag = response.headers.get("etag") || undefined;
+        if (response.status === 304) {
+          log.info(`[ETag] No changes for codeberg:${owner}/${repo}.`);
+          return {
+            release: null,
+            error: { type: "not_modified" },
+            newEtag: repoSettings.etag,
+          };
+        }
+      }
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Codeberg (Gitea/Forgejo) may return 404 on the releases endpoint if releases are disabled,
+          // even though the repository exists and tags are available.
+          if (page === 1) {
+            const repoInfo = await fetchCodebergRepoInfo(
+              CODEBERG_API_BASE_URL,
+              headersWithoutAuth,
+              codebergToken,
+              owner,
+              repo,
+            );
+
+            if (repoInfo.ok) {
+              tagFallbackReason = "releases_endpoint_404";
+              break;
+            }
+
+            if (repoInfo.status === 404) {
+              log.error(
+                `Codeberg API error for ${owner}/${repo}: Not Found (404). The repository may not exist or is private.`,
+              );
+              return {
+                release: null,
+                error: { type: "repo_not_found" },
+                newEtag,
+              };
+            }
+
+            log.error(
+              `Codeberg API error for ${owner}/${repo}: ${repoInfo.status} ${repoInfo.statusText}`,
+            );
+            return { release: null, error: { type: "api_error" }, newEtag };
+          }
+
+          // For later pages, a 404 can happen if pagination exceeds available pages. Treat it as end.
+          break;
+        }
+        if (
+          response.status === 429 ||
+          (response.status === 403 && response.headers.get("retry-after"))
+        ) {
+          const retryAfter = response.headers.get("retry-after") ?? "N/A";
+          log.error(
+            `Codeberg API rate limit exceeded for ${owner}/${repo}. Retry-After: ${retryAfter}.`,
+          );
+          return { release: null, error: { type: "rate_limit" }, newEtag };
+        }
+
+        log.error(
+          `Codeberg API error for ${owner}/${repo}: ${response.status} ${response.statusText}`,
+        );
+        return { release: null, error: { type: "api_error" }, newEtag };
+      }
+
+      if (!pageReleases) {
+        throw new Error(
+          `Codeberg API returned an empty body for ${owner}/${repo} releases page ${page}.`,
+        );
+      }
+
+      allReleases = [
+        ...allReleases,
+        ...pageReleases.map((r) => ({
+          id: r.id,
+          html_url:
+            r.html_url ??
+            `https://codeberg.org/${owner}/${repo}/releases/tag/${r.tag_name}`,
+          tag_name: r.tag_name,
+          name: r.name,
+          body: r.body,
+          created_at: r.created_at,
+          published_at: r.published_at,
+          prerelease: !!r.prerelease,
+          draft: !!r.draft,
+        })),
+      ];
+
+      if (pageReleases.length < releasesOnThisPage) {
+        break;
+      }
+    }
+
+    if (allReleases.length === 0) {
+      const reason = tagFallbackReason ?? "no_formal_releases";
+      log.info(
+        `Codeberg releases unavailable for codeberg:${owner}/${repo} (reason=${reason}). Falling back to tags.`,
+      );
+
+      const tagUrls = [
+        `${CODEBERG_API_BASE_URL}/tags?limit=1&page=1`,
+        `${CODEBERG_API_BASE_URL}/tags?per_page=1&page=1`,
+        `${CODEBERG_API_BASE_URL}/tags`,
+      ];
+
+      let tagsResponse: Response | null = null;
+      let tags: CodebergTagApi[] | undefined;
+
+      for (const tagUrl of tagUrls) {
+        try {
+          const tagChain = buildCodebergAuthChain(
+            headersWithoutAuth,
+            codebergToken,
+          );
+
+          const result = await fetchJsonResponseWithRetryAuthChain<
+            CodebergTagApi[]
+          >(tagUrl, tagChain, {
+            description: `Codeberg tags for ${owner}/${repo}`,
+          });
+
+          tagsResponse = result.response;
+          if (!tagsResponse.ok) {
+            continue;
+          }
+
+          const received = result.data ?? [];
+          if (received.length > 0) {
+            tags = received;
+            break;
+          }
+        } catch {
+          // Try the next candidate URL
+        }
+      }
+
+      if (!tagsResponse || !tagsResponse.ok) {
+        log.error(
+          `Failed to fetch tags for codeberg:${owner}/${repo} after failing to find releases.`,
+        );
+        return { release: null, error: { type: "no_releases_found" }, newEtag };
+      }
+
+      if (!tags || tags.length === 0) {
+        log.info(`No tags found for codeberg:${owner}/${repo}.`);
+        return { release: null, error: { type: "no_releases_found" }, newEtag };
+      }
+
+      const latestTag = tags[0];
+      const t = await getTranslations({ locale, namespace: "Actions" });
+
+      let bodyContent = "";
+      let publicationDate = new Date().toISOString();
+
+      const sha = extractCodebergTagCommitSha(latestTag);
+      if (sha) {
+        const commit = await tryFetchCodebergCommitMessage(
+          CODEBERG_API_BASE_URL,
+          headersWithoutAuth,
+          codebergToken,
+          sha,
+        );
+        if (commit?.message) {
+          bodyContent = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commit.message}`;
+        }
+        if (commit?.date) {
+          publicationDate = commit.date;
+        }
+      }
+
+      if (!bodyContent && typeof latestTag.message === "string") {
+        bodyContent = `### ${t("tag_message_fallback_title")}\n\n---\n\n${latestTag.message}`;
+      }
+
+      const virtualRelease: GithubRelease = {
+        id: 0,
+        html_url: `https://codeberg.org/${owner}/${repo}/src/tag/${latestTag.name}`,
+        tag_name: latestTag.name,
+        name: `Tag: ${latestTag.name}`,
+        body: bodyContent,
+        created_at: publicationDate,
+        published_at: publicationDate,
+        prerelease: false,
+        draft: false,
+      };
+      allReleases = [virtualRelease];
+    }
+
+    const filteredReleases = allReleases.filter((r) => {
+      try {
+        if (effectiveExcludeRegex) {
+          const exclude = new RegExp(effectiveExcludeRegex, "i");
+          if (exclude.test(r.tag_name)) return false;
+        }
+        if (effectiveIncludeRegex) {
+          const include = new RegExp(effectiveIncludeRegex, "i");
+          return include.test(r.tag_name);
+        }
+      } catch (e) {
+        log.error(
+          `Invalid regex for repo codeberg:${owner}/${repo}. Regex filters will be ignored. Error:`,
+          e,
+        );
+      }
+
+      if (r.draft) {
+        return effectiveReleaseChannels.includes("draft");
+      }
+
+      const isTagMarkedPreRelease = isPreReleaseByTagName(
+        r.tag_name,
+        allPreReleaseTypes,
+      );
+      const isConsideredPreRelease = r.prerelease || isTagMarkedPreRelease;
+
+      if (isConsideredPreRelease) {
+        if (!effectiveReleaseChannels.includes("prerelease")) return false;
+
+        // If the tag explicitly includes a pre-release marker (e.g. -beta/-rc),
+        // apply the configured sub-channel filter. Otherwise, fall back to the API flag.
+        if (isTagMarkedPreRelease) {
+          return isPreReleaseByTagName(
+            r.tag_name,
+            effectivePreReleaseSubChannels,
+          );
+        }
+
+        return true;
+      }
+
+      return effectiveReleaseChannels.includes("stable");
+    });
+
+    if (filteredReleases.length === 0) {
+      return {
+        release: null,
+        error: { type: "no_matching_releases" },
+        newEtag,
+      };
+    }
+
+    const sortedReleases = filteredReleases.slice().sort((a, b) => {
+      const aTime = new Date(a.published_at || a.created_at).getTime();
+      const bTime = new Date(b.published_at || b.created_at).getTime();
+      return bTime - aTime;
+    });
+
+    const latestRelease = sortedReleases[0];
+
+    if (
+      latestRelease.id !== 0 &&
+      (!latestRelease.body || latestRelease.body.trim() === "")
+    ) {
+      const commit = await tryFetchCodebergCommitMessage(
+        CODEBERG_API_BASE_URL,
+        headersWithoutAuth,
+        codebergToken,
+        latestRelease.tag_name,
+      );
+      if (commit?.message) {
+        const t = await getTranslations({ locale, namespace: "Actions" });
+        latestRelease.body = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commit.message}`;
+      }
+      if (commit?.date) {
+        latestRelease.published_at = latestRelease.published_at ?? commit.date;
+      }
+    }
+
+    latestRelease.fetched_at = fetchedAtTimestamp;
+    return { release: latestRelease, error: null, newEtag };
+  } catch (error) {
+    log.error(`Failed to fetch Codeberg releases for ${owner}/${repo}:`, error);
+    return { release: null, error: { type: "api_error" } };
+  }
+}
+
+async function fetchLatestReleaseWithCache(
+  provider: RepoProvider,
+  owner: string,
+  repo: string,
+  repoSettings: RepoSettingsForFetch,
+  globalSettings: AppSettings,
+  locale: string,
+  options?: { skipCache?: boolean },
+): Promise<LatestReleaseFetchResult> {
+  const fetcher =
+    provider === "github"
+      ? fetchLatestReleaseFromGitHub
+      : fetchLatestReleaseFromCodeberg;
+
+  if (globalSettings.cacheInterval <= 0 || options?.skipCache) {
+    return fetcher(owner, repo, repoSettings, globalSettings, locale);
   }
 
   const cacheIntervalSeconds = globalSettings.cacheInterval * 60;
@@ -740,16 +1601,32 @@ async function fetchLatestReleaseWithCache(
       : globalSettings.releasesPerPage;
 
   const cachedFetch = unstable_cache(
-    (ownerArg, repoArg, repoSettingsArg, globalSettingsArg, localeArg) =>
-      fetchLatestRelease(
-        ownerArg,
-        repoArg,
-        repoSettingsArg,
-        globalSettingsArg,
-        localeArg,
-      ),
+    (
+      providerArg,
+      ownerArg,
+      repoArg,
+      repoSettingsArg,
+      globalSettingsArg,
+      localeArg,
+    ) =>
+      providerArg === "github"
+        ? fetchLatestReleaseFromGitHub(
+            ownerArg,
+            repoArg,
+            repoSettingsArg,
+            globalSettingsArg,
+            localeArg,
+          )
+        : fetchLatestReleaseFromCodeberg(
+            ownerArg,
+            repoArg,
+            repoSettingsArg,
+            globalSettingsArg,
+            localeArg,
+          ),
     [
-      "github-release",
+      provider === "github" ? "github-release" : "codeberg-release",
+      provider,
       owner,
       repo,
       locale,
@@ -758,11 +1635,18 @@ async function fetchLatestReleaseWithCache(
     ],
     {
       revalidate: cacheIntervalSeconds,
-      tags: ["github-releases"],
+      tags: [provider === "github" ? "github-releases" : "codeberg-releases"],
     },
   );
 
-  return cachedFetch(owner, repo, repoSettings, globalSettings, locale);
+  return cachedFetch(
+    provider,
+    owner,
+    repo,
+    repoSettings,
+    globalSettings,
+    locale,
+  );
 }
 
 export async function getLatestReleasesForRepos(
@@ -778,16 +1662,17 @@ export async function getLatestReleasesForRepos(
   const configuredParallel = resolveParallelRepoFetches(settings);
   const effectiveBatchSize = Math.min(configuredParallel, repositories.length);
   const tokenConfigured = !!process.env.GITHUB_ACCESS_TOKEN?.trim();
+  const codebergTokenConfigured = !!process.env.CODEBERG_ACCESS_TOKEN?.trim();
   log.info(
-    `Fetching ${repositories.length} repositories with parallel batch size ${effectiveBatchSize} (configured=${configuredParallel}, token configured=${tokenConfigured ? "yes" : "no"}).`,
+    `Fetching ${repositories.length} repositories with parallel batch size ${effectiveBatchSize} (configured=${configuredParallel}, GitHub token=${tokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}).`,
   );
 
   const buildEnrichedRelease = async (
     repo: Repository,
   ): Promise<EnrichedRelease> => {
-    const parsed = parseGitHubUrl(repo.url);
+    const parsed = parseSupportedRepoUrl(repo.url);
     if (!parsed) {
-      log.warn(`Skipping invalid GitHub URL for repoId=${repo.id}`);
+      log.warn(`Skipping invalid repository URL for repoId=${repo.id}`);
       return {
         repoId: repo.id,
         repoUrl: repo.url,
@@ -812,6 +1697,7 @@ export async function getLatestReleasesForRepos(
       error,
       newEtag,
     } = await fetchLatestReleaseWithCache(
+      parsed.provider,
       parsed.owner,
       parsed.repo,
       repoSettings,
@@ -923,11 +1809,11 @@ export async function addRepositoriesAction(
     let failedCount = 0;
 
     for (const url of urlList) {
-      const parsed = parseGitHubUrl(url);
+      const parsed = parseSupportedRepoUrl(url);
       if (parsed) {
         newRepos.push({
           id: parsed.id,
-          url: `https://github.com/${parsed.id}`,
+          url: parsed.canonicalRepoUrl,
         });
       } else {
         failedCount++;
@@ -1012,9 +1898,17 @@ export async function importRepositoriesAction(
 
       const validImportedRepos: Repository[] = [];
       for (const repo of importedData) {
-        if (repo.id && repo.url && parseGitHubUrl(repo.url)) {
-          validImportedRepos.push(repo);
-        }
+        if (!repo.url) continue;
+        const parsed = parseSupportedRepoUrl(repo.url);
+        if (!parsed) continue;
+
+        // Normalize id/url on import so GitHub/Codeberg repos remain stable even if
+        // the exported data contained variations (trailing paths, `.git`, etc).
+        validImportedRepos.push({
+          ...repo,
+          id: parsed.id,
+          url: parsed.canonicalRepoUrl,
+        });
       }
 
       let addedCount = 0;
@@ -1274,8 +2168,9 @@ async function _checkForNewReleasesUnscheduled(options?: {
   const effectiveLocale = options?.overrideLocale || settings.locale;
   const parallelLimit = resolveParallelRepoFetches(settings);
   const tokenConfigured = !!process.env.GITHUB_ACCESS_TOKEN?.trim();
+  const codebergTokenConfigured = !!process.env.CODEBERG_ACCESS_TOKEN?.trim();
   log.info(
-    `Parallel fetch batch size set to ${parallelLimit} (GitHub token configured=${tokenConfigured ? "yes" : "no"}).`,
+    `Parallel fetch batch size set to ${parallelLimit} (GitHub token=${tokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}).`,
   );
 
   const originalRepos = await getRepositories();
@@ -1620,7 +2515,7 @@ export async function setupTestRepositoryAction(): Promise<{
       await saveRepositories(currentRepos);
       revalidatePath("/");
       revalidatePath("/test");
-      updateTag("github-releases");
+      updateReleaseCacheTags();
       return { success: true, message: t("toast_setup_test_repo_success") };
     } catch (error: unknown) {
       log.error("setupTestRepositoryAction failed:", error);
@@ -1701,8 +2596,9 @@ export async function getGitHubRateLimit(): Promise<RateLimitResult> {
     "X-GitHub-Api-Version": "2022-11-28",
   };
 
-  if (process.env.GITHUB_ACCESS_TOKEN) {
-    headers.Authorization = `token ${process.env.GITHUB_ACCESS_TOKEN}`;
+  const githubToken = normalizeEnvToken(process.env.GITHUB_ACCESS_TOKEN);
+  if (githubToken) {
+    headers.Authorization = `token ${githubToken}`;
   }
 
   try {
@@ -1730,6 +2626,110 @@ export async function getGitHubRateLimit(): Promise<RateLimitResult> {
   } catch (error) {
     log.error("Failed to fetch GitHub rate limit:", error);
     return { data: null, error: "api_error" };
+  }
+}
+
+type CodebergUserApi = {
+  login?: string;
+  username?: string;
+  full_name?: string;
+};
+
+export async function getCodebergTokenCheck(): Promise<CodebergTokenCheckResult> {
+  const token = normalizeEnvToken(process.env.CODEBERG_ACCESS_TOKEN);
+  if (!token) return { status: "not_set" };
+
+  log.info("Validating Codeberg token.");
+
+  const CODEBERG_USER_URL = "https://codeberg.org/api/v1/user";
+  const baseHeaders: HeadersInit = {
+    Accept: "application/json",
+    "User-Agent": "GitHubReleaseMonitorApp",
+  };
+
+  try {
+    const attempts: Array<{
+      scheme: "token" | "bearer";
+      headers: HeadersInit;
+    }> = [
+      {
+        scheme: "token",
+        headers: { ...baseHeaders, Authorization: `token ${token}` },
+      },
+      {
+        scheme: "bearer",
+        headers: { ...baseHeaders, Authorization: `Bearer ${token}` },
+      },
+    ];
+
+    for (const attempt of attempts) {
+      const response = await fetchWithRetry(
+        CODEBERG_USER_URL,
+        { headers: attempt.headers, cache: "no-store" },
+        { description: `Codeberg user endpoint (${attempt.scheme})` },
+      );
+
+      if (!response.ok) {
+        let bodyText: string | undefined;
+        try {
+          bodyText = await response.text();
+        } catch {
+          bodyText = undefined;
+        }
+
+        if (response.status === 401) {
+          continue;
+        }
+
+        // Codeberg scopes: `/api/v1/user` requires `read:user`. A token without this scope
+        // can still be valid and work for repository access (e.g. `read:repository`).
+        if (response.status === 403 && bodyText?.includes("[read:user]")) {
+          log.info(
+            `Codeberg token is valid but missing optional read:user scope (${attempt.scheme}).`,
+          );
+          return {
+            status: "valid",
+            login: null,
+            fullName: null,
+            diagnosticsLimited: true,
+          };
+        }
+
+        log.error(
+          `Codeberg token check failed (${attempt.scheme}): ${response.status} ${response.statusText}`,
+          bodyText ? { bodyText } : undefined,
+        );
+        return { status: "api_error" };
+      }
+
+      let data: CodebergUserApi | undefined;
+      try {
+        data = (await response.json()) as CodebergUserApi;
+      } catch (error) {
+        log.error(
+          `Codeberg token check returned invalid JSON (${attempt.scheme}).`,
+          error,
+        );
+        return { status: "api_error" };
+      }
+
+      const loginRaw =
+        typeof data?.login === "string"
+          ? data.login
+          : typeof data?.username === "string"
+            ? data.username
+            : null;
+
+      const fullName =
+        typeof data?.full_name === "string" ? data.full_name : null;
+
+      return { status: "valid", login: loginRaw, fullName };
+    }
+
+    return { status: "invalid_token" };
+  } catch (error) {
+    log.error("Failed to validate Codeberg token:", error);
+    return { status: "api_error" };
   }
 }
 
@@ -2080,7 +3080,7 @@ export async function updateRepositorySettingsAction(
 }
 
 export async function revalidateReleasesAction() {
-  updateTag("github-releases");
+  updateReleaseCacheTags();
 }
 
 export async function getJobStatusAction(

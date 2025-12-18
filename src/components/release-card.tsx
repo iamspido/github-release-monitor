@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type { AppSettings, EnrichedRelease, FetchError } from "@/types";
@@ -112,6 +113,9 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
   const { repoId, repoUrl, release, error, isNew, repoSettings } =
     enrichedRelease;
   const { isOnline } = useNetworkStatus();
+  const displayRepoId = formatRepoIdForDisplay(repoId, {
+    showProviderPrefix: settings.showProviderPrefixInRepoId ?? true,
+  });
 
   const [isRemoving, startRemoveTransition] = React.useTransition();
   const [isAcknowledging, startAcknowledgeTransition] = React.useTransition();
@@ -121,6 +125,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const settingsButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const prevIsSettingsOpenRef = React.useRef(false);
+  const isTagLink = Boolean(release?.html_url?.includes("/src/tag/"));
 
   React.useEffect(() => {
     // When the settings dialog transitions from open -> closed, return focus to the trigger button.
@@ -270,7 +275,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
                     rel="noopener noreferrer"
                     className="hover:underline"
                   >
-                    {repoId}
+                    {displayRepoId}
                   </a>
                 </CardTitle>
                 <CardDescription className="text-red-400/80">
@@ -365,7 +370,117 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
     );
   }
 
-  if (!release) return <ReleaseCard.Skeleton />;
+  if (!release) {
+    return (
+      <>
+        <RepoSettingsDialog
+          isOpen={isSettingsOpen}
+          setIsOpen={setIsSettingsOpen}
+          repoId={repoId}
+          currentRepoSettings={repoSettings}
+          globalSettings={settings}
+        />
+        <Card className="flex flex-col">
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <Skeleton className="h-6 w-3/4" />
+                <a
+                  href={repoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-muted-foreground hover:underline break-all"
+                >
+                  {displayRepoId}
+                </a>
+              </div>
+              <div className="flex items-center gap-2">
+                {repoHasCustomSettings && (
+                  <TooltipProvider delayDuration={100}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="outline"
+                          className="border-accent text-accent"
+                        >
+                          {t("custom_settings_badge")}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{t("custom_settings_tooltip")}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0 text-muted-foreground"
+                  onClick={() => setIsSettingsOpen(true)}
+                  ref={settingsButtonRef}
+                  aria-label={t("settings_button_aria")}
+                >
+                  <Settings className="size-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="pt-1 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+              <Skeleton className="h-4 w-24" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-72 w-full" />
+          </CardContent>
+          <CardFooter className="justify-between pt-4">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={isRemoving || !isOnline}
+                  aria-disabled={!isOnline}
+                >
+                  {isRemoving ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Trash2 />
+                  )}
+                  {t("remove_button")}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {t("confirm_dialog_title")}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {t.rich("confirm_dialog_description_long", {
+                      bold: (chunks) => (
+                        <span className="font-bold">{chunks}</span>
+                      ),
+                      repoId,
+                    })}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{t("cancel_button")}</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={handleRemove}
+                    disabled={isRemoving || !isOnline}
+                  >
+                    {isRemoving ? <Loader2 className="animate-spin" /> : null}
+                    {t("confirm_button")}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <Skeleton className="h-8 w-32" />
+          </CardFooter>
+        </Card>
+      </>
+    );
+  }
 
   const showAcknowledgeFeature = settings.showAcknowledge ?? true;
   const showMarkAsNewButton = settings.showMarkAsNew ?? true;
@@ -406,7 +521,7 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
                 rel="noopener noreferrer"
                 className="text-sm text-muted-foreground hover:underline break-all"
               >
-                {repoId}
+                {displayRepoId}
               </a>
             </div>
             <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -624,7 +739,8 @@ export function ReleaseCard({ enrichedRelease, settings }: ReleaseCardProps) {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {t("view_on_github")} <ExternalLink />
+                {isTagLink ? t("view_tag") : t("view_on_github")}{" "}
+                <ExternalLink />
               </a>
             </Button>
           </div>

@@ -5,6 +5,7 @@ vi.mock('next/cache', () => ({
   unstable_cache: (fn: any) => fn,
   revalidatePath: () => {},
   revalidateTag: () => {},
+  updateTag: () => {},
 }));
 
 // Mock next-intl translations used in tag fallback

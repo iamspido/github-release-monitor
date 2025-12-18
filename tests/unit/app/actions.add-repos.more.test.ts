@@ -2,6 +2,7 @@
 
 vi.mock('next/cache', () => ({
   revalidatePath: () => {},
+  updateTag: () => {},
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -38,6 +39,10 @@ describe('addRepositoriesAction edge cases', () => {
     expect(typeof res.jobId).toBe('string');
     // Saved repos, normalized to lowercase; current implementation does not de-duplicate within one batch
     const ids = mem.repos.map(r => r.id).sort();
-    expect(ids).toEqual(['another/repo', 'owner/repo', 'owner/repo']);
+    expect(ids).toEqual([
+      'github:another/repo',
+      'github:owner/repo',
+      'github:owner/repo',
+    ]);
   });
 });

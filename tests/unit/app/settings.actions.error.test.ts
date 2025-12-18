@@ -1,6 +1,6 @@
 // vitest globals enabled
 
-vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
+vi.mock('next/cache', () => ({ revalidatePath: () => {}, updateTag: () => {} }));
 
 vi.mock('next-intl/server', () => ({
   getTranslations: async () => (key: string) => key,

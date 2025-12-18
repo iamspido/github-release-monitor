@@ -3,6 +3,7 @@
 const revalidatePathMock = vi.fn();
 vi.mock('next/cache', () => ({
   revalidatePath: revalidatePathMock,
+  updateTag: () => {},
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -35,4 +36,3 @@ describe('markAsNewAction', () => {
     expect(res.error).toBe('toast_mark_as_new_error_not_found');
   });
 });
-

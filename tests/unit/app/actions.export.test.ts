@@ -2,6 +2,7 @@
 
 vi.mock('next/cache', () => ({
   revalidatePath: () => {},
+  updateTag: () => {},
 }));
 
 vi.mock('next-intl/server', () => ({
@@ -30,4 +31,3 @@ describe('getRepositoriesForExport', () => {
     expect(res.error).toBeDefined();
   });
 });
-
