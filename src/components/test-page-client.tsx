@@ -8,7 +8,6 @@ import {
   Eye,
   EyeOff,
   Github,
-  Globe,
   Loader2,
   Mail,
   PackagePlus,
@@ -27,6 +26,7 @@ import {
   triggerAppUpdateCheckAction,
   triggerReleaseCheckAction,
 } from "@/app/actions";
+import { CodebergIcon } from "@/components/icons/codeberg-icon";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -503,7 +503,7 @@ export function TestPageClient({
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <Globe className="size-8 text-muted-foreground" />
+            <CodebergIcon className="size-8 text-muted-foreground" />
             <div>
               <CardTitle>{t("codeberg_card_title")}</CardTitle>
               <CardDescription>
