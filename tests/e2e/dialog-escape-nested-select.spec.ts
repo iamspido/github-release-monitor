@@ -6,12 +6,18 @@ test('ESC closes nested Select first, then dialog; focus returns to trigger', as
   await ensureTestRepo(page);
   await page.goto('/en');
 
-  const trigger = page.getByRole('button', { name: 'Open settings for this repository' }).first();
+  const trigger = page
+    .getByRole('button', {
+      name: /Open settings for this repository|Einstellungen für dieses Repository öffnen/,
+    })
+    .first();
   await trigger.click();
   await expect(page.getByRole('dialog')).toBeVisible();
 
   // Open Apprise Format select inside repo dialog
-  await page.getByLabel('Global Apprise Format').click();
+  await page
+    .getByLabel(/Global Apprise Format|Globales Apprise-Format/)
+    .click();
   // Press ESC should close the Select, dialog remains open
   await page.keyboard.press('Escape');
   await expect(page.getByRole('listbox')).toHaveCount(0);

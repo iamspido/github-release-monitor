@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
 
 test('invalid path returns 404 when logged in', async ({ page }) => {
-  const username = process.env.AUTH_USERNAME || 'test';
-  const password = process.env.AUTH_PASSWORD || 'test';
+  const username = process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || 'test@example.com';
+  const password = process.env.AUTH_PASSWORD || 'TestPassword123';
   // Login first to avoid middleware redirect to login page
   await page.goto('/en/login');
-  await page.getByLabel('Username').fill(username);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Login' }).click();
+  await page.getByLabel(/email|e-mail/i).fill(username);
+  await page.locator('input[name="password"]').fill(password);
+  await page.locator('button[type="submit"]').first().click();
   await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
 
   const resp = await page.goto('/en/this-page-does-not-exist');

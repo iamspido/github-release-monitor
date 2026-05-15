@@ -17,6 +17,10 @@ export const pathnames = {
     en: "/login",
     de: "/anmelden",
   },
+  "/register": {
+    en: "/register",
+    de: "/registrieren",
+  },
   "/test": {
     en: "/test",
     de: "/test",

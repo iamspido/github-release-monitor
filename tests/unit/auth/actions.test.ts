@@ -14,198 +14,217 @@ vi.mock('@/i18n/navigation', () => ({
 
 vi.mock('next-intl/server', () => ({
   getLocale: async () => 'en',
-  // i18n.ts imports getRequestConfig at module scope
-  getRequestConfig: (cb: any) => ({}) as any,
+  getRequestConfig: (_cb: any) => ({}) as any,
 }));
 
 vi.mock('next/headers', () => ({
   headers: async () => new Headers({ 'x-forwarded-for': '198.51.100.23' }),
 }));
 
-const sessionMock = {
-  isLoggedIn: false,
-  username: undefined as any,
-  save: vi.fn(),
-  destroy: vi.fn(),
-};
+const signInEmailMock = vi.fn(async () => ({ ok: true, status: 200 }));
+const signInUsernameMock = vi.fn(async () => ({ ok: true, status: 200 }));
+const signUpEmailMock = vi.fn(async () => ({ ok: true, status: 200 }));
+const signOutMock = vi.fn(async () => ({ ok: true, status: 200 }));
+const ensureAuthDatabaseReadyMock = vi.fn(async () => undefined);
+const findRegistrationConflictMock = vi.fn(() => 'none');
 
-vi.mock('@/lib/session', () => ({
-  getSession: async () => sessionMock,
+vi.mock('@/lib/auth', () => ({
+  auth: {
+    api: {
+      signInEmail: signInEmailMock,
+      signInUsername: signInUsernameMock,
+      signUpEmail: signUpEmailMock,
+      signOut: signOutMock,
+    },
+  },
+  ensureAuthDatabaseReady: ensureAuthDatabaseReadyMock,
+  findRegistrationConflict: findRegistrationConflictMock,
 }));
 
 describe('auth actions', () => {
   const env = { ...process.env };
+
   beforeEach(() => {
     vi.resetModules();
     (globalThis as any).__redirectCalls = [];
     (globalThis as any)._failedLoginAttempts = undefined;
-    sessionMock.isLoggedIn = false;
-    sessionMock.username = undefined;
-    sessionMock.save.mockReset();
-    sessionMock.destroy.mockReset();
+    signInEmailMock.mockReset();
+    signInUsernameMock.mockReset();
+    signUpEmailMock.mockReset();
+    signOutMock.mockReset();
+    ensureAuthDatabaseReadyMock.mockReset();
+    findRegistrationConflictMock.mockReset();
+    signInEmailMock.mockResolvedValue({ ok: true, status: 200 });
+    signInUsernameMock.mockResolvedValue({ ok: true, status: 200 });
+    signUpEmailMock.mockResolvedValue({ ok: true, status: 200 });
+    signOutMock.mockResolvedValue({ ok: true, status: 200 });
+    ensureAuthDatabaseReadyMock.mockResolvedValue(undefined);
+    findRegistrationConflictMock.mockReturnValue('none');
   });
-  afterEach(() => { process.env = { ...env }; });
 
-  it('login: valid credentials set session and redirect safely', async () => {
-    process.env.AUTH_USERNAME = 'user';
-    process.env.AUTH_PASSWORD = 'pass';
+  afterEach(() => {
+    process.env = { ...env };
+  });
 
+  it('login: valid credentials call Better Auth and return a safe redirect target', async () => {
     const { login } = await import('@/app/auth/actions');
     const fd = new FormData();
-    fd.set('username', 'user');
+    fd.set('email', 'user@example.com');
     fd.set('password', 'pass');
     fd.set('next', '/en/test');
 
-    await expect(login(undefined, fd)).rejects.toThrow('__REDIRECT__');
-    expect(sessionMock.isLoggedIn).toBe(true);
-    expect(sessionMock.username).toBe('user');
-    // redirected to path without locale prefix
-    const calls = (globalThis as any).__redirectCalls;
-    expect(calls[calls.length - 1]).toBe('/test');
+    const result = await login(undefined, fd);
+    expect(result).toEqual({ redirectTo: '/en/test' });
+    expect(signInEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: { email: 'user@example.com', password: 'pass' },
+      }),
+    );
+    expect(signInUsernameMock).not.toHaveBeenCalled();
+    expect((globalThis as any).__redirectCalls).toEqual([]);
+  });
+
+  it('login: username credentials call Better Auth username endpoint', async () => {
+    const { login } = await import('@/app/auth/actions');
+    const fd = new FormData();
+    fd.set('email', 'admin');
+    fd.set('password', 'pass');
+
+    const result = await login(undefined, fd);
+    expect(result).toEqual({ redirectTo: '/en/' });
+    expect(signInUsernameMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: { username: 'admin', password: 'pass' },
+      }),
+    );
+    expect(signInEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('login: returns requiresTwoFactor when Better Auth signals twoFactorRedirect', async () => {
+    signInEmailMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      clone: () => ({
+        json: async () => ({ twoFactorRedirect: true }),
+      }),
+    });
+    const { login } = await import('@/app/auth/actions');
+    const fd = new FormData();
+    fd.set('email', 'user@example.com');
+    fd.set('password', 'pass');
+
+    const res = await login(undefined, fd);
+    expect(res).toEqual({ requiresTwoFactor: true });
   });
 
   it('login: invalid credentials returns error', async () => {
-    process.env.AUTH_USERNAME = 'user';
-    process.env.AUTH_PASSWORD = 'pass';
+    signInEmailMock.mockResolvedValue({ ok: false, status: 401 });
     const { login } = await import('@/app/auth/actions');
     const fd = new FormData();
-    fd.set('username', 'user');
+    fd.set('email', 'user@example.com');
     fd.set('password', 'wrong');
     const res = await login(undefined, fd);
     expect(res).toEqual({ errorKey: 'error_invalid_credentials' });
   });
 
-  it('login: invalid input types return error', async () => {
-    process.env.AUTH_USERNAME = 'user';
-    process.env.AUTH_PASSWORD = 'pass';
+  it('login: invalid input returns error before auth call', async () => {
     const { login } = await import('@/app/auth/actions');
     const fd = new FormData();
-    fd.set('username', '');
+    fd.set('email', '');
     fd.set('password', '');
     const res = await login(undefined, fd);
     expect(res).toEqual({ errorKey: 'error_invalid_credentials' });
+    expect(signInEmailMock).not.toHaveBeenCalled();
   });
 
   it('login: unsafe next redirects to root', async () => {
-    process.env.AUTH_USERNAME = 'user';
-    process.env.AUTH_PASSWORD = 'pass';
     const { login } = await import('@/app/auth/actions');
     const fd = new FormData();
-    fd.set('username', 'user');
+    fd.set('email', 'user@example.com');
     fd.set('password', 'pass');
     fd.set('next', 'https://evil.com/whatever');
-    await expect(login(undefined, fd)).rejects.toThrow('__REDIRECT__');
-    const calls = (globalThis as any).__redirectCalls;
-    expect(calls[calls.length - 1]).toBe('/');
+    const result = await login(undefined, fd);
+    expect(result).toEqual({ redirectTo: '/en/' });
+    expect((globalThis as any).__redirectCalls).toEqual([]);
   });
 
-  it('logout: destroys session and redirects to login path', async () => {
+  it('logout: signs out and redirects to login path', async () => {
     const { logout } = await import('@/app/auth/actions');
     await expect(logout()).rejects.toThrow('__REDIRECT__');
-    expect(sessionMock.destroy).toHaveBeenCalled();
+    expect(signOutMock).toHaveBeenCalled();
     const calls = (globalThis as any).__redirectCalls;
     expect(calls[calls.length - 1]).toMatch(/\/login|\/anmelden/);
   });
 
   it('login: applies lockout after too many failed attempts', async () => {
-    process.env.AUTH_USERNAME = 'user';
-    process.env.AUTH_PASSWORD = 'pass';
     process.env.AUTH_MAX_LOGIN_ATTEMPTS = '2';
     process.env.AUTH_LOGIN_WINDOW_SECONDS = '60';
     process.env.AUTH_LOGIN_LOCKOUT_SECONDS = '60';
 
+    signInEmailMock.mockResolvedValue({ ok: false, status: 401 });
     const { login } = await import('@/app/auth/actions');
 
     const firstAttempt = new FormData();
-    firstAttempt.set('username', 'user');
+    firstAttempt.set('email', 'user@example.com');
     firstAttempt.set('password', 'wrong');
     const firstResult = await login(undefined, firstAttempt);
     expect(firstResult).toEqual({ errorKey: 'error_invalid_credentials' });
 
     const secondAttempt = new FormData();
-    secondAttempt.set('username', 'user');
+    secondAttempt.set('email', 'user@example.com');
     secondAttempt.set('password', 'wrong-again');
     const secondResult = await login(undefined, secondAttempt);
     expect(secondResult).toEqual({ errorKey: 'error_too_many_attempts' });
 
+    signInEmailMock.mockResolvedValue({ ok: true, status: 200 });
     const correctAttempt = new FormData();
-    correctAttempt.set('username', 'user');
+    correctAttempt.set('email', 'user@example.com');
     correctAttempt.set('password', 'pass');
     const lockedResult = await login(undefined, correctAttempt);
     expect(lockedResult).toEqual({ errorKey: 'error_too_many_attempts' });
   });
 
-  it('login: logs failed attempts and active lockout details', async () => {
-    process.env.AUTH_USERNAME = 'user';
-    process.env.AUTH_PASSWORD = 'pass';
-    process.env.AUTH_MAX_LOGIN_ATTEMPTS = '2';
-    process.env.AUTH_LOGIN_WINDOW_SECONDS = '60';
-    process.env.AUTH_LOGIN_LOCKOUT_SECONDS = '60';
+  it('register: blocks duplicate username before signup API call', async () => {
+    process.env.AUTH_ENABLE_SIGNUP = 'true';
+    findRegistrationConflictMock.mockReturnValue('username_in_use');
+    const { register } = await import('@/app/auth/actions');
+    const fd = new FormData();
+    fd.set('username', 'admin');
+    fd.set('email', 'admin@example.com');
+    fd.set('password', 'VeryStrongPass123');
 
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      const { login } = await import('@/app/auth/actions');
+    const res = await register(undefined, fd);
 
-      const firstAttempt = new FormData();
-      firstAttempt.set('username', 'user');
-      firstAttempt.set('password', 'wrong');
-      await login(undefined, firstAttempt);
-
-      const secondAttempt = new FormData();
-      secondAttempt.set('username', 'user');
-      secondAttempt.set('password', 'wrong-again');
-      await login(undefined, secondAttempt);
-
-      const blockedAttempt = new FormData();
-      blockedAttempt.set('username', 'user');
-      blockedAttempt.set('password', 'pass');
-      await login(undefined, blockedAttempt);
-
-      const warnLines = warnSpy.mock.calls.map(([line]) => String(line));
-      expect(warnLines.some((line) => line.includes('attempts=1/2'))).toBe(true);
-      expect(warnLines.some((line) => line.includes('lockout activated'))).toBe(true);
-      expect(warnLines.some((line) => line.includes('active lockout'))).toBe(true);
-    } finally {
-      warnSpy.mockRestore();
-    }
+    expect(res).toEqual({ errorKey: 'error_setup_username_in_use' });
+    expect(signUpEmailMock).not.toHaveBeenCalled();
   });
 
-  it('login: logs when lockout expires and access is unblocked', async () => {
-    process.env.AUTH_USERNAME = 'user';
-    process.env.AUTH_PASSWORD = 'pass';
-    process.env.AUTH_MAX_LOGIN_ATTEMPTS = '2';
-    process.env.AUTH_LOGIN_WINDOW_SECONDS = '120';
-    process.env.AUTH_LOGIN_LOCKOUT_SECONDS = '1';
+  it('register: blocks duplicate email before signup API call', async () => {
+    process.env.AUTH_ENABLE_SIGNUP = 'true';
+    findRegistrationConflictMock.mockReturnValue('email_in_use');
+    const { register } = await import('@/app/auth/actions');
+    const fd = new FormData();
+    fd.set('username', 'admin');
+    fd.set('email', 'admin@example.com');
+    fd.set('password', 'VeryStrongPass123');
 
-    const infoSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const nowSpy = vi.spyOn(Date, 'now');
-    try {
-      const { login } = await import('@/app/auth/actions');
+    const res = await register(undefined, fd);
 
-      nowSpy.mockReturnValue(0);
-      const firstAttempt = new FormData();
-      firstAttempt.set('username', 'user');
-      firstAttempt.set('password', 'wrong');
-      await login(undefined, firstAttempt);
+    expect(res).toEqual({ errorKey: 'error_setup_email_in_use' });
+    expect(signUpEmailMock).not.toHaveBeenCalled();
+  });
 
-      nowSpy.mockReturnValue(100);
-      const secondAttempt = new FormData();
-      secondAttempt.set('username', 'user');
-      secondAttempt.set('password', 'wrong-again');
-      await login(undefined, secondAttempt);
+  it('register: rejects usernames outside the Better Auth default policy', async () => {
+    process.env.AUTH_ENABLE_SIGNUP = 'true';
+    const { register } = await import('@/app/auth/actions');
+    const fd = new FormData();
+    fd.set('username', 'admin-user');
+    fd.set('email', 'admin@example.com');
+    fd.set('password', 'VeryStrongPass123');
 
-      nowSpy.mockReturnValue(1_500);
-      const successfulAttempt = new FormData();
-      successfulAttempt.set('username', 'user');
-      successfulAttempt.set('password', 'pass');
-      await expect(login(undefined, successfulAttempt)).rejects.toThrow('__REDIRECT__');
+    const res = await register(undefined, fd);
 
-      const infoLines = infoSpy.mock.calls.map(([line]) => String(line));
-      expect(infoLines.some((line) => line.includes('Lockout expired'))).toBe(true);
-      expect(infoLines.some((line) => line.includes('Access unblocked'))).toBe(true);
-    } finally {
-      nowSpy.mockRestore();
-      infoSpy.mockRestore();
-    }
+    expect(res).toEqual({ errorKey: 'error_setup_invalid_username' });
+    expect(signUpEmailMock).not.toHaveBeenCalled();
   });
 });

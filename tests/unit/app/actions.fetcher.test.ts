@@ -64,6 +64,37 @@ describe('actions fetcher scenarios', () => {
     expect(enriched[0].release?.tag_name).toBe('v1');
   });
 
+  it('does not use a stale releases ETag when no cached release exists', async () => {
+    const actions = await import('@/app/actions');
+
+    const repo: Repository = {
+      id: 'github:zammad/zammad',
+      url: 'https://github.com/zammad/zammad',
+      etag: '"stale-empty-releases"',
+    } as any;
+
+    const nowIso = new Date().toISOString();
+    // releases empty
+    // @ts-ignore
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, headers: { get: () => '"empty-releases"' }, json: async () => [] });
+    // tags
+    // @ts-ignore
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ name: '6.5.1', commit: { sha: 'sha1' } }] });
+    // ref to annotated tag? return not annotated
+    // @ts-ignore
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ object: { type: 'commit', url: 'unused' } }) });
+    // commit message
+    // @ts-ignore
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ commit: { message: 'msg', committer: { date: nowIso } } }) });
+
+    const enriched = await actions.getLatestReleasesForRepos([repo], baseSettings, 'en', { skipCache: true });
+    const releasesRequest = (global.fetch as any).mock.calls[0];
+
+    expect(releasesRequest[1].headers['If-None-Match']).toBeUndefined();
+    expect(enriched[0].release?.tag_name).toBe('6.5.1');
+    expect(enriched[0].newEtag).toBeNull();
+  });
+
   it('paginates over multiple pages', async () => {
     const actions = await import('@/app/actions');
 
@@ -131,6 +162,35 @@ describe('actions fetcher scenarios', () => {
     expect(enriched[0].release?.id).toBe(0);
     expect(enriched[0].release?.tag_name).toBe('v1');
     expect(enriched[0].error).toBeUndefined();
+  });
+
+  it('falls back to the first matching stable tag when newer tags are prereleases', async () => {
+    const actions = await import('@/app/actions');
+
+    const repo: Repository = { id: 'github:zammad/zammad', url: 'https://github.com/zammad/zammad' } as any;
+    const nowIso = new Date().toISOString();
+
+    // releases empty
+    // @ts-ignore
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, headers: { get: () => null }, json: async () => [] });
+    // tags include newer prereleases before the latest stable tag
+    // @ts-ignore
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => [
+      { name: '7.2.0-alpha', commit: { sha: 'sha-alpha-2' } },
+      { name: '7.1.0-alpha', commit: { sha: 'sha-alpha-1' } },
+      { name: '7.0.1', commit: { sha: 'sha-stable' } },
+    ] });
+    // ref to annotated tag? return not annotated
+    // @ts-ignore
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ object: { type: 'commit', url: 'unused' } }) });
+    // commit message for stable tag
+    // @ts-ignore
+    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ commit: { message: 'stable msg', committer: { date: nowIso } } }) });
+
+    const enriched = await actions.getLatestReleasesForRepos([repo], baseSettings, 'en', { skipCache: true });
+
+    expect(enriched[0].release?.tag_name).toBe('7.0.1');
+    expect((global.fetch as any).mock.calls[3][0]).toContain('/commits/sha-stable');
   });
 
   it('maps rate_limit and repo_not_found errors', async () => {

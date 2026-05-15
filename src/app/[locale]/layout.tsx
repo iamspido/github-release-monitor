@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Roboto } from "next/font/google";
 import { notFound } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages, getTranslations } from "next-intl/server";
@@ -13,6 +13,12 @@ import "../globals.css";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+});
+
+const roboto = Roboto({
+  subsets: ["latin"],
+  weight: ["500"],
+  variable: "--font-roboto",
 });
 
 export async function generateMetadata({
@@ -45,7 +51,7 @@ export default async function LocaleLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale} className={`${inter.variable} dark`}>
+    <html lang={locale} className={`${inter.variable} ${roboto.variable} dark`}>
       <body className="font-body antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
           <NetworkStatusProvider>

@@ -1,16 +1,10 @@
 "use client";
 
-import {
-  FlaskConical,
-  Github,
-  Home,
-  Loader2,
-  LogOut,
-  Settings,
-} from "lucide-react";
+import { FlaskConical, Home, Loader2, LogOut, Settings } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { logout } from "@/app/auth/actions";
+import { GithubBrandIcon } from "@/components/icons/simple-brand-icon";
 import { Logo } from "@/components/logo";
 import { OfflineBanner } from "@/components/offline-banner";
 import { Button } from "@/components/ui/button";
@@ -155,7 +149,7 @@ export function Header({ locale, updateNotice }: HeaderProps) {
               aria-label={t("github_aria")}
             >
               <Button variant="ghost" size="icon">
-                <Github className="size-5" />
+                <GithubBrandIcon className="size-5" />
               </Button>
             </a>
             <Button

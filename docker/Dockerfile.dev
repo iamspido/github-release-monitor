@@ -80,10 +80,13 @@ COPY src/ ./src/
 
 # Produce standalone build used by Playwright e2e stage
 # Force production env only for the build step so Next emits standalone output
-RUN NODE_ENV=production npm run build
+RUN NODE_ENV=production \
+    BETTER_AUTH_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+    BETTER_AUTH_URL=http://localhost:3000 \
+    npm run build
 
 # E2E Stage (Playwright)
-FROM mcr.microsoft.com/playwright:v1.58.2-jammy AS e2e
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy AS e2e
 
 WORKDIR /app
 
@@ -92,9 +95,11 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
     CI=true \
     HTTPS=false \
     BACKGROUND_POLLING_INITIALIZED=true \
-    AUTH_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
-    AUTH_USERNAME=test \
-    AUTH_PASSWORD=test
+    BETTER_AUTH_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+    BETTER_AUTH_URL=http://localhost:3000 \
+    AUTH_SETUP_TOKEN=yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy \
+    AUTH_EMAIL=test@example.com \
+    AUTH_PASSWORD=TestPassword123
 
 # Install minimal deps for running Playwright
 COPY package*.json ./
@@ -108,6 +113,9 @@ COPY tests/e2e ./tests/e2e
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
+
+# Rebuild native module for the glibc-based Playwright image.
+RUN npm rebuild better-sqlite3
 
 # Run Playwright tests
 RUN node ./node_modules/@playwright/test/cli.js test

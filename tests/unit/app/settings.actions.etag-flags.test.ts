@@ -14,6 +14,9 @@ vi.mock('next-intl/server', () => ({
   getLocale: async () => 'en',
 }))
 vi.mock('next/headers', () => ({ cookies: async () => ({ set: vi.fn() }) }))
+vi.mock('@/app/actions', () => ({
+  checkForNewReleases: vi.fn().mockResolvedValue({ notificationsSent: 0 }),
+}))
 vi.mock('@/lib/repository-storage', () => ({
   getRepositories: async () => mem.repos,
   saveRepositories: async (list: any[]) => { mem.repos = JSON.parse(JSON.stringify(list)) },

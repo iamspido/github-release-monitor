@@ -10,12 +10,11 @@ test('unauthenticated user is redirected to login', async ({ page, context }) =>
 test('failed login shows error and clears password field', async ({ page, context }) => {
   await context.clearCookies();
   await page.goto('/en/login');
-  await page.getByLabel('Username').fill('test');
-  await page.getByLabel('Password').fill('wrong');
-  await page.getByRole('button', { name: 'Login' }).click();
+  await page.getByLabel(/email|e-mail/i).fill('wrong@example.com');
+  await page.locator('input[name="password"]').fill('wrong');
+  await page.locator('button[type="submit"]').first().click();
   // Still on login page
   await expect(page).toHaveURL(/\/en\/login/);
   // Password cleared
-  await expect(page.getByLabel('Password')).toHaveValue('');
+  await expect(page.locator('input[name="password"]')).toHaveValue('');
 });
-

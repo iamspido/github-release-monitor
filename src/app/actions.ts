@@ -737,7 +737,37 @@ function toCachedRelease(release: GithubRelease): CachedRelease {
     published_at: release.published_at,
     published_at_unknown: release.published_at_unknown,
     fetched_at: release.fetched_at,
+    source: release.id === 0 ? "tag" : "release",
   };
+}
+
+function isCachedTagFallbackRelease(release?: CachedRelease): boolean {
+  if (!release) return false;
+  if (release.source === "tag") return true;
+  return release.name === `Tag: ${release.tag_name}`;
+}
+
+function canReplaceCachedReleaseWithVirtual(
+  current: CachedRelease | undefined,
+): boolean {
+  return !current || isCachedTagFallbackRelease(current);
+}
+
+function applyEtagUpdate(
+  repository: Repository,
+  newEtag: string | null | undefined,
+): boolean {
+  if (newEtag === undefined) return false;
+
+  if (newEtag === null) {
+    if (repository.etag === undefined) return false;
+    delete repository.etag;
+    return true;
+  }
+
+  if (repository.etag === newEtag) return false;
+  repository.etag = newEtag;
+  return true;
 }
 
 // This constant holds the non-translatable part of the test data.
@@ -927,6 +957,57 @@ function resolveEffectiveRepoFilters(
   };
 }
 
+type EffectiveRepoFilters = ReturnType<typeof resolveEffectiveRepoFilters>;
+
+function releaseMatchesEffectiveFilters(
+  release: GithubRelease,
+  filters: EffectiveRepoFilters,
+  repoIdForLog: string,
+): boolean {
+  try {
+    if (filters.effectiveExcludeRegex) {
+      const exclude = new RegExp(filters.effectiveExcludeRegex, "i");
+      if (exclude.test(release.tag_name)) return false;
+    }
+    if (filters.effectiveIncludeRegex) {
+      const include = new RegExp(filters.effectiveIncludeRegex, "i");
+      return include.test(release.tag_name);
+    }
+  } catch (error) {
+    log.error(
+      `Invalid regex for repo ${repoIdForLog}. Regex filters will be ignored. Error:`,
+      error,
+    );
+  }
+
+  if (release.draft) {
+    return filters.effectiveReleaseChannels.includes("draft");
+  }
+
+  const isTagMarkedPreRelease = isPreReleaseByTagName(
+    release.tag_name,
+    allPreReleaseTypes,
+  );
+  const isConsideredPreRelease = release.prerelease || isTagMarkedPreRelease;
+
+  if (isConsideredPreRelease) {
+    if (!filters.effectiveReleaseChannels.includes("prerelease")) return false;
+
+    // If the tag explicitly includes a pre-release marker (e.g. -beta/-rc),
+    // apply the configured sub-channel filter. Otherwise, fall back to the API flag.
+    if (isTagMarkedPreRelease) {
+      return isPreReleaseByTagName(
+        release.tag_name,
+        filters.effectivePreReleaseSubChannels,
+      );
+    }
+
+    return true;
+  }
+
+  return filters.effectiveReleaseChannels.includes("stable");
+}
+
 async function fetchLatestReleaseFromGitHub(
   owner: string,
   repo: string,
@@ -938,13 +1019,14 @@ async function fetchLatestReleaseFromGitHub(
     | "includeRegex"
     | "excludeRegex"
     | "etag"
+    | "latestRelease"
   >,
   globalSettings: AppSettings,
   locale: string,
 ): Promise<{
   release: GithubRelease | null;
   error: FetchError | null;
-  newEtag?: string;
+  newEtag?: string | null;
 }> {
   log.info(`Fetching GitHub release for ${owner}/${repo}`);
   const fetchedAtTimestamp = new Date().toISOString();
@@ -980,7 +1062,7 @@ async function fetchLatestReleaseFromGitHub(
   const MAX_PER_PAGE = 100;
   const pagesToFetch = Math.ceil(totalReleasesToFetch / MAX_PER_PAGE);
   let allReleases: GithubRelease[] = [];
-  let newEtag: string | undefined;
+  let newEtag: string | null | undefined;
 
   const headers: HeadersInit = {
     Accept: "application/vnd.github.v3+json",
@@ -1004,7 +1086,12 @@ async function fetchLatestReleaseFromGitHub(
 
       const currentHeaders = { ...headers };
       // Only use ETag for the first page request.
-      if (page === 1 && repoSettings.etag) {
+      if (
+        page === 1 &&
+        repoSettings.etag &&
+        repoSettings.latestRelease &&
+        !isCachedTagFallbackRelease(repoSettings.latestRelease)
+      ) {
         currentHeaders["If-None-Match"] = repoSettings.etag;
       }
       const fetchOptions: RequestInit = {
@@ -1078,28 +1165,95 @@ async function fetchLatestReleaseFromGitHub(
       log.info(
         `No formal releases found for ${owner}/${repo}. Falling back to tags.`,
       );
-      const { response: tagsResponse, data: tags } =
-        await fetchJsonResponseWithRetry<
-          { name: string; commit: { sha: string } }[]
-        >(
-          `${GITHUB_API_BASE_URL}/tags?per_page=1`,
-          { headers, cache: "no-store" },
-          { description: `GitHub tags for ${owner}/${repo}` },
-        );
+      newEtag = null;
 
-      if (!tagsResponse.ok) {
-        log.error(
-          `Failed to fetch tags for ${owner}/${repo} after failing to find releases.`,
+      const allTags: { name: string; commit: { sha: string } }[] = [];
+      for (let page = 1; page <= pagesToFetch; page++) {
+        const tagsOnThisPage = Math.min(
+          MAX_PER_PAGE,
+          totalReleasesToFetch - allTags.length,
         );
-        return { release: null, error: { type: "no_releases_found" }, newEtag };
+        if (tagsOnThisPage <= 0) break;
+
+        const { response: tagsResponse, data: pageTags } =
+          await fetchJsonResponseWithRetry<
+            { name: string; commit: { sha: string } }[]
+          >(
+            `${GITHUB_API_BASE_URL}/tags?per_page=${tagsOnThisPage}&page=${page}`,
+            { headers, cache: "no-store" },
+            { description: `GitHub tags for ${owner}/${repo} page ${page}` },
+          );
+
+        if (!tagsResponse.ok) {
+          log.error(
+            `Failed to fetch tags for ${owner}/${repo} after failing to find releases.`,
+          );
+          return {
+            release: null,
+            error: { type: "no_releases_found" },
+            newEtag,
+          };
+        }
+
+        if (!pageTags) {
+          throw new Error(
+            `GitHub API returned an empty body for ${owner}/${repo} tags page ${page}.`,
+          );
+        }
+
+        allTags.push(...pageTags);
+
+        if (pageTags.length < tagsOnThisPage) {
+          break;
+        }
       }
 
-      if (!tags || tags.length === 0) {
+      if (allTags.length === 0) {
         log.info(`No tags found for ${owner}/${repo}.`);
         return { release: null, error: { type: "no_releases_found" }, newEtag };
       }
 
-      const latestTag = tags[0];
+      const tagCandidates = allTags.map((tag) => ({
+        tag,
+        release: {
+          id: 0,
+          html_url: `https://github.com/${owner}/${repo}/releases/tag/${tag.name}`,
+          tag_name: tag.name,
+          name: `Tag: ${tag.name}`,
+          body: "",
+          created_at: fetchedAtTimestamp,
+          published_at: fetchedAtTimestamp,
+          prerelease: false,
+          draft: false,
+        } satisfies GithubRelease,
+      }));
+
+      const selectedCandidate = tagCandidates.find(({ release }) =>
+        releaseMatchesEffectiveFilters(
+          release,
+          {
+            effectiveReleaseChannels,
+            effectivePreReleaseSubChannels,
+            totalReleasesToFetch,
+            effectiveIncludeRegex,
+            effectiveExcludeRegex,
+          },
+          `${owner}/${repo}`,
+        ),
+      );
+
+      if (!selectedCandidate) {
+        log.info(
+          `No tags found for ${owner}/${repo} matching the configured filters.`,
+        );
+        return {
+          release: null,
+          error: { type: "no_matching_releases" },
+          newEtag,
+        };
+      }
+
+      const latestTag = selectedCandidate.tag;
       const t = await getTranslations({ locale, namespace: "Actions" });
 
       let bodyContent = "";
@@ -1169,64 +1323,28 @@ async function fetchLatestReleaseFromGitHub(
       }
 
       const virtualRelease: GithubRelease = {
-        id: 0, // Virtual release has no ID
-        html_url: `https://github.com/${owner}/${repo}/releases/tag/${latestTag.name}`,
-        tag_name: latestTag.name,
-        name: `Tag: ${latestTag.name}`,
+        ...selectedCandidate.release,
         body: bodyContent,
         created_at: publicationDate,
         published_at: publicationDate,
-        prerelease: false,
-        draft: false,
       };
       allReleases = [virtualRelease];
     }
 
     // Filter releases according to configured channels/regex
-    const filteredReleases = allReleases.filter((r) => {
-      try {
-        if (effectiveExcludeRegex) {
-          const exclude = new RegExp(effectiveExcludeRegex, "i");
-          if (exclude.test(r.tag_name)) return false;
-        }
-        if (effectiveIncludeRegex) {
-          const include = new RegExp(effectiveIncludeRegex, "i");
-          return include.test(r.tag_name);
-        }
-      } catch (e) {
-        log.error(
-          `Invalid regex for repo ${owner}/${repo}. Regex filters will be ignored. Error:`,
-          e,
-        );
-      }
-
-      if (r.draft) {
-        return effectiveReleaseChannels.includes("draft");
-      }
-
-      const isTagMarkedPreRelease = isPreReleaseByTagName(
-        r.tag_name,
-        allPreReleaseTypes,
-      );
-      const isConsideredPreRelease = r.prerelease || isTagMarkedPreRelease;
-
-      if (isConsideredPreRelease) {
-        if (!effectiveReleaseChannels.includes("prerelease")) return false;
-
-        // If the tag explicitly includes a pre-release marker (e.g. -beta/-rc),
-        // apply the configured sub-channel filter. Otherwise, fall back to the API flag.
-        if (isTagMarkedPreRelease) {
-          return isPreReleaseByTagName(
-            r.tag_name,
-            effectivePreReleaseSubChannels,
-          );
-        }
-
-        return true;
-      }
-
-      return effectiveReleaseChannels.includes("stable");
-    });
+    const filteredReleases = allReleases.filter((release) =>
+      releaseMatchesEffectiveFilters(
+        release,
+        {
+          effectiveReleaseChannels,
+          effectivePreReleaseSubChannels,
+          totalReleasesToFetch,
+          effectiveIncludeRegex,
+          effectiveExcludeRegex,
+        },
+        `${owner}/${repo}`,
+      ),
+    );
 
     if (filteredReleases.length === 0) {
       return {
@@ -1308,12 +1426,13 @@ type RepoSettingsForFetch = Pick<
   | "includeRegex"
   | "excludeRegex"
   | "etag"
+  | "latestRelease"
 >;
 
 type LatestReleaseFetchResult = {
   release: GithubRelease | null;
   error: FetchError | null;
-  newEtag?: string;
+  newEtag?: string | null;
 };
 
 type GitlabReleaseApi = {
@@ -2779,7 +2898,7 @@ async function fetchLatestReleaseFromCodeberg(
         }
       }
 
-      if (!tagsResponse || !tagsResponse.ok) {
+      if (!tagsResponse?.ok) {
         log.error(
           `Failed to fetch tags for codeberg:${owner}/${repo} after failing to find releases.`,
         );
@@ -3080,6 +3199,7 @@ export async function getLatestReleasesForRepos(
       appriseTags: repo.appriseTags,
       appriseFormat: repo.appriseFormat,
       etag: repo.etag,
+      latestRelease: repo.latestRelease,
     };
 
     const {
@@ -3393,14 +3513,15 @@ export async function refreshSingleRepositoryAction(repoId: string) {
     const repoIndex = allRepos.findIndex((r) => r.id === repoId);
     if (repoIndex === -1) return; // Should not happen
 
-    if (enrichedRelease.newEtag) {
-      allRepos[repoIndex].etag = enrichedRelease.newEtag;
-    }
+    applyEtagUpdate(allRepos[repoIndex], enrichedRelease.newEtag);
     if (enrichedRelease.release) {
       const isVirtual = enrichedRelease.release.id === 0;
       const newCached = toCachedRelease(enrichedRelease.release);
       // Avoid overwriting existing real release data with virtual (tag-fallback) data
-      if (!isVirtual || !allRepos[repoIndex].latestRelease) {
+      if (
+        !isVirtual ||
+        canReplaceCachedReleaseWithVirtual(allRepos[repoIndex].latestRelease)
+      ) {
         allRepos[repoIndex].latestRelease = newCached;
       } else if (
         isVirtual &&
@@ -3447,7 +3568,10 @@ export async function refreshMultipleRepositoriesAction(
             const isVirtual = enriched.release.id === 0;
             const newCached = toCachedRelease(enriched.release);
             // Avoid overwriting existing real release data with virtual (tag-fallback) data
-            if (!isVirtual || !repo.latestRelease) {
+            if (
+              !isVirtual ||
+              canReplaceCachedReleaseWithVirtual(repo.latestRelease)
+            ) {
               repo.latestRelease = newCached;
             } else if (
               isVirtual &&
@@ -3462,9 +3586,7 @@ export async function refreshMultipleRepositoriesAction(
               repo.lastSeenReleaseTag = enriched.release.tag_name;
             }
           }
-          if (enriched.newEtag) {
-            repo.etag = enriched.newEtag;
-          }
+          applyEtagUpdate(repo, enriched.newEtag);
         }
         return repo;
       });
@@ -3591,8 +3713,7 @@ async function _checkForNewReleasesUnscheduled(options?: {
     const repo = updatedRepos[repoIndex];
     let repoWasUpdated = false;
 
-    if (enrichedRelease.newEtag && repo.etag !== enrichedRelease.newEtag) {
-      repo.etag = enrichedRelease.newEtag;
+    if (applyEtagUpdate(repo, enrichedRelease.newEtag)) {
       repoWasUpdated = true;
     }
 
@@ -3601,7 +3722,10 @@ async function _checkForNewReleasesUnscheduled(options?: {
       const newCachedRelease = toCachedRelease(enrichedRelease.release);
 
       // Do not overwrite an existing real release with a virtual one.
-      if (!isVirtual || !repo.latestRelease) {
+      if (
+        !isVirtual ||
+        canReplaceCachedReleaseWithVirtual(repo.latestRelease)
+      ) {
         if (
           JSON.stringify(repo.latestRelease) !==
           JSON.stringify(newCachedRelease)

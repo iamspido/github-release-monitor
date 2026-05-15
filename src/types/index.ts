@@ -42,6 +42,7 @@ export type CachedRelease = {
   published_at: string | null;
   published_at_unknown?: boolean;
   fetched_at?: string;
+  source?: "release" | "tag";
 };
 
 export type FetchError = {
@@ -61,7 +62,7 @@ export type EnrichedRelease = {
   release?: GithubRelease;
   error?: FetchError;
   isNew?: boolean;
-  newEtag?: string;
+  newEtag?: string | null;
   repoSettings?: {
     releaseChannels?: ReleaseChannel[];
     preReleaseSubChannels?: PreReleaseChannelType[];
@@ -215,10 +216,4 @@ export type UpdateNotificationState = {
   hasUpdate: boolean;
   isDismissed: boolean;
   shouldNotify: boolean;
-};
-
-// Session Data
-export type SessionData = {
-  isLoggedIn?: boolean;
-  username?: string;
 };

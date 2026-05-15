@@ -25,7 +25,9 @@ COPY public/ ./public/
 COPY src/ ./src/
 
 # Build the application
-RUN npm run build
+RUN BETTER_AUTH_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+    BETTER_AUTH_URL=http://localhost:3000 \
+    npm run build
 
 # Lint Stage (Biome)
 FROM node:24-alpine AS lint
@@ -88,7 +90,7 @@ COPY tests/ ./tests/
 RUN npm test
 
 # E2E Stage (Playwright)
-FROM mcr.microsoft.com/playwright:v1.58.2-jammy AS e2e
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy AS e2e
 
 WORKDIR /app
 
@@ -97,9 +99,11 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
     CI=true \
     HTTPS=false \
     BACKGROUND_POLLING_INITIALIZED=true \
-    AUTH_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
-    AUTH_USERNAME=test \
-    AUTH_PASSWORD=test
+    BETTER_AUTH_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+    BETTER_AUTH_URL=http://localhost:3000 \
+    AUTH_SETUP_TOKEN=yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy \
+    AUTH_EMAIL=test@example.com \
+    AUTH_PASSWORD=TestPassword123
 
 # Copy minimal files for running tests and server
 COPY package*.json ./
@@ -113,6 +117,9 @@ COPY tests/e2e ./tests/e2e
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
+
+# Rebuild native module for the glibc-based Playwright image.
+RUN npm rebuild better-sqlite3
 
 # Run Playwright tests using the local runner
 ARG PW_TESTS=""

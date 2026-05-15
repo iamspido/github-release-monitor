@@ -1,6 +1,6 @@
-import { getIronSession } from "iron-session";
 import { type NextRequest, NextResponse } from "next/server";
 import createIntlMiddleware from "next-intl/middleware";
+import { auth, ensureAuthDatabaseReady } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import {
   NEXT_LOCALE_COOKIE,
@@ -9,25 +9,8 @@ import {
   settingsLocaleCookieOptions,
 } from "@/lib/settings-locale-cookie";
 import { defaultLocale, locales, pathnames, routing } from "./i18n/routing";
-import { sessionOptions } from "./lib/session";
-import type { SessionData } from "./types";
 
 const localeSet = new Set<string>(locales as readonly string[]);
-type IronSessionCookieStore = Extract<
-  Parameters<typeof getIronSession>[0],
-  { get: (...args: unknown[]) => unknown }
->;
-
-function isIronSessionCookieStore(
-  value: unknown,
-): value is IronSessionCookieStore {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "get" in value &&
-    typeof (value as { get?: unknown }).get === "function"
-  );
-}
 
 type LocaleKey = (typeof locales)[number];
 type RouteKey = keyof typeof pathnames;
@@ -106,20 +89,29 @@ export async function proxy(request: NextRequest) {
   const loginPaths = pathnames["/login"];
   const loginPathForLocale =
     loginPaths[currentLocale as "en" | "de"] || loginPaths.en;
+  const registerPaths = pathnames["/register"];
+  const registerPathForLocale =
+    registerPaths[currentLocale as "en" | "de"] || registerPaths.en;
   const isLoginPage = request.nextUrl.pathname.endsWith(loginPathForLocale);
-
-  const cookieStore = request.cookies;
-  if (!isIronSessionCookieStore(cookieStore)) {
-    throw new TypeError(
-      "NextRequest.cookies is missing an expected get method",
-    );
-  }
-  const session = await getIronSession<SessionData>(
-    cookieStore,
-    sessionOptions,
+  const isRegisterPage = request.nextUrl.pathname.endsWith(
+    registerPathForLocale,
   );
+  let isAuthenticated = false;
+  try {
+    logAuth.debug(`Checking session for path '${pathname}'.`);
+    await ensureAuthDatabaseReady();
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    });
+    isAuthenticated = Boolean(session?.session && session?.user);
+    logAuth.debug(
+      `Session check result for path '${pathname}': authenticated=${isAuthenticated}.`,
+    );
+  } catch (error) {
+    logAuth.error("Failed to validate session in proxy.", error);
+  }
 
-  if (!session.isLoggedIn && !isLoginPage) {
+  if (!isAuthenticated && !isLoginPage && !isRegisterPage) {
     const redirectUrl = new URL(
       `/${currentLocale}${loginPathForLocale}`,
       request.url,
@@ -134,13 +126,21 @@ export async function proxy(request: NextRequest) {
     return redirectResponse;
   }
 
-  if (session.isLoggedIn && isLoginPage) {
-    logAuth.info("Logged-in user on login page, redirecting to home.");
+  if (isAuthenticated && (isLoginPage || isRegisterPage)) {
+    logAuth.info("Logged-in user on auth page, redirecting to home.");
     const redirectResponse = NextResponse.redirect(
       new URL(`/${currentLocale}`, request.url),
     );
     attachLocaleCookies(redirectResponse, currentLocale);
     return redirectResponse;
+  }
+
+  if (isAuthenticated) {
+    logAuth.debug(`Authenticated request allowed for path '${pathname}'.`);
+  } else if (isLoginPage || isRegisterPage) {
+    logAuth.debug(
+      `Unauthenticated request allowed for auth page '${pathname}'.`,
+    );
   }
 
   if (process.env.NODE_ENV === "development") {
@@ -215,8 +215,9 @@ function getSecurityHeaders() {
     "default-src 'self'",
     "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
-    // Allow images from any HTTPS origin to support arbitrary release note assets.
-    "img-src 'self' https:",
+    // Allow `data:` image URLs for locally generated QR codes (2FA setup),
+    // plus HTTPS images for release note assets.
+    "img-src 'self' https: data:",
     `connect-src ${connectSrc}`,
     "font-src 'self'",
     "object-src 'none'",

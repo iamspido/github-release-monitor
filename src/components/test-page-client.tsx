@@ -7,8 +7,6 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
-  Github,
-  Gitlab,
   Loader2,
   Mail,
   PackagePlus,
@@ -27,7 +25,11 @@ import {
   triggerAppUpdateCheckAction,
   triggerReleaseCheckAction,
 } from "@/app/actions";
-import { CodebergIcon } from "@/components/icons/codeberg-icon";
+import {
+  CodebergBrandIcon,
+  GithubBrandIcon,
+  GitlabBrandIcon,
+} from "@/components/icons/simple-brand-icon";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -524,7 +526,7 @@ export function TestPageClient({
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <Github className="size-8 text-muted-foreground" />
+            <GithubBrandIcon className="size-8 text-muted-foreground" />
             <div>
               <CardTitle>{t("github_card_title")}</CardTitle>
               <CardDescription>{t("github_card_description")}</CardDescription>
@@ -583,7 +585,7 @@ export function TestPageClient({
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <Gitlab className="size-8 text-muted-foreground" />
+            <GitlabBrandIcon className="size-8 text-muted-foreground" />
             <div>
               <CardTitle>{t("gitlab_card_title")}</CardTitle>
               <CardDescription>{t("gitlab_card_description")}</CardDescription>
@@ -615,7 +617,7 @@ export function TestPageClient({
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <CodebergIcon className="size-8 text-muted-foreground" />
+            <CodebergBrandIcon className="size-8 text-muted-foreground" />
             <div>
               <CardTitle>{t("codeberg_card_title")}</CardTitle>
               <CardDescription>

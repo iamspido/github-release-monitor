@@ -261,8 +261,6 @@ export function SettingsForm({
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
   const isInitialMount = React.useRef(true);
 
-  const [isDeleting, startDeleteTransition] = React.useTransition();
-
   // Check for saved state after locale change
   React.useEffect(() => {
     const savedAfterLocaleChange = sessionStorage.getItem(
@@ -591,31 +589,6 @@ export function SettingsForm({
     !isGithubTokenSet;
 
   const isPreReleaseChecked = channels.includes("prerelease");
-
-  const handleDeleteAll = () => {
-    startDeleteTransition(async () => {
-      try {
-        const result = await deleteAllRepositoriesAction();
-        toast({
-          title: result.message.title,
-          description: result.message.description,
-          variant: result.success ? "default" : "destructive",
-        });
-        if (result.success) {
-          router.push("/");
-        }
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        toast({
-          title: t("toast_error_title"),
-          description: t("toast_delete_all_error_description"),
-          variant: "destructive",
-        });
-      }
-    });
-  };
 
   return (
     <>
@@ -1287,58 +1260,86 @@ export function SettingsForm({
             </div>
           </CardContent>
         </Card>
-
-        <Card className="border-destructive/50">
-          <CardHeader>
-            <CardTitle className="text-destructive">
-              {t("danger_zone_title")}
-            </CardTitle>
-            <CardDescription className="text-destructive/80">
-              {t("danger_zone_description")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="destructive"
-                  disabled={isDeleting || !isOnline}
-                >
-                  {isDeleting ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <Trash2 />
-                  )}
-                  {t("delete_all_button_text")}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    {t("delete_all_dialog_title")}
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {t("delete_all_dialog_description")}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isDeleting || !isOnline}>
-                    {t("cancel_button")}
-                  </AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    onClick={handleDeleteAll}
-                    disabled={isDeleting || !isOnline}
-                  >
-                    {isDeleting && <Loader2 className="animate-spin" />}
-                    {t("confirm_delete_button")}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </CardContent>
-        </Card>
       </div>
     </>
+  );
+}
+
+export function SettingsDangerZoneCard() {
+  const t = useTranslations("SettingsForm");
+  const { toast } = useToast();
+  const router = useRouter();
+  const { isOnline } = useNetworkStatus();
+  const [isDeleting, startDeleteTransition] = React.useTransition();
+
+  const handleDeleteAll = () => {
+    startDeleteTransition(async () => {
+      try {
+        const result = await deleteAllRepositoriesAction();
+        toast({
+          title: result.message.title,
+          description: result.message.description,
+          variant: result.success ? "default" : "destructive",
+        });
+        if (result.success) {
+          router.push("/");
+        }
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
+        toast({
+          title: t("toast_error_title"),
+          description: t("toast_delete_all_error_description"),
+          variant: "destructive",
+        });
+      }
+    });
+  };
+
+  return (
+    <Card className="mt-6 border-destructive/50">
+      <CardHeader>
+        <CardTitle className="text-destructive">
+          {t("danger_zone_title")}
+        </CardTitle>
+        <CardDescription className="text-destructive/80">
+          {t("danger_zone_description")}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" disabled={isDeleting || !isOnline}>
+              {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
+              {t("delete_all_button_text")}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {t("delete_all_dialog_title")}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("delete_all_dialog_description")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting || !isOnline}>
+                {t("cancel_button")}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={handleDeleteAll}
+                disabled={isDeleting || !isOnline}
+              >
+                {isDeleting && <Loader2 className="animate-spin" />}
+                {t("confirm_delete_button")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </CardContent>
+    </Card>
   );
 }

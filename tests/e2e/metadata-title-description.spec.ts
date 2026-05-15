@@ -1,12 +1,13 @@
 import { test, expect } from '@playwright/test';
 
 test('title and description are localized on EN routes', async ({ page }) => {
-  const username = process.env.AUTH_USERNAME || 'test';
-  const password = process.env.AUTH_PASSWORD || 'test';
+  const username = process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || 'test@example.com';
+  const password = process.env.AUTH_PASSWORD || 'TestPassword123';
   await page.goto('/en/login');
-  await page.getByLabel('Username').fill(username);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Login' }).click();
+  await page.getByLabel(/email|e-mail/i).fill(username);
+  await page.locator('input[name="password"]').fill(password);
+  await page.locator('button[type="submit"]').first().click();
+  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
 
   for (const path of ['/en', '/en/settings', '/en/test']) {
     await page.goto(path);
@@ -26,4 +27,3 @@ test('title and description are localized on DE routes', async ({ page, context 
     expect(desc).toBe('Überwachen Sie GitHub-Releases mit Leichtigkeit.');
   }
 });
-

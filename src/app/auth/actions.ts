@@ -4,9 +4,15 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { getLocale } from "next-intl/server";
 import { pathnames } from "@/i18n/routing";
+import {
+  auth,
+  ensureAuthDatabaseReady,
+  findRegistrationConflict,
+} from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { isPasswordPolicyValid } from "@/lib/password-policy";
 import { redirectLocalized } from "@/lib/redirect-localized";
-import { getSession } from "@/lib/session";
+import { isUsernamePolicyValid } from "@/lib/username-policy";
 
 type LoginAttemptState = {
   failures: number;
@@ -23,6 +29,16 @@ type FailedAttemptResult = {
 };
 
 type FailedAttemptReason = "invalid_input" | "invalid_credentials";
+
+export type LoginActionState = {
+  errorKey?: string;
+  requiresTwoFactor?: boolean;
+  redirectTo?: string;
+};
+
+export type RegisterActionState = {
+  errorKey?: string;
+};
 
 declare global {
   var _failedLoginAttempts: Map<string, LoginAttemptState> | undefined;
@@ -73,20 +89,100 @@ const loginLockoutSeconds = parseBoundedIntegerEnv(
 const loginAttemptWindowMs = loginAttemptWindowSeconds * 1_000;
 const loginLockoutMs = loginLockoutSeconds * 1_000;
 
-async function getLoginRequestContext(username: string): Promise<{
-  rateLimitKey: string;
-  clientIp: string;
-}> {
-  const headerStore = await headers();
+function getClientIp(headerStore: Headers): string {
   const forwardedFor = headerStore.get("x-forwarded-for");
   const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
   const realIp = headerStore.get("x-real-ip")?.trim();
-  const ip = (firstForwardedIp || realIp || "unknown").slice(0, 128);
-  const normalizedUsername = username.trim().toLowerCase().slice(0, 128);
+  return (firstForwardedIp || realIp || "unknown").slice(0, 128);
+}
+
+function getLoginRequestContext(
+  headerStore: Headers,
+  identifier: string,
+): {
+  rateLimitKey: string;
+  clientIp: string;
+} {
+  const ip = getClientIp(headerStore);
+  const normalizedIdentifier = identifier.trim().toLowerCase().slice(0, 128);
   return {
-    rateLimitKey: `${ip}:${normalizedUsername || "unknown"}`,
+    rateLimitKey: `${ip}:${normalizedIdentifier || "unknown"}`,
     clientIp: ip,
   };
+}
+
+function isLikelyEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isValidUsername(value: string) {
+  return isUsernamePolicyValid(value);
+}
+
+function normalizeAuthApiErrorCode(value: unknown) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+async function getAuthApiErrorCode(response: Response) {
+  try {
+    const payload = (await response.clone().json()) as {
+      error?: unknown;
+      code?: unknown;
+    };
+    return (
+      normalizeAuthApiErrorCode(payload.error) ||
+      normalizeAuthApiErrorCode(payload.code)
+    );
+  } catch {
+    return "";
+  }
+}
+
+function mapRegisterErrorToSetupError(errorCode: string): string {
+  if (!errorCode) {
+    return "error_setup_failed";
+  }
+
+  if (
+    errorCode === "user_already_exists" ||
+    errorCode === "email_already_exists" ||
+    errorCode === "email_already_in_use" ||
+    errorCode === "email_in_use"
+  ) {
+    return "error_setup_email_in_use";
+  }
+
+  if (
+    errorCode === "username_already_exists" ||
+    errorCode === "username_already_in_use" ||
+    errorCode === "username_in_use" ||
+    errorCode === "username_taken"
+  ) {
+    return "error_setup_username_in_use";
+  }
+
+  if (errorCode === "invalid_email" || errorCode === "email_invalid") {
+    return "error_setup_invalid_email";
+  }
+
+  if (errorCode === "invalid_username" || errorCode === "username_invalid") {
+    return "error_setup_invalid_username";
+  }
+
+  if (
+    errorCode === "invalid_password" ||
+    errorCode === "weak_password" ||
+    errorCode === "password_too_weak" ||
+    errorCode === "password_policy_violation"
+  ) {
+    return "error_setup_invalid_password_policy";
+  }
+
+  if (errorCode === "signup_disabled" || errorCode === "invalid_input") {
+    return "error_setup_invalid_input";
+  }
+
+  return "error_setup_failed";
 }
 
 function pruneFailedLoginState(now: number) {
@@ -182,7 +278,7 @@ function clearExpiredLockout(
 }
 
 function logFailedLoginAttempt(
-  username: string,
+  identifier: string,
   clientIp: string,
   reason: FailedAttemptReason,
   result: FailedAttemptResult,
@@ -194,7 +290,7 @@ function logFailedLoginAttempt(
     logger
       .withScope("Auth")
       .warn(
-        `Failed login attempt for username='${username}' from ip='${clientIp}' (${reasonLabel}); lockout activated for ${result.lockoutRemainingSeconds}s after ${result.failures}/${loginAttemptLimit} failed attempts.`,
+        `Failed login attempt for identifier='${identifier}' from ip='${clientIp}' (${reasonLabel}); lockout activated for ${result.lockoutRemainingSeconds}s after ${result.failures}/${loginAttemptLimit} failed attempts.`,
       );
     return;
   }
@@ -202,28 +298,59 @@ function logFailedLoginAttempt(
   logger
     .withScope("Auth")
     .warn(
-      `Failed login attempt for username='${username}' from ip='${clientIp}' (${reasonLabel}); attempts=${result.failures}/${loginAttemptLimit}, remaining_before_lockout=${result.attemptsRemaining}.`,
+      `Failed login attempt for identifier='${identifier}' from ip='${clientIp}' (${reasonLabel}); attempts=${result.failures}/${loginAttemptLimit}, remaining_before_lockout=${result.attemptsRemaining}.`,
     );
 }
 
+async function hasTwoFactorRedirectFlag(payload: unknown): Promise<boolean> {
+  if (!payload || typeof payload !== "object") return false;
+
+  const direct = (payload as { twoFactorRedirect?: unknown }).twoFactorRedirect;
+  if (typeof direct === "boolean") {
+    return direct;
+  }
+
+  if (typeof (payload as { clone?: unknown }).clone !== "function") {
+    return false;
+  }
+
+  try {
+    const cloned = (payload as { clone: () => Response }).clone();
+    const data = (await cloned.json()) as { twoFactorRedirect?: unknown };
+    return data.twoFactorRedirect === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function login(
-  _previousState: { errorKey?: string } | undefined,
+  _previousState: LoginActionState | undefined,
   formData: FormData,
 ) {
-  const username = formData.get("username");
+  const email = formData.get("email");
   const password = formData.get("password");
   const next = formData.get("next");
-  const usernameValue = typeof username === "string" ? username.trim() : "";
-  const { rateLimitKey, clientIp } =
-    await getLoginRequestContext(usernameValue);
+  const identifierValue = typeof email === "string" ? email.trim() : "";
+  const headerStore = await headers();
+  const { rateLimitKey, clientIp } = getLoginRequestContext(
+    headerStore,
+    identifierValue,
+  );
   const now = Date.now();
+  const methodLabel = isLikelyEmail(identifierValue) ? "email" : "username";
+
+  logger
+    .withScope("Auth")
+    .info(
+      `Login attempt started for identifier='${identifierValue || "unknown"}' from ip='${clientIp}' using ${methodLabel}.`,
+    );
 
   const expiredLockout = clearExpiredLockout(rateLimitKey, now);
   if (expiredLockout.wasCleared) {
     logger
       .withScope("Auth")
       .info(
-        `Lockout expired for username='${usernameValue || "unknown"}' from ip='${clientIp}'. Access unblocked after ${expiredLockout.failures} failed attempt(s).`,
+        `Lockout expired for identifier='${identifierValue || "unknown"}' from ip='${clientIp}'. Access unblocked after ${expiredLockout.failures} failed attempt(s).`,
       );
   }
 
@@ -234,21 +361,20 @@ export async function login(
     logger
       .withScope("Auth")
       .warn(
-        `Blocked login attempt for username='${usernameValue || "unknown"}' from ip='${clientIp}' due to active lockout (${remainingSeconds}s remaining).`,
+        `Blocked login attempt for identifier='${identifierValue || "unknown"}' from ip='${clientIp}' due to active lockout (${remainingSeconds}s remaining).`,
       );
     return { errorKey: "error_too_many_attempts" };
   }
 
-  // Security: Validate input types and presence
   if (
-    typeof username !== "string" ||
-    !usernameValue ||
+    typeof email !== "string" ||
+    !identifierValue ||
     typeof password !== "string" ||
     !password
   ) {
     const failedAttempt = registerFailedAttempt(rateLimitKey, now);
     logFailedLoginAttempt(
-      typeof username === "string" ? usernameValue : "unknown",
+      typeof email === "string" ? identifierValue : "unknown",
       clientIp,
       "invalid_input",
       failedAttempt,
@@ -256,74 +382,94 @@ export async function login(
     return { errorKey: "error_invalid_credentials" };
   }
 
-  if (
-    username === process.env.AUTH_USERNAME &&
-    password === process.env.AUTH_PASSWORD
-  ) {
+  await ensureAuthDatabaseReady();
+  const signInResponse =
+    methodLabel === "email"
+      ? await auth.api.signInEmail({
+          headers: headerStore,
+          body: { email: identifierValue.toLowerCase(), password },
+          asResponse: true,
+        })
+      : await auth.api.signInUsername({
+          headers: headerStore,
+          body: { username: identifierValue, password },
+          asResponse: true,
+        });
+
+  logger
+    .withScope("Auth")
+    .info(
+      `Primary auth API response for identifier='${identifierValue}' from ip='${clientIp}' returned status=${signInResponse.status}.`,
+    );
+
+  if (signInResponse.ok) {
+    const twoFactorRequired = await hasTwoFactorRedirectFlag(signInResponse);
+
     const previousFailures =
       failedLoginAttempts.get(rateLimitKey)?.failures ?? 0;
     clearFailedAttempts(rateLimitKey);
-    const session = await getSession();
-    session.isLoggedIn = true;
-    session.username = username;
-    await session.save();
+    if (twoFactorRequired) {
+      logger
+        .withScope("Auth")
+        .info(
+          `Primary auth factor valid for identifier='${identifierValue}' from ip='${clientIp}'. Awaiting OTP verification.`,
+        );
+      return { requiresTwoFactor: true };
+    }
+
     logger
       .withScope("Auth")
       .info(
-        `Successful login for username='${username}' from ip='${clientIp}'`,
+        `Successful login for identifier='${identifierValue}' from ip='${clientIp}'`,
       );
     if (previousFailures > 0) {
       logger
         .withScope("Auth")
         .info(
-          `Cleared ${previousFailures} failed login attempt(s) for username='${username}' from ip='${clientIp}' after successful authentication.`,
+          `Cleared ${previousFailures} failed login attempt(s) for identifier='${identifierValue}' from ip='${clientIp}' after successful authentication.`,
         );
     }
 
-    // Revalidate the root path to ensure data is fresh after login.
-    // The path revalidated must be the absolute path, not the translated one.
     revalidatePath("/", "layout");
-
-    // Security: Only redirect to relative paths within the app to prevent open redirect vulnerabilities.
+    const locale = await getLocale();
+    let finalPath = "/";
     if (
       typeof next === "string" &&
       next.startsWith("/") &&
       !next.startsWith("//") &&
       !next.includes("..")
     ) {
-      const locale = await getLocale();
-      // Remove the leading locale from the 'next' parameter before redirecting
-      // e.g., transforms "/de/test" to "/test"
       const pathWithoutLocale = next.startsWith(`/${locale}`)
         ? next.substring(`/${locale}`.length)
         : next;
-
-      // Ensure the path is not empty and starts with a slash
-      const finalPath =
+      finalPath =
         (pathWithoutLocale.startsWith("/")
           ? pathWithoutLocale
           : `/${pathWithoutLocale}`) || "/";
-
-      logger
-        .withScope("Auth")
-        .info(`Redirect after login to '${finalPath}' (locale=${locale})`);
-      await redirectLocalized(finalPath, locale);
-    } else {
-      const locale = await getLocale();
-      logger
-        .withScope("Auth")
-        .info(`Redirect after login to '/' (locale=${locale})`);
-      await redirectLocalized("/", locale);
     }
+
+    logger
+      .withScope("Auth")
+      .info(
+        `Login completed; client will navigate to '${finalPath}' (locale=${locale}).`,
+      );
+    return { redirectTo: `/${locale}${finalPath}` };
   }
+
+  logger
+    .withScope("Auth")
+    .warn(
+      `Login rejected for identifier='${identifierValue || "unknown"}' from ip='${clientIp}' with status=${signInResponse.status}.`,
+    );
 
   const failedAttempt = registerFailedAttempt(rateLimitKey, now);
   logFailedLoginAttempt(
-    usernameValue || "unknown",
+    identifierValue || "unknown",
     clientIp,
     "invalid_credentials",
     failedAttempt,
   );
+
   return {
     errorKey: failedAttempt.lockoutTriggered
       ? "error_too_many_attempts"
@@ -331,14 +477,125 @@ export async function login(
   };
 }
 
-export async function logout() {
-  const session = await getSession();
+export async function register(
+  _previousState: RegisterActionState | undefined,
+  formData: FormData,
+) {
+  const signupEnabled = process.env.AUTH_ENABLE_SIGNUP === "true";
+  if (!signupEnabled) {
+    return { errorKey: "error_setup_unavailable" };
+  }
+
+  const usernameRaw = formData.get("username");
+  const emailRaw = formData.get("email");
+  const passwordRaw = formData.get("password");
+  const nameRaw = formData.get("name");
+
+  const username = typeof usernameRaw === "string" ? usernameRaw.trim() : "";
+  const email =
+    typeof emailRaw === "string" ? emailRaw.trim().toLowerCase() : "";
+  const password = typeof passwordRaw === "string" ? passwordRaw : "";
+  const name = typeof nameRaw === "string" ? nameRaw.trim() : "";
+
+  const headerStore = await headers();
+  const clientIp = getClientIp(headerStore);
+
+  logger
+    .withScope("Auth")
+    .info(
+      `Registration attempt started for username='${username || "unknown"}' email='${email || "unknown"}' from ip='${clientIp}'.`,
+    );
+
+  if (!isValidUsername(username)) {
+    return { errorKey: "error_setup_invalid_username" };
+  }
+  if (!isLikelyEmail(email)) {
+    return { errorKey: "error_setup_invalid_email" };
+  }
+  if (!isPasswordPolicyValid(password.trim())) {
+    return { errorKey: "error_setup_invalid_password_policy" };
+  }
+
+  await ensureAuthDatabaseReady();
+
+  const registrationConflict = findRegistrationConflict(username, email);
+  if (registrationConflict === "username_in_use") {
+    logger
+      .withScope("Auth")
+      .warn(
+        `Registration blocked for username='${username}' from ip='${clientIp}' because username is already in use.`,
+      );
+    return { errorKey: "error_setup_username_in_use" };
+  }
+  if (registrationConflict === "email_in_use") {
+    logger
+      .withScope("Auth")
+      .warn(
+        `Registration blocked for email='${email}' from ip='${clientIp}' because email is already in use.`,
+      );
+    return { errorKey: "error_setup_email_in_use" };
+  }
+
+  const signUpBody = {
+    email,
+    password,
+    username,
+    name: name || username,
+  };
+
+  const signUpResponse = await auth.api.signUpEmail({
+    headers: headerStore,
+    body: signUpBody,
+    asResponse: true,
+  });
+
+  if (!signUpResponse.ok) {
+    const errorCode = await getAuthApiErrorCode(signUpResponse);
+    const mappedKey = mapRegisterErrorToSetupError(errorCode);
+    logger
+      .withScope("Auth")
+      .warn(
+        `Registration failed for username='${username || "unknown"}' email='${email || "unknown"}' from ip='${clientIp}' with status=${signUpResponse.status}${errorCode ? ` (error='${errorCode}')` : ""}.`,
+      );
+    return { errorKey: mappedKey };
+  }
+
+  logger
+    .withScope("Auth")
+    .info(
+      `Registration successful for username='${username}' email='${email}' from ip='${clientIp}'. Redirecting to login.`,
+    );
   const locale = await getLocale();
-  const user = session.username || "unknown";
-  logger.withScope("Auth").info(`User '${user}' logged out`);
-  session.destroy();
+  const loginPath = pathnames["/login"][locale as "en" | "de"];
+  redirectLocalized(`${loginPath}?registered=1`, locale);
+}
+
+export async function logout() {
+  await ensureAuthDatabaseReady();
+  const headerStore = await headers();
+  const locale = await getLocale();
+  const clientIp = getClientIp(headerStore);
+  logger.withScope("Auth").info(`Logout requested from ip='${clientIp}'.`);
+
+  const signOutResponse = await auth.api.signOut({
+    headers: headerStore,
+    asResponse: true,
+  });
+  if (!signOutResponse.ok) {
+    logger
+      .withScope("Auth")
+      .warn(
+        `Sign out returned a non-success status=${signOutResponse.status} for ip='${clientIp}'.`,
+      );
+  }
+
+  logger
+    .withScope("Auth")
+    .info(
+      `User logged out from ip='${clientIp}' with status=${signOutResponse.status}.`,
+    );
 
   const loginPath = pathnames["/login"][locale as "en" | "de"];
   revalidatePath("/");
-  await redirectLocalized(loginPath, locale);
+  redirectLocalized(loginPath, locale);
 }

@@ -7,6 +7,7 @@ if (process.env.CI) {
 
 export default defineConfig({
   testDir: 'tests/e2e',
+  globalSetup: './tests/e2e/global-setup.ts',
   timeout: 30_000,
   retries: 0,
   workers: 1,
@@ -35,9 +36,11 @@ export default defineConfig({
       NODE_ENV: 'production',
       HTTPS: 'false',
       BACKGROUND_POLLING_INITIALIZED: 'true',
-      AUTH_SECRET: 'x'.repeat(64),
-      AUTH_USERNAME: process.env.AUTH_USERNAME || 'test',
-      AUTH_PASSWORD: process.env.AUTH_PASSWORD || 'test',
+      BETTER_AUTH_SECRET: 'x'.repeat(64),
+      BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
+      AUTH_SETUP_TOKEN: process.env.AUTH_SETUP_TOKEN || 'y'.repeat(64),
+      AUTH_EMAIL: process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || 'test@example.com',
+      AUTH_PASSWORD: process.env.AUTH_PASSWORD || 'TestPassword123',
       GITLAB_ADDITIONAL_HOSTS: process.env.GITLAB_ADDITIONAL_HOSTS || 'gitlab.self.test',
     },
   },

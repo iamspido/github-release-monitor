@@ -33,6 +33,12 @@ const nextConfig = {
         port: '',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'developers.google.com',
+        port: '',
+        pathname: '/identity/images/**',
+      },
     ],
   },
 };

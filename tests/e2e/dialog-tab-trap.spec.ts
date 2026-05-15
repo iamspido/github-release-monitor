@@ -6,7 +6,11 @@ test('repo dialog traps focus with Tab/Shift+Tab', async ({ page }) => {
   await ensureTestRepo(page);
   await page.goto('/en');
 
-  const trigger = page.getByRole('button', { name: 'Open settings for this repository' }).first();
+  const trigger = page
+    .getByRole('button', {
+      name: /Open settings for this repository|Einstellungen für dieses Repository öffnen/,
+    })
+    .first();
   await trigger.click();
 
   const dialog = page.getByRole('dialog');

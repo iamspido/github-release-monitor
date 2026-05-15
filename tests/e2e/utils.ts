@@ -59,7 +59,11 @@ export async function waitForTestRepoReady(page: Page, timeoutMs = 8_000) {
 
 export async function ensureTestRepo(page: Page, timeoutMs = 8_000) {
   await page.goto('/en/test');
-  await page.getByRole('button', { name: 'Add/Reset Test Repo' }).click();
+  await page
+    .getByRole('button', {
+      name: /Add\/Reset Test Repo|Test-Repo hinzufügen\/zurücksetzen/,
+    })
+    .click();
   await waitForTestRepoReady(page, timeoutMs);
 }
 
@@ -100,7 +104,7 @@ export async function goOnline(page: Page, waitMs = 450) {
 
 async function hasSessionCookie(page: Page): Promise<boolean> {
   const cookies = await page.context().cookies();
-  return cookies.some(cookie => cookie.name === 'github-release-monitor-session');
+  return cookies.some(cookie => cookie.name === 'better-auth.session_token');
 }
 
 export async function isLoggedIn(page: Page): Promise<boolean> {
@@ -117,9 +121,10 @@ export async function ensureAuthenticated(page: Page): Promise<void> {
   }
 }
 
-export async function login(page: Page, username?: string, password?: string, timeoutMs = 20_000) {
-  const u = username || process.env.AUTH_USERNAME || 'test';
-  const p = password || process.env.AUTH_PASSWORD || 'test';
+export async function login(page: Page, email?: string, password?: string, timeoutMs = 20_000) {
+  const u = email || process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || 'test@example.com';
+  const p = password || process.env.AUTH_PASSWORD || 'TestPassword123';
+  const setupToken = process.env.AUTH_SETUP_TOKEN || 'x'.repeat(64);
 
   const loginUrlRegex = /\/(en|de)\/(login|anmelden)/;
 
@@ -147,7 +152,19 @@ export async function login(page: Page, username?: string, password?: string, ti
     throw new Error(`Unable to reach login page, current path: ${currentPath}`);
   }
 
-  const usernameField = page.locator('input[name="username"]');
+  const setupTokenField = page.locator('input[name="setupToken"]');
+  if ((await setupTokenField.count()) > 0) {
+    await setupTokenField.first().fill(setupToken, { timeout: timeoutMs });
+    await page.locator('input[name="name"]').fill('E2E Admin', { timeout: timeoutMs });
+    await page.locator('input[name="email"]').fill(u, { timeout: timeoutMs });
+    await page.locator('input[name="password"]').fill(p, { timeout: timeoutMs });
+    await page.getByRole('button', { name: /create admin account|administratorkonto erstellen/i }).click({
+      timeout: timeoutMs,
+    });
+    await expect(setupTokenField).toHaveCount(0, { timeout: timeoutMs });
+  }
+
+  const usernameField = page.locator('input[name="email"]');
   const passwordField = page.locator('input[name="password"]');
 
   if (await usernameField.count() === 0 || await passwordField.count() === 0) {
@@ -164,7 +181,7 @@ export async function login(page: Page, username?: string, password?: string, ti
   await passwordField.waitFor({ state: 'visible', timeout: timeoutMs });
   await passwordField.fill(p, { timeout: timeoutMs });
 
-  const loginButton = page.getByRole('button', { name: /login|anmelden/i }).first();
+  const loginButton = page.locator('button[type="submit"]').first();
   await loginButton.click({ timeout: timeoutMs });
   await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
 }

@@ -2,7 +2,6 @@
 
 import {
   FlaskConical,
-  Github,
   Home,
   Loader2,
   LogOut,
@@ -11,6 +10,7 @@ import {
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
+import { GithubBrandIcon } from "@/components/icons/simple-brand-icon";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -133,7 +133,7 @@ export function MobileMenu({ onLogout, isLoggingOut }: MobileMenuProps) {
               rel="noopener noreferrer"
               className="flex w-full cursor-pointer items-center"
             >
-              <Github className="mr-2 size-4" />
+              <GithubBrandIcon className="mr-2 size-4" />
               <span>{t("menu_github")}</span>
             </a>
           </DropdownMenuItem>

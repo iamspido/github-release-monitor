@@ -1,8 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultLocale } from '@/i18n/routing';
-import { getIronSession } from 'iron-session';
 import { SETTINGS_LOCALE_COOKIE, NEXT_LOCALE_COOKIE } from '@/lib/settings-locale-cookie';
-import type { SessionData } from '@/types';
 
 const handleI18nMock = vi.fn();
 const createIntlMiddlewareMock = vi.fn(() => handleI18nMock);
@@ -12,12 +10,16 @@ vi.mock('next-intl/middleware', () => ({
   default: createIntlMiddlewareMock,
 }));
 
-vi.mock('iron-session', () => ({
-  getIronSession: vi.fn(async () => ({})),
-}));
+const getSessionMock = vi.fn(async () => null);
+const ensureAuthDatabaseReadyMock = vi.fn(async () => undefined);
 
-vi.mock('next/headers', () => ({
-  cookies: vi.fn(async () => ({})),
+vi.mock('@/lib/auth', () => ({
+  auth: {
+    api: {
+      getSession: getSessionMock,
+    },
+  },
+  ensureAuthDatabaseReady: ensureAuthDatabaseReadyMock,
 }));
 
 vi.mock('next/server', () => {
@@ -216,6 +218,10 @@ describe('proxy', () => {
     handleI18nMock.mockReset();
     createIntlMiddlewareMock.mockReset();
     createIntlMiddlewareMock.mockReturnValue(handleI18nMock);
+    getSessionMock.mockReset();
+    getSessionMock.mockResolvedValue(null);
+    ensureAuthDatabaseReadyMock.mockReset();
+    ensureAuthDatabaseReadyMock.mockResolvedValue(undefined);
   });
 
   it('redirects unauthenticated users to locale login and sets cookies', async () => {
@@ -226,8 +232,7 @@ describe('proxy', () => {
     baseResponse.headers.set('x-next-intl-locale', 'de');
     handleI18nMock.mockReturnValue(baseResponse);
 
-    const getIronSessionMock = vi.mocked(getIronSession);
-    getIronSessionMock.mockResolvedValue({ isLoggedIn: false } as SessionData);
+    getSessionMock.mockResolvedValue(null);
 
     const request = createRequest(
       'https://example.com/de/einstellungen',
@@ -258,8 +263,7 @@ describe('proxy', () => {
     baseResponse.headers.set('x-next-intl-locale', 'de');
     handleI18nMock.mockReturnValue(baseResponse);
 
-    const getIronSessionMock = vi.mocked(getIronSession);
-    getIronSessionMock.mockResolvedValue({ isLoggedIn: true } as SessionData);
+    getSessionMock.mockResolvedValue({ session: { id: 's1' }, user: { id: 'u1' } });
 
     const request = createRequest(
       'https://example.com/de/anmelden',
@@ -273,6 +277,27 @@ describe('proxy', () => {
     expect(response.headers.get('location')).toBe('https://example.com/de');
     expect(response.cookies.get(SETTINGS_LOCALE_COOKIE)?.value).toBe('de');
     expect(response.cookies.get(NEXT_LOCALE_COOKIE)?.value).toBe('de');
+  });
+
+  it('allows unauthenticated users on the register page', async () => {
+    expect(proxyFn).toBeDefined();
+    const { NextResponse } = await import('next/server');
+
+    const baseResponse = new NextResponse(null, { status: 200 });
+    baseResponse.headers.set('x-next-intl-locale', 'de');
+    handleI18nMock.mockReturnValue(baseResponse);
+    getSessionMock.mockResolvedValue(null);
+
+    const request = createRequest(
+      'https://example.com/de/registrieren',
+      { host: 'example.com' },
+      { [SETTINGS_LOCALE_COOKIE]: 'de' },
+    );
+
+    const response = await proxyFn!(request as any);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
   });
 
   it('blocks disallowed origins during development', async () => {
@@ -289,8 +314,7 @@ describe('proxy', () => {
     process.env.ALLOWED_DEV_ORIGINS = 'https://allowed.example.com';
 
     try {
-      const getIronSessionMock = vi.mocked(getIronSession);
-      getIronSessionMock.mockResolvedValue({ isLoggedIn: true } as SessionData);
+      getSessionMock.mockResolvedValue({ session: { id: 's1' }, user: { id: 'u1' } });
 
       const request = createRequest(
         'https://example.com/de',
@@ -319,8 +343,7 @@ describe('proxy', () => {
     baseResponse.headers.set('x-next-intl-locale', 'de');
     handleI18nMock.mockReturnValue(baseResponse);
 
-    const getIronSessionMock = vi.mocked(getIronSession);
-    getIronSessionMock.mockResolvedValue({ isLoggedIn: true } as SessionData);
+    getSessionMock.mockResolvedValue({ session: { id: 's1' }, user: { id: 'u1' } });
 
     const originalNodeEnv = process.env.NODE_ENV;
     const originalHttps = process.env.HTTPS;
