@@ -215,6 +215,7 @@ describe('buildSettingsLocaleApiUrls', () => {
 describe('proxy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.AUTHENTICATION_METHOD;
     handleI18nMock.mockReset();
     createIntlMiddlewareMock.mockReset();
     createIntlMiddlewareMock.mockReturnValue(handleI18nMock);
@@ -298,6 +299,97 @@ describe('proxy', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('location')).toBeNull();
+  });
+
+  it('allows unauthenticated home in AllowUnauthenticated mode', async () => {
+    expect(proxyFn).toBeDefined();
+    const { NextResponse } = await import('next/server');
+    process.env.AUTHENTICATION_METHOD = 'AllowUnauthenticated';
+
+    const baseResponse = new NextResponse(null, { status: 200 });
+    baseResponse.headers.set('x-next-intl-locale', 'de');
+    handleI18nMock.mockReturnValue(baseResponse);
+    getSessionMock.mockResolvedValue(null);
+
+    const request = createRequest(
+      'https://example.com/de',
+      { host: 'example.com' },
+      { [SETTINGS_LOCALE_COOKIE]: 'de' },
+    );
+
+    const response = await proxyFn!(request as any);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
+  });
+
+  it('blocks unauthenticated settings in AllowUnauthenticated mode', async () => {
+    expect(proxyFn).toBeDefined();
+    const { NextResponse } = await import('next/server');
+    process.env.AUTHENTICATION_METHOD = 'AllowUnauthenticated';
+
+    const baseResponse = new NextResponse(null, { status: 200 });
+    baseResponse.headers.set('x-next-intl-locale', 'de');
+    handleI18nMock.mockReturnValue(baseResponse);
+    getSessionMock.mockResolvedValue(null);
+
+    const request = createRequest(
+      'https://example.com/de/einstellungen',
+      { host: 'example.com' },
+      { [SETTINGS_LOCALE_COOKIE]: 'de' },
+    );
+
+    const response = await proxyFn!(request as any);
+
+    expect(response.status).toBe(307);
+    const redirectUrl = response.headers.get('location');
+    const parsed = redirectUrl ? new URL(redirectUrl) : null;
+    expect(parsed?.pathname).toBe('/de/anmelden');
+    expect(parsed?.searchParams.get('next')).toBe('/de/einstellungen');
+  });
+
+  it('allows restricted pages without internal session in External mode', async () => {
+    expect(proxyFn).toBeDefined();
+    const { NextResponse } = await import('next/server');
+    process.env.AUTHENTICATION_METHOD = 'External';
+
+    const baseResponse = new NextResponse(null, { status: 200 });
+    baseResponse.headers.set('x-next-intl-locale', 'de');
+    handleI18nMock.mockReturnValue(baseResponse);
+    getSessionMock.mockResolvedValue(null);
+
+    const request = createRequest(
+      'https://example.com/de/einstellungen',
+      { host: 'example.com' },
+      { [SETTINGS_LOCALE_COOKIE]: 'de' },
+    );
+
+    const response = await proxyFn!(request as any);
+
+    expect(response.status).toBe(200);
+    expect(getSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('redirects auth pages to home in External mode', async () => {
+    expect(proxyFn).toBeDefined();
+    const { NextResponse } = await import('next/server');
+    process.env.AUTHENTICATION_METHOD = 'External';
+
+    const baseResponse = new NextResponse(null, { status: 200 });
+    baseResponse.headers.set('x-next-intl-locale', 'de');
+    handleI18nMock.mockReturnValue(baseResponse);
+
+    const request = createRequest(
+      'https://example.com/de/anmelden',
+      { host: 'example.com' },
+      { [SETTINGS_LOCALE_COOKIE]: 'de' },
+    );
+
+    const response = await proxyFn!(request as any);
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('https://example.com/de');
+    expect(getSessionMock).not.toHaveBeenCalled();
   });
 
   it('blocks disallowed origins during development', async () => {

@@ -1,6 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
 import createIntlMiddleware from "next-intl/middleware";
-import { auth, ensureAuthDatabaseReady } from "@/lib/auth";
+import {
+  canReadHomeUnauthenticated,
+  getAuthenticationMethod,
+} from "@/lib/auth-mode";
 import { logger } from "@/lib/logger";
 import {
   NEXT_LOCALE_COOKIE,
@@ -40,6 +43,7 @@ const SETTINGS_LOCALE_API_PATH = "/api/settings-locale";
 export async function proxy(request: NextRequest) {
   const logAuth = logger.withScope("Auth");
   const logSecurity = logger.withScope("Security");
+  const authenticationMethod = getAuthenticationMethod();
 
   const pathname = request.nextUrl.pathname;
   if (
@@ -89,29 +93,47 @@ export async function proxy(request: NextRequest) {
   const loginPaths = pathnames["/login"];
   const loginPathForLocale =
     loginPaths[currentLocale as "en" | "de"] || loginPaths.en;
-  const registerPaths = pathnames["/register"];
-  const registerPathForLocale =
-    registerPaths[currentLocale as "en" | "de"] || registerPaths.en;
-  const isLoginPage = request.nextUrl.pathname.endsWith(loginPathForLocale);
-  const isRegisterPage = request.nextUrl.pathname.endsWith(
-    registerPathForLocale,
-  );
+  const routeKey = getRouteKeyForPath(currentLocale, request.nextUrl.pathname);
+  const isLoginPage = routeKey === "/login";
+  const isRegisterPage = routeKey === "/register";
   let isAuthenticated = false;
-  try {
-    logAuth.debug(`Checking session for path '${pathname}'.`);
-    await ensureAuthDatabaseReady();
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    });
-    isAuthenticated = Boolean(session?.session && session?.user);
-    logAuth.debug(
-      `Session check result for path '${pathname}': authenticated=${isAuthenticated}.`,
-    );
-  } catch (error) {
-    logAuth.error("Failed to validate session in proxy.", error);
+  if (authenticationMethod !== "External") {
+    try {
+      logAuth.debug(`Checking session for path '${pathname}'.`);
+      const { auth, ensureAuthDatabaseReady } = await import("@/lib/auth");
+      await ensureAuthDatabaseReady();
+      const session = await auth.api.getSession({
+        headers: request.headers,
+      });
+      isAuthenticated = Boolean(session?.session && session?.user);
+      logAuth.debug(
+        `Session check result for path '${pathname}': authenticated=${isAuthenticated}.`,
+      );
+    } catch (error) {
+      logAuth.error("Failed to validate session in proxy.", error);
+    }
   }
 
-  if (!isAuthenticated && !isLoginPage && !isRegisterPage) {
+  if (authenticationMethod === "External" && (isLoginPage || isRegisterPage)) {
+    logAuth.info("External auth mode active, redirecting auth page to home.");
+    const redirectResponse = NextResponse.redirect(
+      new URL(`/${currentLocale}`, request.url),
+    );
+    attachLocaleCookies(redirectResponse, currentLocale);
+    return redirectResponse;
+  }
+
+  const isPublicAuthPage = isLoginPage || isRegisterPage;
+  const canReadPublicHome =
+    routeKey === "/" && canReadHomeUnauthenticated(authenticationMethod);
+  const shouldRequireAuth =
+    authenticationMethod === "Basic"
+      ? !isPublicAuthPage
+      : authenticationMethod === "AllowUnauthenticated"
+        ? !isPublicAuthPage && !canReadPublicHome
+        : false;
+
+  if (!isAuthenticated && shouldRequireAuth) {
     const redirectUrl = new URL(
       `/${currentLocale}${loginPathForLocale}`,
       request.url,
@@ -126,7 +148,11 @@ export async function proxy(request: NextRequest) {
     return redirectResponse;
   }
 
-  if (isAuthenticated && (isLoginPage || isRegisterPage)) {
+  if (
+    authenticationMethod !== "External" &&
+    isAuthenticated &&
+    (isLoginPage || isRegisterPage)
+  ) {
     logAuth.info("Logged-in user on auth page, redirecting to home.");
     const redirectResponse = NextResponse.redirect(
       new URL(`/${currentLocale}`, request.url),
@@ -137,9 +163,11 @@ export async function proxy(request: NextRequest) {
 
   if (isAuthenticated) {
     logAuth.debug(`Authenticated request allowed for path '${pathname}'.`);
-  } else if (isLoginPage || isRegisterPage) {
+  } else if (authenticationMethod === "External") {
+    logAuth.debug(`External auth mode allowed request for path '${pathname}'.`);
+  } else if (isLoginPage || isRegisterPage || canReadPublicHome) {
     logAuth.debug(
-      `Unauthenticated request allowed for auth page '${pathname}'.`,
+      `Unauthenticated request allowed for public path '${pathname}'.`,
     );
   }
 
@@ -172,6 +200,15 @@ function getAllowedDevOrigins(): string[] {
   return allowedOriginsFromEnv
     ? allowedOriginsFromEnv.split(",").map((origin) => origin.trim())
     : [];
+}
+
+function getRouteKeyForPath(
+  locale: LocaleKey,
+  pathname: string,
+): RouteKey | null {
+  const { restPath } = splitLocaleFromPath(pathname);
+  const normalizedPath = normalizedRestPath(restPath);
+  return reversePathLookup[locale][normalizedPath] ?? null;
 }
 
 function normalizeGitlabHost(value: string): string | null {

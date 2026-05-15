@@ -4,6 +4,7 @@ import {
   FlaskConical,
   Home,
   Loader2,
+  LogIn,
   LogOut,
   Menu,
   Settings,
@@ -22,11 +23,13 @@ import {
 import { useNetworkStatus } from "@/hooks/use-network";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { pathnames } from "@/i18n/routing";
+import type { AuthAccess } from "@/lib/auth-mode";
 import { cn } from "@/lib/utils";
 
 interface MobileMenuProps {
   onLogout: () => void;
   isLoggingOut: boolean;
+  authAccess?: AuthAccess;
 }
 
 type NavPage = "home" | "settings" | "test";
@@ -38,7 +41,22 @@ type NavLink = {
   page: NavPage;
 };
 
-export function MobileMenu({ onLogout, isLoggingOut }: MobileMenuProps) {
+const defaultAuthAccess: AuthAccess = {
+  authenticationMethod: "Basic",
+  isAuthenticated: true,
+  canMutate: true,
+  canAccessRestrictedPages: true,
+  showLogin: false,
+  showLogout: true,
+  showSettings: true,
+  showTest: true,
+};
+
+export function MobileMenu({
+  onLogout,
+  isLoggingOut,
+  authAccess = defaultAuthAccess,
+}: MobileMenuProps) {
   const t = useTranslations("HomePage");
   const pathname = usePathname();
   const router = useRouter();
@@ -47,13 +65,26 @@ export function MobileMenu({ onLogout, isLoggingOut }: MobileMenuProps) {
 
   const navLinks: NavLink[] = [
     { href: "/", label: t("home_aria"), icon: Home, page: "home" },
-    {
-      href: "/settings",
-      label: t("settings_aria"),
-      icon: Settings,
-      page: "settings",
-    },
-    { href: "/test", label: t("test_aria"), icon: FlaskConical, page: "test" },
+    ...(authAccess.showSettings
+      ? [
+          {
+            href: "/settings" as const,
+            label: t("settings_aria"),
+            icon: Settings,
+            page: "settings" as const,
+          },
+        ]
+      : []),
+    ...(authAccess.showTest
+      ? [
+          {
+            href: "/test" as const,
+            label: t("test_aria"),
+            icon: FlaskConical,
+            page: "test" as const,
+          },
+        ]
+      : []),
   ];
 
   const normalizePath = (path: string | null | undefined) => {
@@ -138,23 +169,43 @@ export function MobileMenu({ onLogout, isLoggingOut }: MobileMenuProps) {
             </a>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            asChild
-            onSelect={onLogout}
-            disabled={isLoggingOut || !isOnline}
-          >
-            <button
-              type="button"
-              className="flex w-full cursor-pointer items-center"
-            >
-              {isLoggingOut ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : (
-                <LogOut className="mr-2 size-4" />
-              )}
-              <span>{t("menu_logout")}</span>
-            </button>
-          </DropdownMenuItem>
+          {authAccess.showLogin && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                asChild
+                onSelect={() => router.push("/login")}
+                className="flex w-full cursor-pointer items-center"
+              >
+                <button type="button">
+                  <LogIn className="mr-2 size-4" />
+                  <span>{t("menu_login")}</span>
+                </button>
+              </DropdownMenuItem>
+            </>
+          )}
+          {authAccess.showLogout && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                asChild
+                onSelect={onLogout}
+                disabled={isLoggingOut || !isOnline}
+              >
+                <button
+                  type="button"
+                  className="flex w-full cursor-pointer items-center"
+                >
+                  {isLoggingOut ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <LogOut className="mr-2 size-4" />
+                  )}
+                  <span>{t("menu_logout")}</span>
+                </button>
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

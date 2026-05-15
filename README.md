@@ -68,6 +68,11 @@ Navigate to the `example/` directory. You will need to configure the environment
 
    **Authentication (Required)**
    ```env
+   # Basic: internal login required for the app.
+   # AllowUnauthenticated: public read-only home; login required for changes, settings, and test page.
+   # External: disables internal auth gates for deployments protected by Authelia, Authentik, TinyAuth, NGINX Basic auth, etc.
+   AUTHENTICATION_METHOD=Basic
+
    # Optional login rate-limit/lockout protection (values in seconds)
    # Lockout duration once the threshold is reached.
    AUTH_LOGIN_LOCKOUT_SECONDS=900
@@ -345,6 +350,11 @@ Now, open the `.env` file and add the following variables.
 These variables are essential for securing your application.
 
 ```env
+# Basic: internal login required for the app.
+# AllowUnauthenticated: public read-only home; login required for changes, settings, and test page.
+# External: disables internal auth gates for deployments protected by Authelia, Authentik, TinyAuth, NGINX Basic auth, etc.
+AUTHENTICATION_METHOD=Basic
+
 # Optional login rate-limit/lockout protection (values in seconds)
 # Lockout duration once the threshold is reached.
 AUTH_LOGIN_LOCKOUT_SECONDS=900
@@ -567,6 +577,7 @@ Here is a complete list of all environment variables used by the application.
 |-----------------------|-----------------------------------------------------------------------------------------------------------|------------------------|----------------------------|
 | `ALLOWED_DEV_ORIGINS` | Comma-separated list of allowed origins in development; blocks others in middleware.                      | No (dev only)          | -                          |
 | `APPRISE_URL`         | URL of your Apprise service's notification endpoint (e.g., http://host/notify or http://host/notify/key). | No                     | -                          |
+| `AUTHENTICATION_METHOD` | Authentication mode: `Basic`, `AllowUnauthenticated`, or `External`. `External` should only be used behind another auth layer. | No | `Basic` |
 | `AUTH_LOGIN_LOCKOUT_SECONDS` | Lockout duration (seconds) after too many failed login attempts.                                   | No                     | `900`                      |
 | `AUTH_LOGIN_WINDOW_SECONDS` | Time window (seconds) used to count failed login attempts.                                          | No                     | `900`                      |
 | `AUTH_MAX_LOGIN_ATTEMPTS` | Maximum failed login attempts before a temporary lockout is applied.                                 | No                     | `5`                        |

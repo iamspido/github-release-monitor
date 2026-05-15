@@ -11,12 +11,14 @@
     "settings_aria": "Open settings page",
     "test_aria": "Open test page",
     "github_aria": "View source on GitHub",
+    "login_aria": "Log in",
     "logout_aria": "Log out",
     "home_aria": "Back to home page",
     "menu_home": "Home",
     "menu_settings": "Settings",
     "menu_test": "Test Page",
     "menu_github": "View on GitHub",
+    "menu_login": "Login",
     "menu_logout": "Logout",
     "menu_open": "Open menu",
     "monitored_repos_title": "Monitored Repositories",
@@ -104,7 +106,10 @@
   "EmptyState": {
     "title": "Start Observing",
     "description_line1": "You are not monitoring any repositories yet.",
-    "description_line2": "Add some GitHub, GitLab, or Codeberg repository URLs above to get started."
+    "description_line2": "Add some GitHub, GitLab, or Codeberg repository URLs above to get started.",
+    "readonly_title": "No repositories monitored",
+    "readonly_line1": "There are no repositories to display yet.",
+    "readonly_line2": "Log in to add repositories."
   },
   "SettingsPage": {
     "title": "Application Settings",
@@ -481,6 +486,7 @@
     "show_password": "Show password",
     "hide_password": "Hide password",
     "login_button": "Login",
+    "continue_without_login": "Continue without login",
     "register_button": "Register",
     "alternative_login_divider": "Or continue",
     "social_provider_github": "GitHub",
@@ -557,7 +563,8 @@
     "error_repo_not_found": "Repository not found. It might be private, deleted, or misspelled.",
     "error_no_releases_found": "The repository has no releases or tags.",
     "error_no_matching_releases": "No releases found that match your filter settings. Try increasing the number of releases to fetch in the settings.",
-    "error_generic_fetch": "Could not fetch release information."
+    "error_generic_fetch": "Could not fetch release information.",
+    "error_auth_required": "Please log in to use this action."
   },
   "TestRelease": {
     "title": "Full Markdown Test Release",

@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { getLocale, getTranslations } from "next-intl/server";
 
 import { checkForNewReleases } from "@/app/actions";
+import { canPerformRestrictedAction } from "@/lib/auth-access";
 import { logger } from "@/lib/logger";
 import { getRepositories, saveRepositories } from "@/lib/repository-storage";
 import {
@@ -17,8 +18,36 @@ import { getSettings, saveSettings } from "@/lib/settings-storage";
 import { scheduleTask } from "@/lib/task-scheduler";
 import type { AppSettings } from "@/types";
 
+async function getRestrictedActionMessage() {
+  const locale = await getLocale();
+  const t = await getTranslations({ locale, namespace: "Actions" });
+  return t("error_auth_required");
+}
+
+async function isRestrictedActionAllowed(): Promise<boolean> {
+  const allowed = await canPerformRestrictedAction();
+  if (!allowed) {
+    logger
+      .withScope("Settings")
+      .warn(
+        "Rejected restricted settings action because the request is unauthenticated.",
+      );
+  }
+  return allowed;
+}
+
 export async function updateSettingsAction(newSettings: AppSettings) {
   return scheduleTask("updateSettingsAction", async () => {
+    if (!(await isRestrictedActionAllowed())) {
+      return {
+        success: false,
+        message: {
+          title: await getRestrictedActionMessage(),
+          description: await getRestrictedActionMessage(),
+        },
+      };
+    }
+
     try {
       const currentSettings = await getSettings();
 
@@ -256,6 +285,16 @@ export async function updateSettingsAction(newSettings: AppSettings) {
 
 export async function deleteAllRepositoriesAction() {
   return scheduleTask("deleteAllRepositoriesAction", async () => {
+    if (!(await isRestrictedActionAllowed())) {
+      return {
+        success: false,
+        message: {
+          title: await getRestrictedActionMessage(),
+          description: await getRestrictedActionMessage(),
+        },
+      };
+    }
+
     try {
       await saveRepositories([]);
       logger.withScope("Settings").info("Deleted all repositories.");

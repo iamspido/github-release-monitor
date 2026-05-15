@@ -1,6 +1,13 @@
 "use client";
 
-import { FlaskConical, Home, Loader2, LogOut, Settings } from "lucide-react";
+import {
+  FlaskConical,
+  Home,
+  Loader2,
+  LogIn,
+  LogOut,
+  Settings,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { logout } from "@/app/auth/actions";
@@ -12,6 +19,7 @@ import { UpdateNoticeBanner } from "@/components/update-notice-banner";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { Link, usePathname } from "@/i18n/navigation";
 import { pathnames } from "@/i18n/routing";
+import type { AuthAccess } from "@/lib/auth-mode";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type { UpdateNotificationState } from "@/types";
@@ -20,6 +28,7 @@ import { MobileMenu } from "./mobile-menu";
 type HeaderProps = {
   locale: string;
   updateNotice?: UpdateNotificationState;
+  authAccess?: AuthAccess;
 };
 
 type NavLink = {
@@ -29,7 +38,22 @@ type NavLink = {
   page: "home" | "settings" | "test";
 };
 
-export function Header({ locale, updateNotice }: HeaderProps) {
+const defaultAuthAccess: AuthAccess = {
+  authenticationMethod: "Basic",
+  isAuthenticated: true,
+  canMutate: true,
+  canAccessRestrictedPages: true,
+  showLogin: false,
+  showLogout: true,
+  showSettings: true,
+  showTest: true,
+};
+
+export function Header({
+  locale,
+  updateNotice,
+  authAccess = defaultAuthAccess,
+}: HeaderProps) {
   const t = useTranslations("HomePage");
   const pathname = usePathname();
   const [isLoggingOut, startLogoutTransition] = React.useTransition();
@@ -66,13 +90,26 @@ export function Header({ locale, updateNotice }: HeaderProps) {
 
   const navLinks: NavLink[] = [
     { href: "/", label: t("home_aria"), icon: Home, page: "home" },
-    {
-      href: "/settings",
-      label: t("settings_aria"),
-      icon: Settings,
-      page: "settings",
-    },
-    { href: "/test", label: t("test_aria"), icon: FlaskConical, page: "test" },
+    ...(authAccess.showSettings
+      ? [
+          {
+            href: "/settings" as const,
+            label: t("settings_aria"),
+            icon: Settings,
+            page: "settings" as const,
+          },
+        ]
+      : []),
+    ...(authAccess.showTest
+      ? [
+          {
+            href: "/test" as const,
+            label: t("test_aria"),
+            icon: FlaskConical,
+            page: "test" as const,
+          },
+        ]
+      : []),
   ];
 
   const normalizePath = (path: string | null | undefined) => {
@@ -127,7 +164,11 @@ export function Header({ locale, updateNotice }: HeaderProps) {
           </h1>
         </Link>
         <div className="flex items-center gap-2">
-          <MobileMenu onLogout={handleLogout} isLoggingOut={isLoggingOut} />
+          <MobileMenu
+            onLogout={handleLogout}
+            isLoggingOut={isLoggingOut}
+            authAccess={authAccess}
+          />
 
           <div className="hidden items-center gap-2 md:flex">
             {navLinks.map((link) => (
@@ -152,24 +193,40 @@ export function Header({ locale, updateNotice }: HeaderProps) {
                 <GithubBrandIcon className="size-5" />
               </Button>
             </a>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleLogout}
-              disabled={isLoggingOut || !isOnline}
-              aria-label={t("logout_aria")}
-            >
-              {isLoggingOut ? (
-                <Loader2 className="size-5 animate-spin" />
-              ) : (
-                <LogOut className="size-5" />
-              )}
-            </Button>
+            {authAccess.showLogin && (
+              <Link href="/login" passHref>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t("login_aria")}
+                >
+                  <LogIn className="size-5" />
+                </Button>
+              </Link>
+            )}
+            {authAccess.showLogout && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleLogout}
+                disabled={isLoggingOut || !isOnline}
+                aria-label={t("logout_aria")}
+              >
+                {isLoggingOut ? (
+                  <Loader2 className="size-5 animate-spin" />
+                ) : (
+                  <LogOut className="size-5" />
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>
       <OfflineBanner />
-      <UpdateNoticeBanner notice={updateNotice} />
+      <UpdateNoticeBanner
+        notice={updateNotice}
+        canDismiss={authAccess.canMutate}
+      />
     </header>
   );
 }

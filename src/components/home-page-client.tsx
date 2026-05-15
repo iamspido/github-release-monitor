@@ -24,6 +24,7 @@ interface HomePageClientProps {
   errorSummary: Map<Exclude<FetchError["type"], "not_modified">, number> | null;
   lastUpdated: Date;
   locale: string;
+  canMutate?: boolean;
 }
 
 // Helper to get the translation key for a specific error type.
@@ -50,6 +51,7 @@ export function HomePageClient({
   errorSummary,
   lastUpdated,
   locale,
+  canMutate = true,
 }: HomePageClientProps) {
   const t = useTranslations("HomePage");
   const tActions = useTranslations("Actions");
@@ -82,7 +84,7 @@ export function HomePageClient({
 
   return (
     <>
-      <RepositoryForm currentRepositories={repositories} />
+      {canMutate && <RepositoryForm currentRepositories={repositories} />}
 
       <section className="mt-8">
         <div className="mb-4 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -97,7 +99,7 @@ export function HomePageClient({
             </span>
             <div className="flex items-stretch gap-2 justify-center sm:w-auto sm:items-center">
               <ExportButton />
-              <RefreshButton />
+              {canMutate && <RefreshButton />}
             </div>
           </div>
         </div>
@@ -134,7 +136,7 @@ export function HomePageClient({
         )}
 
         {repositories.length === 0 ? (
-          <EmptyState />
+          <EmptyState canMutate={canMutate} />
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {sortedReleases.map((enrichedRelease) => (
@@ -142,6 +144,7 @@ export function HomePageClient({
                 key={enrichedRelease.repoId}
                 enrichedRelease={enrichedRelease}
                 settings={settings}
+                canMutate={canMutate}
               />
             ))}
           </div>

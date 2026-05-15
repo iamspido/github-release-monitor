@@ -42,6 +42,8 @@ interface LoginFormProps {
   passkeyEnabled: boolean;
   signupEnabled: boolean;
   registerPath: string;
+  allowUnauthenticatedAccess?: boolean;
+  publicHomePath?: string;
 }
 
 type PasswordLoginState = {
@@ -139,6 +141,8 @@ export function LoginForm({
   passkeyEnabled,
   signupEnabled,
   registerPath,
+  allowUnauthenticatedAccess = false,
+  publicHomePath = "/",
 }: LoginFormProps) {
   const [passwordLoginState, setPasswordLoginState] =
     React.useState<PasswordLoginState | null>(null);
@@ -739,7 +743,7 @@ export function LoginForm({
               </div>
             )}
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex-col gap-2">
             <Button
               type="submit"
               className="w-full"
@@ -753,6 +757,16 @@ export function LoginForm({
               )}
               {t("setup_button")}
             </Button>
+            {allowUnauthenticatedAccess && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                asChild
+              >
+                <Link href={publicHomePath}>{t("continue_without_login")}</Link>
+              </Button>
+            )}
           </CardFooter>
         </Card>
       </form>
@@ -1012,6 +1026,18 @@ export function LoginForm({
                   asChild
                 >
                   <Link href={registerPath}>{t("register_button")}</Link>
+                </Button>
+              )}
+              {allowUnauthenticatedAccess && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  asChild
+                >
+                  <Link href={publicHomePath}>
+                    {t("continue_without_login")}
+                  </Link>
                 </Button>
               )}
             </div>

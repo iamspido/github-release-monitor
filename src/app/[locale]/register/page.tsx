@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { RegisterForm } from "@/components/auth/register-form";
 import { Logo } from "@/components/logo";
 import { pathnames } from "@/i18n/routing";
+import { getAuthenticationMethod } from "@/lib/auth-mode";
 import { redirectLocalized } from "@/lib/redirect-localized";
 
 export default async function RegisterPage({
@@ -10,6 +11,10 @@ export default async function RegisterPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  if (getAuthenticationMethod() === "External") {
+    redirectLocalized("/", locale);
+  }
+
   const t = await getTranslations({ locale, namespace: "RegisterPage" });
   const signupEnabled = process.env.AUTH_ENABLE_SIGNUP === "true";
   const enabledSocialProviders: Array<"github" | "google"> = [];

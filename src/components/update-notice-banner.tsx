@@ -11,9 +11,13 @@ import type { UpdateNotificationState } from "@/types";
 
 type UpdateNoticeBannerProps = {
   notice?: UpdateNotificationState;
+  canDismiss?: boolean;
 };
 
-export function UpdateNoticeBanner({ notice }: UpdateNoticeBannerProps) {
+export function UpdateNoticeBanner({
+  notice,
+  canDismiss = true,
+}: UpdateNoticeBannerProps) {
   const t = useTranslations("UpdateNotice");
   const [isPending, startTransition] = React.useTransition();
   const [isVisible, setIsVisible] = React.useState<boolean>(
@@ -70,18 +74,20 @@ export function UpdateNoticeBanner({ notice }: UpdateNoticeBannerProps) {
               {t("cta_label")}
             </Button>
           </a>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleDismiss}
-            disabled={isPending}
-          >
-            {isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              t("dismiss_label")
-            )}
-          </Button>
+          {canDismiss && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleDismiss}
+              disabled={isPending}
+            >
+              {isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                t("dismiss_label")
+              )}
+            </Button>
+          )}
         </div>
       </div>
     </div>

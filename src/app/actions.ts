@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { inflateSync } from "node:zlib";
 import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
+import { canPerformRestrictedAction } from "@/lib/auth-access";
 import { sendTestEmail } from "@/lib/email";
 import { isRetryableFetchError } from "@/lib/fetch-retry";
 import { getJobStatus, type JobStatus, setJobStatus } from "@/lib/job-store";
@@ -60,6 +61,22 @@ function updateReleaseCacheTags(): void {
   updateTag("github-releases");
   updateTag("codeberg-releases");
   updateTag("gitlab-releases");
+}
+
+async function getRestrictedActionError(): Promise<string> {
+  const locale = await getLocale();
+  const t = await getTranslations({ locale, namespace: "Actions" });
+  return t("error_auth_required");
+}
+
+async function isRestrictedActionAllowed(): Promise<boolean> {
+  const allowed = await canPerformRestrictedAction();
+  if (!allowed) {
+    log.warn(
+      "Rejected restricted action because the request is unauthenticated.",
+    );
+  }
+  return allowed;
 }
 
 async function wait(delayMs: number): Promise<void> {
@@ -570,6 +587,10 @@ export async function resolveRepoProvidersAction(input: string): Promise<{
   success: boolean;
   candidates: RepoProviderResolutionCandidate[];
 }> {
+  if (!(await isRestrictedActionAllowed())) {
+    return { success: false, candidates: [] };
+  }
+
   const parsed = parseOwnerRepoShorthand(input);
   if (!parsed) {
     log.debug(
@@ -3306,6 +3327,9 @@ export async function addRepositoriesAction(
   return scheduleTask("addRepositoriesAction", async () => {
     const locale = await getLocale();
     const t = await getTranslations({ locale, namespace: "RepositoryForm" });
+    if (!(await isRestrictedActionAllowed())) {
+      return { success: false, error: await getRestrictedActionError() };
+    }
 
     const urls = formData.get("urls");
     if (typeof urls !== "string" || !urls.trim()) {
@@ -3400,6 +3424,9 @@ export async function importRepositoriesAction(
   return scheduleTask("importRepositoriesAction", async () => {
     const locale = await getLocale();
     const t = await getTranslations({ locale, namespace: "RepositoryForm" });
+    if (!(await isRestrictedActionAllowed())) {
+      return { success: false, message: await getRestrictedActionError() };
+    }
     const settings = await getSettings();
 
     try {
@@ -3480,6 +3507,10 @@ export async function importRepositoriesAction(
 
 export async function refreshSingleRepositoryAction(repoId: string) {
   return scheduleTask(`refreshSingleRepositoryAction: ${repoId}`, async () => {
+    if (!(await isRestrictedActionAllowed())) {
+      return;
+    }
+
     if (!isValidRepoId(repoId)) {
       log.error("Invalid repoId format for refresh:", repoId);
       return;
@@ -3602,6 +3633,10 @@ export async function refreshMultipleRepositoriesAction(
 
 export async function removeRepositoryAction(repoId: string) {
   return scheduleTask(`removeRepositoryAction: ${repoId}`, async () => {
+    if (!(await isRestrictedActionAllowed())) {
+      return;
+    }
+
     if (!isValidRepoId(repoId)) {
       log.error("Invalid repoId format for removal:", repoId);
       return;
@@ -3618,6 +3653,10 @@ export async function acknowledgeNewReleaseAction(
   repoId: string,
 ): Promise<{ success: boolean; error?: string }> {
   return scheduleTask(`acknowledgeNewReleaseAction: ${repoId}`, async () => {
+    if (!(await isRestrictedActionAllowed())) {
+      return { success: false, error: await getRestrictedActionError() };
+    }
+
     if (!isValidRepoId(repoId)) {
       return { success: false, error: "Invalid repository ID format." };
     }
@@ -3647,6 +3686,10 @@ export async function markAsNewAction(
   repoId: string,
 ): Promise<{ success: boolean; error?: string }> {
   return scheduleTask(`markAsNewAction: ${repoId}`, async () => {
+    if (!(await isRestrictedActionAllowed())) {
+      return { success: false, error: await getRestrictedActionError() };
+    }
+
     if (!isValidRepoId(repoId)) {
       return { success: false, error: "Invalid repository ID format." };
     }
@@ -3884,6 +3927,10 @@ export async function dismissUpdateNotificationAction(): Promise<{
   success: boolean;
 }> {
   return scheduleTask("dismissUpdateNotification", async () => {
+    if (!(await isRestrictedActionAllowed())) {
+      return { success: false };
+    }
+
     await updateSystemStatus((current) => {
       const latestVersion = current.latestKnownVersion;
       if (!latestVersion) {
@@ -3906,6 +3953,10 @@ export async function triggerAppUpdateCheckAction(): Promise<{
   notice: UpdateNotificationState;
 }> {
   return scheduleTask("triggerAppUpdateCheck", async () => {
+    if (!(await isRestrictedActionAllowed())) {
+      return { success: false, notice: await getUpdateNotificationState() };
+    }
+
     await updateSystemStatus((current) => ({
       ...current,
       dismissedVersion: null,
@@ -3988,6 +4039,10 @@ export async function setupTestRepositoryAction(): Promise<{
   return scheduleTask("setupTestRepositoryAction", async () => {
     const locale = await getLocale();
     const t = await getTranslations({ locale, namespace: "TestPage" });
+    if (!(await isRestrictedActionAllowed())) {
+      return { success: false, message: await getRestrictedActionError() };
+    }
+
     // Prepare a readable title/body so the card renders nicely before the first check
     const { title, body } = await getComprehensiveMarkdownBody(locale);
 
@@ -4052,6 +4107,9 @@ export async function triggerReleaseCheckAction(): Promise<{
 }> {
   const locale = await getLocale();
   const t = await getTranslations({ locale, namespace: "TestPage" });
+  if (!(await isRestrictedActionAllowed())) {
+    return { success: false, message: await getRestrictedActionError() };
+  }
 
   const {
     MAIL_HOST,
@@ -4420,6 +4478,9 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
   const locale = await getLocale();
   const t = await getTranslations({ locale, namespace: "TestPage" });
   const tEmail = await getTranslations({ locale, namespace: "Email" });
+  if (!(await isRestrictedActionAllowed())) {
+    return { success: false, error: await getRestrictedActionError() };
+  }
 
   const trimmedEmail = customEmail.trim();
   const recipient = trimmedEmail || process.env.MAIL_TO_ADDRESS;
@@ -4486,6 +4547,9 @@ export async function sendTestAppriseAction(): Promise<{
 }> {
   const locale = await getLocale();
   const t = await getTranslations({ locale, namespace: "TestPage" });
+  if (!(await isRestrictedActionAllowed())) {
+    return { success: false, error: await getRestrictedActionError() };
+  }
 
   const { APPRISE_URL } = process.env;
   if (!APPRISE_URL) {
@@ -4529,6 +4593,10 @@ export async function sendTestAppriseAction(): Promise<{
 }
 
 export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
+  if (!(await isRestrictedActionAllowed())) {
+    return { status: "error", error: await getRestrictedActionError() };
+  }
+
   const { APPRISE_URL } = process.env;
   if (!APPRISE_URL) {
     return { status: "not_configured" };
@@ -4571,6 +4639,10 @@ export async function refreshAndCheckAction(): Promise<{
   messageKey: "toast_refresh_success_description" | "toast_refresh_found_new";
 }> {
   const locale = await getLocale();
+  if (!(await isRestrictedActionAllowed())) {
+    throw new Error(await getRestrictedActionError());
+  }
+
   log.info("Manual refresh triggered by user");
   const result = await checkForNewReleases({
     overrideLocale: locale,
@@ -4616,6 +4688,10 @@ export async function updateRepositorySettingsAction(
   >,
 ): Promise<{ success: boolean; error?: string }> {
   return scheduleTask(`updateRepositorySettingsAction: ${repoId}`, async () => {
+    if (!(await isRestrictedActionAllowed())) {
+      return { success: false, error: await getRestrictedActionError() };
+    }
+
     if (!isValidRepoId(repoId)) {
       return { success: false, error: "Invalid repository ID format." };
     }

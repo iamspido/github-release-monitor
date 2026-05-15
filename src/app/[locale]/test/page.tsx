@@ -8,6 +8,7 @@ import {
 } from "@/app/actions";
 import { Header } from "@/components/header";
 import { TestPageClient } from "@/components/test-page-client";
+import { getCurrentAuthAccess } from "@/lib/auth-access";
 import { logger } from "@/lib/logger";
 import type {
   AppriseStatus,
@@ -66,6 +67,7 @@ export default async function TestPage({
   const notificationConfig = getNotificationConfig();
   const updateNotice: UpdateNotificationState =
     await getUpdateNotificationState();
+  const authAccess = await getCurrentAuthAccess();
 
   let appriseStatus: AppriseStatus;
   try {
@@ -84,7 +86,11 @@ export default async function TestPage({
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
-      <Header locale={locale} updateNotice={updateNotice} />
+      <Header
+        locale={locale}
+        updateNotice={updateNotice}
+        authAccess={authAccess}
+      />
       <main className="container mx-auto px-4 py-8 md:px-6">
         <h2 className="mb-8 text-3xl font-bold tracking-tight break-words">
           {t("title")}

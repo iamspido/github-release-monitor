@@ -10,6 +10,7 @@ import {
 } from "@/components/settings-form";
 import { SocialAccountsSettingsCard } from "@/components/social-accounts-settings-card";
 import { TwoFactorSettingsCard } from "@/components/two-factor-settings-card";
+import { getCurrentAuthAccess } from "@/lib/auth-access";
 import { getSettings } from "@/lib/settings-storage";
 import type { AppSettings } from "@/types";
 
@@ -41,10 +42,17 @@ export default async function SettingsPage({
     enabledSocialProviders.push("google");
   }
   const updateNotice = await getUpdateNotificationState();
+  const authAccess = await getCurrentAuthAccess();
+  const showInternalAuthSettings =
+    authAccess.authenticationMethod !== "External";
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
-      <Header locale={locale} updateNotice={updateNotice} />
+      <Header
+        locale={locale}
+        updateNotice={updateNotice}
+        authAccess={authAccess}
+      />
       <main className="container mx-auto px-4 py-8 md:px-6">
         <div className="mx-auto max-w-2xl">
           <h2 className="mb-4 text-3xl font-bold tracking-tight break-words">
@@ -57,13 +65,17 @@ export default async function SettingsPage({
             isAppriseConfigured={isAppriseConfigured}
             isGithubTokenSet={isGithubTokenSet}
           />
-          <AccountCredentialsSettingsCard />
-          <TwoFactorSettingsCard />
-          {isPasskeyEnabled && <PasskeySettingsCard />}
-          {enabledSocialProviders.length > 0 && (
-            <SocialAccountsSettingsCard
-              enabledSocialProviders={enabledSocialProviders}
-            />
+          {showInternalAuthSettings && (
+            <>
+              <AccountCredentialsSettingsCard />
+              <TwoFactorSettingsCard />
+              {isPasskeyEnabled && <PasskeySettingsCard />}
+              {enabledSocialProviders.length > 0 && (
+                <SocialAccountsSettingsCard
+                  enabledSocialProviders={enabledSocialProviders}
+                />
+              )}
+            </>
           )}
           <SettingsDangerZoneCard />
         </div>

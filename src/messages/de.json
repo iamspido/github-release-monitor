@@ -11,12 +11,14 @@
     "settings_aria": "Einstellungen öffnen",
     "test_aria": "Testseite öffnen",
     "github_aria": "Quellcode auf GitHub ansehen",
+    "login_aria": "Anmelden",
     "logout_aria": "Abmelden",
     "home_aria": "Zurück zur Startseite",
     "menu_home": "Startseite",
     "menu_settings": "Einstellungen",
     "menu_test": "Testseite",
     "menu_github": "Auf GitHub ansehen",
+    "menu_login": "Anmelden",
     "menu_logout": "Abmelden",
     "menu_open": "Menü öffnen",
     "monitored_repos_title": "Überwachte Repositories",
@@ -104,7 +106,10 @@
   "EmptyState": {
     "title": "Beobachtung starten",
     "description_line1": "Sie überwachen noch keine Repositories.",
-    "description_line2": "Fügen Sie oben einige GitHub-, GitLab- oder Codeberg-Repository-URLs hinzu, um zu beginnen."
+    "description_line2": "Fügen Sie oben einige GitHub-, GitLab- oder Codeberg-Repository-URLs hinzu, um zu beginnen.",
+    "readonly_title": "Keine Repositories überwacht",
+    "readonly_line1": "Es gibt noch keine Repositories, die angezeigt werden können.",
+    "readonly_line2": "Melden Sie sich an, um Repositories hinzuzufügen."
   },
   "SettingsPage": {
     "title": "Anwendungseinstellungen",
@@ -481,6 +486,7 @@
     "show_password": "Passwort anzeigen",
     "hide_password": "Passwort ausblenden",
     "login_button": "Anmelden",
+    "continue_without_login": "Ohne Anmeldung fortfahren",
     "register_button": "Registrieren",
     "alternative_login_divider": "Oder fortfahren",
     "social_provider_github": "GitHub",
@@ -557,7 +563,8 @@
     "error_repo_not_found": "Das Repository wurde nicht gefunden. Es könnte privat, gelöscht oder falsch geschrieben sein.",
     "error_no_releases_found": "Das Repository hat keine Releases oder Tags.",
     "error_no_matching_releases": "Keine Releases gefunden, die Ihren Filtereinstellungen entsprechen. Versuchen Sie, die Anzahl der abzurufenden Releases in den Einstellungen zu erhöhen.",
-    "error_generic_fetch": "Release-Informationen konnten nicht abgerufen werden."
+    "error_generic_fetch": "Release-Informationen konnten nicht abgerufen werden.",
+    "error_auth_required": "Bitte melden Sie sich an, um diese Aktion zu verwenden."
   },
   "TestRelease": {
     "title": "Vollständiger Markdown-Test-Release",
