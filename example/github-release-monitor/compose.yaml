@@ -87,7 +87,6 @@ services:
 
 networks:
   apprise:
-    driver: "bridge"
   traefik-net:
     name: traefik-net
     external: true
