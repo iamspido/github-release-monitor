@@ -23,6 +23,8 @@
     "menu_open": "Menü öffnen",
     "monitored_repos_title": "Überwachte Repositories",
     "repo_count": "{count, plural, =0 {0 Repos} =1 {# Repo} other {# Repos}}",
+    "new_repo_count": "{count, plural, =0 {0 neu} =1 {# neu} other {# neu}}",
+    "security_repo_count": "{count, plural, =0 {0 Sicherheit} =1 {# Sicherheit} other {# Sicherheit}}",
     "last_updated": "Letzte Aktualisierung: {time}",
     "sort_label": "Sortierung",
     "sort_latest_first": "Neueste Releases zuerst",

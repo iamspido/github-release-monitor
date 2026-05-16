@@ -21,6 +21,7 @@ import {
   normalizeReleaseSortOrder,
   sortEnrichedReleases,
 } from "@/lib/release-sort";
+import { isSecurityRelease } from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import type {
   AppSettings,
@@ -191,6 +192,14 @@ export function HomePageClient({
       settings.prioritizeNewSecurityReleases,
     ],
   );
+  const repositoryStats = React.useMemo(() => {
+    const newCount = releases.filter((item) => Boolean(item.isNew)).length;
+    const securityCount = releases.filter(
+      (item) => Boolean(item.isNew) && isSecurityRelease(item.release),
+    ).length;
+
+    return { newCount, securityCount };
+  }, [releases]);
 
   return (
     <>
@@ -210,7 +219,13 @@ export function HomePageClient({
               {t("monitored_repos_title")}
             </h2>
             <span className="shrink-0 text-sm text-muted-foreground sm:text-right">
-              {t("repo_count", { count: repositories.length })}
+              {[
+                t("repo_count", { count: repositories.length }),
+                t("new_repo_count", { count: repositoryStats.newCount }),
+                t("security_repo_count", {
+                  count: repositoryStats.securityCount,
+                }),
+              ].join(" | ")}
               {formattedLastUpdated &&
                 ` | ${t("last_updated", { time: formattedLastUpdated })}`}
             </span>
