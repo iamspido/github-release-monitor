@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, Loader2, Plus, Upload } from "lucide-react";
+import { ChevronDown, Loader2, Plus, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import * as React from "react";
@@ -34,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
+import { cn } from "@/lib/utils";
 import type { Repository } from "@/types";
 
 function SubmitButton({
@@ -478,92 +479,116 @@ export function RepositoryForm({
                     : t("expand_button_aria")
                 }
               >
-                {isExpanded ? (
-                  <ChevronDown className="size-5" />
-                ) : (
-                  <ChevronLeft className="size-5" />
-                )}
+                <ChevronDown
+                  className={cn(
+                    "size-5 transition-transform duration-200 ease-out",
+                    isExpanded ? "rotate-0" : "rotate-90",
+                  )}
+                />
               </Button>
             </div>
           </div>
-          {isExpanded && <CardDescription>{t("description")}</CardDescription>}
         </CardHeader>
-        <CardContent id={contentId} hidden={!isExpanded}>
-          <form
-            onSubmit={(e) => {
-              if (typeof navigator !== "undefined" && !navigator.onLine) {
-                e.preventDefault();
-                toast({
-                  title: t("toast_fail_title"),
-                  description: t("toast_generic_error"),
-                  variant: "destructive",
-                });
-                return;
-              }
-
-              e.preventDefault();
-              if (!urls.trim()) return;
-              if (isPending || isResolvingProviders || providerDialogOpen) {
-                return;
-              }
-              if (jobId) return;
-
-              hasProcessedResult.current = false;
-              const lines = urls
-                .split("\n")
-                .map((u) => u.trim())
-                .filter((u) => u !== "");
-
-              startProviderResolveTransition(async () => {
-                await resolveLinesAndSubmit(lines);
-              });
-            }}
-          >
-            <div className="grid w-full gap-2">
-              <Textarea
-                ref={textareaRef}
-                name="urls"
-                placeholder={t("placeholder")}
-                value={urls}
-                onChange={(e) => setUrls(e.target.value)}
-                rows={4}
-                wrap="off"
-                className="resize-none overflow-y-auto overflow-x-auto max-h-80"
-                disabled={
-                  isPending ||
-                  isResolvingProviders ||
-                  !!jobId ||
-                  providerDialogOpen
-                }
-              />
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleImportClick}
-                  className="mt-2 w-full sm:mt-0 sm:w-auto"
-                  disabled={isPending || isImporting || !!jobId || !isOnline}
-                >
-                  {isImporting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="mr-2 h-4 w-4" />
-                  )}
-                  {t("button_import")}
-                </Button>
-                <SubmitButton
-                  isDisabled={
-                    !urls.trim() ||
-                    !isOnline ||
-                    isResolvingProviders ||
-                    providerDialogOpen
+        <div
+          id={contentId}
+          aria-hidden={!isExpanded}
+          className={cn(
+            "grid transition-[grid-template-rows,opacity] duration-300 ease-in-out",
+            isExpanded
+              ? "grid-rows-[1fr] opacity-100"
+              : "grid-rows-[0fr] opacity-0",
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <CardContent className="pt-0">
+              <CardDescription className="mb-6">
+                {t("description")}
+              </CardDescription>
+              <form
+                onSubmit={(e) => {
+                  if (typeof navigator !== "undefined" && !navigator.onLine) {
+                    e.preventDefault();
+                    toast({
+                      title: t("toast_fail_title"),
+                      description: t("toast_generic_error"),
+                      variant: "destructive",
+                    });
+                    return;
                   }
-                  isPending={isPending || !!jobId || isResolvingProviders}
-                />
-              </div>
-            </div>
-          </form>
-        </CardContent>
+
+                  e.preventDefault();
+                  if (!urls.trim()) return;
+                  if (isPending || isResolvingProviders || providerDialogOpen) {
+                    return;
+                  }
+                  if (jobId) return;
+
+                  hasProcessedResult.current = false;
+                  const lines = urls
+                    .split("\n")
+                    .map((u) => u.trim())
+                    .filter((u) => u !== "");
+
+                  startProviderResolveTransition(async () => {
+                    await resolveLinesAndSubmit(lines);
+                  });
+                }}
+              >
+                <div className="grid w-full gap-2">
+                  <Textarea
+                    ref={textareaRef}
+                    name="urls"
+                    placeholder={t("placeholder")}
+                    value={urls}
+                    onChange={(e) => setUrls(e.target.value)}
+                    rows={4}
+                    wrap="off"
+                    className="resize-none overflow-y-auto overflow-x-auto max-h-80"
+                    disabled={
+                      !isExpanded ||
+                      isPending ||
+                      isResolvingProviders ||
+                      !!jobId ||
+                      providerDialogOpen
+                    }
+                  />
+                  <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleImportClick}
+                      className="mt-2 w-full sm:mt-0 sm:w-auto"
+                      disabled={
+                        !isExpanded ||
+                        isPending ||
+                        isImporting ||
+                        !!jobId ||
+                        !isOnline
+                      }
+                    >
+                      {isImporting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="mr-2 h-4 w-4" />
+                      )}
+                      {t("button_import")}
+                    </Button>
+                    <SubmitButton
+                      isDisabled={
+                        !isExpanded ||
+                        !urls.trim() ||
+                        !isOnline ||
+                        isResolvingProviders ||
+                        providerDialogOpen
+                      }
+                      isPending={isPending || !!jobId || isResolvingProviders}
+                    />
+                  </div>
+                </div>
+              </form>
+            </CardContent>
+          </div>
+        </div>
       </Card>
 
       <AlertDialog

@@ -21,15 +21,17 @@ test('add repositories form collapse state persists and can be restored from set
     name: 'Collapse add repositories form',
   });
   await collapseButton.click();
-  await expect(textarea).toBeHidden();
 
   const expandButton = page.getByRole('button', {
     name: 'Expand add repositories form',
   });
   await expect(expandButton).toBeEnabled();
+  await expect(expandButton).toHaveAttribute('aria-expanded', 'false');
 
   await page.reload();
-  await expect(page.locator('textarea[name="urls"]')).toBeHidden();
+  await expect(
+    page.getByRole('button', { name: 'Expand add repositories form' }),
+  ).toHaveAttribute('aria-expanded', 'false');
 
   await page.goto('/en/settings');
   await expect(setting).not.toBeChecked();
