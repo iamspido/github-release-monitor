@@ -186,6 +186,7 @@ export function SettingsForm({
       languageSelect: `${baseId}-language`,
       releaseSortOrder: `${baseId}-release-sort-order`,
       providerSortOrder: `${baseId}-provider-sort-order`,
+      prioritizeNewSecurityReleases: `${baseId}-prioritize-new-security-releases`,
       showAcknowledge: `${baseId}-show-acknowledge`,
       showMarkAsNew: `${baseId}-show-mark-new`,
       showProviderPrefixInRepoId: `${baseId}-show-provider-prefix-in-repo-id`,
@@ -221,6 +222,10 @@ export function SettingsForm({
   const [providerSortOrder, setProviderSortOrder] = React.useState<
     ReleaseProviderSortKey[]
   >(currentSettings.providerSortOrder ?? defaultProviderSortOrder);
+  const [prioritizeNewSecurityReleases, setPrioritizeNewSecurityReleases] =
+    React.useState<boolean>(
+      currentSettings.prioritizeNewSecurityReleases ?? false,
+    );
   const [releasesPerPage, setReleasesPerPage] = React.useState(
     String(currentSettings.releasesPerPage || 30),
   );
@@ -335,6 +340,7 @@ export function SettingsForm({
       preReleaseSubChannels,
       releaseSortOrder,
       providerSortOrder,
+      prioritizeNewSecurityReleases,
       showAcknowledge,
       showMarkAsNew,
       showProviderPrefixInRepoId,
@@ -362,6 +368,7 @@ export function SettingsForm({
     preReleaseSubChannels,
     releaseSortOrder,
     providerSortOrder,
+    prioritizeNewSecurityReleases,
     showAcknowledge,
     showMarkAsNew,
     showProviderPrefixInRepoId,
@@ -753,6 +760,28 @@ export function SettingsForm({
               </div>
             )}
             <div className="space-y-4 pt-2">
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id={ids.prioritizeNewSecurityReleases}
+                  checked={prioritizeNewSecurityReleases}
+                  onCheckedChange={(checked) =>
+                    setPrioritizeNewSecurityReleases(Boolean(checked))
+                  }
+                  disabled={saveStatus === "saving" || !isOnline}
+                  className="mt-1"
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label
+                    htmlFor={ids.prioritizeNewSecurityReleases}
+                    className="font-medium cursor-pointer"
+                  >
+                    {t("prioritize_new_security_releases_title")}
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t("prioritize_new_security_releases_description")}
+                  </p>
+                </div>
+              </div>
               <div className="flex items-start space-x-3">
                 <Checkbox
                   id={ids.showAcknowledge}

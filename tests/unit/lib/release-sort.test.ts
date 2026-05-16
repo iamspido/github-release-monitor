@@ -6,6 +6,7 @@ function release(
   repoId: string,
   date: string | null,
   isNew = false,
+  body: string | null = null,
 ): EnrichedRelease {
   return {
     repoId,
@@ -17,7 +18,7 @@ function release(
           html_url: `https://example.com/${repoId}/releases/v1`,
           tag_name: "v1",
           name: "v1",
-          body: null,
+          body,
           created_at: date,
           published_at: date,
           prerelease: false,
@@ -59,6 +60,43 @@ describe("sortEnrichedReleases", () => {
       "github:owner/new-newer",
       "github:owner/new-older",
       "github:owner/seen-newer",
+    ]);
+  });
+
+  it("can prioritize new security releases before the selected sort order", () => {
+    const input = [
+      release(
+        "github:owner/newer-regular",
+        "2024-03-01T00:00:00.000Z",
+        true,
+      ),
+      release(
+        "github:owner/older-security",
+        "2024-01-01T00:00:00.000Z",
+        true,
+        "Security update for CVE-2024-12345.",
+      ),
+      release(
+        "github:owner/seen-security",
+        "2024-04-01T00:00:00.000Z",
+        false,
+        "Security update.",
+      ),
+    ];
+
+    expect(
+      ids(sortEnrichedReleases(input, "latest_first", undefined, true)),
+    ).toEqual([
+      "github:owner/older-security",
+      "github:owner/seen-security",
+      "github:owner/newer-regular",
+    ]);
+    expect(
+      ids(sortEnrichedReleases(input, "latest_first", undefined, false)),
+    ).toEqual([
+      "github:owner/seen-security",
+      "github:owner/newer-regular",
+      "github:owner/older-security",
     ]);
   });
 

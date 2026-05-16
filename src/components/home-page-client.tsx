@@ -136,8 +136,14 @@ export function HomePageClient({
         releases,
         releaseSortOrder,
         settings.providerSortOrder,
+        settings.prioritizeNewSecurityReleases,
       ),
-    [releases, releaseSortOrder, settings.providerSortOrder],
+    [
+      releases,
+      releaseSortOrder,
+      settings.providerSortOrder,
+      settings.prioritizeNewSecurityReleases,
+    ],
   );
 
   return (

@@ -29,6 +29,7 @@ const defaultSettings: AppSettings = {
   preReleaseSubChannels: allPreReleaseTypes,
   releaseSortOrder: "latest_first",
   providerSortOrder: defaultProviderSortOrder,
+  prioritizeNewSecurityReleases: false,
   showAcknowledge: true,
   showMarkAsNew: true,
   showProviderPrefixInRepoId: true,

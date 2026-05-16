@@ -1,3 +1,4 @@
+import { isSecurityRelease } from "@/lib/security-release";
 import type {
   EnrichedRelease,
   ReleaseProviderSortKey,
@@ -124,10 +125,22 @@ export function sortEnrichedReleases(
   releases: EnrichedRelease[],
   sortOrder: ReleaseSortOrder | undefined,
   providerSortOrder: ReleaseProviderSortKey[] | undefined,
+  prioritizeNewSecurityReleases = false,
 ): EnrichedRelease[] {
   const normalizedSortOrder = normalizeReleaseSortOrder(sortOrder);
 
   return [...releases].sort((a, b) => {
+    if (prioritizeNewSecurityReleases) {
+      const aIsNewSecurityRelease =
+        Boolean(a.isNew) && isSecurityRelease(a.release);
+      const bIsNewSecurityRelease =
+        Boolean(b.isNew) && isSecurityRelease(b.release);
+
+      if (aIsNewSecurityRelease !== bIsNewSecurityRelease) {
+        return aIsNewSecurityRelease ? -1 : 1;
+      }
+    }
+
     switch (normalizedSortOrder) {
       case "new_first":
         if (Boolean(a.isNew) !== Boolean(b.isNew)) {

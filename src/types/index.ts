@@ -207,6 +207,7 @@ export type AppSettings = {
   preReleaseSubChannels?: PreReleaseChannelType[];
   releaseSortOrder?: ReleaseSortOrder;
   providerSortOrder?: ReleaseProviderSortKey[];
+  prioritizeNewSecurityReleases?: boolean;
   showAcknowledge?: boolean;
   showMarkAsNew?: boolean;
   showProviderPrefixInRepoId?: boolean;

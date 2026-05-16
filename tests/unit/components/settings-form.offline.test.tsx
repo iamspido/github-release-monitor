@@ -81,4 +81,13 @@ describe('SettingsForm offline autosave paused', () => {
       cleanup();
     }
   });
+
+  it('renders the security release priority setting', async () => {
+    const { div, cleanup } = renderForm(true);
+    try {
+      expect(div.textContent ?? '').toContain('prioritize_new_security_releases_title');
+    } finally {
+      cleanup();
+    }
+  });
 });

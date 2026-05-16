@@ -83,6 +83,7 @@ export default async function HomePage({
       releaseChannels: ["stable"],
       releaseSortOrder: "latest_first",
       providerSortOrder: ["github", "gitlab", "codeberg"],
+      prioritizeNewSecurityReleases: false,
       showAcknowledge: true,
       releasesPerPage: 30,
       parallelRepoFetches: 1,

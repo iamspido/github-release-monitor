@@ -70,6 +70,7 @@ describe('updateSettingsAction clears ETags for all change flags', () => {
       ...mem.settings,
       releaseSortOrder: 'provider_grouped',
       providerSortOrder: ['codeberg', 'gitlab', 'github'],
+      prioritizeNewSecurityReleases: true,
     })
 
     expect(mem.repos[0].etag).toBe('E1')

@@ -55,6 +55,7 @@ import {
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
+import { isSecurityRelease } from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type { AppSettings, EnrichedRelease, FetchError } from "@/types";
@@ -505,6 +506,8 @@ export function ReleaseCard({
 
   const showAcknowledgeFeature = settings.showAcknowledge ?? true;
   const showMarkAsNewButton = settings.showMarkAsNew ?? true;
+  const isNewSecurityRelease =
+    Boolean(isNew) && showAcknowledgeFeature && isSecurityRelease(release);
 
   return (
     <>
@@ -520,8 +523,11 @@ export function ReleaseCard({
       <Card
         className={cn(
           "flex flex-col transition-all",
+          isNewSecurityRelease &&
+            "border-yellow-500/70 ring-2 ring-yellow-500/60 ring-offset-2 ring-offset-background",
           isNew &&
             showAcknowledgeFeature &&
+            !isNewSecurityRelease &&
             "border-primary ring-2 ring-primary ring-offset-2 ring-offset-background",
         )}
       >
@@ -552,6 +558,14 @@ export function ReleaseCard({
                 {release.tag_name}
               </Badge>
               <div className="flex items-center gap-2">
+                {isNewSecurityRelease && (
+                  <Badge
+                    variant="outline"
+                    className="border-yellow-500/70 bg-yellow-500/15 text-yellow-700 dark:text-yellow-300"
+                  >
+                    {t("security_release_badge")}
+                  </Badge>
+                )}
                 {repoHasCustomSettings && (
                   <TooltipProvider delayDuration={100}>
                     <Tooltip>

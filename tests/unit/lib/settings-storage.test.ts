@@ -58,4 +58,12 @@ describe('settings-storage failure scenarios', () => {
 
     await expect(saveSettings(current)).rejects.toThrow('Could not save settings data.');
   });
+
+  it('defaults security release prioritization to disabled for old settings files', async () => {
+    const { getSettings } = await import('@/lib/settings-storage');
+
+    const settings = await getSettings();
+
+    expect(settings.prioritizeNewSecurityReleases).toBe(false);
+  });
 });

@@ -194,6 +194,11 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         newS.providerSortOrder,
       );
       pushValueChange(
+        "prioritizeNewSecurityReleases",
+        oldS.prioritizeNewSecurityReleases,
+        newS.prioritizeNewSecurityReleases,
+      );
+      pushValueChange(
         "showAcknowledge",
         oldS.showAcknowledge,
         newS.showAcknowledge,

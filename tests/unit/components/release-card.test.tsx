@@ -10,6 +10,7 @@ const translationMap: Record<string, Record<string, string>> = {
     error_title: 'Repository error',
     custom_settings_badge: '[Custom settings]',
     custom_settings_tooltip: 'Overrides applied',
+    security_release_badge: 'Security',
     settings_button_aria: 'Open repository settings',
     toast_error_title: 'Something went wrong',
     toast_success_title: 'Success',
@@ -305,6 +306,54 @@ describe('ReleaseCard component', () => {
     await Promise.resolve();
     expect(actions.acknowledgeNewReleaseAction).toHaveBeenCalledWith('owner/repo');
     expect(toastSpy).not.toHaveBeenCalled();
+  });
+
+  it('highlights new security releases with a yellow badge and ring', async () => {
+    const enrichedRelease = {
+      ...makeRelease(),
+      isNew: true,
+      release: {
+        ...makeRelease().release!,
+        name: 'Security update',
+        body: 'Fixes CVE-2024-12345.',
+      },
+    };
+
+    render(<ReleaseCardComponent enrichedRelease={enrichedRelease} settings={baseSettings} />);
+
+    const securityBadge = Array.from(container?.querySelectorAll('div') ?? []).find((element) =>
+      element.textContent === 'Security' &&
+      element.className.includes('border-yellow-500/70'),
+    );
+    expect(securityBadge).toBeTruthy();
+    const card = Array.from(container?.querySelectorAll('div') ?? []).find((element) =>
+      element.className.includes('ring-yellow-500/60'),
+    );
+    expect(card).toBeTruthy();
+  });
+
+  it('does not show the security badge for seen security releases', async () => {
+    const enrichedRelease = {
+      ...makeRelease(),
+      isNew: false,
+      release: {
+        ...makeRelease().release!,
+        name: 'Security update',
+        body: 'Fixes CVE-2024-12345.',
+      },
+    };
+
+    render(<ReleaseCardComponent enrichedRelease={enrichedRelease} settings={baseSettings} />);
+
+    const securityBadge = Array.from(container?.querySelectorAll('div') ?? []).find((element) =>
+      element.textContent === 'Security' &&
+      element.className.includes('border-yellow-500/70'),
+    );
+    const card = Array.from(container?.querySelectorAll('div') ?? []).find((element) =>
+      element.className.includes('ring-yellow-500/60'),
+    );
+    expect(securityBadge).toBeUndefined();
+    expect(card).toBeUndefined();
   });
 
   it('shows toast error when mark-as-new action fails', async () => {
