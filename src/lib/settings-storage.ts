@@ -5,8 +5,12 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { defaultLocale, locales } from "@/i18n/routing";
 import { logger } from "@/lib/logger";
+import {
+  normalizeProviderSortOrder,
+  normalizeReleaseSortOrder,
+} from "@/lib/release-sort";
 import type { AppSettings, Locale } from "@/types";
-import { allPreReleaseTypes } from "@/types";
+import { allPreReleaseTypes, defaultProviderSortOrder } from "@/types";
 
 const dataFilePath = path.join(process.cwd(), "data", "settings.json");
 const dataDirPath = path.dirname(dataFilePath);
@@ -23,6 +27,8 @@ const defaultSettings: AppSettings = {
   parallelRepoFetches: defaultParallelRepoFetches,
   releaseChannels: ["stable"],
   preReleaseSubChannels: allPreReleaseTypes,
+  releaseSortOrder: "latest_first",
+  providerSortOrder: defaultProviderSortOrder,
   showAcknowledge: true,
   showMarkAsNew: true,
   showProviderPrefixInRepoId: true,
@@ -62,6 +68,8 @@ function cloneSettings(settings: AppSettings): AppSettings {
     preReleaseSubChannels: settings.preReleaseSubChannels
       ? [...(settings.preReleaseSubChannels ?? [])]
       : undefined,
+    releaseSortOrder: normalizeReleaseSortOrder(settings.releaseSortOrder),
+    providerSortOrder: normalizeProviderSortOrder(settings.providerSortOrder),
   };
 }
 
@@ -73,6 +81,12 @@ async function refreshCache(existingStat?: Stats) {
     ]);
     const data = JSON.parse(fileContent);
     const merged = { ...defaultSettings, ...(data as Partial<AppSettings>) };
+    merged.releaseSortOrder = normalizeReleaseSortOrder(
+      merged.releaseSortOrder,
+    );
+    merged.providerSortOrder = normalizeProviderSortOrder(
+      merged.providerSortOrder,
+    );
     cachedSettings = cloneSettings(merged);
     cachedMtimeMs = stat.mtimeMs;
     lastMtimeCheck = Date.now();

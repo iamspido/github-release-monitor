@@ -55,9 +55,11 @@ import type {
   Locale,
   PreReleaseChannelType,
   ReleaseChannel,
+  ReleaseProviderSortKey,
+  ReleaseSortOrder,
   TimeFormat,
 } from "@/types";
-import { allPreReleaseTypes } from "@/types";
+import { allPreReleaseTypes, defaultProviderSortOrder } from "@/types";
 
 const MINUTES_IN_DAY = 24 * 60;
 const MINUTES_IN_HOUR = 60;
@@ -81,6 +83,28 @@ type IntervalValidationError = "too_low" | "too_high" | null;
 type ReleasesPerPageError = "too_low" | "too_high" | null;
 type ParallelRepoFetchError = "too_low" | "too_high" | null;
 type RegexError = "invalid" | null;
+
+const providerSortOrderOptions: ReleaseProviderSortKey[][] = [
+  ["github", "gitlab", "codeberg"],
+  ["github", "codeberg", "gitlab"],
+  ["gitlab", "github", "codeberg"],
+  ["gitlab", "codeberg", "github"],
+  ["codeberg", "github", "gitlab"],
+  ["codeberg", "gitlab", "github"],
+];
+
+function serializeProviderSortOrder(order: ReleaseProviderSortKey[]) {
+  return order.join(",");
+}
+
+function deserializeProviderSortOrder(value: string): ReleaseProviderSortKey[] {
+  const parts = value.split(",") as ReleaseProviderSortKey[];
+  const selected = providerSortOrderOptions.find(
+    (option) =>
+      serializeProviderSortOrder(option) === serializeProviderSortOrder(parts),
+  );
+  return selected ?? defaultProviderSortOrder;
+}
 
 function FloatingSaveIndicator({ status }: { status: SaveStatus }) {
   const t = useTranslations("SettingsForm");
@@ -160,6 +184,8 @@ export function SettingsForm({
       timeFormat12h: `${baseId}-time-12h`,
       timeFormat24h: `${baseId}-time-24h`,
       languageSelect: `${baseId}-language`,
+      releaseSortOrder: `${baseId}-release-sort-order`,
+      providerSortOrder: `${baseId}-provider-sort-order`,
       showAcknowledge: `${baseId}-show-acknowledge`,
       showMarkAsNew: `${baseId}-show-mark-new`,
       showProviderPrefixInRepoId: `${baseId}-show-provider-prefix-in-repo-id`,
@@ -188,6 +214,13 @@ export function SettingsForm({
     currentSettings.timeFormat,
   );
   const [locale, setLocale] = React.useState<Locale>(currentSettings.locale);
+  const [releaseSortOrder, setReleaseSortOrder] =
+    React.useState<ReleaseSortOrder>(
+      currentSettings.releaseSortOrder ?? "latest_first",
+    );
+  const [providerSortOrder, setProviderSortOrder] = React.useState<
+    ReleaseProviderSortKey[]
+  >(currentSettings.providerSortOrder ?? defaultProviderSortOrder);
   const [releasesPerPage, setReleasesPerPage] = React.useState(
     String(currentSettings.releasesPerPage || 30),
   );
@@ -300,6 +333,8 @@ export function SettingsForm({
         1,
       releaseChannels: channels,
       preReleaseSubChannels,
+      releaseSortOrder,
+      providerSortOrder,
       showAcknowledge,
       showMarkAsNew,
       showProviderPrefixInRepoId,
@@ -325,6 +360,8 @@ export function SettingsForm({
     locale,
     channels,
     preReleaseSubChannels,
+    releaseSortOrder,
+    providerSortOrder,
     showAcknowledge,
     showMarkAsNew,
     showProviderPrefixInRepoId,
@@ -641,6 +678,80 @@ export function SettingsForm({
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor={ids.releaseSortOrder}>
+                {t("release_sort_order_label")}
+              </Label>
+              <Select
+                value={releaseSortOrder}
+                onValueChange={(value: ReleaseSortOrder) =>
+                  setReleaseSortOrder(value)
+                }
+                disabled={saveStatus === "saving" || !isOnline}
+              >
+                <SelectTrigger
+                  id={ids.releaseSortOrder}
+                  className="w-full sm:w-[260px]"
+                >
+                  <SelectValue placeholder={t("release_sort_latest_first")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="latest_first">
+                    {t("release_sort_latest_first")}
+                  </SelectItem>
+                  <SelectItem value="new_first">
+                    {t("release_sort_new_first")}
+                  </SelectItem>
+                  <SelectItem value="oldest_first">
+                    {t("release_sort_oldest_first")}
+                  </SelectItem>
+                  <SelectItem value="repo_az">
+                    {t("release_sort_repo_az")}
+                  </SelectItem>
+                  <SelectItem value="repo_za">
+                    {t("release_sort_repo_za")}
+                  </SelectItem>
+                  <SelectItem value="provider_grouped">
+                    {t("release_sort_provider_grouped")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {releaseSortOrder === "provider_grouped" && (
+              <div className="space-y-2">
+                <Label htmlFor={ids.providerSortOrder}>
+                  {t("provider_sort_order_label")}
+                </Label>
+                <Select
+                  value={serializeProviderSortOrder(providerSortOrder)}
+                  onValueChange={(value) =>
+                    setProviderSortOrder(deserializeProviderSortOrder(value))
+                  }
+                  disabled={saveStatus === "saving" || !isOnline}
+                >
+                  <SelectTrigger
+                    id={ids.providerSortOrder}
+                    className="w-full sm:w-[260px]"
+                  >
+                    <SelectValue
+                      placeholder={t("provider_sort_order_placeholder")}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {providerSortOrderOptions.map((option) => (
+                      <SelectItem
+                        key={serializeProviderSortOrder(option)}
+                        value={serializeProviderSortOrder(option)}
+                      >
+                        {option
+                          .map((provider) => t(`provider_${provider}`))
+                          .join(" / ")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-4 pt-2">
               <div className="flex items-start space-x-3">
                 <Checkbox

@@ -81,6 +81,8 @@ export default async function HomePage({
       refreshInterval: 10,
       cacheInterval: 5,
       releaseChannels: ["stable"],
+      releaseSortOrder: "latest_first",
+      providerSortOrder: ["github", "gitlab", "codeberg"],
       showAcknowledge: true,
       releasesPerPage: 30,
       parallelRepoFetches: 1,

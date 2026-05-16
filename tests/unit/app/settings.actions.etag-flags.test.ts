@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { checkForNewReleases } from '@/app/actions'
 
 const mem = {
   repos: [] as any[],
@@ -60,5 +61,19 @@ describe('updateSettingsAction clears ETags for all change flags', () => {
 
   it('rppChanged clears ETags', async () => {
     await runAndAssert({ ...mem.settings, releasesPerPage: 99 })
+  })
+
+  it('display sort changes do not clear ETags or trigger refresh', async () => {
+    vi.mocked(checkForNewReleases).mockClear()
+    const { updateSettingsAction } = await import('@/app/settings/actions')
+    await updateSettingsAction({
+      ...mem.settings,
+      releaseSortOrder: 'provider_grouped',
+      providerSortOrder: ['codeberg', 'gitlab', 'github'],
+    })
+
+    expect(mem.repos[0].etag).toBe('E1')
+    expect(mem.repos[1].etag).toBe('E2')
+    expect(checkForNewReleases).not.toHaveBeenCalled()
   })
 })

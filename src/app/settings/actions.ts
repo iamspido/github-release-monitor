@@ -7,6 +7,10 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { checkForNewReleases } from "@/app/actions";
 import { canPerformRestrictedAction } from "@/lib/auth-access";
 import { logger } from "@/lib/logger";
+import {
+  normalizeProviderSortOrder,
+  normalizeReleaseSortOrder,
+} from "@/lib/release-sort";
 import { getRepositories, saveRepositories } from "@/lib/repository-storage";
 import {
   NEXT_LOCALE_COOKIE,
@@ -113,6 +117,12 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         includeRegex: newSettings.includeRegex?.trim() || undefined,
         excludeRegex: newSettings.excludeRegex?.trim() || undefined,
         appriseTags: newSettings.appriseTags?.trim() || undefined,
+        releaseSortOrder: normalizeReleaseSortOrder(
+          newSettings.releaseSortOrder,
+        ),
+        providerSortOrder: normalizeProviderSortOrder(
+          newSettings.providerSortOrder,
+        ),
       };
 
       // Compute a concise diff of global settings
@@ -172,6 +182,16 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         "preReleaseSubChannels",
         oldS.preReleaseSubChannels,
         newS.preReleaseSubChannels,
+      );
+      pushValueChange(
+        "releaseSortOrder",
+        oldS.releaseSortOrder,
+        newS.releaseSortOrder,
+      );
+      pushArrayChange(
+        "providerSortOrder",
+        oldS.providerSortOrder,
+        newS.providerSortOrder,
       );
       pushValueChange(
         "showAcknowledge",

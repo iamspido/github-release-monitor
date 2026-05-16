@@ -177,6 +177,22 @@ export const allPreReleaseTypes: PreReleaseChannelType[] = [
   "tp",
 ];
 export type AppriseFormat = "text" | "markdown" | "html";
+export const releaseSortOrders = [
+  "latest_first",
+  "new_first",
+  "oldest_first",
+  "repo_az",
+  "repo_za",
+  "provider_grouped",
+] as const;
+export type ReleaseSortOrder = (typeof releaseSortOrders)[number];
+export const repoProviderSortKeys = ["github", "gitlab", "codeberg"] as const;
+export type ReleaseProviderSortKey = (typeof repoProviderSortKeys)[number];
+export const defaultProviderSortOrder: ReleaseProviderSortKey[] = [
+  "github",
+  "gitlab",
+  "codeberg",
+];
 
 export type AppSettings = {
   timeFormat: TimeFormat;
@@ -189,6 +205,8 @@ export type AppSettings = {
   parallelRepoFetches: number;
   releaseChannels: ReleaseChannel[];
   preReleaseSubChannels?: PreReleaseChannelType[];
+  releaseSortOrder?: ReleaseSortOrder;
+  providerSortOrder?: ReleaseProviderSortKey[];
   showAcknowledge?: boolean;
   showMarkAsNew?: boolean;
   showProviderPrefixInRepoId?: boolean;
