@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Plus, Upload } from "lucide-react";
+import { ChevronDown, ChevronLeft, Loader2, Plus, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import * as React from "react";
@@ -79,10 +79,19 @@ type ProviderChoiceCandidate = {
 
 interface RepositoryFormProps {
   currentRepositories: Repository[];
+  isExpanded: boolean;
+  isExpansionSaving: boolean;
+  onToggleExpanded: () => void;
 }
 
-export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
+export function RepositoryForm({
+  currentRepositories,
+  isExpanded,
+  isExpansionSaving,
+  onToggleExpanded,
+}: RepositoryFormProps) {
   const t = useTranslations("RepositoryForm");
+  const contentId = React.useId();
   const [urls, setUrls] = React.useState("");
   const { toast } = useToast();
   const router = useRouter();
@@ -428,10 +437,58 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>{t("title")}</CardTitle>
-          <CardDescription>{t("description")}</CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>{t("title")}</CardTitle>
+            <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+              <input
+                key={fileInputKey}
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".json"
+                className="hidden"
+              />
+              {!isExpanded && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleImportClick}
+                  className="min-w-0 flex-1 sm:flex-none"
+                  disabled={isPending || isImporting || !!jobId || !isOnline}
+                >
+                  {isImporting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="mr-2 h-4 w-4" />
+                  )}
+                  {t("button_import")}
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={onToggleExpanded}
+                disabled={isExpansionSaving}
+                aria-expanded={isExpanded}
+                aria-controls={contentId}
+                aria-label={
+                  isExpanded
+                    ? t("collapse_button_aria")
+                    : t("expand_button_aria")
+                }
+              >
+                {isExpanded ? (
+                  <ChevronDown className="size-5" />
+                ) : (
+                  <ChevronLeft className="size-5" />
+                )}
+              </Button>
+            </div>
+          </div>
+          {isExpanded && <CardDescription>{t("description")}</CardDescription>}
         </CardHeader>
-        <CardContent>
+        <CardContent id={contentId} hidden={!isExpanded}>
           <form
             onSubmit={(e) => {
               if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -480,14 +537,6 @@ export function RepositoryForm({ currentRepositories }: RepositoryFormProps) {
                 }
               />
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:gap-2">
-                <input
-                  key={fileInputKey}
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept=".json"
-                  className="hidden"
-                />
                 <Button
                   type="button"
                   variant="outline"

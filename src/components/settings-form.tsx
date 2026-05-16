@@ -191,6 +191,7 @@ export function SettingsForm({
       showMarkAsNew: `${baseId}-show-mark-new`,
       showProviderPrefixInRepoId: `${baseId}-show-provider-prefix-in-repo-id`,
       showProviderDomainInRepoId: `${baseId}-show-provider-domain-in-repo-id`,
+      repositoryFormExpanded: `${baseId}-repository-form-expanded`,
       stable: `${baseId}-stable`,
       prerelease: `${baseId}-prerelease`,
       draft: `${baseId}-draft`,
@@ -248,6 +249,8 @@ export function SettingsForm({
     React.useState<boolean>(currentSettings.showProviderPrefixInRepoId ?? true);
   const [showProviderDomainInRepoId, setShowProviderDomainInRepoId] =
     React.useState<boolean>(currentSettings.showProviderDomainInRepoId ?? true);
+  const [repositoryFormExpanded, setRepositoryFormExpanded] =
+    React.useState<boolean>(currentSettings.repositoryFormExpanded ?? true);
   const [includeRegex, setIncludeRegex] = React.useState(
     currentSettings.includeRegex ?? "",
   );
@@ -345,6 +348,7 @@ export function SettingsForm({
       showMarkAsNew,
       showProviderPrefixInRepoId,
       showProviderDomainInRepoId,
+      repositoryFormExpanded,
       includeRegex: includeRegex,
       excludeRegex: excludeRegex,
       appriseMaxCharacters: Number.isNaN(parsedAppriseChars)
@@ -373,6 +377,7 @@ export function SettingsForm({
     showMarkAsNew,
     showProviderPrefixInRepoId,
     showProviderDomainInRepoId,
+    repositoryFormExpanded,
     includeRegex,
     excludeRegex,
     appriseMaxCharacters,
@@ -878,6 +883,28 @@ export function SettingsForm({
                   </Label>
                   <p className="text-sm text-muted-foreground">
                     {t("show_provider_domain_in_repo_id_description")}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id={ids.repositoryFormExpanded}
+                  checked={repositoryFormExpanded}
+                  onCheckedChange={(checked) =>
+                    setRepositoryFormExpanded(Boolean(checked))
+                  }
+                  disabled={saveStatus === "saving" || !isOnline}
+                  className="mt-1"
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label
+                    htmlFor={ids.repositoryFormExpanded}
+                    className="font-medium cursor-pointer"
+                  >
+                    {t("repository_form_expanded_title")}
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t("repository_form_expanded_description")}
                   </p>
                 </div>
               </div>

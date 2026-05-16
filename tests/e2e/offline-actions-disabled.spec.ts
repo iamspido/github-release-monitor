@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { login, ensureTestRepo, goOffline, goOnline } from './utils';
+import {
+  ensureRepositoryFormExpanded,
+  ensureTestRepo,
+  goOffline,
+  goOnline,
+  login,
+} from './utils';
 
 test.describe('Offline actions disabled', () => {
   test.beforeEach(async ({ page }) => {
@@ -28,8 +34,11 @@ test.describe('Offline actions disabled', () => {
 
   test('Repo form: add/import disabled offline', async ({ page }) => {
     await page.goto('/en');
+    await ensureRepositoryFormExpanded(page);
     const importBtn = page.getByRole('button', { name: 'Import' });
-    const addBtn = page.getByRole('button', { name: 'Add Repositories' });
+    const addBtn = page
+      .locator('form')
+      .getByRole('button', { name: 'Add Repositories', exact: true });
     await expect(importBtn).toBeEnabled();
     await expect(addBtn).toBeDisabled(); // disabled until urls present
     await page.locator('textarea[name="urls"]').fill('https://github.com/test/test');

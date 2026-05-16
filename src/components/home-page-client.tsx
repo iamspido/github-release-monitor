@@ -78,6 +78,10 @@ export function HomePageClient({
       normalizeReleaseSortOrder(settings.releaseSortOrder),
     );
   const [isSortSaving, startSortSavingTransition] = React.useTransition();
+  const [repositoryFormExpanded, setRepositoryFormExpanded] =
+    React.useState<boolean>(settings.repositoryFormExpanded ?? true);
+  const [isRepositoryFormSaving, startRepositoryFormSavingTransition] =
+    React.useTransition();
 
   React.useEffect(() => {
     // This effect runs only on the client, after the initial render.
@@ -92,6 +96,10 @@ export function HomePageClient({
   React.useEffect(() => {
     setReleaseSortOrder(normalizeReleaseSortOrder(settings.releaseSortOrder));
   }, [settings.releaseSortOrder]);
+
+  React.useEffect(() => {
+    setRepositoryFormExpanded(settings.repositoryFormExpanded ?? true);
+  }, [settings.repositoryFormExpanded]);
 
   const handleSortOrderChange = (value: ReleaseSortOrder) => {
     const previousValue = releaseSortOrder;
@@ -130,6 +138,44 @@ export function HomePageClient({
     });
   };
 
+  const handleRepositoryFormToggle = () => {
+    const previousValue = repositoryFormExpanded;
+    const nextValue = !previousValue;
+    setRepositoryFormExpanded(nextValue);
+
+    if (!canMutate) {
+      return;
+    }
+
+    startRepositoryFormSavingTransition(async () => {
+      try {
+        const result = await updateSettingsAction({
+          ...settings,
+          repositoryFormExpanded: nextValue,
+        });
+
+        if (!result.success) {
+          setRepositoryFormExpanded(previousValue);
+          toast({
+            title: result.message.title,
+            description: result.message.description,
+            variant: "destructive",
+          });
+        }
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
+        setRepositoryFormExpanded(previousValue);
+        toast({
+          title: t("repository_form_toggle_save_error_title"),
+          description: t("repository_form_toggle_save_error_description"),
+          variant: "destructive",
+        });
+      }
+    });
+  };
+
   const sortedReleases = React.useMemo(
     () =>
       sortEnrichedReleases(
@@ -148,7 +194,14 @@ export function HomePageClient({
 
   return (
     <>
-      {canMutate && <RepositoryForm currentRepositories={repositories} />}
+      {canMutate && (
+        <RepositoryForm
+          currentRepositories={repositories}
+          isExpanded={repositoryFormExpanded}
+          isExpansionSaving={isRepositoryFormSaving}
+          onToggleExpanded={handleRepositoryFormToggle}
+        />
+      )}
 
       <section className="mt-8">
         <div className="mb-4 flex flex-col gap-4">

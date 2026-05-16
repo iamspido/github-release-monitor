@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { login } from './utils';
+import { ensureRepositoryFormExpanded, login } from './utils';
 
 test.describe('GitLab self-hosted repository add flow', () => {
   test('adds a repository from allowed additional gitlab host', async ({ page }) => {
@@ -11,8 +11,12 @@ test.describe('GitLab self-hosted repository add flow', () => {
     const repo = `e2e-repo-${idSuffix}`;
     const repoUrl = `https://gitlab.self.test/${owner}/${repo}`;
 
+    await ensureRepositoryFormExpanded(page);
     await page.locator('textarea[name="urls"]').fill(repoUrl);
-    await page.getByRole('button', { name: 'Add Repositories' }).click();
+    await page
+      .locator('form')
+      .getByRole('button', { name: 'Add Repositories', exact: true })
+      .click();
 
     await expect(page.getByText('Repositories Processed', { exact: true })).toBeVisible();
     await expect(page.getByText('Update Complete', { exact: true })).toBeVisible();
@@ -28,8 +32,12 @@ test.describe('GitLab self-hosted repository add flow', () => {
     await page.goto('/en');
 
     const repoUrl = 'https://gitlab.not-allowed.test/t.hohmann/tagesmutter-hohmann';
+    await ensureRepositoryFormExpanded(page);
     await page.locator('textarea[name="urls"]').fill(repoUrl);
-    await page.getByRole('button', { name: 'Add Repositories' }).click();
+    await page
+      .locator('form')
+      .getByRole('button', { name: 'Add Repositories', exact: true })
+      .click();
 
     await expect(page.getByText('Processing Failed', { exact: true })).toBeVisible();
     await expect(page.getByText('1 invalid URLs provided.', { exact: true })).toBeVisible();

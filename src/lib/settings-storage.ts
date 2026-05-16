@@ -34,6 +34,7 @@ const defaultSettings: AppSettings = {
   showMarkAsNew: true,
   showProviderPrefixInRepoId: true,
   showProviderDomainInRepoId: true,
+  repositoryFormExpanded: true,
   includeRegex: undefined,
   excludeRegex: undefined,
   appriseMaxCharacters: 1800,

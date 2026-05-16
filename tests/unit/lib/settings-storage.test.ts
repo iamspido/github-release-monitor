@@ -66,4 +66,12 @@ describe('settings-storage failure scenarios', () => {
 
     expect(settings.prioritizeNewSecurityReleases).toBe(false);
   });
+
+  it('defaults the repository form to expanded for old settings files', async () => {
+    const { getSettings } = await import('@/lib/settings-storage');
+
+    const settings = await getSettings();
+
+    expect(settings.repositoryFormExpanded).toBe(true);
+  });
 });

@@ -212,6 +212,7 @@ export type AppSettings = {
   showMarkAsNew?: boolean;
   showProviderPrefixInRepoId?: boolean;
   showProviderDomainInRepoId?: boolean;
+  repositoryFormExpanded?: boolean;
   includeRegex?: string;
   excludeRegex?: string;
   appriseMaxCharacters?: number;

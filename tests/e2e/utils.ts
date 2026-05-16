@@ -73,6 +73,34 @@ export async function waitForRepoLink(page: Page, repoId = 'test/test', timeoutM
   return link;
 }
 
+export async function ensureRepositoryFormExpanded(page: Page) {
+  const toggleName = new RegExp(
+    [
+      'Expand add repositories form',
+      'Collapse add repositories form',
+      'Formular zum Hinzufügen von Repositories ausklappen',
+      'Formular zum Hinzufügen von Repositories einklappen',
+    ].join('|'),
+  );
+  const toggleButton = page.getByRole('button', {
+    name: toggleName,
+  });
+
+  await expect(toggleButton).toBeVisible();
+
+  if ((await toggleButton.getAttribute('aria-expanded')) !== 'true') {
+    await toggleButton.click();
+    await expect(toggleButton).toHaveAttribute('aria-expanded', 'true');
+  }
+
+  await expect(page.locator('textarea[name="urls"]')).toBeVisible();
+  await expect(
+    page
+      .locator('form')
+      .getByRole('button', { name: /Add Repositories|Repositories hinzufügen/ }),
+  ).toBeVisible();
+}
+
 export async function assertNotVisibleFor(locator: Locator, waitMs = 1600) {
   await locator.page().waitForTimeout(waitMs);
   await expect(locator).toHaveCount(0);
