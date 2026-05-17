@@ -4,7 +4,7 @@ describe("auth email HTML rendering", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    vi.unmock("@/lib/auth");
+    vi.doUnmock("@/lib/auth");
     process.env = {
       ...env,
       BETTER_AUTH_SECRET: "x".repeat(64),
@@ -23,6 +23,7 @@ describe("auth email HTML rendering", () => {
     vi.doUnmock("@better-auth/passkey");
     vi.doUnmock("better-sqlite3");
     vi.doUnmock("nodemailer");
+    vi.doUnmock("@/lib/logger");
     process.env = { ...env };
   });
 
@@ -107,5 +108,61 @@ describe("auth email HTML rendering", () => {
       'href="https://example.test/change?next=&lt;x&gt;&amp;email=&quot;a&#39;b&#96;"',
     );
     expect(changeEmail.html).not.toContain(`current<user>"'&@example.test`);
+  });
+
+  it("logs an actionable message when the auth database cannot be opened", async () => {
+    const error = new Error("unable to open database file");
+    const logErrorMock = vi.fn();
+    const scopedLogger = {
+      error: logErrorMock,
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      withScope: vi.fn(),
+    };
+
+    vi.doMock("@/lib/logger", () => ({
+      logger: {
+        withScope: () => scopedLogger,
+      },
+    }));
+    vi.doMock("better-auth", () => ({
+      betterAuth: vi.fn(),
+    }));
+    vi.doMock("better-auth/db/migration", () => ({
+      getMigrations: vi.fn(),
+    }));
+    vi.doMock("better-auth/next-js", () => ({
+      nextCookies: () => "next-cookies-plugin",
+    }));
+    vi.doMock("better-auth/plugins", () => ({
+      twoFactor: () => "two-factor-plugin",
+      username: () => "username-plugin",
+    }));
+    vi.doMock("@better-auth/passkey", () => ({
+      passkey: () => "passkey-plugin",
+    }));
+    function DatabaseMock() {
+      throw error;
+    }
+    vi.doMock("better-sqlite3", () => ({
+      default: DatabaseMock,
+    }));
+    vi.doMock("nodemailer", () => ({
+      default: {
+        createTransport: vi.fn(),
+      },
+    }));
+
+    await expect(import("@/lib/auth")).rejects.toThrow(
+      "unable to open database file",
+    );
+
+    expect(logErrorMock).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to open Better Auth SQLite database"),
+      error,
+    );
+    expect(logErrorMock.mock.calls[0]?.[0]).toContain("/data/auth.db");
+    expect(logErrorMock.mock.calls[0]?.[0]).toContain("UID/GID 1001");
   });
 });

@@ -16,9 +16,26 @@ const dataDirPath = path.join(process.cwd(), "data");
 const authDbPath = path.join(dataDirPath, "auth.db");
 const https = process.env.HTTPS !== "false";
 
-mkdirSync(dataDirPath, { recursive: true });
+function getRuntimeIdentity() {
+  const uid = typeof process.getuid === "function" ? process.getuid() : null;
+  const gid = typeof process.getgid === "function" ? process.getgid() : null;
+  return `uid=${uid ?? "unknown"} gid=${gid ?? "unknown"}`;
+}
 
-const db = new Database(authDbPath);
+function openAuthDatabase() {
+  try {
+    mkdirSync(dataDirPath, { recursive: true });
+    return new Database(authDbPath);
+  } catch (error) {
+    log.error(
+      `Failed to open Better Auth SQLite database at '${authDbPath}'. Ensure '${dataDirPath}' exists and is writable by the container runtime user (${getRuntimeIdentity()}). For Docker bind mounts, the host data directory must be writable by UID/GID 1001.`,
+      error,
+    );
+    throw error;
+  }
+}
+
+const db = openAuthDatabase();
 const signupEnabled = process.env.AUTH_ENABLE_SIGNUP === "true";
 const passkeyEnabled = process.env.AUTH_ENABLE_PASSKEY !== "false";
 const trustedSocialLinkingEnabled =

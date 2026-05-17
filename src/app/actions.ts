@@ -6,6 +6,7 @@ import { revalidatePath, unstable_cache, updateTag } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { parse as parseYaml } from "yaml";
 import { canPerformRestrictedAction } from "@/lib/auth-access";
+import { trackBackgroundTask } from "@/lib/background-tasks";
 import { sendTestEmail } from "@/lib/email";
 import { isRetryableFetchError } from "@/lib/fetch-retry";
 import { getJobStatus, type JobStatus, setJobStatus } from "@/lib/job-store";
@@ -3817,9 +3818,11 @@ export async function addRepositoriesAction(
 
         jobId = crypto.randomUUID();
         setJobStatus(jobId, "pending");
-        refreshMultipleRepositoriesAction(
-          uniqueNewRepos.map((r) => r.id),
-          jobId,
+        trackBackgroundTask(
+          refreshMultipleRepositoriesAction(
+            uniqueNewRepos.map((r) => r.id),
+            jobId,
+          ),
         );
       }
 
@@ -3924,7 +3927,7 @@ export async function importRepositoriesAction(
         jobId = crypto.randomUUID();
         setJobStatus(jobId, "pending");
         const repoIds = reposToFetch.map((r) => r.id);
-        refreshMultipleRepositoriesAction(repoIds, jobId);
+        trackBackgroundTask(refreshMultipleRepositoriesAction(repoIds, jobId));
       }
 
       log.info(
