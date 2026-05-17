@@ -10,6 +10,7 @@ import {
   addRepositoriesAction,
   getJobStatusAction,
   importRepositoriesAction,
+  previewComposeImportAction,
   resolveRepoProvidersAction,
 } from "@/app/actions";
 import {
@@ -22,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -71,6 +73,21 @@ const initialState = {
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim());
 const isOwnerRepoShorthand = (value: string) =>
   /^[a-z0-9-._]+\/[a-z0-9-._]+$/i.test(value.trim());
+const isComposeFileName = (value: string) => /\.(ya?ml)$/i.test(value);
+
+const getRepositoryDisplayName = (repo: Repository) => {
+  if (repo.id.startsWith("github:")) return repo.id.slice("github:".length);
+  if (repo.id.startsWith("codeberg:")) return repo.id.slice("codeberg:".length);
+  if (repo.id.startsWith("gitlab:")) return repo.id.slice("gitlab:".length);
+  return repo.id;
+};
+
+const getRepositoryProviderName = (repo: Repository) => {
+  if (repo.id.startsWith("github:")) return "GitHub";
+  if (repo.id.startsWith("codeberg:")) return "Codeberg";
+  if (repo.id.startsWith("gitlab:")) return "GitLab";
+  return null;
+};
 
 type ProviderChoiceCandidate = {
   provider: "github" | "codeberg" | "gitlab";
@@ -130,8 +147,13 @@ export function RepositoryForm({
   const [importStats, setImportStats] = React.useState<{
     newCount: number;
     existingCount: number;
+    skippedImages?: number;
   } | null>(null);
   const [fileInputKey, setFileInputKey] = React.useState(Date.now());
+  const currentRepositoryIds = React.useMemo(
+    () => new Set(currentRepositories.map((repo) => repo.id)),
+    [currentRepositories],
+  );
 
   React.useEffect(() => {
     if (isPending) {
@@ -327,6 +349,24 @@ export function RepositoryForm({
     fileInputRef.current?.click();
   };
 
+  const prepareImportPreview = React.useCallback(
+    (importedData: Repository[], skippedImages?: number) => {
+      const newRepos = importedData.filter(
+        (repo) => !currentRepositoryIds.has(repo.id),
+      );
+      const existingCount = importedData.length - newRepos.length;
+
+      setReposToImport(importedData);
+      setImportStats({
+        newCount: newRepos.length,
+        existingCount,
+        skippedImages,
+      });
+      setIsDialogVisible(true);
+    },
+    [currentRepositoryIds],
+  );
+
   const handleFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
@@ -337,6 +377,52 @@ export function RepositoryForm({
     reader.onload = async (e) => {
       try {
         const content = e.target?.result as string;
+
+        if (isComposeFileName(file.name)) {
+          startImportTransition(async () => {
+            try {
+              const result = await previewComposeImportAction(
+                file.name,
+                content,
+              );
+              if (!result.success) {
+                toast({
+                  title: t("toast_import_error_title"),
+                  description:
+                    result.error ?? t("toast_import_error_description"),
+                  variant: "destructive",
+                });
+                return;
+              }
+
+              const skippedImages = Object.values(result.skipped).reduce(
+                (sum, count) => sum + count,
+                0,
+              );
+              if (result.repositories.length === 0 && skippedImages === 0) {
+                toast({
+                  title: t("toast_import_error_title"),
+                  description: t("toast_import_error_no_compose_images"),
+                  variant: "destructive",
+                });
+                return;
+              }
+
+              prepareImportPreview(result.repositories, skippedImages);
+            } catch (error: unknown) {
+              if (reloadIfServerActionStale(error)) {
+                return;
+              }
+              toast({
+                title: t("toast_import_error_title"),
+                description: t("toast_import_error_description"),
+                variant: "destructive",
+              });
+            }
+          });
+          return;
+        }
+
         const importedData = JSON.parse(content);
 
         if (Array.isArray(importedData)) {
@@ -352,17 +438,7 @@ export function RepositoryForm({
             throw new Error(t("toast_import_error_invalid_format"));
           }
 
-          const existingIds = new Set(
-            currentRepositories.map((repo) => repo.id),
-          );
-          const newRepos = importedData.filter(
-            (repo) => !existingIds.has(repo.id),
-          );
-          const existingCount = importedData.length - newRepos.length;
-
-          setReposToImport(importedData);
-          setImportStats({ newCount: newRepos.length, existingCount });
-          setIsDialogVisible(true);
+          prepareImportPreview(importedData);
         } else {
           toast({
             title: t("toast_import_error_title"),
@@ -445,6 +521,13 @@ export function RepositoryForm({
                 key={fileInputKey}
                 type="file"
                 ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".json,.yml,.yaml"
+                className="hidden"
+              />
+              <input
+                key={`json-${fileInputKey}`}
+                type="file"
                 onChange={handleFileChange}
                 accept=".json"
                 className="hidden"
@@ -641,7 +724,7 @@ export function RepositoryForm({
       </AlertDialog>
 
       <AlertDialog open={isDialogVisible} onOpenChange={setIsDialogVisible}>
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle>{t("import_dialog_title")}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -650,8 +733,59 @@ export function RepositoryForm({
                   newCount: importStats.newCount,
                   existingCount: importStats.existingCount,
                 })}
+              {importStats?.skippedImages ? (
+                <span className="mt-2 block">
+                  {t("import_dialog_compose_skipped", {
+                    count: importStats.skippedImages,
+                  })}
+                </span>
+              ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {reposToImport?.length ? (
+            <div className="max-h-72 overflow-y-auto rounded-md border">
+              <div className="sticky top-0 border-b bg-background px-3 py-2 text-sm font-medium">
+                {t("import_dialog_repo_list_title")}
+              </div>
+              <ul className="divide-y">
+                {reposToImport.map((repo) => {
+                  const isExisting = currentRepositoryIds.has(repo.id);
+                  const providerName = getRepositoryProviderName(repo);
+
+                  return (
+                    <li
+                      key={repo.id}
+                      className="flex min-h-12 items-center justify-between gap-3 px-3 py-2"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        {providerName ? (
+                          <Badge variant="outline" className="shrink-0">
+                            {providerName}
+                          </Badge>
+                        ) : null}
+                        <a
+                          href={repo.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="min-w-0 truncate text-sm font-medium text-foreground hover:underline"
+                        >
+                          {getRepositoryDisplayName(repo)}
+                        </a>
+                      </div>
+                      <Badge
+                        variant={isExisting ? "secondary" : "default"}
+                        className="shrink-0"
+                      >
+                        {isExisting
+                          ? t("import_dialog_repo_status_existing")
+                          : t("import_dialog_repo_status_new")}
+                      </Badge>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isImporting}>
               {t("cancel_button")}

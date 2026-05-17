@@ -51,7 +51,8 @@
     "remark-html": "^16.0.1",
     "simple-icons": "^16.19.0",
     "tailwind-merge": "^3.6.0",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",

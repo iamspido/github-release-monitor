@@ -33,6 +33,7 @@ describe('Header logout disabled offline', () => {
   it('renders header in offline without errors', async () => {
     vi.resetModules();
     vi.doMock('@/hooks/use-network', () => ({ useNetworkStatus: () => ({ isOnline: false }) }));
+    vi.doMock('@/app/auth/actions', () => ({ logout: vi.fn() }));
     vi.doMock('next-intl', () => ({
       useTranslations: () => (key: string) => ({
         title: 'GitHub Release Monitor',
@@ -51,6 +52,15 @@ describe('Header logout disabled offline', () => {
     }));
     vi.doMock('@/components/logo', () => ({
       Logo: () => React.createElement('div', { 'data-testid': 'logo' }),
+    }));
+    vi.doMock('@/components/offline-banner', () => ({
+      OfflineBanner: () => React.createElement('div', { 'data-testid': 'offline-banner' }),
+    }));
+    vi.doMock('@/components/update-notice-banner', () => ({
+      UpdateNoticeBanner: () => null,
+    }));
+    vi.doMock('@/components/mobile-menu', () => ({
+      MobileMenu: () => React.createElement('button', { type: 'button' }, 'Menu'),
     }));
     const { Header } = await import('@/components/header');
     const div = document.createElement('div');
