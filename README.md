@@ -42,6 +42,22 @@ A powerful, self-hostable application to automatically monitor GitHub, GitLab, a
 - **Authentication**: [Better Auth](https://www.better-auth.com)
 - **Notifications**: [Nodemailer](https://nodemailer.com/), [Apprise](https://github.com/caronc/apprise)
 
+## ❤️ Sponsors
+
+Thanks to the people and organizations supporting this project.
+
+<p>
+  <a href="https://horizify.de/">
+    <img width="180" alt="Horizify GmbH logo" src="https://github.com/user-attachments/assets/4646f922-c689-494e-bc1a-db51fca77df2" />
+  </a>
+</p>
+
+**[Horizify GmbH](https://horizify.de/)** supports the ongoing development of this project.
+
+**One-time donation:**
+
+- [chip-well](https://github.com/chip-well)
+
 ## 📜 License
 
 This project is licensed under the **AGPL-3.0-only License**.
