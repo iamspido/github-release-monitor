@@ -23,6 +23,7 @@ const defaultSettings: AppSettings = {
   locale: "en",
   refreshInterval: 10, // in minutes
   cacheInterval: 5, // in minutes
+  backgroundCheckCron: undefined,
   releasesPerPage: 30, // GitHub API default
   parallelRepoFetches: defaultParallelRepoFetches,
   releaseChannels: ["stable"],

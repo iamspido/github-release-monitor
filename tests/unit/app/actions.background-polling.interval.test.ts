@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-describe('background polling interval > 1 minute', () => {
+describe('background polling loop', () => {
   const envBackup = { ...process.env }
 
   beforeEach(() => {
@@ -18,16 +18,16 @@ describe('background polling interval > 1 minute', () => {
 
   afterEach(() => { vi.useRealTimers(); process.env = { ...envBackup } })
 
-  it('schedules next tick after 120000ms when refreshInterval=2', async () => {
+  it('schedules the next due-check tick after 60000ms', async () => {
     const timeoutSpy = vi.spyOn(global, 'setTimeout')
     await import('@/app/actions')
     await vi.advanceTimersByTimeAsync(5000)
     await Promise.resolve()
-    // the second timer should be for 120000ms
+    // Background polling wakes every minute and filters repositories by their
+    // effective per-repository schedule.
     const delays = timeoutSpy.mock.calls.map(c => c[1])
     expect(delays).toContain(5000)
-    expect(delays).toContain(120_000)
+    expect(delays).toContain(60_000)
     timeoutSpy.mockRestore()
   })
 })
-

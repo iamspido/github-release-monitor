@@ -14,6 +14,7 @@ import {
   deleteAllRepositoriesAction,
   updateSettingsAction,
 } from "@/app/settings/actions";
+import { CronTimeSelect } from "@/components/cron-time-select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,6 +73,74 @@ function minutesToDhms(totalMinutes: number) {
   return { d, h, m };
 }
 
+type GlobalAutomationMode = "interval" | "cron";
+type CronPreset = "daily" | "weekdays" | "weekly" | "custom";
+
+const defaultCronExpression = "0 8 * * *";
+const weekdays = [
+  { value: "1", labelKey: "cron_weekday_monday" },
+  { value: "2", labelKey: "cron_weekday_tuesday" },
+  { value: "3", labelKey: "cron_weekday_wednesday" },
+  { value: "4", labelKey: "cron_weekday_thursday" },
+  { value: "5", labelKey: "cron_weekday_friday" },
+  { value: "6", labelKey: "cron_weekday_saturday" },
+  { value: "0", labelKey: "cron_weekday_sunday" },
+] as const;
+
+function splitCronTime(cron?: string) {
+  const [minute, hour] = (cron || defaultCronExpression).split(" ");
+  const h = Number.parseInt(hour, 10);
+  const m = Number.parseInt(minute, 10);
+  return `${String(Number.isFinite(h) ? h : 8).padStart(2, "0")}:${String(
+    Number.isFinite(m) ? m : 0,
+  ).padStart(2, "0")}`;
+}
+
+function inferCronPreset(cron?: string): CronPreset {
+  if (!cron) return "daily";
+  const parts = cron.trim().replace(/\s+/g, " ").split(" ");
+  if (parts.length !== 5) return "custom";
+  const [, , dayOfMonth, month, dayOfWeek] = parts;
+  if (dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
+    return "daily";
+  }
+  if (dayOfMonth === "*" && month === "*" && dayOfWeek === "1-5") {
+    return "weekdays";
+  }
+  if (dayOfMonth === "*" && month === "*" && /^[0-6]$/.test(dayOfWeek)) {
+    return "weekly";
+  }
+  return "custom";
+}
+
+function inferCronWeekday(cron?: string) {
+  const parts = cron?.trim().replace(/\s+/g, " ").split(" ") ?? [];
+  return parts.length === 5 && /^[0-6]$/.test(parts[4]) ? parts[4] : "1";
+}
+
+function buildCronExpression(
+  preset: CronPreset,
+  time: string,
+  weekday: string,
+  customExpression: string,
+) {
+  if (preset === "custom") return customExpression.trim().replace(/\s+/g, " ");
+  const [hour = "8", minute = "0"] = time.split(":");
+  const h = Number.parseInt(hour, 10);
+  const m = Number.parseInt(minute, 10);
+  const safeHour = Number.isFinite(h) ? Math.min(Math.max(h, 0), 23) : 8;
+  const safeMinute = Number.isFinite(m) ? Math.min(Math.max(m, 0), 59) : 0;
+  if (preset === "weekdays") return `${safeMinute} ${safeHour} * * 1-5`;
+  if (preset === "weekly") return `${safeMinute} ${safeHour} * * ${weekday}`;
+  return `${safeMinute} ${safeHour} * * *`;
+}
+
+function isValidFiveFieldCron(cron: string) {
+  const parts = cron.trim().replace(/\s+/g, " ").split(" ");
+  if (parts.length !== 5) return false;
+  return parts.every((part) => part.length > 0);
+}
+
 type SaveStatus =
   | "idle"
   | "waiting"
@@ -83,6 +152,7 @@ type IntervalValidationError = "too_low" | "too_high" | null;
 type ReleasesPerPageError = "too_low" | "too_high" | null;
 type ParallelRepoFetchError = "too_low" | "too_high" | null;
 type RegexError = "invalid" | null;
+type CronValidationError = "invalid" | null;
 
 const providerSortOrderOptions: ReleaseProviderSortKey[][] = [
   ["github", "gitlab", "codeberg"],
@@ -200,6 +270,13 @@ export function SettingsForm({
       intervalMinutes: `${baseId}-interval-minutes`,
       intervalHours: `${baseId}-interval-hours`,
       intervalDays: `${baseId}-interval-days`,
+      automationMode: `${baseId}-automation-mode`,
+      cronPreset: `${baseId}-cron-preset`,
+      cronHour: `${baseId}-cron-hour`,
+      cronMinute: `${baseId}-cron-minute`,
+      cronPeriod: `${baseId}-cron-period`,
+      cronWeekday: `${baseId}-cron-weekday`,
+      cronExpression: `${baseId}-cron-expression`,
       cacheMinutes: `${baseId}-cache-minutes`,
       cacheHours: `${baseId}-cache-hours`,
       cacheDays: `${baseId}-cache-days`,
@@ -266,6 +343,22 @@ export function SettingsForm({
   const [appriseFormat, setAppriseFormat] = React.useState<AppriseFormat>(
     currentSettings.appriseFormat ?? "text",
   );
+  const [automationMode, setAutomationMode] =
+    React.useState<GlobalAutomationMode>(
+      currentSettings.backgroundCheckCron ? "cron" : "interval",
+    );
+  const [cronPreset, setCronPreset] = React.useState<CronPreset>(() =>
+    inferCronPreset(currentSettings.backgroundCheckCron),
+  );
+  const [cronTime, setCronTime] = React.useState(() =>
+    splitCronTime(currentSettings.backgroundCheckCron),
+  );
+  const [cronWeekday, setCronWeekday] = React.useState(() =>
+    inferCronWeekday(currentSettings.backgroundCheckCron),
+  );
+  const [cronExpression, setCronExpression] = React.useState(
+    currentSettings.backgroundCheckCron ?? defaultCronExpression,
+  );
 
   const [days, setDays] = React.useState(() =>
     String(minutesToDhms(currentSettings.refreshInterval).d),
@@ -298,6 +391,7 @@ export function SettingsForm({
     React.useState<RegexError>(null);
   const [excludeRegexError, setExcludeRegexError] =
     React.useState<RegexError>(null);
+  const [cronError, setCronError] = React.useState<CronValidationError>(null);
 
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
   const isInitialMount = React.useRef(true);
@@ -328,12 +422,17 @@ export function SettingsForm({
       dCache * MINUTES_IN_DAY + hCache * MINUTES_IN_HOUR + mCache;
 
     const parsedAppriseChars = parseInt(appriseMaxCharacters, 10);
+    const backgroundCheckCron =
+      automationMode === "cron"
+        ? buildCronExpression(cronPreset, cronTime, cronWeekday, cronExpression)
+        : undefined;
 
     return {
       timeFormat,
       locale,
       refreshInterval: totalMinutes,
       cacheInterval: totalCacheMinutes,
+      backgroundCheckCron,
       releasesPerPage: parseInt(releasesPerPage, 10) || 30,
       parallelRepoFetches:
         parseInt(parallelRepoFetches, 10) ||
@@ -364,6 +463,11 @@ export function SettingsForm({
     cacheDays,
     cacheHours,
     cacheMinutes,
+    automationMode,
+    cronPreset,
+    cronTime,
+    cronWeekday,
+    cronExpression,
     releasesPerPage,
     parallelRepoFetches,
     timeFormat,
@@ -395,7 +499,7 @@ export function SettingsForm({
     const parallelRepoFetchesFilled = parallelRepoFetches !== "";
 
     // Refresh Interval Validation
-    if (refreshFieldsFilled) {
+    if (automationMode === "interval" && refreshFieldsFilled) {
       if (newSettings.refreshInterval < 1) {
         setIntervalError("too_low");
       } else if (newSettings.refreshInterval > MAX_INTERVAL_MINUTES) {
@@ -405,6 +509,13 @@ export function SettingsForm({
       }
     } else {
       setIntervalError(null);
+    }
+
+    if (automationMode === "cron") {
+      const cron = newSettings.backgroundCheckCron ?? "";
+      setCronError(isValidFiveFieldCron(cron) ? null : "invalid");
+    } else {
+      setCronError(null);
     }
 
     // Releases Per Page Validation
@@ -462,9 +573,11 @@ export function SettingsForm({
     // Cache Validation
     const isCacheEnabled = newSettings.cacheInterval > 0;
     const cacheIsLarger =
+      automationMode === "interval" &&
       newSettings.cacheInterval > newSettings.refreshInterval;
     setIsCacheInvalid(
-      refreshFieldsFilled &&
+      automationMode === "interval" &&
+        refreshFieldsFilled &&
         cacheFieldsFilled &&
         isCacheEnabled &&
         cacheIsLarger,
@@ -482,6 +595,8 @@ export function SettingsForm({
     newSettings.cacheInterval,
     includeRegex,
     excludeRegex,
+    automationMode,
+    newSettings.backgroundCheckCron,
   ]);
 
   // Auto-Save Effect
@@ -497,17 +612,26 @@ export function SettingsForm({
       return;
     }
 
-    const hasEmptyFields = [
-      days,
-      hours,
-      minutes,
-      cacheDays,
-      cacheHours,
-      cacheMinutes,
-      releasesPerPage,
-      parallelRepoFetches,
-      appriseMaxCharacters,
-    ].some((val) => val === "");
+    const hasEmptyIntervalFields =
+      automationMode === "interval" &&
+      [days, hours, minutes].some((val) => val === "");
+    const hasEmptyCronFields =
+      automationMode === "cron" &&
+      (cronPreset === "custom"
+        ? cronExpression.trim() === ""
+        : cronTime.trim() === "" ||
+          (cronPreset === "weekly" && cronWeekday.trim() === ""));
+    const hasEmptyFields =
+      hasEmptyIntervalFields ||
+      hasEmptyCronFields ||
+      [
+        cacheDays,
+        cacheHours,
+        cacheMinutes,
+        releasesPerPage,
+        parallelRepoFetches,
+        appriseMaxCharacters,
+      ].some((val) => val === "");
 
     if (
       hasEmptyFields ||
@@ -516,7 +640,8 @@ export function SettingsForm({
       releasesPerPageError ||
       parallelRepoFetchesError ||
       includeRegexError ||
-      excludeRegexError
+      excludeRegexError ||
+      cronError
     ) {
       setSaveStatus("idle");
       return;
@@ -571,6 +696,11 @@ export function SettingsForm({
     days,
     hours,
     minutes,
+    automationMode,
+    cronPreset,
+    cronTime,
+    cronWeekday,
+    cronExpression,
     cacheDays,
     cacheHours,
     cacheMinutes,
@@ -582,6 +712,7 @@ export function SettingsForm({
     parallelRepoFetchesError,
     includeRegexError,
     excludeRegexError,
+    cronError,
     appriseMaxCharacters,
     isOnline,
     currentSettings.locale,
@@ -1104,77 +1235,218 @@ export function SettingsForm({
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
-              <Label>{t("refresh_interval_title")}</Label>
-              <div className="grid grid-cols-3 gap-4 mt-2">
-                <div className="space-y-2">
-                  <Label htmlFor={ids.intervalMinutes}>
-                    {t("refresh_interval_minutes_label")}
-                  </Label>
-                  <Input
-                    id={ids.intervalMinutes}
-                    type="number"
-                    value={minutes}
-                    onChange={(e) => setMinutes(e.target.value)}
-                    min={0}
-                    max={59}
-                    disabled={saveStatus === "saving" || !isOnline}
-                    className={cn(
-                      !!intervalError &&
-                        "border-destructive focus-visible:ring-destructive",
-                    )}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={ids.intervalHours}>
-                    {t("refresh_interval_hours_label")}
-                  </Label>
-                  <Input
-                    id={ids.intervalHours}
-                    type="number"
-                    value={hours}
-                    onChange={(e) => setHours(e.target.value)}
-                    min={0}
-                    max={23}
-                    disabled={saveStatus === "saving" || !isOnline}
-                    className={cn(
-                      !!intervalError &&
-                        "border-destructive focus-visible:ring-destructive",
-                    )}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={ids.intervalDays}>
-                    {t("refresh_interval_days_label")}
-                  </Label>
-                  <Input
-                    id={ids.intervalDays}
-                    type="number"
-                    value={days}
-                    onChange={(e) => setDays(e.target.value)}
-                    min={0}
-                    max={3650}
-                    disabled={saveStatus === "saving" || !isOnline}
-                    className={cn(
-                      !!intervalError &&
-                        "border-destructive focus-visible:ring-destructive",
-                    )}
-                  />
-                </div>
-              </div>
-              {intervalError === "too_low" ? (
-                <p className="mt-2 text-sm text-destructive">
-                  {t("refresh_interval_error_min")}
-                </p>
-              ) : intervalError === "too_high" ? (
-                <p className="mt-2 text-sm text-destructive">
-                  {t("refresh_interval_error_max")}
-                </p>
-              ) : (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {t("refresh_interval_hint")}
-                </p>
-              )}
+              <Label htmlFor={ids.automationMode}>
+                {t("automation_mode_label")}
+              </Label>
+              <Select
+                value={automationMode}
+                onValueChange={(value: GlobalAutomationMode) =>
+                  setAutomationMode(value)
+                }
+                disabled={saveStatus === "saving" || !isOnline}
+              >
+                <SelectTrigger id={ids.automationMode} className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="interval">
+                    {t("automation_mode_interval")}
+                  </SelectItem>
+                  <SelectItem value="cron">
+                    {t("automation_mode_cron")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {automationMode === "interval" && (
+              <div>
+                <Label>{t("refresh_interval_title")}</Label>
+                <div className="grid grid-cols-3 gap-4 mt-2">
+                  <div className="space-y-2">
+                    <Label htmlFor={ids.intervalMinutes}>
+                      {t("refresh_interval_minutes_label")}
+                    </Label>
+                    <Input
+                      id={ids.intervalMinutes}
+                      type="number"
+                      value={minutes}
+                      onChange={(e) => setMinutes(e.target.value)}
+                      min={0}
+                      max={59}
+                      disabled={saveStatus === "saving" || !isOnline}
+                      className={cn(
+                        !!intervalError &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={ids.intervalHours}>
+                      {t("refresh_interval_hours_label")}
+                    </Label>
+                    <Input
+                      id={ids.intervalHours}
+                      type="number"
+                      value={hours}
+                      onChange={(e) => setHours(e.target.value)}
+                      min={0}
+                      max={23}
+                      disabled={saveStatus === "saving" || !isOnline}
+                      className={cn(
+                        !!intervalError &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={ids.intervalDays}>
+                      {t("refresh_interval_days_label")}
+                    </Label>
+                    <Input
+                      id={ids.intervalDays}
+                      type="number"
+                      value={days}
+                      onChange={(e) => setDays(e.target.value)}
+                      min={0}
+                      max={3650}
+                      disabled={saveStatus === "saving" || !isOnline}
+                      className={cn(
+                        !!intervalError &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                  </div>
+                </div>
+                {intervalError === "too_low" ? (
+                  <p className="mt-2 text-sm text-destructive">
+                    {t("refresh_interval_error_min")}
+                  </p>
+                ) : intervalError === "too_high" ? (
+                  <p className="mt-2 text-sm text-destructive">
+                    {t("refresh_interval_error_max")}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {t("refresh_interval_hint")}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {automationMode === "cron" && (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor={ids.cronPreset}>
+                    {t("cron_preset_label")}
+                  </Label>
+                  <Select
+                    value={cronPreset}
+                    onValueChange={(value: CronPreset) => setCronPreset(value)}
+                    disabled={saveStatus === "saving" || !isOnline}
+                  >
+                    <SelectTrigger id={ids.cronPreset} className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">
+                        {t("cron_preset_daily")}
+                      </SelectItem>
+                      <SelectItem value="weekdays">
+                        {t("cron_preset_weekdays")}
+                      </SelectItem>
+                      <SelectItem value="weekly">
+                        {t("cron_preset_weekly")}
+                      </SelectItem>
+                      <SelectItem value="custom">
+                        {t("cron_preset_custom")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {cronPreset !== "custom" ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>{t("cron_time_label")}</Label>
+                      <CronTimeSelect
+                        ids={{
+                          hour: ids.cronHour,
+                          minute: ids.cronMinute,
+                          period: ids.cronPeriod,
+                        }}
+                        labels={{
+                          hour: t("cron_time_hour_label"),
+                          minute: t("cron_time_minute_label"),
+                          period: t("cron_time_period_label"),
+                          am: t("cron_time_am"),
+                          pm: t("cron_time_pm"),
+                        }}
+                        value={cronTime}
+                        onChange={setCronTime}
+                        timeFormat={timeFormat}
+                        disabled={saveStatus === "saving" || !isOnline}
+                      />
+                    </div>
+                    {cronPreset === "weekly" && (
+                      <div className="space-y-2">
+                        <Label htmlFor={ids.cronWeekday}>
+                          {t("cron_weekday_label")}
+                        </Label>
+                        <Select
+                          value={cronWeekday}
+                          onValueChange={setCronWeekday}
+                          disabled={saveStatus === "saving" || !isOnline}
+                        >
+                          <SelectTrigger id={ids.cronWeekday}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {weekdays.map((weekday) => (
+                              <SelectItem
+                                key={weekday.value}
+                                value={weekday.value}
+                              >
+                                {t(weekday.labelKey)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor={ids.cronExpression}>
+                      {t("cron_expression_label")}
+                    </Label>
+                    <Input
+                      id={ids.cronExpression}
+                      value={cronExpression}
+                      onChange={(event) =>
+                        setCronExpression(event.target.value)
+                      }
+                      placeholder={defaultCronExpression}
+                      disabled={saveStatus === "saving" || !isOnline}
+                      className={cn(
+                        !!cronError &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                  </div>
+                )}
+
+                {cronError ? (
+                  <p className="text-sm text-destructive">
+                    {t("cron_error_invalid")}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {t("cron_hint")}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div>
               <Label>{t("cache_settings_title")}</Label>

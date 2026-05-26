@@ -14,6 +14,7 @@ import {
   refreshSingleRepositoryAction,
   updateRepositorySettingsAction,
 } from "@/app/actions";
+import { CronTimeSelect } from "@/components/cron-time-select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,7 +73,105 @@ type SaveStatus =
   | "error"
   | "paused";
 type ReleasesPerPageError = "too_low" | "too_high" | null;
+type IntervalValidationError = "too_low" | "too_high" | null;
 type RegexError = "invalid" | null;
+type CronError = "invalid" | null;
+type AutomationMode = "global" | "interval" | "cron";
+type CronPreset = "daily" | "weekdays" | "weekly" | "custom";
+
+const MINUTES_IN_DAY = 24 * 60;
+const MINUTES_IN_HOUR = 60;
+const MAX_INTERVAL_MINUTES = 5_256_000;
+
+function minutesToDhms(totalMinutes: number) {
+  const d = Math.floor(totalMinutes / MINUTES_IN_DAY);
+  const h = Math.floor((totalMinutes % MINUTES_IN_DAY) / MINUTES_IN_HOUR);
+  const m = totalMinutes % MINUTES_IN_HOUR;
+  return { d, h, m };
+}
+
+function getAutomationMode(
+  settings?: Pick<Repository, "refreshInterval" | "backgroundCheckCron">,
+): AutomationMode {
+  if (settings?.backgroundCheckCron) return "cron";
+  if (typeof settings?.refreshInterval === "number") return "interval";
+  return "global";
+}
+
+function normalizeTimeInput(value: string) {
+  return /^\d{2}:\d{2}$/.test(value) ? value : "08:00";
+}
+
+function timeToCronParts(time: string) {
+  const [hour = "8", minute = "0"] = normalizeTimeInput(time).split(":");
+  return { hour: Number(hour), minute: Number(minute) };
+}
+
+function inferCronPreset(cron: string | undefined): {
+  preset: CronPreset;
+  time: string;
+  weekday: string;
+  expression: string;
+} {
+  const fallback = {
+    preset: "daily" as CronPreset,
+    time: "08:00",
+    weekday: "1",
+    expression: "",
+  };
+  if (!cron) return fallback;
+
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) {
+    return { ...fallback, preset: "custom", expression: cron };
+  }
+
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+  const hourNumber = Number(hour);
+  const minuteNumber = Number(minute);
+  const hasSimpleTime =
+    Number.isInteger(hourNumber) &&
+    hourNumber >= 0 &&
+    hourNumber <= 23 &&
+    Number.isInteger(minuteNumber) &&
+    minuteNumber >= 0 &&
+    minuteNumber <= 59;
+  const time = hasSimpleTime
+    ? `${String(hourNumber).padStart(2, "0")}:${String(minuteNumber).padStart(2, "0")}`
+    : fallback.time;
+
+  if (hasSimpleTime && dayOfMonth === "*" && month === "*") {
+    if (dayOfWeek === "*") return { ...fallback, preset: "daily", time };
+    if (dayOfWeek === "1-5") return { ...fallback, preset: "weekdays", time };
+    if (/^[0-6]$/.test(dayOfWeek)) {
+      return { ...fallback, preset: "weekly", time, weekday: dayOfWeek };
+    }
+  }
+
+  return { ...fallback, preset: "custom", expression: cron };
+}
+
+function buildCronExpression(
+  preset: CronPreset,
+  time: string,
+  weekday: string,
+  customExpression: string,
+) {
+  if (preset === "custom") return customExpression.trim();
+  const { hour, minute } = timeToCronParts(time);
+  if (preset === "weekdays") return `${minute} ${hour} * * 1-5`;
+  if (preset === "weekly") return `${minute} ${hour} * * ${weekday}`;
+  return `${minute} ${hour} * * *`;
+}
+
+function isValidFiveFieldCron(value: string) {
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  if (!trimmed) return false;
+  if (trimmed.split(" ").length !== 5) return false;
+  return /^[-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+$/.test(
+    trimmed,
+  );
+}
 
 function SaveStatusIndicator({ status }: { status: SaveStatus }) {
   const t = useTranslations("RepoSettingsDialog");
@@ -143,6 +242,9 @@ interface RepoSettingsDialogProps {
     | "releaseChannels"
     | "preReleaseSubChannels"
     | "releasesPerPage"
+    | "refreshInterval"
+    | "cacheInterval"
+    | "backgroundCheckCron"
     | "includeRegex"
     | "excludeRegex"
     | "appriseTags"
@@ -173,6 +275,20 @@ export function RepoSettingsDialog({
   const includeRegexId = React.useId();
   const excludeRegexId = React.useId();
   const releasesPerPageId = React.useId();
+  const refreshModeId = React.useId();
+  const intervalMinutesId = React.useId();
+  const intervalHoursId = React.useId();
+  const intervalDaysId = React.useId();
+  const cacheOverrideId = React.useId();
+  const cacheMinutesId = React.useId();
+  const cacheHoursId = React.useId();
+  const cacheDaysId = React.useId();
+  const cronPresetId = React.useId();
+  const cronHourId = React.useId();
+  const cronMinuteId = React.useId();
+  const cronPeriodId = React.useId();
+  const cronWeekdayId = React.useId();
+  const cronExpressionId = React.useId();
   const appriseFormatId = React.useId();
   const appriseTagsId = React.useId();
   const prereleaseSubChannelBaseId = React.useId();
@@ -185,6 +301,43 @@ export function RepoSettingsDialog({
   >(currentRepoSettings?.preReleaseSubChannels);
   const [releasesPerPage, setReleasesPerPage] = React.useState<string | number>(
     currentRepoSettings?.releasesPerPage ?? "",
+  );
+  const [automationMode, setAutomationMode] = React.useState<AutomationMode>(
+    getAutomationMode(currentRepoSettings),
+  );
+  const [intervalDays, setIntervalDays] = React.useState(() =>
+    String(minutesToDhms(currentRepoSettings?.refreshInterval ?? 60).d),
+  );
+  const [intervalHours, setIntervalHours] = React.useState(() =>
+    String(minutesToDhms(currentRepoSettings?.refreshInterval ?? 60).h),
+  );
+  const [intervalMinutes, setIntervalMinutes] = React.useState(() =>
+    String(minutesToDhms(currentRepoSettings?.refreshInterval ?? 60).m),
+  );
+  const [useCustomCache, setUseCustomCache] = React.useState(
+    typeof currentRepoSettings?.cacheInterval === "number",
+  );
+  const [cacheDays, setCacheDays] = React.useState(() =>
+    String(minutesToDhms(currentRepoSettings?.cacheInterval ?? 0).d),
+  );
+  const [cacheHours, setCacheHours] = React.useState(() =>
+    String(minutesToDhms(currentRepoSettings?.cacheInterval ?? 0).h),
+  );
+  const [cacheMinutes, setCacheMinutes] = React.useState(() =>
+    String(minutesToDhms(currentRepoSettings?.cacheInterval ?? 0).m),
+  );
+  const cronInitial = React.useMemo(
+    () =>
+      inferCronPreset(currentRepoSettings?.backgroundCheckCron ?? undefined),
+    [currentRepoSettings?.backgroundCheckCron],
+  );
+  const [cronPreset, setCronPreset] = React.useState<CronPreset>(
+    cronInitial.preset,
+  );
+  const [cronTime, setCronTime] = React.useState(cronInitial.time);
+  const [cronWeekday, setCronWeekday] = React.useState(cronInitial.weekday);
+  const [cronExpression, setCronExpression] = React.useState(
+    cronInitial.expression,
   );
   const [includeRegex, setIncludeRegex] = React.useState(
     currentRepoSettings?.includeRegex ?? "",
@@ -201,6 +354,10 @@ export function RepoSettingsDialog({
 
   const [releasesPerPageError, setReleasesPerPageError] =
     React.useState<ReleasesPerPageError>(null);
+  const [intervalError, setIntervalError] =
+    React.useState<IntervalValidationError>(null);
+  const [isCacheInvalid, setIsCacheInvalid] = React.useState(false);
+  const [cronError, setCronError] = React.useState<CronError>(null);
   const [includeRegexError, setIncludeRegexError] =
     React.useState<RegexError>(null);
   const [excludeRegexError, setExcludeRegexError] =
@@ -230,6 +387,10 @@ export function RepoSettingsDialog({
         releaseChannels: currentRepoSettings?.releaseChannels ?? [],
         preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels,
         releasesPerPage: currentRepoSettings?.releasesPerPage ?? null,
+        refreshInterval: currentRepoSettings?.refreshInterval ?? null,
+        cacheInterval: currentRepoSettings?.cacheInterval ?? null,
+        backgroundCheckCron:
+          currentRepoSettings?.backgroundCheckCron ?? undefined,
         includeRegex: currentRepoSettings?.includeRegex ?? undefined,
         excludeRegex: currentRepoSettings?.excludeRegex ?? undefined,
         appriseTags: currentRepoSettings?.appriseTags ?? undefined,
@@ -239,6 +400,23 @@ export function RepoSettingsDialog({
       setChannels(initialSettings.releaseChannels);
       setPreReleaseSubChannels(initialSettings.preReleaseSubChannels);
       setReleasesPerPage(initialSettings.releasesPerPage ?? "");
+      setAutomationMode(getAutomationMode(initialSettings));
+      const intervalParts = minutesToDhms(
+        initialSettings.refreshInterval ?? 60,
+      );
+      setIntervalDays(String(intervalParts.d));
+      setIntervalHours(String(intervalParts.h));
+      setIntervalMinutes(String(intervalParts.m));
+      setUseCustomCache(typeof initialSettings.cacheInterval === "number");
+      const cacheParts = minutesToDhms(initialSettings.cacheInterval ?? 0);
+      setCacheDays(String(cacheParts.d));
+      setCacheHours(String(cacheParts.h));
+      setCacheMinutes(String(cacheParts.m));
+      const inferredCron = inferCronPreset(initialSettings.backgroundCheckCron);
+      setCronPreset(inferredCron.preset);
+      setCronTime(inferredCron.time);
+      setCronWeekday(inferredCron.weekday);
+      setCronExpression(inferredCron.expression);
       setIncludeRegex(initialSettings.includeRegex ?? "");
       setExcludeRegex(initialSettings.excludeRegex ?? "");
       setAppriseTags(initialSettings.appriseTags ?? "");
@@ -277,6 +455,7 @@ export function RepoSettingsDialog({
   const useGlobalChannels = channels.length === 0;
   const useGlobalSubChannels = preReleaseSubChannels === undefined;
   const useGlobalReleasesPerPage = String(releasesPerPage).trim() === "";
+  const useGlobalAutomation = automationMode === "global" && !useCustomCache;
   const useGlobalIncludeRegex = includeRegex.trim() === "";
   const useGlobalExcludeRegex = excludeRegex.trim() === "";
   const useGlobalAppriseTags = appriseTags.trim() === "";
@@ -285,6 +464,7 @@ export function RepoSettingsDialog({
   const isUsingAllGlobalSettings =
     useGlobalChannels &&
     useGlobalReleasesPerPage &&
+    useGlobalAutomation &&
     useGlobalIncludeRegex &&
     useGlobalExcludeRegex &&
     useGlobalAppriseTags &&
@@ -295,6 +475,9 @@ export function RepoSettingsDialog({
     | "releaseChannels"
     | "preReleaseSubChannels"
     | "releasesPerPage"
+    | "refreshInterval"
+    | "cacheInterval"
+    | "backgroundCheckCron"
     | "includeRegex"
     | "excludeRegex"
     | "appriseTags"
@@ -310,10 +493,37 @@ export function RepoSettingsDialog({
       }
     }
 
+    const parsedIntervalDays = parseInt(intervalDays, 10) || 0;
+    const parsedIntervalHours = parseInt(intervalHours, 10) || 0;
+    const parsedIntervalMinutes = parseInt(intervalMinutes, 10) || 0;
+    const finalRefreshInterval =
+      automationMode === "interval"
+        ? parsedIntervalDays * MINUTES_IN_DAY +
+          parsedIntervalHours * MINUTES_IN_HOUR +
+          parsedIntervalMinutes
+        : null;
+
+    const parsedCacheDays = parseInt(cacheDays, 10) || 0;
+    const parsedCacheHours = parseInt(cacheHours, 10) || 0;
+    const parsedCacheMinutes = parseInt(cacheMinutes, 10) || 0;
+    const finalCacheInterval = useCustomCache
+      ? parsedCacheDays * MINUTES_IN_DAY +
+        parsedCacheHours * MINUTES_IN_HOUR +
+        parsedCacheMinutes
+      : null;
+
+    const finalCron =
+      automationMode === "cron"
+        ? buildCronExpression(cronPreset, cronTime, cronWeekday, cronExpression)
+        : undefined;
+
     return {
       releaseChannels: channels,
       preReleaseSubChannels: preReleaseSubChannels ?? [],
       releasesPerPage: finalReleasesPerPage,
+      refreshInterval: finalRefreshInterval,
+      cacheInterval: finalCacheInterval,
+      backgroundCheckCron: finalCron || undefined,
       includeRegex: includeRegex.trim() || undefined,
       excludeRegex: excludeRegex.trim() || undefined,
       appriseTags: appriseTags.trim() || undefined,
@@ -323,6 +533,18 @@ export function RepoSettingsDialog({
     channels,
     preReleaseSubChannels,
     releasesPerPage,
+    automationMode,
+    intervalDays,
+    intervalHours,
+    intervalMinutes,
+    useCustomCache,
+    cacheDays,
+    cacheHours,
+    cacheMinutes,
+    cronPreset,
+    cronTime,
+    cronWeekday,
+    cronExpression,
     includeRegex,
     excludeRegex,
     appriseTags,
@@ -347,6 +569,49 @@ export function RepoSettingsDialog({
       setReleasesPerPageError(null);
     }
 
+    if (automationMode === "interval") {
+      const fieldsFilled =
+        intervalDays !== "" && intervalHours !== "" && intervalMinutes !== "";
+      if (fieldsFilled) {
+        const interval = newSettings.refreshInterval ?? 0;
+        if (interval < 1) {
+          setIntervalError("too_low");
+        } else if (interval > MAX_INTERVAL_MINUTES) {
+          setIntervalError("too_high");
+        } else {
+          setIntervalError(null);
+        }
+      } else {
+        setIntervalError(null);
+      }
+    } else {
+      setIntervalError(null);
+    }
+
+    const cacheFieldsFilled =
+      cacheDays !== "" && cacheHours !== "" && cacheMinutes !== "";
+    const effectiveAutomationUsesInterval =
+      automationMode === "interval" ||
+      (automationMode === "global" && !globalSettings.backgroundCheckCron);
+    const effectiveRefreshInterval =
+      automationMode === "interval"
+        ? (newSettings.refreshInterval ?? 0)
+        : globalSettings.refreshInterval;
+    const cacheIsLarger =
+      effectiveAutomationUsesInterval &&
+      useCustomCache &&
+      cacheFieldsFilled &&
+      (newSettings.cacheInterval ?? 0) > 0 &&
+      (newSettings.cacheInterval ?? 0) > effectiveRefreshInterval;
+    setIsCacheInvalid(cacheIsLarger);
+
+    if (automationMode === "cron") {
+      const cron = newSettings.backgroundCheckCron ?? "";
+      setCronError(isValidFiveFieldCron(cron) ? null : "invalid");
+    } else {
+      setCronError(null);
+    }
+
     if (!includeRegex.trim()) {
       setIncludeRegexError(null);
     } else {
@@ -368,7 +633,24 @@ export function RepoSettingsDialog({
         setExcludeRegexError("invalid");
       }
     }
-  }, [releasesPerPage, includeRegex, excludeRegex]);
+  }, [
+    releasesPerPage,
+    automationMode,
+    intervalDays,
+    intervalHours,
+    intervalMinutes,
+    cacheDays,
+    cacheHours,
+    cacheMinutes,
+    useCustomCache,
+    newSettings.refreshInterval,
+    newSettings.cacheInterval,
+    newSettings.backgroundCheckCron,
+    globalSettings.refreshInterval,
+    globalSettings.backgroundCheckCron,
+    includeRegex,
+    excludeRegex,
+  ]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -384,7 +666,14 @@ export function RepoSettingsDialog({
       return;
     }
 
-    if (releasesPerPageError || includeRegexError || excludeRegexError) {
+    if (
+      releasesPerPageError ||
+      intervalError ||
+      isCacheInvalid ||
+      cronError ||
+      includeRegexError ||
+      excludeRegexError
+    ) {
       setSaveStatus("idle");
       return;
     }
@@ -471,6 +760,9 @@ export function RepoSettingsDialog({
     repoId,
     isOpen,
     releasesPerPageError,
+    intervalError,
+    isCacheInvalid,
+    cronError,
     includeRegexError,
     excludeRegexError,
     toast,
@@ -539,11 +831,30 @@ export function RepoSettingsDialog({
     setIsOpen(open);
   };
 
+  const resetAutomationOverrideState = () => {
+    const intervalParts = minutesToDhms(globalSettings.refreshInterval);
+    const cacheParts = minutesToDhms(globalSettings.cacheInterval);
+
+    setAutomationMode("global");
+    setIntervalDays(String(intervalParts.d));
+    setIntervalHours(String(intervalParts.h));
+    setIntervalMinutes(String(intervalParts.m));
+    setUseCustomCache(false);
+    setCacheDays(String(cacheParts.d));
+    setCacheHours(String(cacheParts.h));
+    setCacheMinutes(String(cacheParts.m));
+    setCronPreset("daily");
+    setCronTime("08:00");
+    setCronWeekday("1");
+    setCronExpression("");
+  };
+
   const handleResetAll = () => {
     if (!isOnline) return;
     setChannels([]);
     setPreReleaseSubChannels([]);
     setReleasesPerPage("");
+    resetAutomationOverrideState();
     setIncludeRegex("");
     setExcludeRegex("");
     setAppriseTags("");
@@ -556,6 +867,11 @@ export function RepoSettingsDialog({
     setPreReleaseSubChannels([]);
     setIncludeRegex("");
     setExcludeRegex("");
+  };
+
+  const handleResetAutomation = () => {
+    if (!isOnline) return;
+    resetAutomationOverrideState();
   };
 
   const isStableChecked = useGlobalChannels
@@ -805,6 +1121,368 @@ export function RepoSettingsDialog({
                 </p>
               )}
             </div>
+          </div>
+
+          <div className="space-y-4 p-4 border rounded-md">
+            <div className="flex justify-between items-center">
+              <h4 className="font-semibold text-base">
+                {t("automation_title")}
+              </h4>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleResetAutomation}
+                      className="size-8 shrink-0"
+                      disabled={!isOnline}
+                      aria-disabled={!isOnline}
+                    >
+                      <RotateCcw className="size-4" />
+                      <span className="sr-only">
+                        {t("reset_to_global_button")}
+                      </span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{t("reset_to_global_tooltip")}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t("automation_description")}
+            </p>
+
+            <div className="space-y-2">
+              <Label htmlFor={refreshModeId}>
+                {t("automation_mode_label")}
+              </Label>
+              <Select
+                value={automationMode}
+                onValueChange={(value: AutomationMode) =>
+                  setAutomationMode(value)
+                }
+                disabled={!isOnline}
+              >
+                <SelectTrigger id={refreshModeId}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="global">
+                    {globalSettings.backgroundCheckCron
+                      ? t("automation_mode_global_cron", {
+                          cron: globalSettings.backgroundCheckCron,
+                        })
+                      : t("automation_mode_global", {
+                          count: globalSettings.refreshInterval,
+                        })}
+                  </SelectItem>
+                  <SelectItem value="interval">
+                    {t("automation_mode_interval")}
+                  </SelectItem>
+                  <SelectItem value="cron">
+                    {t("automation_mode_cron")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {automationMode === "interval" && (
+              <div>
+                <Label>{t("custom_refresh_interval_label")}</Label>
+                <div className="grid grid-cols-3 gap-3 mt-2">
+                  <div className="space-y-2">
+                    <Label htmlFor={intervalMinutesId}>
+                      {tGlobal("refresh_interval_minutes_label")}
+                    </Label>
+                    <Input
+                      id={intervalMinutesId}
+                      type="number"
+                      value={intervalMinutes}
+                      onChange={(e) => setIntervalMinutes(e.target.value)}
+                      min={0}
+                      max={59}
+                      disabled={!isOnline}
+                      className={cn(
+                        !!intervalError &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={intervalHoursId}>
+                      {tGlobal("refresh_interval_hours_label")}
+                    </Label>
+                    <Input
+                      id={intervalHoursId}
+                      type="number"
+                      value={intervalHours}
+                      onChange={(e) => setIntervalHours(e.target.value)}
+                      min={0}
+                      max={23}
+                      disabled={!isOnline}
+                      className={cn(
+                        !!intervalError &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={intervalDaysId}>
+                      {tGlobal("refresh_interval_days_label")}
+                    </Label>
+                    <Input
+                      id={intervalDaysId}
+                      type="number"
+                      value={intervalDays}
+                      onChange={(e) => setIntervalDays(e.target.value)}
+                      min={0}
+                      max={3650}
+                      disabled={!isOnline}
+                      className={cn(
+                        !!intervalError &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                  </div>
+                </div>
+                {intervalError === "too_low" ? (
+                  <p className="mt-2 text-sm text-destructive">
+                    {tGlobal("refresh_interval_error_min")}
+                  </p>
+                ) : intervalError === "too_high" ? (
+                  <p className="mt-2 text-sm text-destructive">
+                    {tGlobal("refresh_interval_error_max")}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {tGlobal("refresh_interval_hint")}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {automationMode === "cron" && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor={cronPresetId}>{t("cron_preset_label")}</Label>
+                  <Select
+                    value={cronPreset}
+                    onValueChange={(value: CronPreset) => setCronPreset(value)}
+                    disabled={!isOnline}
+                  >
+                    <SelectTrigger id={cronPresetId}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">
+                        {t("cron_preset_daily")}
+                      </SelectItem>
+                      <SelectItem value="weekdays">
+                        {t("cron_preset_weekdays")}
+                      </SelectItem>
+                      <SelectItem value="weekly">
+                        {t("cron_preset_weekly")}
+                      </SelectItem>
+                      <SelectItem value="custom">
+                        {t("cron_preset_custom")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {cronPreset !== "custom" && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label>{t("cron_time_label")}</Label>
+                      <CronTimeSelect
+                        ids={{
+                          hour: cronHourId,
+                          minute: cronMinuteId,
+                          period: cronPeriodId,
+                        }}
+                        labels={{
+                          hour: tGlobal("cron_time_hour_label"),
+                          minute: tGlobal("cron_time_minute_label"),
+                          period: tGlobal("cron_time_period_label"),
+                          am: tGlobal("cron_time_am"),
+                          pm: tGlobal("cron_time_pm"),
+                        }}
+                        value={cronTime}
+                        onChange={setCronTime}
+                        timeFormat={globalSettings.timeFormat}
+                        disabled={!isOnline}
+                      />
+                    </div>
+                    {cronPreset === "weekly" && (
+                      <div className="space-y-2">
+                        <Label htmlFor={cronWeekdayId}>
+                          {t("cron_weekday_label")}
+                        </Label>
+                        <Select
+                          value={cronWeekday}
+                          onValueChange={setCronWeekday}
+                          disabled={!isOnline}
+                        >
+                          <SelectTrigger id={cronWeekdayId}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">
+                              {t("cron_weekday_monday")}
+                            </SelectItem>
+                            <SelectItem value="2">
+                              {t("cron_weekday_tuesday")}
+                            </SelectItem>
+                            <SelectItem value="3">
+                              {t("cron_weekday_wednesday")}
+                            </SelectItem>
+                            <SelectItem value="4">
+                              {t("cron_weekday_thursday")}
+                            </SelectItem>
+                            <SelectItem value="5">
+                              {t("cron_weekday_friday")}
+                            </SelectItem>
+                            <SelectItem value="6">
+                              {t("cron_weekday_saturday")}
+                            </SelectItem>
+                            <SelectItem value="0">
+                              {t("cron_weekday_sunday")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {cronPreset === "custom" && (
+                  <div className="space-y-2">
+                    <Label htmlFor={cronExpressionId}>
+                      {t("cron_expression_label")}
+                    </Label>
+                    <Input
+                      id={cronExpressionId}
+                      value={cronExpression}
+                      onChange={(e) => setCronExpression(e.target.value)}
+                      placeholder="0 8 * * *"
+                      disabled={!isOnline}
+                      className={cn(
+                        !!cronError &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                  </div>
+                )}
+
+                {cronError ? (
+                  <p className="text-sm text-destructive">
+                    {t("cron_error_invalid")}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {t("cron_hint")}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-start space-x-3 border-t pt-4">
+              <Checkbox
+                id={cacheOverrideId}
+                checked={useCustomCache}
+                onCheckedChange={(checked) =>
+                  setUseCustomCache(Boolean(checked))
+                }
+                disabled={!isOnline}
+                className="mt-1"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor={cacheOverrideId}
+                  className="font-medium cursor-pointer"
+                >
+                  {t("custom_cache_label")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("custom_cache_description", {
+                    count: globalSettings.cacheInterval,
+                  })}
+                </p>
+              </div>
+            </div>
+
+            {useCustomCache && (
+              <div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor={cacheMinutesId}>
+                      {tGlobal("refresh_interval_minutes_label")}
+                    </Label>
+                    <Input
+                      id={cacheMinutesId}
+                      type="number"
+                      value={cacheMinutes}
+                      onChange={(e) => setCacheMinutes(e.target.value)}
+                      min={0}
+                      max={59}
+                      disabled={!isOnline}
+                      className={cn(
+                        isCacheInvalid &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={cacheHoursId}>
+                      {tGlobal("refresh_interval_hours_label")}
+                    </Label>
+                    <Input
+                      id={cacheHoursId}
+                      type="number"
+                      value={cacheHours}
+                      onChange={(e) => setCacheHours(e.target.value)}
+                      min={0}
+                      max={23}
+                      disabled={!isOnline}
+                      className={cn(
+                        isCacheInvalid &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={cacheDaysId}>
+                      {tGlobal("refresh_interval_days_label")}
+                    </Label>
+                    <Input
+                      id={cacheDaysId}
+                      type="number"
+                      value={cacheDays}
+                      onChange={(e) => setCacheDays(e.target.value)}
+                      min={0}
+                      max={3650}
+                      disabled={!isOnline}
+                      className={cn(
+                        isCacheInvalid &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                  </div>
+                </div>
+                {isCacheInvalid ? (
+                  <p className="mt-2 text-sm text-destructive">
+                    {tGlobal("cache_validation_error")}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {t("custom_cache_hint")}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="space-y-4 p-4 border rounded-md">

@@ -29,4 +29,39 @@ describe('updateRepositorySettingsAction edge cases', () => {
     expect(res.success).toBe(false);
     expect(res.error).toBe('toast_error_not_found');
   });
+
+  it('saves per-repository automation settings', async () => {
+    mem.repos = [{ id: 'o/r', url: 'https://github.com/o/r', lastBackgroundCheckAt: 'old' }];
+    const { updateRepositorySettingsAction } = await import('@/app/actions');
+
+    const res = await updateRepositorySettingsAction('o/r', {
+      releaseChannels: ['stable'],
+      preReleaseSubChannels: [],
+      releasesPerPage: null,
+      refreshInterval: 30,
+      cacheInterval: 0,
+      backgroundCheckCron: null,
+    } as any);
+
+    expect(res.success).toBe(true);
+    expect(mem.repos[0].refreshInterval).toBe(30);
+    expect(mem.repos[0].cacheInterval).toBe(0);
+    expect(mem.repos[0].backgroundCheckCron).toBeUndefined();
+    expect(mem.repos[0].lastBackgroundCheckAt).toBe('old');
+  });
+
+  it('rejects invalid cron settings', async () => {
+    mem.repos = [{ id: 'o/r', url: 'https://github.com/o/r' }];
+    const { updateRepositorySettingsAction } = await import('@/app/actions');
+
+    const res = await updateRepositorySettingsAction('o/r', {
+      releaseChannels: ['stable'],
+      preReleaseSubChannels: [],
+      releasesPerPage: null,
+      backgroundCheckCron: '0 0 21 * * *',
+    } as any);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('cron_error_invalid');
+  });
 });

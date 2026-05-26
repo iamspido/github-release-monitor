@@ -75,4 +75,26 @@ describe('settings actions', () => {
     expect(Array.isArray(memRepos.list)).toBe(true);
     expect(memRepos.list.length).toBe(0);
   });
+
+  it('saves a valid global background cron schedule', async () => {
+    const { updateSettingsAction } = await import('@/app/settings/actions');
+    const res = await updateSettingsAction({
+      ...settingsStore.current,
+      backgroundCheckCron: '0 21 * * *',
+    });
+
+    expect(res.success).toBe(true);
+    expect(settingsStore.current.backgroundCheckCron).toBe('0 21 * * *');
+  });
+
+  it('rejects invalid global background cron schedules', async () => {
+    const { updateSettingsAction } = await import('@/app/settings/actions');
+    const res = await updateSettingsAction({
+      ...settingsStore.current,
+      backgroundCheckCron: '0 0 21 * * *',
+    });
+
+    expect(res.success).toBe(false);
+    expect(settingsStore.current.backgroundCheckCron).toBeUndefined();
+  });
 });

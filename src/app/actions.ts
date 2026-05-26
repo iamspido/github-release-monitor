@@ -15,6 +15,13 @@ import {
   sendNotification,
   sendTestAppriseNotification,
 } from "@/lib/notifications";
+import {
+  filterRepositoriesDueForBackgroundCheck,
+  getEffectiveCacheIntervalMinutes,
+  normalizeBackgroundCheckCron,
+  normalizeCacheInterval,
+  normalizeRefreshInterval,
+} from "@/lib/repository-schedule";
 import { getRepositories, saveRepositories } from "@/lib/repository-storage";
 import { getSettings } from "@/lib/settings-storage";
 import { getSystemStatus, updateSystemStatus } from "@/lib/system-status";
@@ -1888,6 +1895,7 @@ type RepoSettingsForFetch = Pick<
   | "releaseChannels"
   | "preReleaseSubChannels"
   | "releasesPerPage"
+  | "cacheInterval"
   | "includeRegex"
   | "excludeRegex"
   | "etag"
@@ -3534,11 +3542,16 @@ async function fetchLatestReleaseWithCache(
             )
         : fetchLatestReleaseFromCodeberg;
 
-  if (globalSettings.cacheInterval <= 0 || options?.skipCache) {
+  const cacheIntervalMinutes = getEffectiveCacheIntervalMinutes(
+    repoSettings,
+    globalSettings,
+  );
+
+  if (cacheIntervalMinutes <= 0 || options?.skipCache) {
     return fetcher(owner, repo, repoSettings, globalSettings, locale);
   }
 
-  const cacheIntervalSeconds = globalSettings.cacheInterval * 60;
+  const cacheIntervalSeconds = cacheIntervalMinutes * 60;
 
   const effectiveReleasesPerPage =
     typeof repoSettings.releasesPerPage === "number" &&
@@ -3604,6 +3617,7 @@ async function fetchLatestReleaseWithCache(
       locale,
       JSON.stringify(repoSettings),
       String(effectiveReleasesPerPage),
+      String(cacheIntervalMinutes),
     ],
     {
       revalidate: cacheIntervalSeconds,
@@ -3659,6 +3673,9 @@ export async function getLatestReleasesForRepos(
       releaseChannels: repo.releaseChannels,
       preReleaseSubChannels: repo.preReleaseSubChannels,
       releasesPerPage: repo.releasesPerPage,
+      refreshInterval: repo.refreshInterval,
+      cacheInterval: repo.cacheInterval,
+      backgroundCheckCron: repo.backgroundCheckCron,
       includeRegex: repo.includeRegex,
       excludeRegex: repo.excludeRegex,
       appriseTags: repo.appriseTags,
@@ -4164,9 +4181,12 @@ export async function markAsNewAction(
 async function _checkForNewReleasesUnscheduled(options?: {
   overrideLocale?: string;
   skipCache?: boolean;
+  onlyDue?: boolean;
 }) {
   log.info(`Running check for new releases...`);
   const settings = await getSettings();
+  const backgroundCheckStartedAt = new Date();
+  const backgroundCheckStartedAtIso = backgroundCheckStartedAt.toISOString();
   const effectiveLocale = options?.overrideLocale || settings.locale;
   const parallelLimit = resolveParallelRepoFetches(settings);
   const tokenConfigured = !!process.env.GITHUB_ACCESS_TOKEN?.trim();
@@ -4182,8 +4202,21 @@ async function _checkForNewReleasesUnscheduled(options?: {
     return { notificationsSent: 0, checked: 0 };
   }
 
+  const reposToCheck = options?.onlyDue
+    ? filterRepositoriesDueForBackgroundCheck(
+        originalRepos,
+        settings,
+        backgroundCheckStartedAt,
+      )
+    : originalRepos;
+
+  if (reposToCheck.length === 0) {
+    log.info(`No repositories are due for background check.`);
+    return { notificationsSent: 0, checked: 0 };
+  }
+
   const enrichedReleases = await getLatestReleasesForRepos(
-    originalRepos,
+    reposToCheck,
     settings,
     effectiveLocale,
     { skipCache: options?.skipCache },
@@ -4201,6 +4234,14 @@ async function _checkForNewReleasesUnscheduled(options?: {
 
     const repo = updatedRepos[repoIndex];
     let repoWasUpdated = false;
+
+    if (
+      options?.onlyDue &&
+      repo.lastBackgroundCheckAt !== backgroundCheckStartedAtIso
+    ) {
+      repo.lastBackgroundCheckAt = backgroundCheckStartedAtIso;
+      repoWasUpdated = true;
+    }
 
     if (applyEtagUpdate(repo, enrichedRelease.newEtag)) {
       repoWasUpdated = true;
@@ -4287,14 +4328,15 @@ async function _checkForNewReleasesUnscheduled(options?: {
     log.info(`No new releases found.`);
   }
   log.info(
-    `Summary: notificationsSent=${notificationsSent} checked=${originalRepos.length}`,
+    `Summary: notificationsSent=${notificationsSent} checked=${reposToCheck.length}`,
   );
-  return { notificationsSent, checked: originalRepos.length };
+  return { notificationsSent, checked: reposToCheck.length };
 }
 
 export async function checkForNewReleases(options?: {
   overrideLocale?: string;
   skipCache?: boolean;
+  onlyDue?: boolean;
 }) {
   return scheduleTask("checkForNewReleases", () =>
     _checkForNewReleasesUnscheduled(options),
@@ -4417,23 +4459,13 @@ export async function triggerAppUpdateCheckAction(): Promise<{
 
 async function backgroundPollingLoop() {
   try {
-    await checkForNewReleases({ skipCache: true });
+    await checkForNewReleases({ skipCache: true, onlyDue: true });
   } catch (error) {
     log.error("Error during background check for new releases:", error);
   } finally {
-    const settings = await getSettings();
-    let pollingIntervalMinutes = settings.refreshInterval;
+    const pollingIntervalMs = 60 * 1000;
 
-    const MINIMUM_INTERVAL_MINUTES = 1;
-    if (pollingIntervalMinutes < MINIMUM_INTERVAL_MINUTES) {
-      pollingIntervalMinutes = MINIMUM_INTERVAL_MINUTES;
-    }
-
-    const pollingIntervalMs = pollingIntervalMinutes * 60 * 1000;
-
-    log.info(
-      `Next background check scheduled in ${pollingIntervalMinutes} minutes.`,
-    );
+    log.info("Next background check scheduled in 1 minute.");
     setTimeout(backgroundPollingLoop, pollingIntervalMs);
   }
 }
@@ -5106,6 +5138,22 @@ export async function refreshAndCheckAction(): Promise<{
   return { success: true, messageKey };
 }
 
+export async function refreshDueRepositoriesAction(): Promise<{
+  success: boolean;
+  checked: number;
+}> {
+  if (!(await isRestrictedActionAllowed())) {
+    throw new Error(await getRestrictedActionError());
+  }
+
+  const result = await checkForNewReleases({
+    skipCache: true,
+    onlyDue: true,
+  });
+
+  return { success: true, checked: result.checked };
+}
+
 export async function getRepositoriesForExport(): Promise<{
   success: boolean;
   data?: Repository[];
@@ -5127,6 +5175,9 @@ export async function updateRepositorySettingsAction(
     | "releaseChannels"
     | "preReleaseSubChannels"
     | "releasesPerPage"
+    | "refreshInterval"
+    | "cacheInterval"
+    | "backgroundCheckCron"
     | "includeRegex"
     | "excludeRegex"
     | "appriseTags"
@@ -5162,6 +5213,24 @@ export async function updateRepositorySettingsAction(
       const prevExclude = (existing.excludeRegex ?? "").trim() || undefined;
       const newInclude = (settings.includeRegex ?? "").trim() || undefined;
       const newExclude = (settings.excludeRegex ?? "").trim() || undefined;
+      const cronInput = (settings.backgroundCheckCron ?? "").trim();
+      const newBackgroundCheckCron = cronInput
+        ? normalizeBackgroundCheckCron(cronInput)
+        : undefined;
+
+      if (cronInput && !newBackgroundCheckCron) {
+        return { success: false, error: t("cron_error_invalid") };
+      }
+
+      const newRefreshInterval = newBackgroundCheckCron
+        ? null
+        : typeof settings.refreshInterval === "number"
+          ? (normalizeRefreshInterval(settings.refreshInterval) ?? null)
+          : null;
+      const newCacheInterval =
+        typeof settings.cacheInterval === "number"
+          ? (normalizeCacheInterval(settings.cacheInterval) ?? null)
+          : null;
 
       const filtersChanged =
         prevInclude !== newInclude || prevExclude !== newExclude;
@@ -5184,6 +5253,12 @@ export async function updateRepositorySettingsAction(
       const prevRpp = existing.releasesPerPage ?? undefined;
       const newRpp = settings.releasesPerPage ?? undefined;
       const rppChanged = prevRpp !== newRpp;
+      const refreshIntervalChanged =
+        (existing.refreshInterval ?? null) !== newRefreshInterval;
+      const cacheIntervalChanged =
+        (existing.cacheInterval ?? null) !== newCacheInterval;
+      const backgroundCheckCronChanged =
+        (existing.backgroundCheckCron ?? undefined) !== newBackgroundCheckCron;
 
       // Build change summary for logging
       const changes: string[] = [];
@@ -5210,6 +5285,21 @@ export async function updateRepositorySettingsAction(
       ) {
         changes.push(
           `releasesPerPage: ${fmt(existing.releasesPerPage)} -> ${fmt(settings.releasesPerPage)}`,
+        );
+      }
+      if (refreshIntervalChanged) {
+        changes.push(
+          `refreshInterval: ${fmt(existing.refreshInterval)} -> ${fmt(newRefreshInterval)}`,
+        );
+      }
+      if (cacheIntervalChanged) {
+        changes.push(
+          `cacheInterval: ${fmt(existing.cacheInterval)} -> ${fmt(newCacheInterval)}`,
+        );
+      }
+      if (backgroundCheckCronChanged) {
+        changes.push(
+          `backgroundCheckCron: ${fmt(existing.backgroundCheckCron)} -> ${fmt(newBackgroundCheckCron)}`,
         );
       }
       if (prevInclude !== newInclude) {
@@ -5243,6 +5333,12 @@ export async function updateRepositorySettingsAction(
         releaseChannels: settings.releaseChannels,
         preReleaseSubChannels: settings.preReleaseSubChannels,
         releasesPerPage: settings.releasesPerPage,
+        refreshInterval: newRefreshInterval,
+        cacheInterval: newCacheInterval,
+        backgroundCheckCron: newBackgroundCheckCron,
+        lastBackgroundCheckAt: backgroundCheckCronChanged
+          ? undefined
+          : existing.lastBackgroundCheckAt,
         includeRegex: newInclude,
         excludeRegex: newExclude,
         appriseTags: settings.appriseTags,

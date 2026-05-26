@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 // We'll mock hook per test and import component dynamically
 
 vi.mock('@/app/actions', () => ({
-  refreshAndCheckAction: vi.fn().mockResolvedValue({ messageKey: 'toast_refresh_success_description' }),
+  refreshDueRepositoriesAction: vi.fn().mockResolvedValue({ messageKey: 'toast_refresh_success_description' }),
 }));
 
 vi.mock('@/i18n/navigation', () => ({
@@ -43,11 +43,11 @@ describe('AutoRefresher', () => {
       return { ...actual, useTransition: () => [false, (cb: any) => cb()] };
     });
     vi.doMock('@/hooks/use-network', () => ({ useNetworkStatus: () => ({ isOnline: true }) }));
-    vi.doMock('@/app/actions', () => ({ refreshAndCheckAction: vi.fn().mockResolvedValue({}) }));
+    vi.doMock('@/app/actions', () => ({ refreshDueRepositoriesAction: vi.fn().mockResolvedValue({}) }));
     const routerRef = { refresh: vi.fn() };
     vi.doMock('@/i18n/navigation', () => ({ useRouter: () => routerRef }));
     const { AutoRefresher } = await import('@/components/auto-refresher');
-    const { refreshAndCheckAction } = await import('@/app/actions');
+    const { refreshDueRepositoriesAction } = await import('@/app/actions');
     // routerRef used by component
 
     const { restore } = mockIntervalImmediate();
@@ -63,7 +63,7 @@ describe('AutoRefresher', () => {
       // allow startTransition to schedule
       await Promise.resolve();
       await Promise.resolve();
-      expect(refreshAndCheckAction).toHaveBeenCalledTimes(1);
+      expect(refreshDueRepositoriesAction).toHaveBeenCalledTimes(1);
       expect(routerRef.refresh).toHaveBeenCalledTimes(1);
     } finally {
       flushSync(() => { root.unmount(); });
@@ -84,11 +84,11 @@ describe('AutoRefresher', () => {
       return { ...actual, useTransition: () => [false, (cb: any) => cb()] };
     });
     vi.doMock('@/hooks/use-network', () => ({ useNetworkStatus: () => ({ isOnline: false }) }));
-    vi.doMock('@/app/actions', () => ({ refreshAndCheckAction: vi.fn().mockResolvedValue({}) }));
+    vi.doMock('@/app/actions', () => ({ refreshDueRepositoriesAction: vi.fn().mockResolvedValue({}) }));
     const routerRef = { refresh: vi.fn() };
     vi.doMock('@/i18n/navigation', () => ({ useRouter: () => routerRef }));
     const { AutoRefresher } = await import('@/components/auto-refresher');
-    const { refreshAndCheckAction } = await import('@/app/actions');
+    const { refreshDueRepositoriesAction } = await import('@/app/actions');
 
     const { restore } = mockIntervalImmediate();
     const div = document.createElement('div');
@@ -103,7 +103,7 @@ describe('AutoRefresher', () => {
       });
       await Promise.resolve();
       await Promise.resolve();
-      expect(refreshAndCheckAction).not.toHaveBeenCalled();
+      expect(refreshDueRepositoriesAction).not.toHaveBeenCalled();
       expect(routerRef.refresh).not.toHaveBeenCalled();
     } finally {
       flushSync(() => { root.unmount(); });
@@ -125,7 +125,7 @@ describe('AutoRefresher', () => {
     });
     vi.doMock('@/hooks/use-network', () => ({ useNetworkStatus: () => ({ isOnline: true }) }));
     const error = new Error('Failed to find Server Action "abc"');
-    vi.doMock('@/app/actions', () => ({ refreshAndCheckAction: vi.fn().mockRejectedValue(error) }));
+    vi.doMock('@/app/actions', () => ({ refreshDueRepositoriesAction: vi.fn().mockRejectedValue(error) }));
     const reloadStub = vi.fn().mockReturnValue(true);
     vi.doMock('@/lib/server-action-error', () => ({
       reloadIfServerActionStale: reloadStub,

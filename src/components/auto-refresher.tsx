@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useTransition } from "react";
-import { refreshAndCheckAction } from "@/app/actions";
+import { refreshDueRepositoriesAction } from "@/app/actions";
 import { useRouter } from "@/i18n/navigation";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 
-// This component uses the refreshInterval from settings to periodically
-// call router.refresh(), which re-fetches and re-renders Server Components
-// without a full page reload.
+// Periodically asks the server to check repositories that are due by their
+// per-repository background schedule, then refreshes Server Components.
 export function AutoRefresher({
-  intervalMinutes,
+  intervalMinutes: _intervalMinutes,
 }: {
   intervalMinutes: number;
 }) {
@@ -17,9 +16,7 @@ export function AutoRefresher({
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    // Ensure interval is at least 1 minute to avoid excessive requests.
-    const effectiveIntervalMinutes = Math.max(intervalMinutes, 1);
-    const intervalMs = effectiveIntervalMinutes * 60 * 1000;
+    const intervalMs = 60 * 1000;
 
     const intervalId = setInterval(() => {
       // Don't stack refreshes if one is already in progress.
@@ -32,7 +29,7 @@ export function AutoRefresher({
           // By explicitly invalidating the cache on the server before refreshing,
           // we ensure that router.refresh() fetches the newest data
           // instead of potentially serving a stale version while revalidating.
-          await refreshAndCheckAction();
+          await refreshDueRepositoriesAction();
           router.refresh();
         } catch (error: unknown) {
           if (reloadIfServerActionStale(error)) {
@@ -47,7 +44,7 @@ export function AutoRefresher({
 
     // Clean up the interval when the component unmounts or the interval changes.
     return () => clearInterval(intervalId);
-  }, [intervalMinutes, router, isPending]);
+  }, [router, isPending]);
 
   return null; // This component doesn't render any UI.
 }

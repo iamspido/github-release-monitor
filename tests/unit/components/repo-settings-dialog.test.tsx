@@ -22,6 +22,16 @@ const translationMap: Record<string, Record<string, string>> = {
     regex_filter_title: 'Regex filter',
     channels_hint_global: 'Global channels',
     channels_hint_individual: 'Individual channels',
+    automation_title: 'Automation',
+    automation_description: 'Configure automation',
+    automation_mode_label: 'Mode',
+    automation_mode_global: 'Global interval',
+    automation_mode_global_cron: 'Global schedule',
+    automation_mode_interval: 'Custom interval',
+    automation_mode_cron: 'Schedule',
+    custom_cache_label: 'Custom cache',
+    custom_cache_description: 'Global cache duration',
+    custom_cache_hint: 'Set 0 to disable cache',
   },
   SettingsForm: {
     autosave_success: 'All changes saved',
@@ -108,10 +118,13 @@ const baseSettings: AppSettings = {
   releaseChannels: ['stable'],
 };
 
-const emptyRepoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'includeRegex' | 'excludeRegex' | 'appriseTags' | 'appriseFormat'> = {
+const emptyRepoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'refreshInterval' | 'cacheInterval' | 'backgroundCheckCron' | 'includeRegex' | 'excludeRegex' | 'appriseTags' | 'appriseFormat'> = {
   releaseChannels: [],
   preReleaseSubChannels: [],
   releasesPerPage: null,
+  refreshInterval: null,
+  cacheInterval: null,
+  backgroundCheckCron: null,
   includeRegex: undefined,
   excludeRegex: undefined,
   appriseTags: undefined,

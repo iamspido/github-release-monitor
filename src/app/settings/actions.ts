@@ -11,6 +11,7 @@ import {
   normalizeProviderSortOrder,
   normalizeReleaseSortOrder,
 } from "@/lib/release-sort";
+import { normalizeBackgroundCheckCron } from "@/lib/repository-schedule";
 import { getRepositories, saveRepositories } from "@/lib/repository-storage";
 import {
   NEXT_LOCALE_COOKIE,
@@ -96,6 +97,24 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         JSON.stringify(normArray(newSettings.preReleaseSubChannels));
       const rppChanged =
         currentSettings.releasesPerPage !== newSettings.releasesPerPage;
+      const incomingCron = (newSettings.backgroundCheckCron ?? "").trim();
+      const sanitizedBackgroundCheckCron = incomingCron
+        ? normalizeBackgroundCheckCron(incomingCron)
+        : undefined;
+
+      if (incomingCron && !sanitizedBackgroundCheckCron) {
+        const t = await getTranslations({
+          locale: newSettings.locale,
+          namespace: "SettingsForm",
+        });
+        return {
+          success: false,
+          message: {
+            title: t("toast_error_title"),
+            description: t("cron_error_invalid"),
+          },
+        };
+      }
 
       // Ensure refreshInterval is at least 1
       const sanitizedParallelRepoFetches = (() => {
@@ -113,6 +132,7 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         ...newSettings,
         refreshInterval: Math.max(1, newSettings.refreshInterval),
         cacheInterval: Math.max(0, newSettings.cacheInterval),
+        backgroundCheckCron: sanitizedBackgroundCheckCron,
         parallelRepoFetches: sanitizedParallelRepoFetches,
         includeRegex: newSettings.includeRegex?.trim() || undefined,
         excludeRegex: newSettings.excludeRegex?.trim() || undefined,
@@ -163,6 +183,11 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         newS.refreshInterval,
       );
       pushValueChange("cacheInterval", oldS.cacheInterval, newS.cacheInterval);
+      pushValueChange(
+        "backgroundCheckCron",
+        oldS.backgroundCheckCron,
+        newS.backgroundCheckCron,
+      );
       pushValueChange(
         "releasesPerPage",
         oldS.releasesPerPage,

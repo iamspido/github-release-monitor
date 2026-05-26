@@ -34,6 +34,7 @@
     "better-sqlite3": "^12.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cron-parser": "^5.5.0",
     "date-fns": "^4.3.0",
     "lucide-react": "^1.16.0",
     "next": "^16.2.6",

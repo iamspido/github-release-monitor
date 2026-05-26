@@ -258,6 +258,11 @@ export function ReleaseCard({
       repoSettings.preReleaseSubChannels.length > 0) ||
     (repoSettings?.releasesPerPage !== null &&
       typeof repoSettings?.releasesPerPage === "number") ||
+    (repoSettings?.refreshInterval !== null &&
+      typeof repoSettings?.refreshInterval === "number") ||
+    (repoSettings?.cacheInterval !== null &&
+      typeof repoSettings?.cacheInterval === "number") ||
+    repoSettings?.backgroundCheckCron ||
     repoSettings?.includeRegex ||
     repoSettings?.excludeRegex ||
     repoSettings?.appriseTags ||

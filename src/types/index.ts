@@ -13,6 +13,10 @@ export type Repository = {
   releaseChannels?: ReleaseChannel[];
   preReleaseSubChannels?: PreReleaseChannelType[];
   releasesPerPage?: number | null;
+  refreshInterval?: number | null;
+  cacheInterval?: number | null;
+  backgroundCheckCron?: string | null;
+  lastBackgroundCheckAt?: string;
   includeRegex?: string;
   excludeRegex?: string;
   appriseTags?: string;
@@ -67,6 +71,9 @@ export type EnrichedRelease = {
     releaseChannels?: ReleaseChannel[];
     preReleaseSubChannels?: PreReleaseChannelType[];
     releasesPerPage?: number | null;
+    refreshInterval?: number | null;
+    cacheInterval?: number | null;
+    backgroundCheckCron?: string | null;
     includeRegex?: string;
     excludeRegex?: string;
     appriseTags?: string;
@@ -201,6 +208,8 @@ export type AppSettings = {
   refreshInterval: number;
   // The total cache interval, stored in minutes.
   cacheInterval: number;
+  // Optional global background schedule. When set, repositories without their own automation override use this instead of refreshInterval.
+  backgroundCheckCron?: string;
   releasesPerPage: number;
   parallelRepoFetches: number;
   releaseChannels: ReleaseChannel[];

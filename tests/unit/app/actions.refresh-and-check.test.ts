@@ -40,7 +40,7 @@ vi.mock('@/lib/notifications', async (orig) => {
 });
 
 describe('refreshAndCheckAction', () => {
-  beforeEach(() => { vi.resetModules(); });
+  beforeEach(() => { vi.resetModules(); vi.useRealTimers(); });
 
   // Note: Mocking a function inside the same module isn't reliable with ESM live bindings.
   // We verify the default branch (0 notifications) without stubbing internals.
@@ -78,6 +78,86 @@ describe('refreshAndCheckAction', () => {
     });
     const res = await refreshAndCheckAction();
     expect(res.messageKey).toBe('toast_refresh_found_new');
+    global.fetch = fetchBackup;
+  });
+
+  it('checks only due repositories when schedule filtering is enabled', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T10:10:00.000Z'));
+    const { checkForNewReleases } = await import('@/app/actions');
+    mem.repos = [
+      {
+        id: 'due/repo',
+        url: 'https://github.com/due/repo',
+        lastBackgroundCheckAt: '2024-01-01T10:00:00.000Z',
+      },
+      {
+        id: 'fresh/repo',
+        url: 'https://github.com/fresh/repo',
+        lastBackgroundCheckAt: '2024-01-01T10:09:59.000Z',
+      },
+    ];
+    const fetchBackup = global.fetch;
+    // @ts-ignore
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ([{
+        id: 1,
+        html_url: '#',
+        tag_name: 'v1',
+        name: 'v1',
+        body: 'x',
+        created_at: new Date().toISOString(),
+        published_at: new Date().toISOString(),
+        prerelease: false,
+        draft: false,
+      }]),
+    });
+
+    const res = await checkForNewReleases({ skipCache: true, onlyDue: true });
+
+    expect(res.checked).toBe(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(mem.repos.find((repo) => repo.id === 'due/repo')?.lastBackgroundCheckAt)
+      .toBe('2024-01-01T10:10:00.000Z');
+    expect(mem.repos.find((repo) => repo.id === 'fresh/repo')?.lastBackgroundCheckAt)
+      .toBe('2024-01-01T10:09:59.000Z');
+    global.fetch = fetchBackup;
+  });
+
+  it('manual refresh ignores repository schedules', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T10:10:00.000Z'));
+    const { refreshAndCheckAction } = await import('@/app/actions');
+    mem.repos = [{
+      id: 'fresh/repo',
+      url: 'https://github.com/fresh/repo',
+      lastBackgroundCheckAt: '2024-01-01T10:09:59.000Z',
+    }];
+    const fetchBackup = global.fetch;
+    // @ts-ignore
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ([{
+        id: 1,
+        html_url: '#',
+        tag_name: 'v1',
+        name: 'v1',
+        body: 'x',
+        created_at: new Date().toISOString(),
+        published_at: new Date().toISOString(),
+        prerelease: false,
+        draft: false,
+      }]),
+    });
+
+    await refreshAndCheckAction();
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
     global.fetch = fetchBackup;
   });
 });
