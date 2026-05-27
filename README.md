@@ -52,7 +52,8 @@ Thanks to the people and organizations supporting this project.
   </a>
 </p>
 
-**[Horizify GmbH](https://horizify.de/)** supports the ongoing development of this project.
+**[Horizify GmbH](https://horizify.de/)** supports the ongoing development of this project.  
+Horizify provides managed Linux server operations from Germany for business-critical websites and applications, including monitoring, security updates, backups, migrations, and direct technical support.
 
 **One-time donation:**
 
