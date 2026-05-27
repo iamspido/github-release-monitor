@@ -39,7 +39,7 @@
     "lucide-react": "^1.16.0",
     "next": "^16.2.6",
     "next-intl": "^4.12.0",
-    "nodemailer": "^8.0.8",
+    "nodemailer": "^8.0.9",
     "qrcode": "^1.5.4",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
@@ -58,7 +58,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
     "@playwright/test": "^1.60.0",
-    "@swc/helpers": "^0.5.21",
+    "@swc/helpers": "^0.5.23",
     "@tailwindcss/postcss": "^4.3.0",
     "@tailwindcss/typography": "^0.5.19",
     "@types/node": "^25.9.1",
