@@ -1,61 +1,94 @@
 // vitest globals enabled
 
-vi.mock('next/cache', () => ({
+import type { AppSettings, Repository } from "@/types";
+
+vi.mock("next/cache", () => ({
   revalidatePath: () => {},
   updateTag: () => {},
 }));
 
-vi.mock('next-intl/server', () => ({
-  getTranslations: async () => (key: string, vars?: Record<string, any>) => key,
-  getLocale: async () => 'en',
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => (key: string, _vars?: Record<string, unknown>) =>
+    key,
+  getLocale: async () => "en",
 }));
 
-vi.mock('next/headers', () => ({
+vi.mock("next/headers", () => ({
   cookies: async () => ({ set: vi.fn() }),
 }));
 
-const memRepos: { list: any[] } = { list: [] };
-const settingsStore: { current: any } = { current: {
-  timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30, parallelRepoFetches: 5,
-  releaseChannels: ['stable'], preReleaseSubChannels: ['beta'], includeRegex: undefined, excludeRegex: undefined, showAcknowledge: true,
-}};
+const memRepos: { list: Repository[] } = { list: [] };
+const settingsStore: { current: AppSettings } = {
+  current: {
+    timeFormat: "24h",
+    locale: "en",
+    refreshInterval: 10,
+    cacheInterval: 5,
+    releasesPerPage: 30,
+    parallelRepoFetches: 5,
+    releaseChannels: ["stable"],
+    preReleaseSubChannels: ["beta"],
+    includeRegex: undefined,
+    excludeRegex: undefined,
+    showAcknowledge: true,
+  },
+};
 
-vi.mock('@/lib/repository-storage', () => ({
+vi.mock("@/lib/storage/repositories", () => ({
   getRepositories: async () => memRepos.list,
-  saveRepositories: async (list: any[]) => { memRepos.list = JSON.parse(JSON.stringify(list)); },
+  saveRepositories: async (list: Repository[]) => {
+    memRepos.list = JSON.parse(JSON.stringify(list));
+  },
 }));
 
-vi.mock('@/lib/settings-storage', () => ({
+vi.mock("@/lib/storage/settings", () => ({
   getSettings: async () => settingsStore.current,
-  saveSettings: async (s: any) => { settingsStore.current = JSON.parse(JSON.stringify(s)); },
+  saveSettings: async (s: AppSettings) => {
+    settingsStore.current = JSON.parse(JSON.stringify(s));
+  },
 }));
 
-describe('settings actions', () => {
+describe("settings actions", () => {
   beforeEach(() => {
     vi.resetModules();
     memRepos.list = [];
     settingsStore.current = {
-      timeFormat: '24h', locale: 'en', refreshInterval: 10, cacheInterval: 5, releasesPerPage: 30, parallelRepoFetches: 5,
-      releaseChannels: ['stable'], preReleaseSubChannels: ['beta'], includeRegex: undefined, excludeRegex: undefined, showAcknowledge: true,
+      timeFormat: "24h",
+      locale: "en",
+      refreshInterval: 10,
+      cacheInterval: 5,
+      releasesPerPage: 30,
+      parallelRepoFetches: 5,
+      releaseChannels: ["stable"],
+      preReleaseSubChannels: ["beta"],
+      includeRegex: undefined,
+      excludeRegex: undefined,
+      showAcknowledge: true,
     };
   });
 
-  it('updateSettingsAction clears ETags on regex change and resets isNew when disabling acknowledge', async () => {
+  it("updateSettingsAction clears ETags on regex change and resets isNew when disabling acknowledge", async () => {
     memRepos.list = [
-      { id: 'o/a', url: 'https://github.com/o/a', etag: 'E1', isNew: true },
-      { id: 'o/b', url: 'https://github.com/o/b', etag: 'E2', isNew: true },
+      { id: "o/a", url: "https://github.com/o/a", etag: "E1", isNew: true },
+      { id: "o/b", url: "https://github.com/o/b", etag: "E2", isNew: true },
     ];
 
     // Spy checkForNewReleases
-    vi.doMock('@/app/actions', async () => {
-      const actual = await vi.importActual<any>('@/app/actions');
-      return { ...actual, checkForNewReleases: vi.fn().mockResolvedValue({ notificationsSent: 0 }) };
+    vi.doMock("@/app/actions", async () => {
+      const actual =
+        await vi.importActual<typeof import("@/app/actions")>("@/app/actions");
+      return {
+        ...actual,
+        checkForNewReleases: vi
+          .fn()
+          .mockResolvedValue({ notificationsSent: 0 }),
+      };
     });
 
-    const { updateSettingsAction } = await import('@/app/settings/actions');
+    const { updateSettingsAction } = await import("@/app/settings/actions");
     await updateSettingsAction({
       ...settingsStore.current,
-      includeRegex: 'v.*',
+      includeRegex: "v.*",
       showAcknowledge: false,
     });
 
@@ -67,31 +100,33 @@ describe('settings actions', () => {
     expect(memRepos.list[1].isNew).toBe(false);
   });
 
-  it('deleteAllRepositoriesAction clears storage and returns success', async () => {
-    memRepos.list = [ { id: 'x/y', url: 'https://github.com/x/y' } ];
-    const { deleteAllRepositoriesAction } = await import('@/app/settings/actions');
+  it("deleteAllRepositoriesAction clears storage and returns success", async () => {
+    memRepos.list = [{ id: "x/y", url: "https://github.com/x/y" }];
+    const { deleteAllRepositoriesAction } = await import(
+      "@/app/settings/actions"
+    );
     const res = await deleteAllRepositoriesAction();
     expect(res.success).toBe(true);
     expect(Array.isArray(memRepos.list)).toBe(true);
     expect(memRepos.list.length).toBe(0);
   });
 
-  it('saves a valid global background cron schedule', async () => {
-    const { updateSettingsAction } = await import('@/app/settings/actions');
+  it("saves a valid global background cron schedule", async () => {
+    const { updateSettingsAction } = await import("@/app/settings/actions");
     const res = await updateSettingsAction({
       ...settingsStore.current,
-      backgroundCheckCron: '0 21 * * *',
+      backgroundCheckCron: "0 21 * * *",
     });
 
     expect(res.success).toBe(true);
-    expect(settingsStore.current.backgroundCheckCron).toBe('0 21 * * *');
+    expect(settingsStore.current.backgroundCheckCron).toBe("0 21 * * *");
   });
 
-  it('rejects invalid global background cron schedules', async () => {
-    const { updateSettingsAction } = await import('@/app/settings/actions');
+  it("rejects invalid global background cron schedules", async () => {
+    const { updateSettingsAction } = await import("@/app/settings/actions");
     const res = await updateSettingsAction({
       ...settingsStore.current,
-      backgroundCheckCron: '0 0 21 * * *',
+      backgroundCheckCron: "0 0 21 * * *",
     });
 
     expect(res.success).toBe(false);

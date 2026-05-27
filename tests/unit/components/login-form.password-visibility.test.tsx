@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-import React from "react";
-import ReactDOM from "react-dom/client";
 import { act } from "react";
+import ReactDOM from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let searchParams = new URLSearchParams();
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => searchParams,
@@ -34,7 +34,7 @@ vi.mock("@/app/auth/actions", () => ({
   login: vi.fn(),
 }));
 
-vi.mock("@/lib/auth-client", () => ({
+vi.mock("@/lib/auth/client", () => ({
   authClient: {
     signIn: {
       social: vi.fn(),

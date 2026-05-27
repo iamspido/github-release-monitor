@@ -5,7 +5,7 @@ import {
   getAuthSetupLockPath,
   isAuthSetupLocked,
   writeAuthSetupLock,
-} from "@/lib/auth-setup-lock";
+} from "@/lib/auth/setup-lock";
 import { logger } from "@/lib/logger";
 import { isPasswordPolicyValid } from "@/lib/password-policy";
 import { isUsernamePolicyValid } from "@/lib/username-policy";

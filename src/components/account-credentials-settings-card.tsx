@@ -27,7 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNetworkStatus } from "@/hooks/use-network";
-import { authClient } from "@/lib/auth-client";
+import { authClient } from "@/lib/auth/client";
 import {
   isPasswordPolicyValid,
   PASSWORD_MIN_LENGTH,

@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
-import React from "react";
-import ReactDOM from "react-dom/client";
 import { act } from "react";
+import ReactDOM from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let networkState = { isOnline: true };
 const listAccountsMock = vi.fn();
 const useSessionMock = vi.fn();
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string, values?: Record<string, string>) => {
@@ -50,7 +50,7 @@ vi.mock("@/app/auth/settings-actions", () => ({
   updateAccountPasswordAction: vi.fn(async () => ({ ok: true, mode: "set" })),
 }));
 
-vi.mock("@/lib/auth-client", () => ({
+vi.mock("@/lib/auth/client", () => ({
   authClient: {
     listAccounts: (...args: unknown[]) => listAccountsMock(...args),
     useSession: (...args: unknown[]) => useSessionMock(...args),
@@ -149,7 +149,9 @@ describe("AccountCredentialsSettingsCard", () => {
     expect(currentPasswordInput).toBeTruthy();
     expect(newPasswordInputs.length).toBe(2);
     expect(currentPasswordInput?.type).toBe("password");
-    newPasswordInputs.forEach((input) => expect(input.type).toBe("password"));
+    newPasswordInputs.forEach((input) => {
+      expect(input.type).toBe("password");
+    });
 
     const showButton = container.querySelector(
       'button[aria-label="Show password"]',
@@ -161,7 +163,9 @@ describe("AccountCredentialsSettingsCard", () => {
     });
 
     expect(currentPasswordInput?.type).toBe("text");
-    newPasswordInputs.forEach((input) => expect(input.type).toBe("text"));
+    newPasswordInputs.forEach((input) => {
+      expect(input.type).toBe("text");
+    });
 
     const hideButton = container.querySelector(
       'button[aria-label="Hide password"]',
@@ -173,7 +177,9 @@ describe("AccountCredentialsSettingsCard", () => {
     });
 
     expect(currentPasswordInput?.type).toBe("password");
-    newPasswordInputs.forEach((input) => expect(input.type).toBe("password"));
+    newPasswordInputs.forEach((input) => {
+      expect(input.type).toBe("password");
+    });
   });
 
   it("enables password submit only when new and confirm passwords match", async () => {
@@ -193,15 +199,11 @@ describe("AccountCredentialsSettingsCard", () => {
     expect(newPasswordField).toBeTruthy();
     expect(confirmPasswordField).toBeTruthy();
 
-    const submitButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find(
+    const submitButton = Array.from(container.querySelectorAll("button")).find(
       (button) =>
         button.textContent?.includes("Set password") ||
         button.textContent?.includes("Change password"),
-    ) as
-      | HTMLButtonElement
-      | undefined;
+    ) as HTMLButtonElement | undefined;
     expect(submitButton).toBeTruthy();
     expect(submitButton?.disabled).toBe(true);
 

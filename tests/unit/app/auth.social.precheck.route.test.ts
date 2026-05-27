@@ -8,12 +8,14 @@ vi.mock("@/lib/auth", () => ({
 
 const buildSocialLoginIntentValueMock = vi.fn(() => "intent.value");
 const buildSocialLoginIntentSetCookieHeaderMock = vi.fn(
-  () => "auth_social_login_intent=intent.value; Path=/; HttpOnly; SameSite=Lax; Max-Age=120",
+  () =>
+    "auth_social_login_intent=intent.value; Path=/; HttpOnly; SameSite=Lax; Max-Age=120",
 );
 
-vi.mock("@/lib/auth-social-login-intent", () => ({
+vi.mock("@/lib/auth/social-login-intent", () => ({
   buildSocialLoginIntentValue: buildSocialLoginIntentValueMock,
-  buildSocialLoginIntentSetCookieHeader: buildSocialLoginIntentSetCookieHeaderMock,
+  buildSocialLoginIntentSetCookieHeader:
+    buildSocialLoginIntentSetCookieHeaderMock,
 }));
 
 vi.mock("@/lib/logger", () => ({

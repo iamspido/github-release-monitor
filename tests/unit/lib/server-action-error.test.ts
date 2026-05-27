@@ -1,26 +1,28 @@
 // @vitest-environment node
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   isStaleServerActionError,
   reloadIfServerActionStale,
-} from '@/lib/server-action-error';
+} from "@/lib/server-action-error";
 
 const ORIGINAL_WINDOW = globalThis.window;
 
 afterEach(() => {
   if (ORIGINAL_WINDOW === undefined) {
-    delete (globalThis as any).window;
+    delete (globalThis as Record<string, unknown>).window;
   } else {
-    (globalThis as any).window = ORIGINAL_WINDOW;
+    (globalThis as Record<string, unknown>).window = ORIGINAL_WINDOW;
   }
 });
 
-describe('reloadIfServerActionStale', () => {
-  it('reloads the page and returns true when message contains stale server action text', () => {
+describe("reloadIfServerActionStale", () => {
+  it("reloads the page and returns true when message contains stale server action text", () => {
     const reloadSpy = vi.fn();
-    (globalThis as any).window = { location: { reload: reloadSpy } };
+    (globalThis as Record<string, unknown>).window = {
+      location: { reload: reloadSpy },
+    };
 
     const result = reloadIfServerActionStale(
       new Error('Failed to find Server Action "abc"'),
@@ -30,9 +32,11 @@ describe('reloadIfServerActionStale', () => {
     expect(reloadSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('reloads the page when Next 15 reports an unrecognized server action', () => {
+  it("reloads the page when Next 15 reports an unrecognized server action", () => {
     const reloadSpy = vi.fn();
-    (globalThis as any).window = { location: { reload: reloadSpy } };
+    (globalThis as Record<string, unknown>).window = {
+      location: { reload: reloadSpy },
+    };
 
     const result = reloadIfServerActionStale(
       new Error(
@@ -44,11 +48,13 @@ describe('reloadIfServerActionStale', () => {
     expect(reloadSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('reloads the page when the error digest marks the action as undefined', () => {
+  it("reloads the page when the error digest marks the action as undefined", () => {
     const reloadSpy = vi.fn();
-    (globalThis as any).window = { location: { reload: reloadSpy } };
-    const error = new Error('Some error');
-    (error as any).digest = 'NEXT_UNDEFINED_ACTION_123';
+    (globalThis as Record<string, unknown>).window = {
+      location: { reload: reloadSpy },
+    };
+    const error = new Error("Some error");
+    (error as Error & { digest?: string }).digest = "NEXT_UNDEFINED_ACTION_123";
 
     const result = reloadIfServerActionStale(error);
 
@@ -56,18 +62,20 @@ describe('reloadIfServerActionStale', () => {
     expect(reloadSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('returns false and does not reload for other errors', () => {
+  it("returns false and does not reload for other errors", () => {
     const reloadSpy = vi.fn();
-    (globalThis as any).window = { location: { reload: reloadSpy } };
+    (globalThis as Record<string, unknown>).window = {
+      location: { reload: reloadSpy },
+    };
 
-    const result = reloadIfServerActionStale(new Error('Other error'));
+    const result = reloadIfServerActionStale(new Error("Other error"));
 
     expect(result).toBe(false);
     expect(reloadSpy).not.toHaveBeenCalled();
   });
 
-  it('returns false when window is not defined', () => {
-    delete (globalThis as any).window;
+  it("returns false when window is not defined", () => {
+    delete (globalThis as Record<string, unknown>).window;
     const result = reloadIfServerActionStale(
       new Error('Failed to find Server Action "abc"'),
     );
@@ -76,22 +84,20 @@ describe('reloadIfServerActionStale', () => {
   });
 });
 
-describe('isStaleServerActionError', () => {
-  it('detects stale server action error by message', () => {
+describe("isStaleServerActionError", () => {
+  it("detects stale server action error by message", () => {
     expect(
-      isStaleServerActionError(
-        new Error('Failed to find Server Action "abc"'),
-      ),
+      isStaleServerActionError(new Error('Failed to find Server Action "abc"')),
     ).toBe(true);
   });
 
-  it('detects stale server action error by digest', () => {
-    const error = new Error('Some error');
-    (error as any).digest = 'NEXT_UNDEFINED_ACTION_XYZ';
+  it("detects stale server action error by digest", () => {
+    const error = new Error("Some error");
+    (error as Error & { digest?: string }).digest = "NEXT_UNDEFINED_ACTION_XYZ";
     expect(isStaleServerActionError(error)).toBe(true);
   });
 
-  it('returns false for unrelated errors', () => {
-    expect(isStaleServerActionError(new Error('Other error'))).toBe(false);
+  it("returns false for unrelated errors", () => {
+    expect(isStaleServerActionError(new Error("Other error"))).toBe(false);
   });
 });

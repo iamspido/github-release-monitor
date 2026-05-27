@@ -28,7 +28,7 @@ function argsContainStaleError(args: unknown[]): {
   return { match: false };
 }
 
-export function register(): void {
+export async function register(): Promise<void> {
   if (patched || typeof console === "undefined") {
     return;
   }
@@ -188,4 +188,11 @@ export function register(): void {
 
   interceptStreamWrite(nodeStderr, "stderr.write");
   interceptStreamWrite(nodeStdout, "stdout.write");
+
+  if (typeof window === "undefined" && process.env.NEXT_RUNTIME === "nodejs") {
+    const { startBackgroundWorkers } = await import(
+      "@/lib/runtime/background-workers"
+    );
+    startBackgroundWorkers();
+  }
 }

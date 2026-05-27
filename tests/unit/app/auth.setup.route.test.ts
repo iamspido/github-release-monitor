@@ -21,7 +21,7 @@ const acquireAuthSetupBootstrapLockMock = vi.fn(async () => ({
 }));
 const getAuthSetupLockPathMock = vi.fn(() => "/app/data/auth-setup.lock");
 
-vi.mock("@/lib/auth-setup-lock", () => ({
+vi.mock("@/lib/auth/setup-lock", () => ({
   acquireAuthSetupBootstrapLock: acquireAuthSetupBootstrapLockMock,
   isAuthSetupLocked: isAuthSetupLockedMock,
   writeAuthSetupLock: writeAuthSetupLockMock,
@@ -61,8 +61,11 @@ describe("auth setup route", () => {
       ...env,
       AUTH_SETUP_TOKEN: "x".repeat(64),
     };
-    (globalThis as typeof globalThis & { _authSetupTokenWarningLogged?: boolean })
-      ._authSetupTokenWarningLogged = undefined;
+    (
+      globalThis as typeof globalThis & {
+        _authSetupTokenWarningLogged?: boolean;
+      }
+    )._authSetupTokenWarningLogged = undefined;
 
     ensureAuthDatabaseReadyMock.mockResolvedValue(undefined);
     hasAnyAuthUserMock.mockReturnValue("no_user");
@@ -201,7 +204,9 @@ describe("auth setup route", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: "invalid_username" });
+    await expect(response.json()).resolves.toEqual({
+      error: "invalid_username",
+    });
     expect(signUpEmailMock).not.toHaveBeenCalled();
   });
 
@@ -217,7 +222,9 @@ describe("auth setup route", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({ error: "invalid_username" });
+    await expect(response.json()).resolves.toEqual({
+      error: "invalid_username",
+    });
     expect(signUpEmailMock).not.toHaveBeenCalled();
   });
 
@@ -333,7 +340,9 @@ describe("auth setup route", () => {
   });
 
   it("POST: rechecks existing users after acquiring setup bootstrap lock", async () => {
-    hasAnyAuthUserMock.mockReturnValueOnce("no_user").mockReturnValueOnce("has_user");
+    hasAnyAuthUserMock
+      .mockReturnValueOnce("no_user")
+      .mockReturnValueOnce("has_user");
     const { POST } = await import("@/app/api/auth/setup/route");
 
     const response = await POST(
@@ -391,7 +400,9 @@ describe("auth setup route", () => {
     );
 
     expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({ error: "setup_lock_failed" });
+    await expect(response.json()).resolves.toEqual({
+      error: "setup_lock_failed",
+    });
     expect(scopedLogger.error).toHaveBeenCalled();
   });
 });

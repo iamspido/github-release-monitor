@@ -1,27 +1,36 @@
 // @vitest-environment jsdom
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { flushSync } from 'react-dom';
-import { describe, it, expect, vi } from 'vitest';
+import { flushSync } from "react-dom";
+import ReactDOM from "react-dom/client";
+import { describe, expect, it, vi } from "vitest";
+
 // We'll mock hook per test and import component dynamically
 
-vi.mock('@/app/actions', () => ({
-  refreshDueRepositoriesAction: vi.fn().mockResolvedValue({ messageKey: 'toast_refresh_success_description' }),
+vi.mock("@/app/actions", () => ({
+  refreshDueRepositoriesAction: vi
+    .fn()
+    .mockResolvedValue({ messageKey: "toast_refresh_success_description" }),
 }));
 
-vi.mock('@/i18n/navigation', () => ({
+vi.mock("@/i18n/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
-describe('AutoRefresher', () => {
+describe("AutoRefresher", () => {
   function mockIntervalImmediate() {
-    let savedCb: Function | null = null;
-    const si = vi.spyOn(global, 'setInterval' as any).mockImplementation((cb: any) => {
-      savedCb = cb;
-      cb();
-      return 1 as any;
-    });
-    const ci = vi.spyOn(global, 'clearInterval' as any).mockImplementation(() => {});
+    let savedCb: (() => void) | null = null;
+    const si = vi
+      .spyOn(globalThis, "setInterval")
+      .mockImplementation((cb: TimerHandler) => {
+        if (typeof cb !== "function") {
+          throw new Error("Expected function interval handler");
+        }
+        savedCb = cb;
+        cb();
+        return 1 as unknown as ReturnType<typeof setInterval>;
+      });
+    const ci = vi
+      .spyOn(globalThis, "clearInterval")
+      .mockImplementation(() => {});
     return {
       si,
       ci,
@@ -35,27 +44,40 @@ describe('AutoRefresher', () => {
     };
   }
 
-  it('triggers refresh when online', async () => {
+  it("triggers refresh when online", async () => {
     vi.resetModules();
     // Immediate transitions
-    vi.doMock('react', async (importOriginal) => {
-      const actual: any = await importOriginal();
-      return { ...actual, useTransition: () => [false, (cb: any) => cb()] };
+    vi.doMock("react", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("react")>();
+      return {
+        ...actual,
+        useTransition: () => [false, (cb: () => void) => cb()],
+      };
     });
-    vi.doMock('@/hooks/use-network', () => ({ useNetworkStatus: () => ({ isOnline: true }) }));
-    vi.doMock('@/app/actions', () => ({ refreshDueRepositoriesAction: vi.fn().mockResolvedValue({}) }));
+    vi.doMock("@/hooks/use-network", () => ({
+      useNetworkStatus: () => ({ isOnline: true }),
+    }));
+    vi.doMock("@/app/actions", () => ({
+      refreshDueRepositoriesAction: vi.fn().mockResolvedValue({}),
+    }));
     const routerRef = { refresh: vi.fn() };
-    vi.doMock('@/i18n/navigation', () => ({ useRouter: () => routerRef }));
-    const { AutoRefresher } = await import('@/components/auto-refresher');
-    const { refreshDueRepositoriesAction } = await import('@/app/actions');
+    vi.doMock("@/i18n/navigation", () => ({ useRouter: () => routerRef }));
+    const { AutoRefresher } = await import("@/components/auto-refresher");
+    const { refreshDueRepositoriesAction } = await import("@/app/actions");
     // routerRef used by component
 
     const { restore } = mockIntervalImmediate();
-    const div = document.createElement('div');
+    const div = document.createElement("div");
     document.body.appendChild(div);
     const root = ReactDOM.createRoot(div);
-    const originalOnLine = Object.getOwnPropertyDescriptor(window.navigator, 'onLine');
-    Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true } as any);
+    const originalOnLine = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "onLine",
+    );
+    Object.defineProperty(window.navigator, "onLine", {
+      value: true,
+      configurable: true,
+    });
     try {
       flushSync(() => {
         root.render(<AutoRefresher intervalMinutes={1} />);
@@ -66,37 +88,52 @@ describe('AutoRefresher', () => {
       expect(refreshDueRepositoriesAction).toHaveBeenCalledTimes(1);
       expect(routerRef.refresh).toHaveBeenCalledTimes(1);
     } finally {
-      flushSync(() => { root.unmount(); });
+      flushSync(() => {
+        root.unmount();
+      });
       div.remove();
       if (originalOnLine) {
-        Object.defineProperty(window.navigator, 'onLine', originalOnLine);
+        Object.defineProperty(window.navigator, "onLine", originalOnLine);
       } else {
-        delete (window.navigator as any).onLine;
+        delete (window.navigator as Navigator & { onLine?: boolean }).onLine;
       }
       restore();
     }
   });
 
-  it('skips refresh when offline', async () => {
+  it("skips refresh when offline", async () => {
     vi.resetModules();
-    vi.doMock('react', async (importOriginal) => {
-      const actual: any = await importOriginal();
-      return { ...actual, useTransition: () => [false, (cb: any) => cb()] };
+    vi.doMock("react", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("react")>();
+      return {
+        ...actual,
+        useTransition: () => [false, (cb: () => void) => cb()],
+      };
     });
-    vi.doMock('@/hooks/use-network', () => ({ useNetworkStatus: () => ({ isOnline: false }) }));
-    vi.doMock('@/app/actions', () => ({ refreshDueRepositoriesAction: vi.fn().mockResolvedValue({}) }));
+    vi.doMock("@/hooks/use-network", () => ({
+      useNetworkStatus: () => ({ isOnline: false }),
+    }));
+    vi.doMock("@/app/actions", () => ({
+      refreshDueRepositoriesAction: vi.fn().mockResolvedValue({}),
+    }));
     const routerRef = { refresh: vi.fn() };
-    vi.doMock('@/i18n/navigation', () => ({ useRouter: () => routerRef }));
-    const { AutoRefresher } = await import('@/components/auto-refresher');
-    const { refreshDueRepositoriesAction } = await import('@/app/actions');
+    vi.doMock("@/i18n/navigation", () => ({ useRouter: () => routerRef }));
+    const { AutoRefresher } = await import("@/components/auto-refresher");
+    const { refreshDueRepositoriesAction } = await import("@/app/actions");
 
     const { restore } = mockIntervalImmediate();
-    const div = document.createElement('div');
+    const div = document.createElement("div");
     document.body.appendChild(div);
     const root = ReactDOM.createRoot(div);
     // Guard also uses navigator.onLine; ensure false
-    const originalOnLine = Object.getOwnPropertyDescriptor(window.navigator, 'onLine');
-    Object.defineProperty(window.navigator, 'onLine', { value: false, configurable: true } as any);
+    const originalOnLine = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "onLine",
+    );
+    Object.defineProperty(window.navigator, "onLine", {
+      value: false,
+      configurable: true,
+    });
     try {
       flushSync(() => {
         root.render(<AutoRefresher intervalMinutes={1} />);
@@ -106,41 +143,58 @@ describe('AutoRefresher', () => {
       expect(refreshDueRepositoriesAction).not.toHaveBeenCalled();
       expect(routerRef.refresh).not.toHaveBeenCalled();
     } finally {
-      flushSync(() => { root.unmount(); });
+      flushSync(() => {
+        root.unmount();
+      });
       div.remove();
       if (originalOnLine) {
-        Object.defineProperty(window.navigator, 'onLine', originalOnLine);
+        Object.defineProperty(window.navigator, "onLine", originalOnLine);
       } else {
-        delete (window.navigator as any).onLine;
+        delete (window.navigator as Navigator & { onLine?: boolean }).onLine;
       }
       restore();
     }
   });
 
-  it('reloads the page when a stale server action error occurs', async () => {
+  it("reloads the page when a stale server action error occurs", async () => {
     vi.resetModules();
-    vi.doMock('react', async (importOriginal) => {
-      const actual: any = await importOriginal();
-      return { ...actual, useTransition: () => [false, (cb: any) => cb()] };
+    vi.doMock("react", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("react")>();
+      return {
+        ...actual,
+        useTransition: () => [false, (cb: () => void) => cb()],
+      };
     });
-    vi.doMock('@/hooks/use-network', () => ({ useNetworkStatus: () => ({ isOnline: true }) }));
+    vi.doMock("@/hooks/use-network", () => ({
+      useNetworkStatus: () => ({ isOnline: true }),
+    }));
     const error = new Error('Failed to find Server Action "abc"');
-    vi.doMock('@/app/actions', () => ({ refreshDueRepositoriesAction: vi.fn().mockRejectedValue(error) }));
+    vi.doMock("@/app/actions", () => ({
+      refreshDueRepositoriesAction: vi.fn().mockRejectedValue(error),
+    }));
     const reloadStub = vi.fn().mockReturnValue(true);
-    vi.doMock('@/lib/server-action-error', () => ({
+    vi.doMock("@/lib/server-action-error", () => ({
       reloadIfServerActionStale: reloadStub,
     }));
     const routerRef = { refresh: vi.fn() };
-    vi.doMock('@/i18n/navigation', () => ({ useRouter: () => routerRef }));
-    const { AutoRefresher } = await import('@/components/auto-refresher');
-    const { reloadIfServerActionStale } = await import('@/lib/server-action-error');
+    vi.doMock("@/i18n/navigation", () => ({ useRouter: () => routerRef }));
+    const { AutoRefresher } = await import("@/components/auto-refresher");
+    const { reloadIfServerActionStale } = await import(
+      "@/lib/server-action-error"
+    );
 
     const { restore } = mockIntervalImmediate();
-    const div = document.createElement('div');
+    const div = document.createElement("div");
     document.body.appendChild(div);
     const root = ReactDOM.createRoot(div);
-    const originalOnLine = Object.getOwnPropertyDescriptor(window.navigator, 'onLine');
-    Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true } as any);
+    const originalOnLine = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "onLine",
+    );
+    Object.defineProperty(window.navigator, "onLine", {
+      value: true,
+      configurable: true,
+    });
     try {
       flushSync(() => {
         root.render(<AutoRefresher intervalMinutes={1} />);
@@ -151,12 +205,14 @@ describe('AutoRefresher', () => {
       expect(reloadIfServerActionStale).toHaveBeenCalledWith(error);
       expect(routerRef.refresh).not.toHaveBeenCalled();
     } finally {
-      flushSync(() => { root.unmount(); });
+      flushSync(() => {
+        root.unmount();
+      });
       div.remove();
       if (originalOnLine) {
-        Object.defineProperty(window.navigator, 'onLine', originalOnLine);
+        Object.defineProperty(window.navigator, "onLine", originalOnLine);
       } else {
-        delete (window.navigator as any).onLine;
+        delete (window.navigator as Navigator & { onLine?: boolean }).onLine;
       }
       restore();
     }

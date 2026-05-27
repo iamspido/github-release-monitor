@@ -2,7 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { RegisterForm } from "@/components/auth/register-form";
 import { Logo } from "@/components/logo";
 import { pathnames } from "@/i18n/routing";
-import { getAuthenticationMethod } from "@/lib/auth-mode";
+import { getAuthenticationMethod } from "@/lib/auth/mode";
 import { redirectLocalized } from "@/lib/redirect-localized";
 
 export default async function RegisterPage({

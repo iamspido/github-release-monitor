@@ -1,4 +1,4 @@
-import { waitForBackgroundTasks } from './src/lib/background-tasks';
+import { waitForBackgroundTasks } from "./src/lib/runtime/background-tasks";
 
 // Global test setup executed before test files
 // Ensure a strong AUTH_SECRET is present to avoid noisy logs during imports

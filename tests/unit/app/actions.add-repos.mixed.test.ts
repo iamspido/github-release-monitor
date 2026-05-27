@@ -1,54 +1,68 @@
 // vitest globals enabled
 
-vi.mock('next/cache', () => ({
+import type { Repository } from "@/types";
+
+vi.mock("next/cache", () => ({
   revalidatePath: () => {},
   updateTag: () => {},
 }));
 
-vi.mock('next-intl/server', () => ({
-  getTranslations: async () => (key: string, vars?: Record<string, any>) => key,
-  getLocale: async () => 'en',
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => (key: string, _vars?: Record<string, unknown>) =>
+    key,
+  getLocale: async () => "en",
 }));
 
-const mem: { repos: any[] } = { repos: [] };
-vi.mock('@/lib/repository-storage', () => ({
+const mem: { repos: Repository[] } = { repos: [] };
+vi.mock("@/lib/storage/repositories", () => ({
   getRepositories: async () => mem.repos,
-  saveRepositories: async (list: any[]) => { mem.repos = JSON.parse(JSON.stringify(list)); },
+  saveRepositories: async (list: Repository[]) => {
+    mem.repos = JSON.parse(JSON.stringify(list));
+  },
 }));
 
-describe('addRepositoriesAction mixed inputs', () => {
-  beforeEach(() => { vi.resetModules(); mem.repos = []; });
+describe("addRepositoriesAction mixed inputs", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mem.repos = [];
+  });
 
-  it('adds one new, skips duplicate existing, ignores invalid; jobId set for additions', async () => {
+  it("adds one new, skips duplicate existing, ignores invalid; jobId set for additions", async () => {
     // existing
     mem.repos = [
-      { id: 'github:owner/repo', url: 'https://github.com/owner/repo' },
+      { id: "github:owner/repo", url: "https://github.com/owner/repo" },
     ];
-    const { addRepositoriesAction } = await import('@/app/actions');
+    const { addRepositoriesAction } = await import("@/app/actions");
     const fd = new FormData();
-    fd.set('urls', [
-      'https://github.com/owner/repo', // duplicate existing
-      'https://example.com/not-github/abc', // invalid domain
-      'https://github.com/another/repo', // new valid
-    ].join('\n'));
+    fd.set(
+      "urls",
+      [
+        "https://github.com/owner/repo", // duplicate existing
+        "https://example.com/not-github/abc", // invalid domain
+        "https://github.com/another/repo", // new valid
+      ].join("\n"),
+    );
 
     const res = await addRepositoriesAction({}, fd);
     expect(res.success).toBe(true);
-    expect(typeof res.jobId).toBe('string');
-    const ids = mem.repos.map(r => r.id).sort();
-    expect(ids).toEqual(['github:another/repo', 'github:owner/repo']);
+    expect(typeof res.jobId).toBe("string");
+    const ids = mem.repos.map((r) => r.id).sort();
+    expect(ids).toEqual(["github:another/repo", "github:owner/repo"]);
   });
 
-  it('no additions: only invalid/duplicates → no jobId', async () => {
+  it("no additions: only invalid/duplicates → no jobId", async () => {
     mem.repos = [
-      { id: 'github:owner/repo', url: 'https://github.com/owner/repo' },
+      { id: "github:owner/repo", url: "https://github.com/owner/repo" },
     ];
-    const { addRepositoriesAction } = await import('@/app/actions');
+    const { addRepositoriesAction } = await import("@/app/actions");
     const fd = new FormData();
-    fd.set('urls', [
-      'https://github.com/owner/repo',
-      'https://example.com/not-github/abc',
-    ].join('\n'));
+    fd.set(
+      "urls",
+      [
+        "https://github.com/owner/repo",
+        "https://example.com/not-github/abc",
+      ].join("\n"),
+    );
     const res = await addRepositoriesAction({}, fd);
     expect(res.success).toBe(true);
     expect(res.jobId).toBeUndefined();

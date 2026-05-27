@@ -2,7 +2,7 @@
 
 vi.mock("next/cache", () => ({
   revalidatePath: () => {},
-  unstable_cache: (fn: any) => fn,
+  unstable_cache: <T extends (...args: never[]) => unknown>(fn: T) => fn,
   updateTag: () => {},
 }));
 
@@ -43,7 +43,7 @@ services:
     image: postgres:16
 `;
 
-    (global.fetch as any)
+    vi.mocked(global.fetch)
       .mockResolvedValueOnce(
         new Response(null, {
           status: 401,
@@ -91,7 +91,7 @@ services:
   it("reads source labels from multi-arch child manifests", async () => {
     const actions = await import("@/app/actions");
 
-    (global.fetch as any)
+    vi.mocked(global.fetch)
       .mockResolvedValueOnce(
         jsonResponse({
           manifests: [
@@ -138,7 +138,7 @@ services:
   it("skips GHCR images with missing or invalid source labels", async () => {
     const actions = await import("@/app/actions");
 
-    (global.fetch as any)
+    vi.mocked(global.fetch)
       .mockResolvedValueOnce(
         jsonResponse({
           config: {
@@ -191,6 +191,6 @@ services:
     expect(result.success).toBe(true);
     expect(result.repositories).toEqual([]);
     expect(result.skipped.unsupported_registry).toBe(3);
-    expect((global.fetch as any).mock.calls.length).toBe(0);
+    expect(vi.mocked(global.fetch).mock.calls.length).toBe(0);
   });
 });

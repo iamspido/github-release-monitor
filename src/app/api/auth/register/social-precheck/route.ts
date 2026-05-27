@@ -8,7 +8,7 @@ import {
 import {
   buildSocialLoginIntentSetCookieHeader,
   buildSocialLoginIntentValue,
-} from "@/lib/auth-social-login-intent";
+} from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
 import { isUsernamePolicyValid } from "@/lib/username-policy";
 

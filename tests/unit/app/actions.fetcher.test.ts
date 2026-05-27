@@ -1,53 +1,53 @@
 // vitest globals enabled
 
 // Mocks for next/cache to bypass Next runtime
-vi.mock('next/cache', () => ({
-  unstable_cache: (fn: any) => fn,
+vi.mock("next/cache", () => ({
+  unstable_cache: <T extends (...args: never[]) => unknown>(fn: T) => fn,
   revalidatePath: () => {},
   revalidateTag: () => {},
   updateTag: () => {},
 }));
 
 // Mock next-intl translations used in tag fallback
-vi.mock('next-intl/server', () => ({
+vi.mock("next-intl/server", () => ({
   getTranslations: async () => (key: string) => key,
 }));
 
-import type { Repository, AppSettings } from '@/types';
+import type { AppSettings, Repository } from "@/types";
 
-describe('actions fetcher scenarios', () => {
+describe("actions fetcher scenarios", () => {
   const fetchBackup = global.fetch;
   const baseSettings: AppSettings = {
-    timeFormat: '24h',
-    locale: 'en',
+    timeFormat: "24h",
+    locale: "en",
     refreshInterval: 10,
     cacheInterval: 0,
     releasesPerPage: 30,
     parallelRepoFetches: 5,
-    releaseChannels: ['stable'],
-  } as any;
+    releaseChannels: ["stable"],
+  };
 
   beforeEach(() => {
     vi.resetModules();
-    // @ts-ignore
+    // @ts-expect-error
     global.fetch = vi.fn();
   });
   afterEach(() => {
     global.fetch = fetchBackup;
   });
 
-  it('handles 304 not_modified and reconstructs from cache', async () => {
-    const actions = await import('@/app/actions');
+  it("handles 304 not_modified and reconstructs from cache", async () => {
+    const actions = await import("@/app/actions");
 
     const repo: Repository = {
-      id: 'o/r',
-      url: 'https://github.com/o/r',
+      id: "o/r",
+      url: "https://github.com/o/r",
       etag: 'W/"abc"',
       latestRelease: {
-        html_url: 'https://github.com/o/r/releases/tag/v1',
-        tag_name: 'v1',
-        name: 'v1',
-        body: 'body',
+        html_url: "https://github.com/o/r/releases/tag/v1",
+        tag_name: "v1",
+        name: "v1",
+        body: "body",
         created_at: new Date().toISOString(),
         published_at: new Date().toISOString(),
         fetched_at: new Date().toISOString(),
@@ -55,62 +55,95 @@ describe('actions fetcher scenarios', () => {
     };
 
     // 304 on first page
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ status: 304, ok: false, headers: { get: () => 'W/"def"' } });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      status: 304,
+      ok: false,
+      headers: { get: () => 'W/"def"' },
+    });
 
-    const enriched = await actions.getLatestReleasesForRepos([repo], baseSettings, 'en', { skipCache: true });
-    expect(enriched[0].error?.type).toBe('not_modified');
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+    expect(enriched[0].error?.type).toBe("not_modified");
     expect(enriched[0].release?.id).toBe(0); // reconstructed
-    expect(enriched[0].release?.tag_name).toBe('v1');
+    expect(enriched[0].release?.tag_name).toBe("v1");
   });
 
-  it('does not use a stale releases ETag when no cached release exists', async () => {
-    const actions = await import('@/app/actions');
+  it("does not use a stale releases ETag when no cached release exists", async () => {
+    const actions = await import("@/app/actions");
 
     const repo: Repository = {
-      id: 'github:zammad/zammad',
-      url: 'https://github.com/zammad/zammad',
+      id: "github:zammad/zammad",
+      url: "https://github.com/zammad/zammad",
       etag: '"stale-empty-releases"',
-    } as any;
+    };
 
     const nowIso = new Date().toISOString();
     // releases empty
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, headers: { get: () => '"empty-releases"' }, json: async () => [] });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => '"empty-releases"' },
+      json: async () => [],
+    });
     // tags
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ name: '6.5.1', commit: { sha: 'sha1' } }] });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [{ name: "6.5.1", commit: { sha: "sha1" } }],
+    });
     // ref to annotated tag? return not annotated
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ object: { type: 'commit', url: 'unused' } }) });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ object: { type: "commit", url: "unused" } }),
+    });
     // commit message
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ commit: { message: 'msg', committer: { date: nowIso } } }) });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        commit: { message: "msg", committer: { date: nowIso } },
+      }),
+    });
 
-    const enriched = await actions.getLatestReleasesForRepos([repo], baseSettings, 'en', { skipCache: true });
-    const releasesRequest = (global.fetch as any).mock.calls[0];
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+    const releasesRequest = vi.mocked(global.fetch).mock.calls[0];
 
-    expect(releasesRequest[1].headers['If-None-Match']).toBeUndefined();
-    expect(enriched[0].release?.tag_name).toBe('6.5.1');
+    expect(releasesRequest[1].headers["If-None-Match"]).toBeUndefined();
+    expect(enriched[0].release?.tag_name).toBe("6.5.1");
     expect(enriched[0].newEtag).toBeNull();
   });
 
-  it('paginates over multiple pages', async () => {
-    const actions = await import('@/app/actions');
+  it("paginates over multiple pages", async () => {
+    const actions = await import("@/app/actions");
 
     const repo: Repository = {
-      id: 'o/r',
-      url: 'https://github.com/o/r',
+      id: "o/r",
+      url: "https://github.com/o/r",
       releasesPerPage: 150,
-    } as any;
+    };
 
     const now = Date.now();
     const page1 = Array.from({ length: 100 }, (_, i) => ({
       id: i + 1,
-      html_url: '#',
+      html_url: "#",
       tag_name: `v${i + 1}`,
       name: null,
-      body: 'x',
+      body: "x",
       created_at: new Date(now - (200 - i) * 1000).toISOString(),
       published_at: new Date(now - (200 - i) * 1000).toISOString(),
       prerelease: false,
@@ -118,10 +151,10 @@ describe('actions fetcher scenarios', () => {
     }));
     const page2 = Array.from({ length: 50 }, (_, i) => ({
       id: 100 + i + 1,
-      html_url: '#',
+      html_url: "#",
       tag_name: `v${100 + i + 1}`,
       name: null,
-      body: 'x',
+      body: "x",
       created_at: new Date(now - (50 - i) * 1000).toISOString(),
       published_at: new Date(now - (50 - i) * 1000).toISOString(),
       prerelease: false,
@@ -129,149 +162,264 @@ describe('actions fetcher scenarios', () => {
     }));
 
     // page 1
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, headers: { get: () => null }, json: async () => page1 });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => page1,
+    });
     // page 2
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, headers: { get: () => null }, json: async () => page2 });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => page2,
+    });
 
-    const enriched = await actions.getLatestReleasesForRepos([repo], { ...baseSettings, releasesPerPage: 30 }, 'en', { skipCache: true });
-    expect((global.fetch as any).mock.calls.length).toBe(2);
-    expect(enriched[0].release?.tag_name).toBe('v150');
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      { ...baseSettings, releasesPerPage: 30 },
+      "en",
+      { skipCache: true },
+    );
+    expect(vi.mocked(global.fetch).mock.calls.length).toBe(2);
+    expect(enriched[0].release?.tag_name).toBe("v150");
   });
 
-  it('falls back to tags when no releases', async () => {
-    const actions = await import('@/app/actions');
+  it("falls back to tags when no releases", async () => {
+    const actions = await import("@/app/actions");
 
-    const repo: Repository = { id: 'o/r', url: 'https://github.com/o/r' } as any;
+    const repo: Repository = {
+      id: "o/r",
+      url: "https://github.com/o/r",
+    };
 
     // releases empty
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, headers: { get: () => null }, json: async () => [] });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => [],
+    });
     // tags
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ name: 'v1', commit: { sha: 'sha1' } }] });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [{ name: "v1", commit: { sha: "sha1" } }],
+    });
     // ref to annotated tag? return not annotated
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ object: { type: 'commit', url: 'unused' } }) });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ object: { type: "commit", url: "unused" } }),
+    });
     // commit message
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ commit: { message: 'msg', committer: { date: new Date().toISOString() } } }) });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        commit: {
+          message: "msg",
+          committer: { date: new Date().toISOString() },
+        },
+      }),
+    });
 
-    const enriched = await actions.getLatestReleasesForRepos([repo], baseSettings, 'en', { skipCache: true });
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
     expect(enriched[0].release?.id).toBe(0);
-    expect(enriched[0].release?.tag_name).toBe('v1');
+    expect(enriched[0].release?.tag_name).toBe("v1");
     expect(enriched[0].error).toBeUndefined();
   });
 
-  it('falls back to the first matching stable tag when newer tags are prereleases', async () => {
-    const actions = await import('@/app/actions');
+  it("falls back to the first matching stable tag when newer tags are prereleases", async () => {
+    const actions = await import("@/app/actions");
 
-    const repo: Repository = { id: 'github:zammad/zammad', url: 'https://github.com/zammad/zammad' } as any;
+    const repo: Repository = {
+      id: "github:zammad/zammad",
+      url: "https://github.com/zammad/zammad",
+    };
     const nowIso = new Date().toISOString();
 
     // releases empty
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, headers: { get: () => null }, json: async () => [] });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => [],
+    });
     // tags include newer prereleases before the latest stable tag
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => [
-      { name: '7.2.0-alpha', commit: { sha: 'sha-alpha-2' } },
-      { name: '7.1.0-alpha', commit: { sha: 'sha-alpha-1' } },
-      { name: '7.0.1', commit: { sha: 'sha-stable' } },
-    ] });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [
+        { name: "7.2.0-alpha", commit: { sha: "sha-alpha-2" } },
+        { name: "7.1.0-alpha", commit: { sha: "sha-alpha-1" } },
+        { name: "7.0.1", commit: { sha: "sha-stable" } },
+      ],
+    });
     // ref to annotated tag? return not annotated
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ object: { type: 'commit', url: 'unused' } }) });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ object: { type: "commit", url: "unused" } }),
+    });
     // commit message for stable tag
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ commit: { message: 'stable msg', committer: { date: nowIso } } }) });
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        commit: { message: "stable msg", committer: { date: nowIso } },
+      }),
+    });
 
-    const enriched = await actions.getLatestReleasesForRepos([repo], baseSettings, 'en', { skipCache: true });
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
 
-    expect(enriched[0].release?.tag_name).toBe('7.0.1');
-    expect((global.fetch as any).mock.calls[3][0]).toContain('/commits/sha-stable');
+    expect(enriched[0].release?.tag_name).toBe("7.0.1");
+    expect(vi.mocked(global.fetch).mock.calls[3][0]).toContain(
+      "/commits/sha-stable",
+    );
   });
 
-  it('maps rate_limit and repo_not_found errors', async () => {
-    const actions = await import('@/app/actions');
-    const repo: Repository = { id: 'o/r', url: 'https://github.com/o/r' } as any;
+  it("maps rate_limit and repo_not_found errors", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "o/r",
+      url: "https://github.com/o/r",
+    };
 
     // rate limit 403
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden', headers: { get: () => '1' } });
-    let enriched = await actions.getLatestReleasesForRepos([repo], baseSettings, 'en', { skipCache: true });
-    expect(enriched[0].error?.type).toBe('rate_limit');
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      statusText: "Forbidden",
+      headers: { get: () => "1" },
+    });
+    let enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+    expect(enriched[0].error?.type).toBe("rate_limit");
 
     // repo not found 404
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found', headers: { get: () => null } });
-    enriched = await actions.getLatestReleasesForRepos([repo], baseSettings, 'en', { skipCache: true });
-    expect(enriched[0].error?.type).toBe('repo_not_found');
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      statusText: "Not Found",
+      headers: { get: () => null },
+    });
+    enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+    expect(enriched[0].error?.type).toBe("repo_not_found");
   });
 
-  it('preserves repository order when parallel batches resolve out of order', async () => {
-    const actions = await import('@/app/actions');
+  it("preserves repository order when parallel batches resolve out of order", async () => {
+    const actions = await import("@/app/actions");
     const originalFetch = global.fetch;
 
     const repos: Repository[] = [
-      { id: 'alpha/repo-a', url: 'https://github.com/alpha/repo-a', releaseChannels: ['stable', 'prerelease'] } as any,
-      { id: 'beta/repo-b', url: 'https://github.com/beta/repo-b', releaseChannels: ['stable', 'prerelease'] } as any,
-      { id: 'gamma/repo-c', url: 'https://github.com/gamma/repo-c', releaseChannels: ['stable', 'prerelease'] } as any,
+      {
+        id: "alpha/repo-a",
+        url: "https://github.com/alpha/repo-a",
+        releaseChannels: ["stable", "prerelease"],
+      },
+      {
+        id: "beta/repo-b",
+        url: "https://github.com/beta/repo-b",
+        releaseChannels: ["stable", "prerelease"],
+      },
+      {
+        id: "gamma/repo-c",
+        url: "https://github.com/gamma/repo-c",
+        releaseChannels: ["stable", "prerelease"],
+      },
     ];
 
-    const releaseMap: Record<string, any[]> = {
-      'alpha/repo-a': [{
-        id: 1,
-        html_url: '#a',
-        tag_name: 'v1-a',
-        name: 'A',
-        body: 'note-a',
-        created_at: new Date().toISOString(),
-        published_at: new Date().toISOString(),
-        prerelease: false,
-        draft: false,
-      }],
-      'beta/repo-b': [{
-        id: 2,
-        html_url: '#b',
-        tag_name: 'v1-b',
-        name: 'B',
-        body: 'note-b',
-        created_at: new Date().toISOString(),
-        published_at: new Date().toISOString(),
-        prerelease: false,
-        draft: false,
-      }],
-      'gamma/repo-c': [{
-        id: 3,
-        html_url: '#c',
-        tag_name: 'v1-c',
-        name: 'C',
-        body: 'note-c',
-        created_at: new Date().toISOString(),
-        published_at: new Date().toISOString(),
-        prerelease: false,
-        draft: false,
-      }],
+    const releaseMap: Record<string, unknown[]> = {
+      "alpha/repo-a": [
+        {
+          id: 1,
+          html_url: "#a",
+          tag_name: "v1-a",
+          name: "A",
+          body: "note-a",
+          created_at: new Date().toISOString(),
+          published_at: new Date().toISOString(),
+          prerelease: false,
+          draft: false,
+        },
+      ],
+      "beta/repo-b": [
+        {
+          id: 2,
+          html_url: "#b",
+          tag_name: "v1-b",
+          name: "B",
+          body: "note-b",
+          created_at: new Date().toISOString(),
+          published_at: new Date().toISOString(),
+          prerelease: false,
+          draft: false,
+        },
+      ],
+      "gamma/repo-c": [
+        {
+          id: 3,
+          html_url: "#c",
+          tag_name: "v1-c",
+          name: "C",
+          body: "note-c",
+          created_at: new Date().toISOString(),
+          published_at: new Date().toISOString(),
+          prerelease: false,
+          draft: false,
+        },
+      ],
     };
 
     const delays: Record<string, number> = {
-      'alpha/repo-a': 30,
-      'beta/repo-b': 10,
-      'gamma/repo-c': 0,
+      "alpha/repo-a": 30,
+      "beta/repo-b": 10,
+      "gamma/repo-c": 0,
     };
 
-    // @ts-ignore
+    // @ts-expect-error
     global.fetch = vi.fn((url: string) => {
       const match = url.match(/repos\/([^/]+\/[^/]+)\/releases/);
       if (!match) {
         return Promise.resolve({
           ok: true,
           status: 200,
-          statusText: 'OK',
+          statusText: "OK",
           headers: { get: () => null },
-          json: async () => ([]),
+          json: async () => [],
         });
       }
       const repoId = match[1];
@@ -282,7 +430,7 @@ describe('actions fetcher scenarios', () => {
           resolve({
             ok: true,
             status: 200,
-            statusText: 'OK',
+            statusText: "OK",
             headers: { get: () => null },
             json: async () => data,
           });
@@ -296,10 +444,23 @@ describe('actions fetcher scenarios', () => {
     };
 
     try {
-      const enriched = await actions.getLatestReleasesForRepos(repos, settings, 'en', { skipCache: true });
-      expect(enriched.map(r => r.repoId)).toEqual(['alpha/repo-a', 'beta/repo-b', 'gamma/repo-c']);
-      expect(enriched.map(r => r.release?.tag_name)).toEqual(['v1-a', 'v1-b', 'v1-c']);
-      expect((global.fetch as any).mock.calls.length).toBe(3);
+      const enriched = await actions.getLatestReleasesForRepos(
+        repos,
+        settings,
+        "en",
+        { skipCache: true },
+      );
+      expect(enriched.map((r) => r.repoId)).toEqual([
+        "alpha/repo-a",
+        "beta/repo-b",
+        "gamma/repo-c",
+      ]);
+      expect(enriched.map((r) => r.release?.tag_name)).toEqual([
+        "v1-a",
+        "v1-b",
+        "v1-c",
+      ]);
+      expect(vi.mocked(global.fetch).mock.calls.length).toBe(3);
     } finally {
       global.fetch = originalFetch;
     }

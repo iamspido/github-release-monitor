@@ -1,65 +1,91 @@
 // @vitest-environment jsdom
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { act } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppSettings, Repository } from '@/types';
+import type React from "react";
+import { act } from "react";
+import ReactDOM from "react-dom/client";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import type { AppSettings, Repository } from "@/types";
+
+type RichValues = Record<string, (() => React.ReactNode) | string>;
+type TranslationFn = ((
+  key: string,
+  values?: Record<string, unknown>,
+) => string) & {
+  rich: (key: string, values?: RichValues) => React.ReactNode;
+};
+type PassthroughProps = React.HTMLAttributes<HTMLDivElement> & {
+  children?: React.ReactNode;
+};
+type UpdateRepositorySettingsAction =
+  typeof import("@/app/actions").updateRepositorySettingsAction;
 
 const translationMap: Record<string, Record<string, string>> = {
   RepoSettingsDialog: {
-    title: 'Repository settings',
-    autosave_waiting: 'Waiting to save…',
-    autosave_saving: 'Saving…',
-    autosave_success_short: 'Saved',
-    autosave_error: 'Save failed',
-    autosave_paused_offline: 'Offline – saving paused',
-    toast_error_title: 'Save error',
-    reset_to_global_button: 'Reset filters',
-    reset_to_global_tooltip: 'Reset to global',
-    releases_per_page_label_repo: 'Releases per page',
-    releases_per_page_hint_global: 'Using global value',
-    releases_per_page_hint_individual: 'Using custom value',
-    regex_filter_title: 'Regex filter',
-    channels_hint_global: 'Global channels',
-    channels_hint_individual: 'Individual channels',
-    automation_title: 'Automation',
-    automation_description: 'Configure automation',
-    automation_mode_label: 'Mode',
-    automation_mode_global: 'Global interval',
-    automation_mode_global_cron: 'Global schedule',
-    automation_mode_interval: 'Custom interval',
-    automation_mode_cron: 'Schedule',
-    custom_cache_label: 'Custom cache',
-    custom_cache_description: 'Global cache duration',
-    custom_cache_hint: 'Set 0 to disable cache',
+    title: "Repository settings",
+    autosave_waiting: "Waiting to save…",
+    autosave_saving: "Saving…",
+    autosave_success_short: "Saved",
+    autosave_error: "Save failed",
+    autosave_paused_offline: "Offline – saving paused",
+    toast_error_title: "Save error",
+    reset_to_global_button: "Reset filters",
+    reset_to_global_tooltip: "Reset to global",
+    releases_per_page_label_repo: "Releases per page",
+    releases_per_page_hint_global: "Using global value",
+    releases_per_page_hint_individual: "Using custom value",
+    regex_filter_title: "Regex filter",
+    channels_hint_global: "Global channels",
+    channels_hint_individual: "Individual channels",
+    automation_title: "Automation",
+    automation_description: "Configure automation",
+    automation_mode_label: "Mode",
+    automation_mode_global: "Global interval",
+    automation_mode_global_cron: "Global schedule",
+    automation_mode_interval: "Custom interval",
+    automation_mode_cron: "Schedule",
+    custom_cache_label: "Custom cache",
+    custom_cache_description: "Global cache duration",
+    custom_cache_hint: "Set 0 to disable cache",
   },
   SettingsForm: {
-    autosave_success: 'All changes saved',
+    autosave_success: "All changes saved",
     offline_notice:
       "Offline – this dialog is read-only. Changes will not be saved until you're back online.",
-    release_channel_title: 'Channels',
-    release_channel_description_repo: 'Pick channels',
-    release_channel_stable: 'Stable',
-    release_channel_prerelease: 'Prerelease',
-    release_channel_draft: 'Draft',
-    prerelease_subtype_description: 'Prerelease tags',
-    regex_filter_description_repo: 'Filter releases',
-    include_regex_label: 'Include regex',
-    exclude_regex_label: 'Exclude regex',
-    regex_placeholder: 'Regex…',
-    regex_error_invalid: 'Invalid regular expression.',
+    release_channel_title: "Channels",
+    release_channel_description_repo: "Pick channels",
+    release_channel_stable: "Stable",
+    release_channel_prerelease: "Prerelease",
+    release_channel_draft: "Draft",
+    prerelease_subtype_description: "Prerelease tags",
+    regex_filter_description_repo: "Filter releases",
+    include_regex_label: "Include regex",
+    exclude_regex_label: "Exclude regex",
+    regex_placeholder: "Regex…",
+    regex_error_invalid: "Invalid regular expression.",
   },
 };
 
-vi.mock('next-intl', () => ({
+vi.mock("next-intl", () => ({
   useTranslations: (namespace: string) => {
     const dict = translationMap[namespace] ?? {};
-    const translate = ((key: string) => dict[key] ?? `${namespace}.${key}`) as any;
-    translate.rich = (key: string, values: Record<string, any>) => {
+    const translate = ((key: string) =>
+      dict[key] ?? `${namespace}.${key}`) as TranslationFn;
+    translate.rich = (key: string, values?: RichValues) => {
       const message = dict[key];
       if (!message) return `${namespace}.${key}`;
       if (!values) return message;
-      return message.replace('{repoId}', values.repoId ? values.repoId() : '');
+      const repoId = values.repoId;
+      return message.replace(
+        "{repoId}",
+        typeof repoId === "function" ? String(repoId()) : "",
+      );
     };
     return translate;
   },
@@ -67,13 +93,13 @@ vi.mock('next-intl', () => ({
 
 let networkState = { isOnline: true };
 
-vi.mock('@/hooks/use-network', () => ({
+vi.mock("@/hooks/use-network", () => ({
   useNetworkStatus: () => networkState,
 }));
 
 const toastSpy = vi.fn();
 
-vi.mock('@/hooks/use-toast', () => ({
+vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({
     toasts: [],
     toast: toastSpy,
@@ -84,8 +110,10 @@ vi.mock('@/hooks/use-toast', () => ({
 
 let fakeSetTimeout: typeof globalThis.setTimeout;
 
-vi.mock('@/components/ui/dialog', () => {
-  const passthrough = ({ children, ...rest }: any) => <div {...rest}>{children}</div>;
+vi.mock("@/components/ui/dialog", () => {
+  const passthrough = ({ children, ...rest }: PassthroughProps) => (
+    <div {...rest}>{children}</div>
+  );
   return {
     Dialog: passthrough,
     DialogContent: passthrough,
@@ -99,26 +127,42 @@ vi.mock('@/components/ui/dialog', () => {
 
 const updateSettingsMock = vi.fn();
 
-vi.mock('@/app/actions', async () => {
-  const actual = await vi.importActual('@/app/actions');
+vi.mock("@/app/actions", async () => {
+  const actual = await vi.importActual("@/app/actions");
+  const updateRepositorySettingsAction: UpdateRepositorySettingsAction = (
+    repoId,
+    settings,
+  ) => updateSettingsMock(repoId, settings);
   return {
     ...actual,
-    updateRepositorySettingsAction: vi.fn((...args: any[]) => updateSettingsMock(...args)),
+    updateRepositorySettingsAction: vi.fn(updateRepositorySettingsAction),
     refreshSingleRepositoryAction: vi.fn().mockResolvedValue({}),
   };
 });
 
 const baseSettings: AppSettings = {
-  timeFormat: '24h',
-  locale: 'en',
+  timeFormat: "24h",
+  locale: "en",
   refreshInterval: 5,
   cacheInterval: 5,
   releasesPerPage: 10,
   parallelRepoFetches: 3,
-  releaseChannels: ['stable'],
+  releaseChannels: ["stable"],
 };
 
-const emptyRepoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChannels' | 'releasesPerPage' | 'refreshInterval' | 'cacheInterval' | 'backgroundCheckCron' | 'includeRegex' | 'excludeRegex' | 'appriseTags' | 'appriseFormat'> = {
+const emptyRepoSettings: Pick<
+  Repository,
+  | "releaseChannels"
+  | "preReleaseSubChannels"
+  | "releasesPerPage"
+  | "refreshInterval"
+  | "cacheInterval"
+  | "backgroundCheckCron"
+  | "includeRegex"
+  | "excludeRegex"
+  | "appriseTags"
+  | "appriseFormat"
+> = {
   releaseChannels: [],
   preReleaseSubChannels: [],
   releasesPerPage: null,
@@ -131,24 +175,41 @@ const emptyRepoSettings: Pick<Repository, 'releaseChannels' | 'preReleaseSubChan
   appriseFormat: undefined,
 };
 
-let RepoSettingsDialogComponent: typeof import('@/components/repo-settings-dialog').RepoSettingsDialog;
+let RepoSettingsDialogComponent: typeof import("@/components/repo-settings-dialog").RepoSettingsDialog;
 
-(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe('RepoSettingsDialog autosave behaviour', () => {
+describe("RepoSettingsDialog autosave behaviour", () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
 
   beforeAll(async () => {
-    const mod = await import('@/components/repo-settings-dialog');
+    const mod = await import("@/components/repo-settings-dialog");
     RepoSettingsDialogComponent = mod.RepoSettingsDialog;
   });
 
   beforeEach(() => {
     vi.useFakeTimers();
     fakeSetTimeout = globalThis.setTimeout;
-    globalThis.setTimeout = ((cb: (...args: any[]) => any, delay?: number, ...args: any[]) =>
+    globalThis.setTimeout = ((
+      cb: TimerHandler,
+      delay?: number,
+      ...args: Parameters<typeof globalThis.setTimeout> extends [
+        TimerHandler,
+        number | undefined,
+        ...infer Rest,
+      ]
+        ? Rest
+        : never
+    ) =>
       fakeSetTimeout(async () => {
+        if (typeof cb !== "function") {
+          throw new TypeError(
+            "String timer handlers are not supported in tests",
+          );
+        }
         await act(async () => {
           await cb(...args);
         });
@@ -157,7 +218,7 @@ describe('RepoSettingsDialog autosave behaviour', () => {
     toastSpy.mockClear();
     updateSettingsMock.mockReset();
     updateSettingsMock.mockResolvedValue({ success: true });
-    container = document.createElement('div');
+    container = document.createElement("div");
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
   });
@@ -173,7 +234,11 @@ describe('RepoSettingsDialog autosave behaviour', () => {
   });
 
   function renderDialog(
-    props?: Partial<React.ComponentProps<typeof import('@/components/repo-settings-dialog').RepoSettingsDialog>>,
+    props?: Partial<
+      React.ComponentProps<
+        typeof import("@/components/repo-settings-dialog").RepoSettingsDialog
+      >
+    >,
   ) {
     act(() => {
       root.render(
@@ -197,14 +262,21 @@ describe('RepoSettingsDialog autosave behaviour', () => {
   }
 
   function setInputValue(input: HTMLInputElement, value: string) {
-    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    const descriptor = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    );
     if (descriptor?.set) {
       descriptor.set.call(input, value);
     } else {
       input.value = value;
     }
-    input.dispatchEvent(new Event('input', { bubbles: true, cancelable: true, composed: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+    input.dispatchEvent(
+      new Event("input", { bubbles: true, cancelable: true, composed: true }),
+    );
+    input.dispatchEvent(
+      new Event("change", { bubbles: true, cancelable: true }),
+    );
   }
 
   async function advanceAutosaveDelay(delay = 1500) {
@@ -227,43 +299,50 @@ describe('RepoSettingsDialog autosave behaviour', () => {
         await flushEffects();
       }
     }
-    throw lastError ?? new Error('Expectation not met');
+    throw lastError ?? new Error("Expectation not met");
   }
 
   async function getIncludeInput() {
     await flushEffects();
 
     // Find input by its associated label instead of static ID
-    const labels = Array.from(container.querySelectorAll('label'));
-    const includeRegexLabel = labels.find(label => 
-      label.textContent?.includes('Include regex')
+    const labels = Array.from(container.querySelectorAll("label"));
+    const includeRegexLabel = labels.find((label) =>
+      label.textContent?.includes("Include regex"),
     );
 
     let input: HTMLInputElement | null = null;
 
-    if (includeRegexLabel && includeRegexLabel.htmlFor) {
+    if (includeRegexLabel?.htmlFor) {
       // Use getElementById which handles special characters in IDs correctly
-      input = document.getElementById(includeRegexLabel.htmlFor) as HTMLInputElement;
+      input = document.getElementById(
+        includeRegexLabel.htmlFor,
+      ) as HTMLInputElement;
     }
 
     // Fallback: find by placeholder text
     if (!input) {
-      const allInputs = Array.from(container.querySelectorAll('input[type="text"]')) as HTMLInputElement[];
+      const allInputs = Array.from(
+        container.querySelectorAll('input[type="text"]'),
+      ) as HTMLInputElement[];
       // The include regex input comes before exclude regex input
       // and should be in the "Regex filter" section
-      input = allInputs.find(inp => {
-        const placeholder = inp.placeholder;
-        return placeholder && (placeholder.includes('Regex') || placeholder === '');
-      }) || allInputs[0];
+      input =
+        allInputs.find((inp) => {
+          const placeholder = inp.placeholder;
+          return (
+            placeholder && (placeholder.includes("Regex") || placeholder === "")
+          );
+        }) || allInputs[0];
     }
 
     if (!input) {
-      throw new Error('include-regex-repo input not rendered');
+      throw new Error("include-regex-repo input not rendered");
     }
     return input;
   }
 
-  it('pauses autosave when offline without calling update action', async () => {
+  it("pauses autosave when offline without calling update action", async () => {
     networkState = { isOnline: false };
     renderDialog();
     await flushEffects();
@@ -273,13 +352,13 @@ describe('RepoSettingsDialog autosave behaviour', () => {
     expect(updateSettingsMock).not.toHaveBeenCalled();
   });
 
-  it('shows success and commits settings when autosave succeeds', async () => {
+  it("shows success and commits settings when autosave succeeds", async () => {
     updateSettingsMock.mockResolvedValueOnce({ success: true });
 
     renderDialog();
     const input = await getIncludeInput();
     await act(async () => {
-      setInputValue(input, 'feature');
+      setInputValue(input, "feature");
     });
     await flushEffects();
 
@@ -288,24 +367,24 @@ describe('RepoSettingsDialog autosave behaviour', () => {
     await act(async () => {
       await expectEventually(() => {
         expect(updateSettingsMock).toHaveBeenCalledWith(
-          'owner/repo',
-          expect.objectContaining({ includeRegex: 'feature' }),
+          "owner/repo",
+          expect.objectContaining({ includeRegex: "feature" }),
         );
       });
     });
     await act(async () => {
       await expectEventually(() => {
-        expect(document.body.textContent).toContain('Saved');
+        expect(document.body.textContent).toContain("Saved");
       });
     });
     expect(toastSpy).not.toHaveBeenCalled();
   });
 
-  it('blocks autosave when include regex becomes invalid', async () => {
+  it("blocks autosave when include regex becomes invalid", async () => {
     renderDialog();
     const input = await getIncludeInput();
     await act(async () => {
-      setInputValue(input, '(');
+      setInputValue(input, "(");
     });
     await flushEffects();
 
@@ -313,20 +392,22 @@ describe('RepoSettingsDialog autosave behaviour', () => {
 
     await act(async () => {
       await expectEventually(() => {
-        expect(document.body.textContent).toContain('Invalid regular expression.');
+        expect(document.body.textContent).toContain(
+          "Invalid regular expression.",
+        );
       });
     });
     expect(updateSettingsMock).not.toHaveBeenCalled();
     expect(toastSpy).not.toHaveBeenCalled();
   });
 
-  it('shows error toast when autosave returns failure', async () => {
-    updateSettingsMock.mockResolvedValueOnce({ success: false, error: 'nope' });
+  it("shows error toast when autosave returns failure", async () => {
+    updateSettingsMock.mockResolvedValueOnce({ success: false, error: "nope" });
 
     renderDialog();
     const input = await getIncludeInput();
     await act(async () => {
-      setInputValue(input, 'feature');
+      setInputValue(input, "feature");
     });
     await flushEffects();
 
@@ -336,9 +417,9 @@ describe('RepoSettingsDialog autosave behaviour', () => {
       await expectEventually(() => {
         expect(toastSpy).toHaveBeenCalledWith(
           expect.objectContaining({
-            title: 'Save error',
-            description: 'nope',
-            variant: 'destructive',
+            title: "Save error",
+            description: "nope",
+            variant: "destructive",
           }),
         );
       });
@@ -346,13 +427,13 @@ describe('RepoSettingsDialog autosave behaviour', () => {
     expect(updateSettingsMock).toHaveBeenCalled();
   });
 
-  it('shows error toast when autosave throws', async () => {
-    updateSettingsMock.mockRejectedValueOnce(new Error('broken'));
+  it("shows error toast when autosave throws", async () => {
+    updateSettingsMock.mockRejectedValueOnce(new Error("broken"));
 
     renderDialog();
     const input = await getIncludeInput();
     await act(async () => {
-      setInputValue(input, 'feature');
+      setInputValue(input, "feature");
     });
     await flushEffects();
 
@@ -362,9 +443,9 @@ describe('RepoSettingsDialog autosave behaviour', () => {
       await expectEventually(() => {
         expect(toastSpy).toHaveBeenCalledWith(
           expect.objectContaining({
-            title: 'Save error',
-            description: 'Error: broken',
-            variant: 'destructive',
+            title: "Save error",
+            description: "Error: broken",
+            variant: "destructive",
           }),
         );
       });

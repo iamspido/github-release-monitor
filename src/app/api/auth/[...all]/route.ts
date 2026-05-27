@@ -13,15 +13,15 @@ import {
   acquireAuthSetupBootstrapLock,
   isAuthSetupLocked,
   writeAuthSetupLock,
-} from "@/lib/auth-setup-lock";
+} from "@/lib/auth/setup-lock";
 import {
   buildSetupSocialContextSetCookieHeader,
   readSetupSocialContextFromRequest,
-} from "@/lib/auth-setup-social-context";
+} from "@/lib/auth/setup-social-context";
 import {
   buildSocialLoginIntentSetCookieHeader,
   readSocialLoginIntentFromRequest,
-} from "@/lib/auth-social-login-intent";
+} from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
 
 const handler = toNextJsHandler(auth);

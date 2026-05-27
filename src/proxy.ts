@@ -3,7 +3,7 @@ import createIntlMiddleware from "next-intl/middleware";
 import {
   canReadHomeUnauthenticated,
   getAuthenticationMethod,
-} from "@/lib/auth-mode";
+} from "@/lib/auth/mode";
 import { logger } from "@/lib/logger";
 import {
   NEXT_LOCALE_COOKIE,

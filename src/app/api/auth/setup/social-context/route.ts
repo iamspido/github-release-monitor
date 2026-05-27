@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { ensureAuthDatabaseReady, hasAnyAuthUser } from "@/lib/auth";
-import { isAuthSetupLocked } from "@/lib/auth-setup-lock";
+import { isAuthSetupLocked } from "@/lib/auth/setup-lock";
 import {
   buildSetupSocialContextSetCookieHeader,
   buildSetupSocialContextValue,
-} from "@/lib/auth-setup-social-context";
+} from "@/lib/auth/setup-social-context";
 import { logger } from "@/lib/logger";
 import { isUsernamePolicyValid } from "@/lib/username-policy";
 

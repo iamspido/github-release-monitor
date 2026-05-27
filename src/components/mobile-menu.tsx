@@ -23,7 +23,7 @@ import {
 import { useNetworkStatus } from "@/hooks/use-network";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { pathnames } from "@/i18n/routing";
-import type { AuthAccess } from "@/lib/auth-mode";
+import type { AuthAccess } from "@/lib/auth/mode";
 import { cn } from "@/lib/utils";
 
 interface MobileMenuProps {

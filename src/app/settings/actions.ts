@@ -4,23 +4,23 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { getLocale, getTranslations } from "next-intl/server";
 
-import { checkForNewReleases } from "@/app/actions";
-import { canPerformRestrictedAction } from "@/lib/auth-access";
+import { canPerformRestrictedAction } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
 import {
   normalizeProviderSortOrder,
   normalizeReleaseSortOrder,
 } from "@/lib/release-sort";
-import { normalizeBackgroundCheckCron } from "@/lib/repository-schedule";
-import { getRepositories, saveRepositories } from "@/lib/repository-storage";
+import { checkForNewReleases } from "@/lib/releases/checker";
+import { normalizeBackgroundCheckCron } from "@/lib/runtime/repository-schedule";
+import { scheduleTask } from "@/lib/runtime/task-scheduler";
 import {
   NEXT_LOCALE_COOKIE,
   nextLocaleCookieOptions,
   SETTINGS_LOCALE_COOKIE,
   settingsLocaleCookieOptions,
 } from "@/lib/settings-locale-cookie";
-import { getSettings, saveSettings } from "@/lib/settings-storage";
-import { scheduleTask } from "@/lib/task-scheduler";
+import { getRepositories, saveRepositories } from "@/lib/storage/repositories";
+import { getSettings, saveSettings } from "@/lib/storage/settings";
 import type { AppSettings } from "@/types";
 
 async function getRestrictedActionMessage() {

@@ -195,7 +195,10 @@ describe("auth settings actions", () => {
   it("returns already in use when Better Auth reports duplicate email", async () => {
     changeEmailMock.mockResolvedValueOnce(
       new Response(
-        JSON.stringify({ code: "email_already_exists", message: "already used" }),
+        JSON.stringify({
+          code: "email_already_exists",
+          message: "already used",
+        }),
         { status: 400, headers: { "content-type": "application/json" } },
       ),
     );

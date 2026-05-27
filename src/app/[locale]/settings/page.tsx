@@ -10,8 +10,8 @@ import {
 } from "@/components/settings-form";
 import { SocialAccountsSettingsCard } from "@/components/social-accounts-settings-card";
 import { TwoFactorSettingsCard } from "@/components/two-factor-settings-card";
-import { getCurrentAuthAccess } from "@/lib/auth-access";
-import { getSettings } from "@/lib/settings-storage";
+import { getCurrentAuthAccess } from "@/lib/auth/access";
+import { getSettings } from "@/lib/storage/settings";
 import type { AppSettings } from "@/types";
 
 export default async function SettingsPage({

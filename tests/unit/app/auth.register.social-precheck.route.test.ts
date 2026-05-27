@@ -4,7 +4,8 @@ const isSocialProviderConfiguredMock = vi.fn(() => true);
 const findRegistrationConflictMock = vi.fn(() => "none");
 const buildSocialLoginIntentValueMock = vi.fn(() => "intent.value");
 const buildSocialLoginIntentSetCookieHeaderMock = vi.fn(
-  () => "auth_social_login_intent=intent.value; Path=/; HttpOnly; SameSite=Lax; Max-Age=120",
+  () =>
+    "auth_social_login_intent=intent.value; Path=/; HttpOnly; SameSite=Lax; Max-Age=120",
 );
 
 vi.mock("@/lib/auth", () => ({
@@ -14,9 +15,10 @@ vi.mock("@/lib/auth", () => ({
   findRegistrationConflict: findRegistrationConflictMock,
 }));
 
-vi.mock("@/lib/auth-social-login-intent", () => ({
+vi.mock("@/lib/auth/social-login-intent", () => ({
   buildSocialLoginIntentValue: buildSocialLoginIntentValueMock,
-  buildSocialLoginIntentSetCookieHeader: buildSocialLoginIntentSetCookieHeaderMock,
+  buildSocialLoginIntentSetCookieHeader:
+    buildSocialLoginIntentSetCookieHeaderMock,
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -50,7 +52,9 @@ describe("auth register social-precheck route", () => {
   });
 
   it("allows social registration when no conflicts exist", async () => {
-    const { POST } = await import("@/app/api/auth/register/social-precheck/route");
+    const { POST } = await import(
+      "@/app/api/auth/register/social-precheck/route"
+    );
     const response = await POST(
       setupRequest({
         provider: "github",
@@ -73,7 +77,9 @@ describe("auth register social-precheck route", () => {
 
   it("denies social registration on duplicate username", async () => {
     findRegistrationConflictMock.mockReturnValue("username_in_use");
-    const { POST } = await import("@/app/api/auth/register/social-precheck/route");
+    const { POST } = await import(
+      "@/app/api/auth/register/social-precheck/route"
+    );
     const response = await POST(
       setupRequest({
         provider: "github",
@@ -90,7 +96,9 @@ describe("auth register social-precheck route", () => {
   });
 
   it("rejects invalid username", async () => {
-    const { POST } = await import("@/app/api/auth/register/social-precheck/route");
+    const { POST } = await import(
+      "@/app/api/auth/register/social-precheck/route"
+    );
     const response = await POST(
       setupRequest({
         provider: "github",
@@ -106,7 +114,9 @@ describe("auth register social-precheck route", () => {
   });
 
   it("rejects usernames outside the Better Auth default policy", async () => {
-    const { POST } = await import("@/app/api/auth/register/social-precheck/route");
+    const { POST } = await import(
+      "@/app/api/auth/register/social-precheck/route"
+    );
     const response = await POST(
       setupRequest({
         provider: "github",
@@ -123,7 +133,9 @@ describe("auth register social-precheck route", () => {
 
   it("rejects requests when signup is disabled", async () => {
     isSignupEnabledMock.mockReturnValue(false);
-    const { POST } = await import("@/app/api/auth/register/social-precheck/route");
+    const { POST } = await import(
+      "@/app/api/auth/register/social-precheck/route"
+    );
     const response = await POST(
       setupRequest({
         provider: "github",

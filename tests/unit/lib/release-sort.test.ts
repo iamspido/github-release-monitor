@@ -41,7 +41,9 @@ describe("sortEnrichedReleases", () => {
   ];
 
   it("sorts latest releases first by default and keeps missing releases last", () => {
-    expect(ids(sortEnrichedReleases(releases, "latest_first", undefined))).toEqual([
+    expect(
+      ids(sortEnrichedReleases(releases, "latest_first", undefined)),
+    ).toEqual([
       "gitlab:gitlab.com/owner/new",
       "codeberg:owner/mid",
       "github:owner/old",
@@ -65,11 +67,7 @@ describe("sortEnrichedReleases", () => {
 
   it("can prioritize new security releases before the selected sort order", () => {
     const input = [
-      release(
-        "github:owner/newer-regular",
-        "2024-03-01T00:00:00.000Z",
-        true,
-      ),
+      release("github:owner/newer-regular", "2024-03-01T00:00:00.000Z", true),
       release(
         "github:owner/older-security",
         "2024-01-01T00:00:00.000Z",
@@ -101,7 +99,9 @@ describe("sortEnrichedReleases", () => {
   });
 
   it("supports oldest-first and repository name ordering", () => {
-    expect(ids(sortEnrichedReleases(releases, "oldest_first", undefined))).toEqual([
+    expect(
+      ids(sortEnrichedReleases(releases, "oldest_first", undefined)),
+    ).toEqual([
       "github:owner/old",
       "codeberg:owner/mid",
       "gitlab:gitlab.com/owner/new",

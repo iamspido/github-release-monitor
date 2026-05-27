@@ -1,7 +1,7 @@
 // vitest globals enabled
 
 vi.mock("next/cache", () => ({
-  unstable_cache: (fn: any) => fn,
+  unstable_cache: <T extends (...args: never[]) => unknown>(fn: T) => fn,
   revalidatePath: () => {},
   revalidateTag: () => {},
   updateTag: () => {},
@@ -17,7 +17,7 @@ describe("getGitlabTokenCheck", () => {
 
   beforeEach(() => {
     vi.resetModules();
-    // @ts-ignore
+    // @ts-expect-error
     global.fetch = vi.fn();
     delete process.env.GITLAB_ACCESS_TOKENS;
     delete process.env.GITLAB_DEPLOY_TOKENS;
@@ -34,8 +34,8 @@ describe("getGitlabTokenCheck", () => {
       "gitlab.self.test=gitlab+deploy-token-1:gl-dpt-abc";
     const actions = await import("@/app/actions");
 
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 401,
       statusText: "Unauthorized",
@@ -50,8 +50,8 @@ describe("getGitlabTokenCheck", () => {
       diagnosticsLimited: true,
     });
 
-    // @ts-ignore
-    const [, requestOpts] = (global.fetch as any).mock.calls[0];
+    // @ts-expect-error
+    const [, requestOpts] = vi.mocked(global.fetch).mock.calls[0];
     expect(requestOpts.headers.Authorization.startsWith("Basic ")).toBe(true);
   });
 });

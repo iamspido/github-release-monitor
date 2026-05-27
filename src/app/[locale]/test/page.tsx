@@ -8,7 +8,7 @@ import {
 } from "@/app/actions";
 import { Header } from "@/components/header";
 import { TestPageClient } from "@/components/test-page-client";
-import { getCurrentAuthAccess } from "@/lib/auth-access";
+import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
 import type {
   AppriseStatus,

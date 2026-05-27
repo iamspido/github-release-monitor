@@ -19,7 +19,7 @@ import { UpdateNoticeBanner } from "@/components/update-notice-banner";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { Link, usePathname } from "@/i18n/navigation";
 import { pathnames } from "@/i18n/routing";
-import type { AuthAccess } from "@/lib/auth-mode";
+import type { AuthAccess } from "@/lib/auth/mode";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type { UpdateNotificationState } from "@/types";

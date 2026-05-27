@@ -4,10 +4,10 @@ import { AutoRefresher } from "@/components/auto-refresher";
 import { BackToTopButton } from "@/components/back-to-top-button";
 import { Header } from "@/components/header";
 import { HomePageClient } from "@/components/home-page-client";
-import { getCurrentAuthAccess } from "@/lib/auth-access";
+import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
-import { getRepositories } from "@/lib/repository-storage";
-import { getSettings } from "@/lib/settings-storage";
+import { getRepositories } from "@/lib/storage/repositories";
+import { getSettings } from "@/lib/storage/settings";
 import type {
   AppSettings,
   EnrichedRelease,

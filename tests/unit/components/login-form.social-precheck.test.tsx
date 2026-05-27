@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
-import React from "react";
-import ReactDOM from "react-dom/client";
 import { act } from "react";
+import ReactDOM from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let searchParams = new URLSearchParams();
 const socialSignInMock = vi.fn();
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => searchParams,
@@ -41,7 +41,7 @@ vi.mock("@/app/auth/actions", () => ({
   login: vi.fn(),
 }));
 
-vi.mock("@/lib/auth-client", () => ({
+vi.mock("@/lib/auth/client", () => ({
   authClient: {
     signIn: {
       social: socialSignInMock,
@@ -65,28 +65,28 @@ describe("LoginForm social precheck", () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     fetchMock = vi.fn((input: RequestInfo | URL) => {
-        const url =
-          typeof input === "string"
-            ? input
-            : input instanceof Request
-              ? input.url
-              : input.toString();
-        if (url === "/api/auth/setup") {
-          return Promise.resolve({
-            ok: false,
-            status: 404,
-            json: async () => ({}),
-          });
-        }
-        if (url === "/api/auth/social/precheck") {
-          return Promise.resolve({
-            ok: true,
-            status: 200,
-            json: async () => ({ canProceed: false }),
-          });
-        }
-        return Promise.reject(new Error(`Unexpected fetch URL: ${url}`));
-      });
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof Request
+            ? input.url
+            : input.toString();
+      if (url === "/api/auth/setup") {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: async () => ({}),
+        });
+      }
+      if (url === "/api/auth/social/precheck") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ canProceed: false }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected fetch URL: ${url}`));
+    });
     vi.stubGlobal("fetch", fetchMock);
   });
 

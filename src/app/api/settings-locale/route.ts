@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLocaleSetting } from "@/lib/settings-storage";
+import { getLocaleSetting } from "@/lib/storage/settings";
 
 export const runtime = "nodejs";
 

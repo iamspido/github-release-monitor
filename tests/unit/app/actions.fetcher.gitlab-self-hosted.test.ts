@@ -1,7 +1,7 @@
 // vitest globals enabled
 
 vi.mock("next/cache", () => ({
-  unstable_cache: (fn: any) => fn,
+  unstable_cache: <T extends (...args: never[]) => unknown>(fn: T) => fn,
   revalidatePath: () => {},
   revalidateTag: () => {},
   updateTag: () => {},
@@ -11,8 +11,8 @@ vi.mock("next-intl/server", () => ({
   getTranslations: async () => (key: string) => key,
 }));
 
-import type { AppSettings, Repository } from "@/types";
 import { deflateSync } from "node:zlib";
+import type { AppSettings, Repository } from "@/types";
 
 function concatBytes(chunks: Uint8Array[]): Uint8Array {
   const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
@@ -99,11 +99,11 @@ describe("actions GitLab self-hosted fetcher", () => {
     releasesPerPage: 30,
     parallelRepoFetches: 5,
     releaseChannels: ["stable"],
-  } as any;
+  };
 
   beforeEach(() => {
     vi.resetModules();
-    // @ts-ignore
+    // @ts-expect-error
     global.fetch = vi.fn();
     delete process.env.GITLAB_ADDITIONAL_HOSTS;
     delete process.env.GITLAB_ACCESS_TOKENS;
@@ -122,10 +122,10 @@ describe("actions GitLab self-hosted fetcher", () => {
     const repo: Repository = {
       id: "gitlab:gitlab.self.test/group/repo",
       url: "https://gitlab.self.test/group/repo",
-    } as any;
+    };
 
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -152,8 +152,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     expect(enriched[0].error).toBeUndefined();
     expect(enriched[0].release?.tag_name).toBe("v1.2.3");
 
-    // @ts-ignore
-    const [requestUrl, requestOpts] = (global.fetch as any).mock.calls[0];
+    // @ts-expect-error
+    const [requestUrl, requestOpts] = vi.mocked(global.fetch).mock.calls[0];
     expect(requestUrl).toContain(
       "https://gitlab.self.test/api/v4/projects/group%2Frepo/releases",
     );
@@ -168,11 +168,11 @@ describe("actions GitLab self-hosted fetcher", () => {
     const repo: Repository = {
       id: "gitlab:gitlab.self.test/group/repo",
       url: "https://gitlab.self.test/group/repo",
-    } as any;
+    };
 
     // releases: empty -> tag fallback
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -181,8 +181,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // tags with order_by/sort rejected by older GitLab
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 400,
       statusText: "Bad Request",
@@ -191,8 +191,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // simpler tags endpoint works
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -219,8 +219,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     expect(enriched[0].error).toBeUndefined();
     expect(enriched[0].release?.tag_name).toBe("v2.0.0");
 
-    // @ts-ignore
-    const urls = (global.fetch as any).mock.calls.map((call: any[]) => call[0]);
+    // @ts-expect-error
+    const urls = vi.mocked(global.fetch).mock.calls.map((call) => call[0]);
     expect(
       urls.some((u: string) =>
         u.includes("/repository/tags?per_page=1&order_by=updated&sort=desc"),
@@ -238,11 +238,11 @@ describe("actions GitLab self-hosted fetcher", () => {
     const repo: Repository = {
       id: "gitlab:gitlab.self.test/group/repo",
       url: "https://gitlab.self.test/group/repo",
-    } as any;
+    };
 
     // releases: empty -> tag fallback
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -251,8 +251,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // tags endpoint failure
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 403,
       statusText: "Forbidden",
@@ -279,10 +279,10 @@ describe("actions GitLab self-hosted fetcher", () => {
     const repo: Repository = {
       id: "gitlab:gitlab.self.test/group/repo",
       url: "https://gitlab.self.test/group/repo",
-    } as any;
+    };
 
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -309,8 +309,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     expect(enriched[0].error).toBeUndefined();
     expect(enriched[0].release?.tag_name).toBe("v1.2.3");
 
-    // @ts-ignore
-    const [, requestOpts] = (global.fetch as any).mock.calls[0];
+    // @ts-expect-error
+    const [, requestOpts] = vi.mocked(global.fetch).mock.calls[0];
     const authorizationHeader = requestOpts.headers.Authorization;
     expect(typeof authorizationHeader).toBe("string");
     expect(authorizationHeader.startsWith("Basic ")).toBe(true);
@@ -325,11 +325,11 @@ describe("actions GitLab self-hosted fetcher", () => {
     const repo: Repository = {
       id: "gitlab:gitlab.self.test/group/repo",
       url: "https://gitlab.self.test/group/repo",
-    } as any;
+    };
 
     // releases endpoint not accessible with deploy token on some instances
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 404,
       statusText: "Not Found",
@@ -338,8 +338,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // tags fallback succeeds
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -366,10 +366,12 @@ describe("actions GitLab self-hosted fetcher", () => {
     expect(enriched[0].error).toBeUndefined();
     expect(enriched[0].release?.tag_name).toBe("v2.3.4");
 
-    // @ts-ignore
-    const firstAuth = (global.fetch as any).mock.calls[0][1].headers.Authorization;
-    // @ts-ignore
-    const secondAuth = (global.fetch as any).mock.calls[1][1].headers.Authorization;
+    // @ts-expect-error
+    const firstAuth = vi.mocked(global.fetch).mock.calls[0][1].headers
+      .Authorization;
+    // @ts-expect-error
+    const secondAuth = vi.mocked(global.fetch).mock.calls[1][1].headers
+      .Authorization;
     expect(typeof firstAuth).toBe("string");
     expect(firstAuth.startsWith("Basic ")).toBe(true);
     expect(typeof secondAuth).toBe("string");
@@ -385,7 +387,7 @@ describe("actions GitLab self-hosted fetcher", () => {
     const repo: Repository = {
       id: "gitlab:gitlab.self.test/group/repo",
       url: "https://gitlab.self.test/group/repo",
-    } as any;
+    };
 
     const pkt = (line: string) =>
       `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
@@ -397,8 +399,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     );
 
     // releases endpoint -> 404
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 404,
       statusText: "Not Found",
@@ -407,8 +409,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // tags endpoint -> 404
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 404,
       statusText: "Not Found",
@@ -417,8 +419,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // git transport fallback -> success with one tag
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -427,8 +429,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // git transport commit metadata lookup
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -447,20 +449,20 @@ describe("actions GitLab self-hosted fetcher", () => {
     expect(enriched[0].release?.tag_name).toBe("1.0.0");
     expect(enriched[0].release?.html_url).toContain("/-/tags/1.0.0");
     expect(enriched[0].release?.published_at_unknown).toBe(false);
-    expect(enriched[0].release?.published_at).toBe(
-      "2023-11-14T22:13:20.000Z",
-    );
+    expect(enriched[0].release?.published_at).toBe("2023-11-14T22:13:20.000Z");
     expect(enriched[0].release?.body).toContain("feat: release 1.0.0");
 
-    // @ts-ignore
-    const urls = (global.fetch as any).mock.calls.map((call: any[]) => call[0]);
+    // @ts-expect-error
+    const urls = vi.mocked(global.fetch).mock.calls.map((call) => call[0]);
     expect(
       urls.some((url: string) =>
         url.includes("/group/repo.git/info/refs?service=git-upload-pack"),
       ),
     ).toBe(true);
     expect(
-      urls.some((url: string) => url.includes("/group/repo.git/git-upload-pack")),
+      urls.some((url: string) =>
+        url.includes("/group/repo.git/git-upload-pack"),
+      ),
     ).toBe(true);
   });
 
@@ -473,18 +475,19 @@ describe("actions GitLab self-hosted fetcher", () => {
     const repo: Repository = {
       id: "gitlab:gitlab.self.test/group/repo",
       url: "https://gitlab.self.test/group/repo",
-    } as any;
+    };
 
     const pkt = (line: string) =>
       `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
     const commitSha = "6da1bcce308ad6958bbeba67a5f5e5c752a15b40";
     const gitRefsBody = `${pkt("# service=git-upload-pack\n")}0000${pkt(`${commitSha} refs/tags/1.0.0\n`)}0000`;
-    const invalidUploadPackResponse = new TextEncoder().encode("0008NAK\n0000")
-      .buffer;
+    const invalidUploadPackResponse = new TextEncoder().encode(
+      "0008NAK\n0000",
+    ).buffer;
 
     // releases endpoint -> 404
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 404,
       statusText: "Not Found",
@@ -493,8 +496,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // tags endpoint -> 404
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 404,
       statusText: "Not Found",
@@ -503,8 +506,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // git transport refs fallback succeeds
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -513,8 +516,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // first git-upload-pack call returns non-parseable payload
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -523,8 +526,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // second git-upload-pack call also non-parseable
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -542,7 +545,9 @@ describe("actions GitLab self-hosted fetcher", () => {
     expect(enriched[0].error).toBeUndefined();
     expect(enriched[0].release?.tag_name).toBe("1.0.0");
     expect(enriched[0].release?.published_at_unknown).toBe(true);
-    expect(enriched[0].release?.body).toContain("commit_message_unavailable_fallback");
+    expect(enriched[0].release?.body).toContain(
+      "commit_message_unavailable_fallback",
+    );
     expect(enriched[0].release?.body).toContain("6da1bcce308a");
   });
 
@@ -555,7 +560,7 @@ describe("actions GitLab self-hosted fetcher", () => {
     const repo: Repository = {
       id: "gitlab:gitlab.self.test/group/repo",
       url: "https://gitlab.self.test/group/repo",
-    } as any;
+    };
 
     const pkt = (line: string) =>
       `${(line.length + 4).toString(16).padStart(4, "0")}${line}`;
@@ -567,8 +572,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     );
 
     // releases endpoint -> 404
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 404,
       statusText: "Not Found",
@@ -577,8 +582,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // tags endpoint -> 404
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 404,
       statusText: "Not Found",
@@ -587,8 +592,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // git transport refs fallback succeeds
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -597,8 +602,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // first metadata request fails
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 400,
       statusText: "Bad Request",
@@ -607,8 +612,8 @@ describe("actions GitLab self-hosted fetcher", () => {
     });
 
     // second metadata request succeeds
-    // @ts-ignore
-    (global.fetch as any).mockResolvedValueOnce({
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -626,16 +631,18 @@ describe("actions GitLab self-hosted fetcher", () => {
     expect(enriched[0].error).toBeUndefined();
     expect(enriched[0].release?.tag_name).toBe("1.0.0");
     expect(enriched[0].release?.published_at_unknown).toBe(false);
-    expect(enriched[0].release?.published_at).toBe(
-      "2023-11-26T12:00:00.000Z",
+    expect(enriched[0].release?.published_at).toBe("2023-11-26T12:00:00.000Z");
+    expect(enriched[0].release?.body).toContain(
+      "fix: fallback commit metadata",
     );
-    expect(enriched[0].release?.body).toContain("fix: fallback commit metadata");
 
-    // @ts-ignore
-    const uploadPackCalls = (global.fetch as any).mock.calls.filter(
-      (call: any[]) =>
-        typeof call[0] === "string" && call[0].includes("/git-upload-pack"),
-    );
+    // @ts-expect-error
+    const uploadPackCalls = vi
+      .mocked(global.fetch)
+      .mock.calls.filter(
+        (call) =>
+          typeof call[0] === "string" && call[0].includes("/git-upload-pack"),
+      );
     expect(uploadPackCalls.length).toBe(2);
   });
 });

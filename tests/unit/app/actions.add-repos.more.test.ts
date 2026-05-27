@@ -1,48 +1,59 @@
 // vitest globals enabled
 
-vi.mock('next/cache', () => ({
+import type { Repository } from "@/types";
+
+vi.mock("next/cache", () => ({
   revalidatePath: () => {},
   updateTag: () => {},
 }));
 
-vi.mock('next-intl/server', () => ({
-  getTranslations: async () => (key: string, vars?: Record<string, any>) => key,
-  getLocale: async () => 'en',
+vi.mock("next-intl/server", () => ({
+  getTranslations: async () => (key: string, _vars?: Record<string, unknown>) =>
+    key,
+  getLocale: async () => "en",
 }));
 
-const mem: { repos: any[] } = { repos: [] };
-vi.mock('@/lib/repository-storage', () => ({
+const mem: { repos: Repository[] } = { repos: [] };
+vi.mock("@/lib/storage/repositories", () => ({
   getRepositories: async () => mem.repos,
-  saveRepositories: async (list: any[]) => { mem.repos = JSON.parse(JSON.stringify(list)); },
+  saveRepositories: async (list: Repository[]) => {
+    mem.repos = JSON.parse(JSON.stringify(list));
+  },
 }));
 
-describe('addRepositoriesAction edge cases', () => {
-  beforeEach(() => { vi.resetModules(); mem.repos = []; });
-
-  it('returns error when input is empty or whitespace', async () => {
-    const { addRepositoriesAction } = await import('@/app/actions');
-    const fd = new FormData();
-    fd.set('urls', '   ');
-    const res = await addRepositoriesAction({}, fd);
-    expect(res.success).toBe(false);
-    expect(res.error).toBe('toast_fail_description_manual');
+describe("addRepositoriesAction edge cases", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mem.repos = [];
   });
 
-  it('adds parsed repos (duplicates in same batch are kept) and returns a jobId', async () => {
-    const { addRepositoriesAction } = await import('@/app/actions');
+  it("returns error when input is empty or whitespace", async () => {
+    const { addRepositoriesAction } = await import("@/app/actions");
+    const fd = new FormData();
+    fd.set("urls", "   ");
+    const res = await addRepositoriesAction({}, fd);
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("toast_fail_description_manual");
+  });
+
+  it("adds parsed repos (duplicates in same batch are kept) and returns a jobId", async () => {
+    const { addRepositoriesAction } = await import("@/app/actions");
     const fd = new FormData();
     // Duplicate of the same repo plus a second one with mixed case and spaces
-    fd.set('urls', 'https://github.com/Owner/Repo\nhttps://github.com/owner/repo\n  https://github.com/Another/Repo  ');
+    fd.set(
+      "urls",
+      "https://github.com/Owner/Repo\nhttps://github.com/owner/repo\n  https://github.com/Another/Repo  ",
+    );
 
     const res = await addRepositoriesAction({}, fd);
     expect(res.success).toBe(true);
-    expect(typeof res.jobId).toBe('string');
+    expect(typeof res.jobId).toBe("string");
     // Saved repos, normalized to lowercase; current implementation does not de-duplicate within one batch
-    const ids = mem.repos.map(r => r.id).sort();
+    const ids = mem.repos.map((r) => r.id).sort();
     expect(ids).toEqual([
-      'github:another/repo',
-      'github:owner/repo',
-      'github:owner/repo',
+      "github:another/repo",
+      "github:owner/repo",
+      "github:owner/repo",
     ]);
   });
 });

@@ -2,7 +2,7 @@
 
 vi.mock("next/cache", () => ({
   revalidatePath: () => {},
-  unstable_cache: (fn: any) => fn,
+  unstable_cache: <T extends (...args: never[]) => unknown>(fn: T) => fn,
   updateTag: () => {},
 }));
 
@@ -16,7 +16,7 @@ describe("resolveRepoProvidersAction", () => {
 
   beforeEach(() => {
     vi.resetModules();
-    // @ts-ignore
+    // @ts-expect-error
     global.fetch = vi.fn();
   });
 
@@ -32,8 +32,8 @@ describe("resolveRepoProvidersAction", () => {
   it("returns only the provider that exists", async () => {
     const actions = await import("@/app/actions");
 
-    // @ts-ignore
-    (global.fetch as any)
+    // @ts-expect-error
+    vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" })
       .mockResolvedValueOnce({
         ok: false,
@@ -60,8 +60,8 @@ describe("resolveRepoProvidersAction", () => {
   it("returns multiple candidates when they all exist", async () => {
     const actions = await import("@/app/actions");
 
-    // @ts-ignore
-    (global.fetch as any)
+    // @ts-expect-error
+    vi.mocked(global.fetch)
       .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" })
       .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" })
       .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" });
@@ -81,10 +81,18 @@ describe("resolveRepoProvidersAction", () => {
       "gitlab.com=glpat-main,gitlab.self.test=glpat-self";
     const actions = await import("@/app/actions");
 
-    // @ts-ignore
-    (global.fetch as any)
-      .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found" }) // github
-      .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found" }) // codeberg
+    // @ts-expect-error
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+      }) // github
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+      }) // codeberg
       .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" }) // gitlab.com
       .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" }); // gitlab.self.test
 
@@ -112,20 +120,34 @@ describe("resolveRepoProvidersAction", () => {
       "gitlab.self.test=gitlab+deploy-token-1:gl-dpt-abc";
     const actions = await import("@/app/actions");
 
-    // @ts-ignore
-    (global.fetch as any)
-      .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found" }) // github
-      .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found" }) // codeberg
-      .mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found" }) // gitlab.com
+    // @ts-expect-error
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+      }) // github
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+      }) // codeberg
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+      }) // gitlab.com
       .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" }); // gitlab.self.test
 
     const res = await actions.resolveRepoProvidersAction("owner/repo");
     expect(res.success).toBe(true);
 
-    // @ts-ignore
-    const gitlabSelfCall = (global.fetch as any).mock.calls.find((call: any[]) =>
-      String(call[0]).includes("https://gitlab.self.test/api/v4/projects/"),
-    );
+    // @ts-expect-error
+    const gitlabSelfCall = vi
+      .mocked(global.fetch)
+      .mock.calls.find((call) =>
+        String(call[0]).includes("https://gitlab.self.test/api/v4/projects/"),
+      );
     expect(gitlabSelfCall).toBeTruthy();
     expect(gitlabSelfCall[1].headers.Authorization.startsWith("Basic ")).toBe(
       true,
@@ -140,6 +162,6 @@ describe("resolveRepoProvidersAction", () => {
     );
     expect(res.success).toBe(true);
     expect(res.candidates).toEqual([]);
-    expect((global.fetch as any).mock.calls.length).toBe(0);
+    expect(vi.mocked(global.fetch).mock.calls.length).toBe(0);
   });
 });

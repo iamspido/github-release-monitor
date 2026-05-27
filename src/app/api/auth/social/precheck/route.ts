@@ -4,7 +4,7 @@ import {
   buildSocialLoginIntentSetCookieHeader,
   buildSocialLoginIntentValue,
   type SocialLoginProvider,
-} from "@/lib/auth-social-login-intent";
+} from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
 
 const log = logger.withScope("AuthSocialPrecheck");
