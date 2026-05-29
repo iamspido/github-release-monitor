@@ -1,3 +1,5 @@
+"use server";
+
 import { logger } from "@/lib/logger";
 import { getSystemStatus, saveSystemStatus } from "@/lib/storage/system-status";
 import type { SystemStatus } from "@/types";

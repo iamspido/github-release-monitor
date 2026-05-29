@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import { getUpdateNotificationState } from "@/app/actions";
 import { AccountCredentialsSettingsCard } from "@/components/account-credentials-settings-card";
 import { Header } from "@/components/header";
 import { OfflineInlineNotice } from "@/components/offline-inline-notice";
@@ -10,7 +11,6 @@ import {
 import { SocialAccountsSettingsCard } from "@/components/social-accounts-settings-card";
 import { TwoFactorSettingsCard } from "@/components/two-factor-settings-card";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
-import { getUpdateNotificationState } from "@/lib/runtime/app-update-notice";
 import { getSettings } from "@/lib/storage/settings";
 import type { AppSettings } from "@/types";
 

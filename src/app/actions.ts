@@ -1,6 +1,5 @@
 "use server";
 
-import { getCurrentAuthAccess } from "@/lib/auth/access";
 import {
   getCodebergTokenCheck as getCodebergTokenCheckImpl,
   getGitHubRateLimit as getGitHubRateLimitImpl,
@@ -37,31 +36,6 @@ import {
   setupTestRepositoryAction as setupTestRepositoryActionImpl,
   triggerReleaseCheckAction as triggerReleaseCheckActionImpl,
 } from "@/lib/test-release-actions";
-import type { UpdateNotificationState } from "@/types";
-
-async function canCallExposedRestrictedAction(): Promise<boolean> {
-  const access = await getCurrentAuthAccess();
-  return access.canMutate;
-}
-
-async function getRestrictedActionError(): Promise<string> {
-  const { getLocale, getTranslations } = await import("next-intl/server");
-  const locale = await getLocale();
-  const t = await getTranslations({ locale, namespace: "Actions" });
-  return t("error_auth_required");
-}
-
-function getEmptyUpdateNotificationState(): UpdateNotificationState {
-  return {
-    latestVersion: null,
-    currentVersion: process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0",
-    lastCheckedAt: null,
-    lastCheckError: null,
-    hasUpdate: false,
-    isDismissed: false,
-    shouldNotify: false,
-  };
-}
 
 export async function previewComposeImportAction(
   ...args: Parameters<typeof previewComposeImportActionImpl>
@@ -78,9 +52,6 @@ export async function resolveRepoProvidersAction(
 export async function getLatestReleasesForRepos(
   ...args: Parameters<typeof getLatestReleasesForReposImpl>
 ) {
-  if (!(await canCallExposedRestrictedAction())) {
-    return [];
-  }
   return getLatestReleasesForReposImpl(...args);
 }
 
@@ -105,9 +76,6 @@ export async function refreshSingleRepositoryAction(
 export async function refreshMultipleRepositoriesAction(
   ...args: Parameters<typeof refreshMultipleRepositoriesActionImpl>
 ) {
-  if (!(await canCallExposedRestrictedAction())) {
-    return;
-  }
   return refreshMultipleRepositoriesActionImpl(...args);
 }
 
@@ -132,18 +100,12 @@ export async function markAsNewAction(
 export async function checkForNewReleases(
   ...args: Parameters<typeof checkForNewReleasesImpl>
 ) {
-  if (!(await canCallExposedRestrictedAction())) {
-    throw new Error(await getRestrictedActionError());
-  }
   return checkForNewReleasesImpl(...args);
 }
 
 export async function getUpdateNotificationState(
   ...args: Parameters<typeof getUpdateNotificationStateImpl>
 ) {
-  if (!(await canCallExposedRestrictedAction())) {
-    return getEmptyUpdateNotificationState();
-  }
   return getUpdateNotificationStateImpl(...args);
 }
 
@@ -174,27 +136,18 @@ export async function triggerReleaseCheckAction(
 export async function getGitHubRateLimit(
   ...args: Parameters<typeof getGitHubRateLimitImpl>
 ) {
-  if (!(await canCallExposedRestrictedAction())) {
-    return { data: null, error: "api_error" as const };
-  }
   return getGitHubRateLimitImpl(...args);
 }
 
 export async function getGitlabTokenCheck(
   ...args: Parameters<typeof getGitlabTokenCheckImpl>
 ) {
-  if (!(await canCallExposedRestrictedAction())) {
-    return { status: "api_error" as const };
-  }
   return getGitlabTokenCheckImpl(...args);
 }
 
 export async function getCodebergTokenCheck(
   ...args: Parameters<typeof getCodebergTokenCheckImpl>
 ) {
-  if (!(await canCallExposedRestrictedAction())) {
-    return { status: "api_error" as const };
-  }
   return getCodebergTokenCheckImpl(...args);
 }
 
@@ -231,9 +184,6 @@ export async function refreshDueRepositoriesAction(
 export async function getRepositoriesForExport(
   ...args: Parameters<typeof getRepositoriesForExportImpl>
 ) {
-  if (!(await canCallExposedRestrictedAction())) {
-    return { success: false, error: await getRestrictedActionError() };
-  }
   return getRepositoriesForExportImpl(...args);
 }
 
@@ -246,17 +196,11 @@ export async function updateRepositorySettingsAction(
 export async function revalidateReleasesAction(
   ...args: Parameters<typeof revalidateReleasesActionImpl>
 ) {
-  if (!(await canCallExposedRestrictedAction())) {
-    return;
-  }
   return revalidateReleasesActionImpl(...args);
 }
 
 export async function getJobStatusAction(
   ...args: Parameters<typeof getJobStatusActionImpl>
 ) {
-  if (!(await canCallExposedRestrictedAction())) {
-    return { status: undefined };
-  }
   return getJobStatusActionImpl(...args);
 }

@@ -1,15 +1,15 @@
 import { getTranslations } from "next-intl/server";
-import { checkAppriseStatusAction } from "@/app/actions";
-import { Header } from "@/components/header";
-import { TestPageClient } from "@/components/test-page-client";
-import { getCurrentAuthAccess } from "@/lib/auth/access";
 import {
+  checkAppriseStatusAction,
   getCodebergTokenCheck,
   getGitHubRateLimit,
   getGitlabTokenCheck,
-} from "@/lib/diagnostics/provider-checks";
+  getUpdateNotificationState,
+} from "@/app/actions";
+import { Header } from "@/components/header";
+import { TestPageClient } from "@/components/test-page-client";
+import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
-import { getUpdateNotificationState } from "@/lib/runtime/app-update-notice";
 import type {
   AppriseStatus,
   NotificationConfig,

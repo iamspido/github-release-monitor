@@ -1,3 +1,5 @@
+"use server";
+
 import { getTranslations } from "next-intl/server";
 import { logger } from "@/lib/logger";
 import {

@@ -1,11 +1,11 @@
 import { getTranslations } from "next-intl/server";
+import { getUpdateNotificationState } from "@/app/actions";
 import { AutoRefresher } from "@/components/auto-refresher";
 import { BackToTopButton } from "@/components/back-to-top-button";
 import { Header } from "@/components/header";
 import { HomePageClient } from "@/components/home-page-client";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
-import { getUpdateNotificationState } from "@/lib/runtime/app-update-notice";
 import { getRepositories } from "@/lib/storage/repositories";
 import { getSettings } from "@/lib/storage/settings";
 import type {
