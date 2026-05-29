@@ -4,6 +4,11 @@ import { remark } from "remark";
 import remarkGfm from "remark-gfm";
 import remarkHtml from "remark-html";
 import { logger } from "@/lib/logger";
+import {
+  escapeHtml,
+  escapeHtmlAttribute,
+  safeExternalUrl,
+} from "@/lib/notifications/content-safety";
 import type { GithubRelease, Repository, TimeFormat } from "@/types";
 
 export async function getFormattedDate(
@@ -99,19 +104,30 @@ export async function generateHtmlReleaseBody(
     repoId: repository.id,
     tagName: release.tag_name,
   });
+  const subjectHtml = escapeHtml(subject);
   const { htmlDate } = await getFormattedDate(
     new Date(release.created_at),
     locale,
     timeFormat,
   );
+  const safeLocale = escapeHtmlAttribute(locale);
+  const safeRepoId = escapeHtml(repository.id);
+  const safeRepoUrl = escapeHtmlAttribute(safeExternalUrl(repository.url));
+  const safeReleaseTagName = escapeHtml(release.tag_name);
+  const safeReleaseName = escapeHtml(release.name || "N/A");
+  const safeReleaseUrl = escapeHtmlAttribute(safeExternalUrl(release.html_url));
+  const safeHtmlDate = escapeHtml(htmlDate);
 
   const releaseBodyHtml = release.body
     ? String(
-        await remark().use(remarkGfm).use(remarkHtml).process(release.body),
+        await remark()
+          .use(remarkGfm)
+          .use(remarkHtml, { sanitize: true })
+          .process(release.body),
       )
-    : `<p style="font-style: italic;">${t("html_no_notes")}</p>`;
+    : `<p style="font-style: italic;">${escapeHtml(t("html_no_notes"))}</p>`;
 
-  const repoLink = `<a href="${repository.url}" style="color: #8c9fe8; text-decoration: none;"><strong style="color: #fafafa;">${repository.id}</strong></a>`;
+  const repoLink = `<a href="${safeRepoUrl}" style="color: #8c9fe8; text-decoration: none;"><strong style="color: #fafafa;">${safeRepoId}</strong></a>`;
   const introHtml = t("html_intro", { repoId: "REPO_PLACEHOLDER" }).replace(
     "REPO_PLACEHOLDER",
     repoLink,
@@ -119,13 +135,13 @@ export async function generateHtmlReleaseBody(
 
   return `
     <!DOCTYPE html>
-    <html lang="${locale}">
+    <html lang="${safeLocale}">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <meta name="color-scheme" content="dark">
       <meta name="supported-color-schemes" content="dark">
-      <title>${subject}</title>
+      <title>${subjectHtml}</title>
       <style>
         :root {
           color-scheme: dark;
@@ -248,20 +264,20 @@ export async function generateHtmlReleaseBody(
     </head>
     <body>
       <div class="container">
-        <h2>${t("html_title", { repoId: repository.id, tagName: release.tag_name })}</h2>
+        <h2>${escapeHtml(t("html_title", { repoId: repository.id, tagName: release.tag_name }))}</h2>
         <p>${introHtml}</p>
         <ul style="padding-left: 20px; margin-top: 16px; margin-bottom: 24px;">
-          <li><strong style="color: #fafafa;">${t("html_list_version_label")}</strong> ${release.tag_name}</li>
-          <li><strong style="color: #fafafa;">${t("html_list_name_label")}</strong> ${release.name || "N/A"}</li>
-          <li><strong style="color: #fafafa;">${t("html_list_date_label")}</strong> ${htmlDate}</li>
+          <li><strong style="color: #fafafa;">${escapeHtml(t("html_list_version_label"))}</strong> ${safeReleaseTagName}</li>
+          <li><strong style="color: #fafafa;">${escapeHtml(t("html_list_name_label"))}</strong> ${safeReleaseName}</li>
+          <li><strong style="color: #fafafa;">${escapeHtml(t("html_list_date_label"))}</strong> ${safeHtmlDate}</li>
         </ul>
-        <h3>${t("html_notes_title")}</h3>
+        <h3>${escapeHtml(t("html_notes_title"))}</h3>
         <div class="release-notes-container">
           ${releaseBodyHtml}
         </div>
         <p style="margin-top: 24px;">
-          <a href="${release.html_url}" class="button">
-            ${t("html_button_text")}
+          <a href="${safeReleaseUrl}" class="button">
+            ${escapeHtml(t("html_button_text"))}
           </a>
         </p>
       </div>

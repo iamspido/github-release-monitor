@@ -64,6 +64,42 @@ describe("notifications/email", () => {
     expect(html).toContain("html_no_notes");
   });
 
+  it("escapes untrusted release and repository fields in HTML output", async () => {
+    const maliciousRepo: Repository = {
+      id: `owner/<strong onclick="alert(1)">repo</strong>`,
+      url: `javascript:alert(1)" data-evil="true`,
+    };
+    const maliciousRelease: GithubRelease = {
+      ...release,
+      html_url: `javascript:alert(2)" data-evil="true`,
+      tag_name: `v1"><img src=x onerror="alert(3)">`,
+      name: `<script>alert(4)</script> & "release"`,
+      body: `<script>alert(5)</script><img src=x onerror="alert(6)">`,
+    };
+
+    const html = await generateHtmlReleaseBody(
+      maliciousRelease,
+      maliciousRepo,
+      "en",
+      "24h",
+    );
+
+    expect(html).toContain(
+      `owner/&lt;strong onclick=&quot;alert(1)&quot;&gt;repo&lt;/strong&gt;`,
+    );
+    expect(html).toContain(
+      `v1&quot;&gt;&lt;img src=x onerror=&quot;alert(3)&quot;&gt;`,
+    );
+    expect(html).toContain(
+      `&lt;script&gt;alert(4)&lt;/script&gt; &amp; &quot;release&quot;`,
+    );
+    expect(html).toContain(`href="#"`);
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("javascript:");
+    expect(html).not.toContain("data-evil");
+  });
+
   it("sendNewReleaseEmail throws on incomplete config", async () => {
     delete process.env.MAIL_HOST;
     await expect(

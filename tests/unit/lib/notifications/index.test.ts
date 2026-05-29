@@ -8,6 +8,12 @@ const { sendNewReleaseEmailMock } = vi.hoisted(() => ({
 vi.mock("next-intl/server", () => ({
   getTranslations:
     async () => (key: string, vars?: Record<string, unknown>) => {
+      if (key === "text_new_version_of_markdown") {
+        return "A new version of REPO_PLACEHOLDER has been released.";
+      }
+      if (key === "view_on_github_link" && vars?.link) {
+        return `[View release](${vars.link})`;
+      }
       if (vars?.repoId) return `${key}:${vars.repoId}`;
       if (vars?.tagName) return `${key}:${vars.tagName}`;
       return key;
@@ -135,6 +141,45 @@ describe("notifications/index", () => {
     const body = JSON.parse(call[1].body);
     expect(url).toMatch(/\/notify$/);
     expect(body.format).toBe("markdown"); // repo override
+  });
+
+  it("escapes Apprise markdown metadata and unsafe link destinations", async () => {
+    process.env.APPRISE_URL = "http://apprise.test/notify";
+    // @ts-expect-error
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      text: async () => "",
+      status: 200,
+      headers: new Headers(),
+    });
+
+    const maliciousRepo: Repository = {
+      id: "owner](https://evil.test)<b>",
+      url: "javascript:alert(1)",
+      appriseFormat: "markdown",
+    };
+    const maliciousRelease: GithubRelease = {
+      ...release,
+      html_url: "javascript:alert(2)",
+      tag_name: "v1](https://evil.test)",
+      name: "Name **bold** [x](https://evil.test)",
+    };
+
+    await sendNotification(maliciousRepo, maliciousRelease, "en", baseSettings);
+
+    const call = vi.mocked(global.fetch).mock.calls[0];
+    const payload = JSON.parse(call[1].body);
+    expect(payload.format).toBe("markdown");
+    expect(payload.body).toContain(
+      "owner\\]\\(https://evil\\.test\\)\\<b\\>",
+    );
+    expect(payload.body).toContain("v1\\]\\(https://evil\\.test\\)");
+    expect(payload.body).toContain(
+      "Name \\*\\*bold\\*\\* \\[x\\]\\(https://evil\\.test\\)",
+    );
+    expect(payload.body).toContain("](#)");
+    expect(payload.body).not.toContain("javascript:");
+    expect(payload.body).not.toContain("Name **bold** [x]");
   });
 
   it("appriseMaxCharacters truncates text payload", async () => {

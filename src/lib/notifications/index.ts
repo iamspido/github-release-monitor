@@ -1,6 +1,10 @@
 import { getTranslations } from "next-intl/server";
 import { logger } from "@/lib/logger";
 import {
+  escapeMarkdownLinkDestination,
+  escapeMarkdownText,
+} from "@/lib/notifications/content-safety";
+import {
   generateHtmlReleaseBody,
   generatePlainTextReleaseBody,
   getFormattedDate,
@@ -29,16 +33,16 @@ async function generateMarkdownReleaseBody(
   );
 
   const viewOnGithubText = tApprise("view_on_github_link", {
-    link: release.html_url,
+    link: escapeMarkdownLinkDestination(release.html_url),
   });
   const truncatedText = tApprise("truncated_message");
   const footerSeparator = "\n\n---\n\n";
 
   const title = tApprise("title", {
-    repoId: repository.id,
-    tagName: release.tag_name,
+    repoId: escapeMarkdownText(repository.id),
+    tagName: escapeMarkdownText(release.tag_name),
   });
-  const repoLink = `**[${repository.id}](${repository.url})**`;
+  const repoLink = `**[${escapeMarkdownText(repository.id)}](${escapeMarkdownLinkDestination(repository.url)})**`;
   const introText = t("text_new_version_of_markdown").replace(
     "REPO_PLACEHOLDER",
     repoLink,
@@ -49,9 +53,9 @@ async function generateMarkdownReleaseBody(
 
 ${introText}
 
-* **${t("text_version_label")}**: ${release.tag_name}
-* **${t("text_release_name_label")}**: ${release.name || "N/A"}
-* **${t("text_release_date_label")}**: ${htmlDate}
+* **${t("text_version_label")}**: ${escapeMarkdownText(release.tag_name)}
+* **${t("text_release_name_label")}**: ${escapeMarkdownText(release.name || "N/A")}
+* **${t("text_release_date_label")}**: ${escapeMarkdownText(htmlDate)}
 `;
 
   let body = `${header.trim()}\n\n### ${t("text_release_notes_label")}\n---\n${release.body || t("text_no_notes")}`;
