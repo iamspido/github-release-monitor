@@ -161,3 +161,16 @@ export function buildSocialLoginIntentSetCookieHeader(
     .filter(Boolean)
     .join("; ");
 }
+
+export async function setSocialLoginIntentCookie(value: string | null) {
+  const { cookies } = await import("next/headers");
+  const cookieStore = await cookies();
+  const maxAge = value ? SOCIAL_LOGIN_INTENT_TTL_SECONDS : 0;
+  cookieStore.set(SOCIAL_LOGIN_INTENT_COOKIE_NAME, value ?? "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.HTTPS !== "false",
+    path: "/",
+    maxAge,
+  });
+}

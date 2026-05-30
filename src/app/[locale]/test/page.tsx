@@ -3,6 +3,7 @@ import { checkAppriseStatusAction } from "@/app/actions";
 import { Header } from "@/components/header";
 import { TestPageClient } from "@/components/test-page-client";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
+import { buildNotificationConfig } from "@/lib/diagnostics/notification-config";
 import {
   getCodebergTokenCheck,
   getGitHubRateLimit,
@@ -12,46 +13,9 @@ import { logger } from "@/lib/logger";
 import { getUpdateNotificationState } from "@/lib/runtime/app-update-notice";
 import type {
   AppriseStatus,
-  NotificationConfig,
   RateLimitResult,
   UpdateNotificationState,
 } from "@/types";
-
-function getNotificationConfig(): NotificationConfig {
-  const {
-    MAIL_HOST,
-    MAIL_PORT,
-    MAIL_USERNAME,
-    MAIL_PASSWORD,
-    MAIL_FROM_ADDRESS,
-    MAIL_FROM_NAME,
-    MAIL_TO_ADDRESS,
-    APPRISE_URL,
-  } = process.env;
-
-  const isSmtpConfigured = !!(
-    MAIL_HOST &&
-    MAIL_PORT &&
-    MAIL_FROM_ADDRESS &&
-    MAIL_TO_ADDRESS
-  );
-  const isAppriseConfigured = !!APPRISE_URL;
-
-  return {
-    isSmtpConfigured,
-    isAppriseConfigured,
-    variables: {
-      MAIL_HOST: MAIL_HOST || null,
-      MAIL_PORT: MAIL_PORT || null,
-      MAIL_USERNAME: MAIL_USERNAME || null,
-      MAIL_PASSWORD: MAIL_PASSWORD || null,
-      MAIL_FROM_ADDRESS: MAIL_FROM_ADDRESS || null,
-      MAIL_FROM_NAME: MAIL_FROM_NAME || null,
-      MAIL_TO_ADDRESS: MAIL_TO_ADDRESS || null,
-      APPRISE_URL: APPRISE_URL || null,
-    },
-  };
-}
 
 export default async function TestPage({
   params,
@@ -64,7 +28,7 @@ export default async function TestPage({
   const githubTokenSet = !!process.env.GITHUB_ACCESS_TOKEN;
   const gitlabTokenCheck = await getGitlabTokenCheck();
   const codebergTokenCheck = await getCodebergTokenCheck();
-  const notificationConfig = getNotificationConfig();
+  const notificationConfig = buildNotificationConfig();
   const updateNotice: UpdateNotificationState =
     await getUpdateNotificationState();
   const authAccess = await getCurrentAuthAccess();

@@ -2,6 +2,14 @@
 
 import { getCurrentAuthAccess } from "@/lib/auth/access";
 import {
+  beginSecretRevealStepUpActionImpl,
+  completeSecretRevealStepUpActionImpl,
+  getSecretRevealOptionsActionImpl,
+  revealAppriseUrlActionImpl,
+  revealMailPasswordActionImpl,
+  verifySecretRevealTotpActionImpl,
+} from "@/lib/diagnostics/notification-config";
+import {
   getCodebergTokenCheck as getCodebergTokenCheckImpl,
   getGitHubRateLimit as getGitHubRateLimitImpl,
   getGitlabTokenCheck as getGitlabTokenCheckImpl,
@@ -196,6 +204,42 @@ export async function getCodebergTokenCheck(
     return { status: "api_error" as const };
   }
   return getCodebergTokenCheckImpl(...args);
+}
+
+export async function revealMailPasswordAction(
+  ...args: Parameters<typeof revealMailPasswordActionImpl>
+) {
+  return revealMailPasswordActionImpl(...args);
+}
+
+export async function revealAppriseUrlAction(
+  ...args: Parameters<typeof revealAppriseUrlActionImpl>
+) {
+  return revealAppriseUrlActionImpl(...args);
+}
+
+export async function getSecretRevealOptionsAction(
+  ...args: Parameters<typeof getSecretRevealOptionsActionImpl>
+) {
+  return getSecretRevealOptionsActionImpl(...args);
+}
+
+export async function beginSecretRevealStepUpAction(
+  ...args: Parameters<typeof beginSecretRevealStepUpActionImpl>
+) {
+  return beginSecretRevealStepUpActionImpl(...args);
+}
+
+export async function completeSecretRevealStepUpAction(
+  ...args: Parameters<typeof completeSecretRevealStepUpActionImpl>
+) {
+  return completeSecretRevealStepUpActionImpl(...args);
+}
+
+export async function verifySecretRevealTotpAction(
+  ...args: Parameters<typeof verifySecretRevealTotpActionImpl>
+) {
+  return verifySecretRevealTotpActionImpl(...args);
 }
 
 export async function sendTestEmailAction(

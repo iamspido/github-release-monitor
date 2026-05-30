@@ -585,6 +585,14 @@ function isSqliteMissingColumnError(error: unknown) {
   );
 }
 
+function isSqliteMissingTableError(error: unknown) {
+  return (
+    error instanceof Error &&
+    typeof error.message === "string" &&
+    error.message.toLowerCase().includes("no such table")
+  );
+}
+
 export function hasCredentialPasswordAccount(userId: string) {
   const normalizedUserId = userId.trim();
   if (!normalizedUserId) return false;
@@ -849,6 +857,100 @@ function hasLinkedSocialProviderAccount(
       }
       log.error(
         `Failed social account linkage check for user='${normalizedUserId}' provider='${provider}'.`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  return false;
+}
+
+export function getLinkedSocialProvidersForUser(userId: string) {
+  return (["github", "google"] as const).filter((provider) =>
+    hasLinkedSocialProviderAccount(userId, provider),
+  );
+}
+
+export function hasVerifiedTotpForUser(userId: string) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) return false;
+
+  try {
+    const userRow = db
+      .prepare("SELECT twoFactorEnabled FROM user WHERE id = ? LIMIT 1")
+      .get(normalizedUserId) as
+      | { twoFactorEnabled?: boolean | number | string | null }
+      | undefined;
+    const twoFactorEnabled = userRow?.twoFactorEnabled;
+    if (
+      twoFactorEnabled !== true &&
+      twoFactorEnabled !== 1 &&
+      twoFactorEnabled !== "1"
+    ) {
+      return false;
+    }
+  } catch (error) {
+    if (!isSqliteMissingColumnError(error)) {
+      log.error(
+        `Failed to check 2FA user flag for user='${normalizedUserId}'.`,
+        error,
+      );
+    }
+    return false;
+  }
+
+  const queries = [
+    "SELECT id FROM twoFactor WHERE userId = ? AND verified = 1 LIMIT 1",
+    "SELECT id FROM twoFactor WHERE user_id = ? AND verified = 1 LIMIT 1",
+    "SELECT id FROM two_factor WHERE userId = ? AND verified = 1 LIMIT 1",
+    "SELECT id FROM two_factor WHERE user_id = ? AND verified = 1 LIMIT 1",
+  ] as const;
+
+  for (const query of queries) {
+    try {
+      const row = db.prepare(query).get(normalizedUserId);
+      return Boolean(row);
+    } catch (error) {
+      if (
+        isSqliteMissingColumnError(error) ||
+        isSqliteMissingTableError(error)
+      ) {
+        continue;
+      }
+      log.error(
+        `Failed to check TOTP linkage for user='${normalizedUserId}'.`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  return false;
+}
+
+export function hasPasskeyForUser(userId: string) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) return false;
+
+  const queries = [
+    "SELECT id FROM passkey WHERE userId = ? LIMIT 1",
+    "SELECT id FROM passkey WHERE user_id = ? LIMIT 1",
+  ] as const;
+
+  for (const query of queries) {
+    try {
+      const row = db.prepare(query).get(normalizedUserId);
+      return Boolean(row);
+    } catch (error) {
+      if (
+        isSqliteMissingColumnError(error) ||
+        isSqliteMissingTableError(error)
+      ) {
+        continue;
+      }
+      log.error(
+        `Failed to check passkey linkage for user='${normalizedUserId}'.`,
         error,
       );
       return false;

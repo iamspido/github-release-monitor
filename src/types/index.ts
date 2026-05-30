@@ -128,9 +128,14 @@ export type GitlabTokenCheckResult =
 export type NotificationConfig = {
   isSmtpConfigured: boolean;
   isAppriseConfigured: boolean;
-  variables: {
-    [key: string]: string | null;
-  };
+  variables: Array<{
+    key: string;
+    displayValue: string | null;
+    isSet: boolean;
+    isRequired: boolean;
+    isSensitive: boolean;
+    revealMode: "none" | "external_click" | "password_confirm";
+  }>;
 };
 
 export type AppriseStatus = {

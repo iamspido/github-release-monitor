@@ -7,10 +7,13 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  Fingerprint,
+  KeyRound,
   Loader2,
   Mail,
   PackagePlus,
   RefreshCw,
+  ShieldCheck,
   Workflow,
   XCircle,
 } from "lucide-react";
@@ -18,13 +21,20 @@ import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import {
+  beginSecretRevealStepUpAction,
   checkAppriseStatusAction,
+  completeSecretRevealStepUpAction,
+  getSecretRevealOptionsAction,
+  revealAppriseUrlAction,
+  revealMailPasswordAction,
   sendTestAppriseAction,
   sendTestEmailAction,
   setupTestRepositoryAction,
   triggerAppUpdateCheckAction,
   triggerReleaseCheckAction,
+  verifySecretRevealTotpAction,
 } from "@/app/actions";
+import { GoogleBrandIcon } from "@/components/google-brand-icon";
 import {
   CodebergBrandIcon,
   GithubBrandIcon,
@@ -38,10 +48,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { authClient } from "@/lib/auth/client";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type {
@@ -62,6 +81,17 @@ interface TestPageClientProps {
   appriseStatus: AppriseStatus;
   updateNotice: UpdateNotificationState;
 }
+
+type SecretRevealTarget = "mail_password" | "apprise_url";
+type SecretRevealSocialProvider = "github" | "google";
+type SecretRevealMethods = {
+  password: boolean;
+  totp: boolean;
+  passkey: boolean;
+  socialProviders: SecretRevealSocialProvider[];
+};
+
+const SECRET_REVEAL_TARGET_STORAGE_KEY = "diagnosticSecretRevealTarget";
 
 function StatusIndicator({
   status,
@@ -110,16 +140,47 @@ export function TestPageClient({
   const [isCheckingApprise, startAppriseCheckTransition] =
     React.useTransition();
   const [isCheckingUpdate, startUpdateTransition] = React.useTransition();
+  const [isRevealingMailPassword, startMailPasswordRevealTransition] =
+    React.useTransition();
+  const [isRevealingAppriseUrl, startAppriseUrlRevealTransition] =
+    React.useTransition();
 
   const { toast } = useToast();
   const [resetTime, setResetTime] = React.useState(t("not_available"));
-  const [isPasswordVisible, setIsPasswordVisible] = React.useState(false);
   const [customEmail, setCustomEmail] = React.useState("");
   const [isEmailInvalid, setIsEmailInvalid] = React.useState(false);
   const [appriseStatus, setAppriseStatus] =
     React.useState(initialAppriseStatus);
   const [updateNotice, setUpdateNotice] = React.useState(initialUpdateNotice);
+  const [revealedMailPassword, setRevealedMailPassword] = React.useState<
+    string | null
+  >(null);
+  const [mailPasswordDialogOpen, setMailPasswordDialogOpen] =
+    React.useState(false);
+  const [mailPasswordConfirmValue, setMailPasswordConfirmValue] =
+    React.useState("");
+  const [mailPasswordRevealError, setMailPasswordRevealError] =
+    React.useState("");
+  const [revealedAppriseUrl, setRevealedAppriseUrl] = React.useState<
+    string | null
+  >(null);
+  const [appriseUrlDialogOpen, setAppriseUrlDialogOpen] = React.useState(false);
+  const [appriseUrlConfirmValue, setAppriseUrlConfirmValue] =
+    React.useState("");
+  const [appriseUrlRevealError, setAppriseUrlRevealError] = React.useState("");
+  const [secretRevealMethods, setSecretRevealMethods] =
+    React.useState<SecretRevealMethods | null>(null);
+  const [secretRevealOptionsLoading, setSecretRevealOptionsLoading] =
+    React.useState(false);
+  const [secretRevealTotpCode, setSecretRevealTotpCode] = React.useState("");
+  const [secretRevealStepUpError, setSecretRevealStepUpError] =
+    React.useState("");
+  const [secretRevealPendingMethod, setSecretRevealPendingMethod] =
+    React.useState<string | null>(null);
   const emailInputId = React.useId();
+  const mailPasswordConfirmInputId = React.useId();
+  const appriseUrlConfirmInputId = React.useId();
+  const secretRevealTotpInputId = React.useId();
 
   const rateLimitData = rateLimitResult.data;
   const rateLimitError = rateLimitResult.error;
@@ -127,12 +188,9 @@ export function TestPageClient({
   const { isOnline } = useNetworkStatus();
 
   const isRateLimitHigh = rateLimit ? rateLimit.limit > 1000 : false;
-  const requiredMailVars = [
-    "MAIL_HOST",
-    "MAIL_PORT",
-    "MAIL_FROM_ADDRESS",
-    "MAIL_TO_ADDRESS",
-  ];
+  const appriseUrlVariable = notificationConfig.variables.find(
+    (variable) => variable.key === "APPRISE_URL",
+  );
   const formattedLastChecked = React.useMemo(() => {
     if (!updateNotice.lastCheckedAt) {
       return t("update_last_checked_never");
@@ -190,6 +248,14 @@ export function TestPageClient({
       setResetTime(clientFormattedTime);
     }
   }, [rateLimit]);
+
+  React.useEffect(
+    () => () => {
+      setRevealedMailPassword(null);
+      setRevealedAppriseUrl(null);
+    },
+    [],
+  );
 
   const isGitlabTokenSet = gitlabTokenCheck.status !== "not_set";
   const gitlabTokenStatusText = isGitlabTokenSet
@@ -521,6 +587,502 @@ export function TestPageClient({
     });
   };
 
+  const handleMailPasswordRevealResult = (
+    result: Awaited<ReturnType<typeof revealMailPasswordAction>>,
+  ) => {
+    if (result.success) {
+      setRevealedMailPassword(result.value);
+      setMailPasswordDialogOpen(false);
+      setMailPasswordConfirmValue("");
+      setMailPasswordRevealError("");
+      return;
+    }
+
+    setMailPasswordRevealError(t(result.errorKey));
+    toast({
+      title: t("toast_error_title"),
+      description: t(result.errorKey),
+      variant: "destructive",
+    });
+  };
+
+  const handleMailPasswordToggle = (
+    revealMode: "none" | "external_click" | "password_confirm",
+  ) => {
+    if (revealedMailPassword !== null) {
+      setRevealedMailPassword(null);
+      return;
+    }
+
+    if (revealMode === "external_click") {
+      startMailPasswordRevealTransition(async () => {
+        try {
+          const result = await revealMailPasswordAction();
+          handleMailPasswordRevealResult(result);
+        } catch (error: unknown) {
+          if (reloadIfServerActionStale(error)) {
+            return;
+          }
+          toast({
+            title: t("toast_error_title"),
+            description: t("error_reveal_failed"),
+            variant: "destructive",
+          });
+        }
+      });
+      return;
+    }
+
+    if (revealMode === "password_confirm") {
+      openSecretRevealDialog("mail_password");
+    }
+  };
+
+  const handleConfirmMailPasswordReveal = () => {
+    setMailPasswordRevealError("");
+    startMailPasswordRevealTransition(async () => {
+      try {
+        const result = await revealMailPasswordAction({
+          currentPassword: mailPasswordConfirmValue,
+        });
+        handleMailPasswordRevealResult(result);
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
+        setMailPasswordRevealError(t("error_reveal_failed"));
+        toast({
+          title: t("toast_error_title"),
+          description: t("error_reveal_failed"),
+          variant: "destructive",
+        });
+      }
+    });
+  };
+
+  const handleAppriseUrlRevealResult = (
+    result: Awaited<ReturnType<typeof revealAppriseUrlAction>>,
+  ) => {
+    if (result.success) {
+      setRevealedAppriseUrl(result.value);
+      setAppriseUrlDialogOpen(false);
+      setAppriseUrlConfirmValue("");
+      setAppriseUrlRevealError("");
+      return;
+    }
+
+    setAppriseUrlRevealError(t(result.errorKey));
+    toast({
+      title: t("toast_error_title"),
+      description: t(result.errorKey),
+      variant: "destructive",
+    });
+  };
+
+  const setTargetRevealError = (
+    target: SecretRevealTarget,
+    message: string,
+  ) => {
+    if (target === "mail_password") {
+      setMailPasswordRevealError(message);
+      return;
+    }
+    setAppriseUrlRevealError(message);
+  };
+
+  const loadSecretRevealOptions = async () => {
+    setSecretRevealOptionsLoading(true);
+    setSecretRevealStepUpError("");
+    try {
+      const result = await getSecretRevealOptionsAction();
+      if (result.success) {
+        setSecretRevealMethods(result.methods);
+        return;
+      }
+      setSecretRevealStepUpError(t(result.errorKey));
+    } catch (error: unknown) {
+      if (reloadIfServerActionStale(error)) {
+        return;
+      }
+      setSecretRevealStepUpError(t("error_step_up_unavailable"));
+    } finally {
+      setSecretRevealOptionsLoading(false);
+    }
+  };
+
+  const openSecretRevealDialog = (target: SecretRevealTarget) => {
+    setSecretRevealTotpCode("");
+    setSecretRevealStepUpError("");
+    setSecretRevealPendingMethod(null);
+    if (target === "mail_password") {
+      setMailPasswordRevealError("");
+      setMailPasswordConfirmValue("");
+      setMailPasswordDialogOpen(true);
+    } else {
+      setAppriseUrlRevealError("");
+      setAppriseUrlConfirmValue("");
+      setAppriseUrlDialogOpen(true);
+    }
+    void loadSecretRevealOptions();
+  };
+
+  const revealSecretAfterStepUp = async (target: SecretRevealTarget) => {
+    if (target === "mail_password") {
+      const result = await revealMailPasswordAction();
+      handleMailPasswordRevealResult(result);
+      return result.success;
+    }
+
+    const result = await revealAppriseUrlAction();
+    handleAppriseUrlRevealResult(result);
+    return result.success;
+  };
+
+  const handleTotpStepUp = (target: SecretRevealTarget) => {
+    const startTransition =
+      target === "mail_password"
+        ? startMailPasswordRevealTransition
+        : startAppriseUrlRevealTransition;
+    startTransition(async () => {
+      setSecretRevealPendingMethod("totp");
+      setSecretRevealStepUpError("");
+      try {
+        const result = await verifySecretRevealTotpAction({
+          code: secretRevealTotpCode,
+        });
+        if (!result.success) {
+          const message = t(result.errorKey);
+          setSecretRevealStepUpError(message);
+          setTargetRevealError(target, message);
+          return;
+        }
+        await revealSecretAfterStepUp(target);
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
+        const message = t("error_step_up_failed");
+        setSecretRevealStepUpError(message);
+        setTargetRevealError(target, message);
+      } finally {
+        setSecretRevealPendingMethod(null);
+      }
+    });
+  };
+
+  const handlePasskeyStepUp = (target: SecretRevealTarget) => {
+    const startTransition =
+      target === "mail_password"
+        ? startMailPasswordRevealTransition
+        : startAppriseUrlRevealTransition;
+    startTransition(async () => {
+      setSecretRevealPendingMethod("passkey");
+      setSecretRevealStepUpError("");
+      try {
+        const beginResult = await beginSecretRevealStepUpAction({
+          method: "passkey",
+        });
+        if (!beginResult.success) {
+          const message = t(beginResult.errorKey);
+          setSecretRevealStepUpError(message);
+          setTargetRevealError(target, message);
+          return;
+        }
+        const passkeyResult = await authClient.signIn.passkey();
+        if (passkeyResult.error) {
+          const message = t("error_step_up_failed");
+          setSecretRevealStepUpError(message);
+          setTargetRevealError(target, message);
+          return;
+        }
+        const completeResult = await completeSecretRevealStepUpAction();
+        if (!completeResult.success) {
+          const message = t(completeResult.errorKey);
+          setSecretRevealStepUpError(message);
+          setTargetRevealError(target, message);
+          return;
+        }
+        await revealSecretAfterStepUp(target);
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
+        const message = t("error_step_up_failed");
+        setSecretRevealStepUpError(message);
+        setTargetRevealError(target, message);
+      } finally {
+        setSecretRevealPendingMethod(null);
+      }
+    });
+  };
+
+  const handleSocialStepUp = (
+    target: SecretRevealTarget,
+    provider: SecretRevealSocialProvider,
+  ) => {
+    const startTransition =
+      target === "mail_password"
+        ? startMailPasswordRevealTransition
+        : startAppriseUrlRevealTransition;
+    startTransition(async () => {
+      setSecretRevealPendingMethod(provider);
+      setSecretRevealStepUpError("");
+      try {
+        const beginResult = await beginSecretRevealStepUpAction({
+          method: "social",
+          provider,
+        });
+        if (!beginResult.success) {
+          const message = t(beginResult.errorKey);
+          setSecretRevealStepUpError(message);
+          setTargetRevealError(target, message);
+          return;
+        }
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(
+            SECRET_REVEAL_TARGET_STORAGE_KEY,
+            target,
+          );
+        }
+        const callbackURL =
+          typeof window === "undefined"
+            ? "/test?secretRevealStepUp=1"
+            : `${window.location.pathname}?secretRevealStepUp=1`;
+        const socialResult = await authClient.signIn.social({
+          provider,
+          callbackURL,
+        });
+        if (socialResult?.error) {
+          const message = t("error_step_up_failed");
+          setSecretRevealStepUpError(message);
+          setTargetRevealError(target, message);
+          setSecretRevealPendingMethod(null);
+        }
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
+        const message = t("error_step_up_failed");
+        setSecretRevealStepUpError(message);
+        setTargetRevealError(target, message);
+        setSecretRevealPendingMethod(null);
+      }
+    });
+  };
+
+  const handleAppriseUrlToggle = (
+    revealMode: "none" | "external_click" | "password_confirm",
+  ) => {
+    if (revealedAppriseUrl !== null) {
+      setRevealedAppriseUrl(null);
+      return;
+    }
+
+    if (revealMode === "external_click") {
+      startAppriseUrlRevealTransition(async () => {
+        try {
+          const result = await revealAppriseUrlAction();
+          handleAppriseUrlRevealResult(result);
+        } catch (error: unknown) {
+          if (reloadIfServerActionStale(error)) {
+            return;
+          }
+          toast({
+            title: t("toast_error_title"),
+            description: t("error_reveal_failed"),
+            variant: "destructive",
+          });
+        }
+      });
+      return;
+    }
+
+    if (revealMode === "password_confirm") {
+      openSecretRevealDialog("apprise_url");
+    }
+  };
+
+  const handleConfirmAppriseUrlReveal = () => {
+    setAppriseUrlRevealError("");
+    startAppriseUrlRevealTransition(async () => {
+      try {
+        const result = await revealAppriseUrlAction({
+          currentPassword: appriseUrlConfirmValue,
+        });
+        handleAppriseUrlRevealResult(result);
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
+        setAppriseUrlRevealError(t("error_reveal_failed"));
+        toast({
+          title: t("toast_error_title"),
+          description: t("error_reveal_failed"),
+          variant: "destructive",
+        });
+      }
+    });
+  };
+
+  // Runs once after social re-auth redirects back to the diagnostics page.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: This must only consume the callback URL once.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("secretRevealStepUp") !== "1") return;
+
+    const storedTarget = window.sessionStorage.getItem(
+      SECRET_REVEAL_TARGET_STORAGE_KEY,
+    );
+    const target: SecretRevealTarget =
+      storedTarget === "apprise_url" ? "apprise_url" : "mail_password";
+    window.sessionStorage.removeItem(SECRET_REVEAL_TARGET_STORAGE_KEY);
+    url.searchParams.delete("secretRevealStepUp");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+
+    const startTransition =
+      target === "mail_password"
+        ? startMailPasswordRevealTransition
+        : startAppriseUrlRevealTransition;
+    startTransition(async () => {
+      setSecretRevealPendingMethod("social");
+      try {
+        const completeResult = await completeSecretRevealStepUpAction();
+        if (!completeResult.success) {
+          const message = t(completeResult.errorKey);
+          setSecretRevealStepUpError(message);
+          setTargetRevealError(target, message);
+          toast({
+            title: t("toast_error_title"),
+            description: message,
+            variant: "destructive",
+          });
+          return;
+        }
+        await revealSecretAfterStepUp(target);
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
+        const message = t("error_step_up_failed");
+        setSecretRevealStepUpError(message);
+        setTargetRevealError(target, message);
+        toast({
+          title: t("toast_error_title"),
+          description: message,
+          variant: "destructive",
+        });
+      } finally {
+        setSecretRevealPendingMethod(null);
+      }
+    });
+  }, []);
+
+  const renderSecretRevealStepUpOptions = (target: SecretRevealTarget) => {
+    const isPending = Boolean(secretRevealPendingMethod);
+    const methods = secretRevealMethods;
+    const providerLabel: Record<SecretRevealSocialProvider, string> = {
+      github: "GitHub",
+      google: "Google",
+    };
+
+    return (
+      <div className="space-y-3 border-t pt-4">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <KeyRound className="size-4" />
+          <span>{t("secret_reveal_alternatives_title")}</span>
+        </div>
+        {secretRevealOptionsLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            <span>{t("secret_reveal_options_loading")}</span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {methods?.totp && (
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  id={secretRevealTotpInputId}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={secretRevealTotpCode}
+                  onChange={(event) =>
+                    setSecretRevealTotpCode(event.target.value)
+                  }
+                  placeholder={t("secret_reveal_totp_placeholder")}
+                  disabled={isPending}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleTotpStepUp(target)}
+                  disabled={isPending || !secretRevealTotpCode.trim()}
+                >
+                  {secretRevealPendingMethod === "totp" ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <ShieldCheck />
+                  )}
+                  <span>{t("secret_reveal_totp_button")}</span>
+                </Button>
+              </div>
+            )}
+            {methods?.passkey && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => handlePasskeyStepUp(target)}
+                disabled={isPending}
+              >
+                {secretRevealPendingMethod === "passkey" ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <Fingerprint />
+                )}
+                <span>{t("secret_reveal_passkey_button")}</span>
+              </Button>
+            )}
+            {methods?.socialProviders.map((provider) => (
+              <Button
+                key={provider}
+                type="button"
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => handleSocialStepUp(target, provider)}
+                disabled={isPending}
+              >
+                {secretRevealPendingMethod === provider ? (
+                  <Loader2 className="animate-spin" />
+                ) : provider === "github" ? (
+                  <GithubBrandIcon className="size-4" />
+                ) : (
+                  <GoogleBrandIcon className="size-4" />
+                )}
+                <span>
+                  {t("secret_reveal_social_button", {
+                    provider: providerLabel[provider],
+                  })}
+                </span>
+              </Button>
+            ))}
+            {methods &&
+              !methods.totp &&
+              !methods.passkey &&
+              methods.socialProviders.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {t("secret_reveal_no_alternatives")}
+                </p>
+              )}
+          </div>
+        )}
+        {secretRevealStepUpError && (
+          <p className="text-sm text-destructive">{secretRevealStepUpError}</p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
       <Card>
@@ -716,14 +1278,51 @@ export function TestPageClient({
             </div>
           )}
 
-          <p className="pl-7 break-all font-mono text-sm text-muted-foreground">
-            <span className="font-semibold text-foreground">APPRISE_URL=</span>
-            {notificationConfig.variables.APPRISE_URL ? (
-              <span>{notificationConfig.variables.APPRISE_URL}</span>
-            ) : (
-              <span className="italic">{t("email_not_set")}</span>
-            )}
-          </p>
+          {revealedAppriseUrl !== null && (
+            <div className="flex items-center gap-2 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-300">
+              <AlertTriangle className="size-5 shrink-0" />
+              <p>{t("apprise_url_warning")}</p>
+            </div>
+          )}
+          <div className="pl-7 flex items-center gap-2">
+            <p className="grow break-all font-mono text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">
+                APPRISE_URL=
+              </span>
+              {appriseUrlVariable?.isSet &&
+              (revealedAppriseUrl || appriseUrlVariable.displayValue) ? (
+                <span>
+                  {revealedAppriseUrl ?? appriseUrlVariable.displayValue}
+                </span>
+              ) : (
+                <span className="italic">{t("email_not_set")}</span>
+              )}
+            </p>
+            {appriseUrlVariable?.isSet &&
+              appriseUrlVariable.revealMode !== "none" && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  disabled={isRevealingAppriseUrl}
+                  onClick={() =>
+                    handleAppriseUrlToggle(appriseUrlVariable.revealMode)
+                  }
+                  aria-label={t(
+                    revealedAppriseUrl ? "hide_secret" : "show_secret",
+                  )}
+                >
+                  {isRevealingAppriseUrl ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : revealedAppriseUrl ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </Button>
+              )}
+          </div>
           <div className="flex flex-col items-start gap-4 pt-2">
             <Button
               onClick={handleRefreshAppriseStatus}
@@ -757,6 +1356,75 @@ export function TestPageClient({
               <span>{t("send_test_apprise_button")}</span>
             </Button>
           </div>
+          <Dialog
+            open={appriseUrlDialogOpen}
+            onOpenChange={(open) => {
+              setAppriseUrlDialogOpen(open);
+              if (!open) {
+                setAppriseUrlConfirmValue("");
+                setAppriseUrlRevealError("");
+                setSecretRevealTotpCode("");
+                setSecretRevealStepUpError("");
+                setSecretRevealPendingMethod(null);
+              }
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{t("apprise_url_reveal_title")}</DialogTitle>
+                <DialogDescription>
+                  {t("apprise_url_reveal_description")}
+                </DialogDescription>
+              </DialogHeader>
+              {(secretRevealMethods?.password ?? true) && (
+                <div className="space-y-2">
+                  <Label htmlFor={appriseUrlConfirmInputId}>
+                    {t("mail_password_current_password_label")}
+                  </Label>
+                  <Input
+                    id={appriseUrlConfirmInputId}
+                    type="password"
+                    value={appriseUrlConfirmValue}
+                    onChange={(event) =>
+                      setAppriseUrlConfirmValue(event.target.value)
+                    }
+                    disabled={isRevealingAppriseUrl}
+                    autoComplete="current-password"
+                  />
+                  {appriseUrlRevealError && (
+                    <p className="text-sm text-destructive">
+                      {appriseUrlRevealError}
+                    </p>
+                  )}
+                </div>
+              )}
+              {renderSecretRevealStepUpOptions("apprise_url")}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setAppriseUrlDialogOpen(false)}
+                  disabled={isRevealingAppriseUrl}
+                >
+                  {t("cancel")}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleConfirmAppriseUrlReveal}
+                  disabled={
+                    isRevealingAppriseUrl ||
+                    !appriseUrlConfirmValue ||
+                    secretRevealMethods?.password === false
+                  }
+                >
+                  {isRevealingAppriseUrl && (
+                    <Loader2 className="animate-spin" />
+                  )}
+                  {t("apprise_url_reveal_button")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
 
@@ -785,74 +1453,151 @@ export function TestPageClient({
               {t("email_all_variables_title")}
             </h4>
 
-            {notificationConfig.variables.MAIL_PASSWORD && (
+            {revealedMailPassword !== null && (
               <div className="flex items-center gap-2 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-300">
                 <AlertTriangle className="size-5 shrink-0" />
                 <p>{t("email_password_warning")}</p>
               </div>
             )}
             <div className="text-sm text-muted-foreground font-mono space-y-2 break-all">
-              {Object.entries(notificationConfig.variables).map(
-                ([key, value]) => {
-                  if (key === "APPRISE_URL") return null;
-                  const isRequired = requiredMailVars.includes(key);
-                  const isMissingAndRequired = isRequired && !value;
+              {notificationConfig.variables.map((variable) => {
+                if (variable.key === "APPRISE_URL") return null;
+                const isMissingAndRequired =
+                  variable.isRequired && !variable.isSet;
 
-                  if (key === "MAIL_PASSWORD" && value) {
-                    return (
-                      <div key={key} className="flex items-center gap-2">
-                        <p className="grow">
-                          <span className="font-semibold text-foreground">
-                            {key}=
-                          </span>
-                          <span>{isPasswordVisible ? value : "••••••••"}</span>
-                        </p>
+                if (variable.key === "MAIL_PASSWORD" && variable.isSet) {
+                  const isRevealed = revealedMailPassword !== null;
+                  const canReveal = variable.revealMode !== "none";
+                  return (
+                    <div key={variable.key} className="flex items-center gap-2">
+                      <p className="grow">
+                        <span className="font-semibold text-foreground">
+                          {variable.key}=
+                        </span>
+                        <span>
+                          {isRevealed
+                            ? revealedMailPassword
+                            : (variable.displayValue ?? "••••••••")}
+                        </span>
+                      </p>
+                      {canReveal && (
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 shrink-0"
+                          disabled={isRevealingMailPassword}
                           onClick={() =>
-                            setIsPasswordVisible(!isPasswordVisible)
+                            handleMailPasswordToggle(variable.revealMode)
                           }
                           aria-label={t(
-                            isPasswordVisible
-                              ? "hide_password"
-                              : "show_password",
+                            isRevealed ? "hide_password" : "show_password",
                           )}
                         >
-                          {isPasswordVisible ? (
+                          {isRevealingMailPassword ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : isRevealed ? (
                             <EyeOff className="size-4" />
                           ) : (
                             <Eye className="size-4" />
                           )}
                         </Button>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <p key={key}>
-                      <span className="font-semibold text-foreground">
-                        {key}=
-                      </span>
-                      {value ? (
-                        <span>{value}</span>
-                      ) : (
-                        <span
-                          className={`italic ${
-                            isMissingAndRequired ? "text-yellow-500" : ""
-                          }`}
-                        >
-                          {t("email_not_set")}
-                        </span>
                       )}
-                    </p>
+                    </div>
                   );
-                },
-              )}
+                }
+
+                return (
+                  <p key={variable.key}>
+                    <span className="font-semibold text-foreground">
+                      {variable.key}=
+                    </span>
+                    {variable.isSet && variable.displayValue ? (
+                      <span>{variable.displayValue}</span>
+                    ) : (
+                      <span
+                        className={`italic ${
+                          isMissingAndRequired ? "text-yellow-500" : ""
+                        }`}
+                      >
+                        {t("email_not_set")}
+                      </span>
+                    )}
+                  </p>
+                );
+              })}
             </div>
           </div>
+
+          <Dialog
+            open={mailPasswordDialogOpen}
+            onOpenChange={(open) => {
+              setMailPasswordDialogOpen(open);
+              if (!open) {
+                setMailPasswordConfirmValue("");
+                setMailPasswordRevealError("");
+                setSecretRevealTotpCode("");
+                setSecretRevealStepUpError("");
+                setSecretRevealPendingMethod(null);
+              }
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{t("mail_password_reveal_title")}</DialogTitle>
+                <DialogDescription>
+                  {t("mail_password_reveal_description")}
+                </DialogDescription>
+              </DialogHeader>
+              {(secretRevealMethods?.password ?? true) && (
+                <div className="space-y-2">
+                  <Label htmlFor={mailPasswordConfirmInputId}>
+                    {t("mail_password_current_password_label")}
+                  </Label>
+                  <Input
+                    id={mailPasswordConfirmInputId}
+                    type="password"
+                    value={mailPasswordConfirmValue}
+                    onChange={(event) =>
+                      setMailPasswordConfirmValue(event.target.value)
+                    }
+                    disabled={isRevealingMailPassword}
+                    autoComplete="current-password"
+                  />
+                  {mailPasswordRevealError && (
+                    <p className="text-sm text-destructive">
+                      {mailPasswordRevealError}
+                    </p>
+                  )}
+                </div>
+              )}
+              {renderSecretRevealStepUpOptions("mail_password")}
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setMailPasswordDialogOpen(false)}
+                  disabled={isRevealingMailPassword}
+                >
+                  {t("cancel")}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleConfirmMailPasswordReveal}
+                  disabled={
+                    isRevealingMailPassword ||
+                    !mailPasswordConfirmValue ||
+                    secretRevealMethods?.password === false
+                  }
+                >
+                  {isRevealingMailPassword && (
+                    <Loader2 className="animate-spin" />
+                  )}
+                  {t("mail_password_reveal_button")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <div className="pt-4 space-y-4">
             <div className="space-y-2">
