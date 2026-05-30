@@ -14,6 +14,11 @@ import { checkForNewReleases } from "@/lib/releases/checker";
 import { normalizeBackgroundCheckCron } from "@/lib/runtime/repository-schedule";
 import { scheduleTask } from "@/lib/runtime/task-scheduler";
 import {
+  getInvalidCustomSecurityPattern,
+  normalizeSecurityHighlightColorPreset,
+  normalizeSecurityHighlightCustomColor,
+} from "@/lib/security-release";
+import {
   NEXT_LOCALE_COOKIE,
   nextLocaleCookieOptions,
   SETTINGS_LOCALE_COOKIE,
@@ -116,6 +121,23 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         };
       }
 
+      const invalidCustomSecurityPattern = getInvalidCustomSecurityPattern(
+        newSettings.customSecurityPatterns,
+      );
+      if (invalidCustomSecurityPattern) {
+        const t = await getTranslations({
+          locale: newSettings.locale,
+          namespace: "SettingsForm",
+        });
+        return {
+          success: false,
+          message: {
+            title: t("toast_error_title"),
+            description: t("security_patterns_error_invalid"),
+          },
+        };
+      }
+
       // Ensure refreshInterval is at least 1
       const sanitizedParallelRepoFetches = (() => {
         const incoming = Number.isFinite(newSettings.parallelRepoFetches)
@@ -143,6 +165,18 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         providerSortOrder: normalizeProviderSortOrder(
           newSettings.providerSortOrder,
         ),
+        securityHighlightColorPreset: normalizeSecurityHighlightColorPreset(
+          newSettings.securityHighlightColorPreset,
+        ),
+        securityHighlightCustomColor: normalizeSecurityHighlightCustomColor(
+          newSettings.securityHighlightCustomColor,
+        ),
+        customSecurityPatterns:
+          newSettings.customSecurityPatterns?.trim() || undefined,
+        includeDefaultSecurityPatterns:
+          newSettings.includeDefaultSecurityPatterns !== false,
+        confirmSecurityAcknowledge:
+          newSettings.confirmSecurityAcknowledge === true,
       };
 
       // Compute a concise diff of global settings
@@ -222,6 +256,31 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         "prioritizeNewSecurityReleases",
         oldS.prioritizeNewSecurityReleases,
         newS.prioritizeNewSecurityReleases,
+      );
+      pushValueChange(
+        "securityHighlightColorPreset",
+        oldS.securityHighlightColorPreset,
+        newS.securityHighlightColorPreset,
+      );
+      pushValueChange(
+        "securityHighlightCustomColor",
+        oldS.securityHighlightCustomColor,
+        newS.securityHighlightCustomColor,
+      );
+      pushValueChange(
+        "confirmSecurityAcknowledge",
+        oldS.confirmSecurityAcknowledge,
+        newS.confirmSecurityAcknowledge,
+      );
+      pushValueChange(
+        "includeDefaultSecurityPatterns",
+        oldS.includeDefaultSecurityPatterns,
+        newS.includeDefaultSecurityPatterns,
+      );
+      pushValueChange(
+        "customSecurityPatterns",
+        oldS.customSecurityPatterns,
+        newS.customSecurityPatterns,
       );
       pushValueChange(
         "showAcknowledge",

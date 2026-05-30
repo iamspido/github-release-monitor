@@ -45,9 +45,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { usePathname, useRouter } from "@/i18n/navigation";
+import {
+  defaultSecurityHighlightCustomColor,
+  getInvalidCustomSecurityPattern,
+  isValidSecurityHighlightCustomColor,
+  normalizeSecurityHighlightColorPreset,
+  normalizeSecurityHighlightCustomColor,
+} from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type {
@@ -58,6 +66,7 @@ import type {
   ReleaseChannel,
   ReleaseProviderSortKey,
   ReleaseSortOrder,
+  SecurityHighlightColorPreset,
   TimeFormat,
 } from "@/types";
 import { allPreReleaseTypes, defaultProviderSortOrder } from "@/types";
@@ -153,6 +162,8 @@ type ReleasesPerPageError = "too_low" | "too_high" | null;
 type ParallelRepoFetchError = "too_low" | "too_high" | null;
 type RegexError = "invalid" | null;
 type CronValidationError = "invalid" | null;
+type HexColorError = "invalid" | null;
+type SecurityPatternsError = "invalid" | null;
 
 const providerSortOrderOptions: ReleaseProviderSortKey[][] = [
   ["github", "gitlab", "codeberg"],
@@ -162,6 +173,43 @@ const providerSortOrderOptions: ReleaseProviderSortKey[][] = [
   ["codeberg", "github", "gitlab"],
   ["codeberg", "gitlab", "github"],
 ];
+
+const securityHighlightColorOptions = [
+  {
+    value: "yellow",
+    labelKey: "security_highlight_color_yellow",
+    swatchClassName: "bg-yellow-500",
+  },
+  {
+    value: "red",
+    labelKey: "security_highlight_color_red",
+    swatchClassName: "bg-red-500",
+  },
+  {
+    value: "orange",
+    labelKey: "security_highlight_color_orange",
+    swatchClassName: "bg-orange-500",
+  },
+  {
+    value: "blue",
+    labelKey: "security_highlight_color_blue",
+    swatchClassName: "bg-blue-500",
+  },
+  {
+    value: "purple",
+    labelKey: "security_highlight_color_purple",
+    swatchClassName: "bg-purple-500",
+  },
+  {
+    value: "custom",
+    labelKey: "security_highlight_color_custom",
+    swatchClassName: "",
+  },
+] as const satisfies readonly {
+  value: SecurityHighlightColorPreset;
+  labelKey: string;
+  swatchClassName: string;
+}[];
 
 function serializeProviderSortOrder(order: ReleaseProviderSortKey[]) {
   return order.join(",");
@@ -257,6 +305,12 @@ export function SettingsForm({
       releaseSortOrder: `${baseId}-release-sort-order`,
       providerSortOrder: `${baseId}-provider-sort-order`,
       prioritizeNewSecurityReleases: `${baseId}-prioritize-new-security-releases`,
+      securityHighlightColor: `${baseId}-security-highlight-color`,
+      securityHighlightCustomColor: `${baseId}-security-highlight-custom-color`,
+      securityHighlightCustomColorPicker: `${baseId}-security-highlight-custom-color-picker`,
+      confirmSecurityAcknowledge: `${baseId}-confirm-security-acknowledge`,
+      includeDefaultSecurityPatterns: `${baseId}-include-default-security-patterns`,
+      customSecurityPatterns: `${baseId}-custom-security-patterns`,
       showAcknowledge: `${baseId}-show-acknowledge`,
       showMarkAsNew: `${baseId}-show-mark-new`,
       showProviderPrefixInRepoId: `${baseId}-show-provider-prefix-in-repo-id`,
@@ -304,6 +358,30 @@ export function SettingsForm({
     React.useState<boolean>(
       currentSettings.prioritizeNewSecurityReleases ?? false,
     );
+  const [securityHighlightColorPreset, setSecurityHighlightColorPreset] =
+    React.useState<SecurityHighlightColorPreset>(
+      normalizeSecurityHighlightColorPreset(
+        currentSettings.securityHighlightColorPreset,
+      ),
+    );
+  const [securityHighlightCustomColor, setSecurityHighlightCustomColor] =
+    React.useState(
+      normalizeSecurityHighlightCustomColor(
+        currentSettings.securityHighlightCustomColor ??
+          defaultSecurityHighlightCustomColor,
+      ),
+    );
+  const [confirmSecurityAcknowledge, setConfirmSecurityAcknowledge] =
+    React.useState<boolean>(
+      currentSettings.confirmSecurityAcknowledge ?? false,
+    );
+  const [includeDefaultSecurityPatterns, setIncludeDefaultSecurityPatterns] =
+    React.useState<boolean>(
+      currentSettings.includeDefaultSecurityPatterns ?? true,
+    );
+  const [customSecurityPatterns, setCustomSecurityPatterns] = React.useState(
+    currentSettings.customSecurityPatterns ?? "",
+  );
   const [releasesPerPage, setReleasesPerPage] = React.useState(
     String(currentSettings.releasesPerPage || 30),
   );
@@ -392,6 +470,12 @@ export function SettingsForm({
   const [excludeRegexError, setExcludeRegexError] =
     React.useState<RegexError>(null);
   const [cronError, setCronError] = React.useState<CronValidationError>(null);
+  const [
+    securityHighlightCustomColorError,
+    setSecurityHighlightCustomColorError,
+  ] = React.useState<HexColorError>(null);
+  const [customSecurityPatternsError, setCustomSecurityPatternsError] =
+    React.useState<SecurityPatternsError>(null);
 
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
   const isInitialMount = React.useRef(true);
@@ -443,6 +527,11 @@ export function SettingsForm({
       releaseSortOrder,
       providerSortOrder,
       prioritizeNewSecurityReleases,
+      securityHighlightColorPreset,
+      securityHighlightCustomColor,
+      confirmSecurityAcknowledge,
+      includeDefaultSecurityPatterns,
+      customSecurityPatterns,
       showAcknowledge,
       showMarkAsNew,
       showProviderPrefixInRepoId,
@@ -477,6 +566,11 @@ export function SettingsForm({
     releaseSortOrder,
     providerSortOrder,
     prioritizeNewSecurityReleases,
+    securityHighlightColorPreset,
+    securityHighlightCustomColor,
+    confirmSecurityAcknowledge,
+    includeDefaultSecurityPatterns,
+    customSecurityPatterns,
     showAcknowledge,
     showMarkAsNew,
     showProviderPrefixInRepoId,
@@ -570,6 +664,21 @@ export function SettingsForm({
       }
     }
 
+    if (
+      securityHighlightColorPreset === "custom" &&
+      !isValidSecurityHighlightCustomColor(securityHighlightCustomColor)
+    ) {
+      setSecurityHighlightCustomColorError("invalid");
+    } else {
+      setSecurityHighlightCustomColorError(null);
+    }
+
+    setCustomSecurityPatternsError(
+      getInvalidCustomSecurityPattern(customSecurityPatterns)
+        ? "invalid"
+        : null,
+    );
+
     // Cache Validation
     const isCacheEnabled = newSettings.cacheInterval > 0;
     const cacheIsLarger =
@@ -595,6 +704,9 @@ export function SettingsForm({
     newSettings.cacheInterval,
     includeRegex,
     excludeRegex,
+    securityHighlightColorPreset,
+    securityHighlightCustomColor,
+    customSecurityPatterns,
     automationMode,
     newSettings.backgroundCheckCron,
   ]);
@@ -641,6 +753,8 @@ export function SettingsForm({
       parallelRepoFetchesError ||
       includeRegexError ||
       excludeRegexError ||
+      securityHighlightCustomColorError ||
+      customSecurityPatternsError ||
       cronError
     ) {
       setSaveStatus("idle");
@@ -712,6 +826,8 @@ export function SettingsForm({
     parallelRepoFetchesError,
     includeRegexError,
     excludeRegexError,
+    securityHighlightCustomColorError,
+    customSecurityPatternsError,
     cronError,
     appriseMaxCharacters,
     isOnline,
@@ -898,28 +1014,6 @@ export function SettingsForm({
             <div className="space-y-4 pt-2">
               <div className="flex items-start space-x-3">
                 <Checkbox
-                  id={ids.prioritizeNewSecurityReleases}
-                  checked={prioritizeNewSecurityReleases}
-                  onCheckedChange={(checked) =>
-                    setPrioritizeNewSecurityReleases(Boolean(checked))
-                  }
-                  disabled={saveStatus === "saving" || !isOnline}
-                  className="mt-1"
-                />
-                <div className="grid gap-1.5 leading-none">
-                  <Label
-                    htmlFor={ids.prioritizeNewSecurityReleases}
-                    className="font-medium cursor-pointer"
-                  >
-                    {t("prioritize_new_security_releases_title")}
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    {t("prioritize_new_security_releases_description")}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Checkbox
                   id={ids.showAcknowledge}
                   checked={showAcknowledge}
                   onCheckedChange={(checked) =>
@@ -1038,6 +1132,218 @@ export function SettingsForm({
                     {t("repository_form_expanded_description")}
                   </p>
                 </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("security_releases_settings_title")}</CardTitle>
+            <CardDescription>
+              {t("security_releases_settings_description")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-start space-x-3">
+              <Checkbox
+                id={ids.prioritizeNewSecurityReleases}
+                checked={prioritizeNewSecurityReleases}
+                onCheckedChange={(checked) =>
+                  setPrioritizeNewSecurityReleases(Boolean(checked))
+                }
+                disabled={saveStatus === "saving" || !isOnline}
+                className="mt-1"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor={ids.prioritizeNewSecurityReleases}
+                  className="font-medium cursor-pointer"
+                >
+                  {t("prioritize_new_security_releases_title")}
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {t("prioritize_new_security_releases_description")}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label>{t("security_highlight_color_label")}</Label>
+              <RadioGroup
+                value={securityHighlightColorPreset}
+                onValueChange={(value) =>
+                  setSecurityHighlightColorPreset(
+                    normalizeSecurityHighlightColorPreset(value),
+                  )
+                }
+                className="grid gap-2 sm:grid-cols-2"
+                disabled={saveStatus === "saving" || !isOnline}
+              >
+                {securityHighlightColorOptions.map((option) => {
+                  const optionId = `${ids.securityHighlightColor}-${option.value}`;
+                  const customSwatchColor = isValidSecurityHighlightCustomColor(
+                    securityHighlightCustomColor,
+                  )
+                    ? securityHighlightCustomColor
+                    : defaultSecurityHighlightCustomColor;
+                  return (
+                    <div
+                      key={option.value}
+                      className="flex items-center space-x-2 rounded-md border p-3"
+                    >
+                      <RadioGroupItem value={option.value} id={optionId} />
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "size-4 shrink-0 rounded-full border",
+                          option.swatchClassName,
+                        )}
+                        style={
+                          option.value === "custom"
+                            ? { backgroundColor: customSwatchColor }
+                            : undefined
+                        }
+                      />
+                      <Label
+                        htmlFor={optionId}
+                        className="cursor-pointer font-normal"
+                      >
+                        {t(option.labelKey)}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </RadioGroup>
+              {securityHighlightColorPreset === "custom" && (
+                <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-[auto_1fr]">
+                  <div className="space-y-2">
+                    <Label htmlFor={ids.securityHighlightCustomColorPicker}>
+                      {t("security_highlight_color_picker_label")}
+                    </Label>
+                    <Input
+                      id={ids.securityHighlightCustomColorPicker}
+                      type="color"
+                      value={
+                        isValidSecurityHighlightCustomColor(
+                          securityHighlightCustomColor,
+                        )
+                          ? securityHighlightCustomColor
+                          : defaultSecurityHighlightCustomColor
+                      }
+                      onChange={(event) =>
+                        setSecurityHighlightCustomColor(
+                          event.target.value.toLowerCase(),
+                        )
+                      }
+                      disabled={saveStatus === "saving" || !isOnline}
+                      className="h-10 w-16 p-1"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={ids.securityHighlightCustomColor}>
+                      {t("security_highlight_hex_label")}
+                    </Label>
+                    <Input
+                      id={ids.securityHighlightCustomColor}
+                      value={securityHighlightCustomColor}
+                      onChange={(event) =>
+                        setSecurityHighlightCustomColor(event.target.value)
+                      }
+                      placeholder={defaultSecurityHighlightCustomColor}
+                      disabled={saveStatus === "saving" || !isOnline}
+                      className={cn(
+                        !!securityHighlightCustomColorError &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                    {securityHighlightCustomColorError ? (
+                      <p className="text-sm text-destructive">
+                        {t("security_highlight_hex_error_invalid")}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {t("security_highlight_hex_hint")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-start space-x-3">
+              <Checkbox
+                id={ids.confirmSecurityAcknowledge}
+                checked={confirmSecurityAcknowledge}
+                onCheckedChange={(checked) =>
+                  setConfirmSecurityAcknowledge(Boolean(checked))
+                }
+                disabled={saveStatus === "saving" || !isOnline}
+                className="mt-1"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor={ids.confirmSecurityAcknowledge}
+                  className="font-medium cursor-pointer"
+                >
+                  {t("confirm_security_acknowledge_title")}
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {t("confirm_security_acknowledge_description")}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id={ids.includeDefaultSecurityPatterns}
+                  checked={includeDefaultSecurityPatterns}
+                  onCheckedChange={(checked) =>
+                    setIncludeDefaultSecurityPatterns(Boolean(checked))
+                  }
+                  disabled={saveStatus === "saving" || !isOnline}
+                  className="mt-1"
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label
+                    htmlFor={ids.includeDefaultSecurityPatterns}
+                    className="font-medium cursor-pointer"
+                  >
+                    {t("include_default_security_patterns_title")}
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t("include_default_security_patterns_description")}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={ids.customSecurityPatterns}>
+                  {t("custom_security_patterns_label")}
+                </Label>
+                <Textarea
+                  id={ids.customSecurityPatterns}
+                  value={customSecurityPatterns}
+                  onChange={(event) =>
+                    setCustomSecurityPatterns(event.target.value)
+                  }
+                  placeholder={t("custom_security_patterns_placeholder")}
+                  disabled={saveStatus === "saving" || !isOnline}
+                  className={cn(
+                    "min-h-32 font-mono text-sm",
+                    !!customSecurityPatternsError &&
+                      "border-destructive focus-visible:ring-destructive",
+                  )}
+                />
+                {customSecurityPatternsError ? (
+                  <p className="text-sm text-destructive">
+                    {t("security_patterns_error_invalid")}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {t("custom_security_patterns_hint")}
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>

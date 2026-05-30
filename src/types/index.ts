@@ -205,6 +205,16 @@ export const defaultProviderSortOrder: ReleaseProviderSortKey[] = [
   "gitlab",
   "codeberg",
 ];
+export const securityHighlightColorPresets = [
+  "yellow",
+  "red",
+  "orange",
+  "blue",
+  "purple",
+  "custom",
+] as const;
+export type SecurityHighlightColorPreset =
+  (typeof securityHighlightColorPresets)[number];
 
 export type AppSettings = {
   timeFormat: TimeFormat;
@@ -222,6 +232,11 @@ export type AppSettings = {
   releaseSortOrder?: ReleaseSortOrder;
   providerSortOrder?: ReleaseProviderSortKey[];
   prioritizeNewSecurityReleases?: boolean;
+  securityHighlightColorPreset?: SecurityHighlightColorPreset;
+  securityHighlightCustomColor?: string;
+  confirmSecurityAcknowledge?: boolean;
+  includeDefaultSecurityPatterns?: boolean;
+  customSecurityPatterns?: string;
   showAcknowledge?: boolean;
   showMarkAsNew?: boolean;
   showProviderPrefixInRepoId?: boolean;

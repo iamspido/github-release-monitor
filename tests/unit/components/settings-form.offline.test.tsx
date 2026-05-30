@@ -101,6 +101,16 @@ describe("SettingsForm offline autosave paused", () => {
       expect(div.textContent ?? "").toContain(
         "prioritize_new_security_releases_title",
       );
+      expect(div.textContent ?? "").toContain(
+        "security_releases_settings_title",
+      );
+      expect(div.textContent ?? "").toContain("security_highlight_color_yellow");
+      expect(div.textContent ?? "").toContain(
+        "confirm_security_acknowledge_title",
+      );
+      expect(div.textContent ?? "").toContain(
+        "include_default_security_patterns_title",
+      );
     } finally {
       cleanup();
     }

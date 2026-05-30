@@ -184,22 +184,19 @@ export function HomePageClient({
         releaseSortOrder,
         settings.providerSortOrder,
         settings.prioritizeNewSecurityReleases,
+        settings,
       ),
-    [
-      releases,
-      releaseSortOrder,
-      settings.providerSortOrder,
-      settings.prioritizeNewSecurityReleases,
-    ],
+    [releases, releaseSortOrder, settings],
   );
   const repositoryStats = React.useMemo(() => {
     const newCount = releases.filter((item) => Boolean(item.isNew)).length;
     const securityCount = releases.filter(
-      (item) => Boolean(item.isNew) && isSecurityRelease(item.release),
+      (item) =>
+        Boolean(item.isNew) && isSecurityRelease(item.release, settings),
     ).length;
 
     return { newCount, securityCount };
-  }, [releases]);
+  }, [releases, settings]);
 
   return (
     <>

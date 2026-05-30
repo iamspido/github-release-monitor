@@ -7,6 +7,10 @@ import {
   normalizeProviderSortOrder,
   normalizeReleaseSortOrder,
 } from "@/lib/release-sort";
+import {
+  defaultSecurityHighlightColorPreset,
+  defaultSecurityHighlightCustomColor,
+} from "@/lib/security-release";
 import type { AppSettings, Locale } from "@/types";
 import { allPreReleaseTypes, defaultProviderSortOrder } from "@/types";
 
@@ -29,6 +33,11 @@ const defaultSettings: AppSettings = {
   releaseSortOrder: "latest_first",
   providerSortOrder: defaultProviderSortOrder,
   prioritizeNewSecurityReleases: false,
+  securityHighlightColorPreset: defaultSecurityHighlightColorPreset,
+  securityHighlightCustomColor: defaultSecurityHighlightCustomColor,
+  confirmSecurityAcknowledge: false,
+  includeDefaultSecurityPatterns: true,
+  customSecurityPatterns: undefined,
   showAcknowledge: true,
   showMarkAsNew: true,
   showProviderPrefixInRepoId: true,

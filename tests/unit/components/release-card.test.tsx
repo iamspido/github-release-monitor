@@ -42,6 +42,9 @@ const translationMap: Record<string, Record<string, string>> = {
     remove_button: "Remove repository",
     confirm_dialog_title: "Remove repository?",
     confirm_dialog_description_long: "Remove {repoId}?",
+    security_acknowledge_confirm_title: "Confirm security acknowledge",
+    security_acknowledge_confirm_description: "Confirm {repoId}",
+    security_acknowledge_confirm_button: "Confirm security seen",
     confirm_button: "Confirm removal",
     cancel_button: "Cancel",
     view_on_github: "Open release",
@@ -419,6 +422,62 @@ describe("ReleaseCard component", () => {
       (element) => element.className.includes("ring-yellow-500/60"),
     );
     expect(card).toBeTruthy();
+  });
+
+  it("uses the configured preset color for security highlights", async () => {
+    const enrichedRelease = makeSecurityRelease(true);
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={{ ...baseSettings, securityHighlightColorPreset: "red" }}
+      />,
+    );
+
+    const securityBadge = Array.from(
+      container?.querySelectorAll("div") ?? [],
+    ).find(
+      (element) =>
+        element.textContent === "Security" &&
+        element.className.includes("border-red-500/70"),
+    );
+    expect(securityBadge).toBeTruthy();
+    const card = Array.from(container?.querySelectorAll("div") ?? []).find(
+      (element) => element.className.includes("ring-red-500/60"),
+    );
+    expect(card).toBeTruthy();
+  });
+
+  it("requires confirmation before acknowledging security releases when enabled", async () => {
+    const actions = await import("@/app/actions");
+    actions.acknowledgeNewReleaseAction.mockResolvedValue({ success: true });
+    const enrichedRelease = makeSecurityRelease(true);
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={{ ...baseSettings, confirmSecurityAcknowledge: true }}
+      />,
+    );
+
+    const acknowledgeButton = getButtonBySpanText("Acknowledge release");
+    expect(acknowledgeButton).toBeTruthy();
+    acknowledgeButton?.click();
+    await Promise.resolve();
+    expect(actions.acknowledgeNewReleaseAction).not.toHaveBeenCalled();
+
+    const confirmButton = getElementByText(
+      "button",
+      "Confirm security seen",
+    ) as HTMLButtonElement | undefined;
+    expect(confirmButton).toBeTruthy();
+    confirmButton?.click();
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(actions.acknowledgeNewReleaseAction).toHaveBeenCalledWith(
+      "owner/repo",
+    );
   });
 
   it("does not show the security badge for seen security releases", async () => {

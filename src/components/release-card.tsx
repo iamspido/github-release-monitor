@@ -55,10 +55,20 @@ import {
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
-import { isSecurityRelease } from "@/lib/security-release";
+import {
+  defaultSecurityHighlightCustomColor,
+  isSecurityRelease,
+  normalizeSecurityHighlightColorPreset,
+  normalizeSecurityHighlightCustomColor,
+} from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
-import type { AppSettings, EnrichedRelease, FetchError } from "@/types";
+import type {
+  AppSettings,
+  EnrichedRelease,
+  FetchError,
+  SecurityHighlightColorPreset,
+} from "@/types";
 import { RepoSettingsDialog } from "./repo-settings-dialog";
 
 function getErrorMessage(
@@ -85,6 +95,86 @@ interface ReleaseCardProps {
   enrichedRelease: EnrichedRelease;
   settings: AppSettings;
   canMutate?: boolean;
+}
+
+type SecurityHighlightStyle = {
+  cardClassName: string;
+  badgeClassName: string;
+  style?: React.CSSProperties;
+};
+
+const securityHighlightPresetStyles: Record<
+  Exclude<SecurityHighlightColorPreset, "custom">,
+  SecurityHighlightStyle
+> = {
+  yellow: {
+    cardClassName:
+      "border-yellow-500/70 ring-2 ring-yellow-500/60 ring-offset-2 ring-offset-background",
+    badgeClassName:
+      "border-yellow-500/70 bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
+  },
+  red: {
+    cardClassName:
+      "border-red-500/70 ring-2 ring-red-500/60 ring-offset-2 ring-offset-background",
+    badgeClassName:
+      "border-red-500/70 bg-red-500/15 text-red-700 dark:text-red-300",
+  },
+  orange: {
+    cardClassName:
+      "border-orange-500/70 ring-2 ring-orange-500/60 ring-offset-2 ring-offset-background",
+    badgeClassName:
+      "border-orange-500/70 bg-orange-500/15 text-orange-700 dark:text-orange-300",
+  },
+  blue: {
+    cardClassName:
+      "border-blue-500/70 ring-2 ring-blue-500/60 ring-offset-2 ring-offset-background",
+    badgeClassName:
+      "border-blue-500/70 bg-blue-500/15 text-blue-700 dark:text-blue-300",
+  },
+  purple: {
+    cardClassName:
+      "border-purple-500/70 ring-2 ring-purple-500/60 ring-offset-2 ring-offset-background",
+    badgeClassName:
+      "border-purple-500/70 bg-purple-500/15 text-purple-700 dark:text-purple-300",
+  },
+};
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = normalizeSecurityHighlightCustomColor(hex);
+  const red = Number.parseInt(normalized.slice(1, 3), 16);
+  const green = Number.parseInt(normalized.slice(3, 5), 16);
+  const blue = Number.parseInt(normalized.slice(5, 7), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function getSecurityHighlightStyle(
+  settings: AppSettings,
+): SecurityHighlightStyle {
+  const preset = normalizeSecurityHighlightColorPreset(
+    settings.securityHighlightColorPreset,
+  );
+
+  if (preset !== "custom") {
+    return securityHighlightPresetStyles[preset];
+  }
+
+  const color = normalizeSecurityHighlightCustomColor(
+    settings.securityHighlightCustomColor ??
+      defaultSecurityHighlightCustomColor,
+  );
+  const style = {
+    "--security-highlight-border": hexToRgba(color, 0.7),
+    "--security-highlight-ring": hexToRgba(color, 0.6),
+    "--security-highlight-bg": hexToRgba(color, 0.15),
+  } as React.CSSProperties;
+
+  return {
+    cardClassName:
+      "border-[var(--security-highlight-border)] ring-2 ring-[var(--security-highlight-ring)] ring-offset-2 ring-offset-background",
+    badgeClassName:
+      "border-[var(--security-highlight-border)] bg-[var(--security-highlight-bg)] text-foreground",
+    style,
+  };
 }
 
 const markdownSanitizeSchema: typeof defaultSchema = {
@@ -512,7 +602,12 @@ export function ReleaseCard({
   const showAcknowledgeFeature = settings.showAcknowledge ?? true;
   const showMarkAsNewButton = settings.showMarkAsNew ?? true;
   const isNewSecurityRelease =
-    Boolean(isNew) && showAcknowledgeFeature && isSecurityRelease(release);
+    Boolean(isNew) &&
+    showAcknowledgeFeature &&
+    isSecurityRelease(release, settings);
+  const securityHighlightStyle = getSecurityHighlightStyle(settings);
+  const shouldConfirmSecurityAcknowledge =
+    isNewSecurityRelease && settings.confirmSecurityAcknowledge === true;
 
   return (
     <>
@@ -528,13 +623,13 @@ export function ReleaseCard({
       <Card
         className={cn(
           "flex flex-col transition-all",
-          isNewSecurityRelease &&
-            "border-yellow-500/70 ring-2 ring-yellow-500/60 ring-offset-2 ring-offset-background",
+          isNewSecurityRelease && securityHighlightStyle.cardClassName,
           isNew &&
             showAcknowledgeFeature &&
             !isNewSecurityRelease &&
             "border-primary ring-2 ring-primary ring-offset-2 ring-offset-background",
         )}
+        style={isNewSecurityRelease ? securityHighlightStyle.style : undefined}
       >
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
@@ -566,7 +661,8 @@ export function ReleaseCard({
                 {isNewSecurityRelease && (
                   <Badge
                     variant="outline"
-                    className="border-yellow-500/70 bg-yellow-500/15 text-yellow-700 dark:text-yellow-300"
+                    className={securityHighlightStyle.badgeClassName}
+                    style={securityHighlightStyle.style}
                   >
                     {t("security_release_badge")}
                   </Badge>
@@ -660,35 +756,100 @@ export function ReleaseCard({
           {canMutate &&
             showAcknowledgeFeature &&
             (isNew ? (
-              <TooltipProvider delayDuration={100}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      onClick={handleAcknowledge}
-                      disabled={
-                        isAcknowledging ||
-                        isRemoving ||
-                        isMarkingAsNew ||
-                        !isOnline
-                      }
-                      aria-disabled={!isOnline}
-                    >
-                      {isAcknowledging ? (
-                        <Loader2 className="animate-spin" />
-                      ) : (
-                        <CheckSquare />
+              shouldConfirmSecurityAcknowledge ? (
+                <AlertDialog>
+                  <TooltipProvider delayDuration={100}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            disabled={
+                              isAcknowledging ||
+                              isRemoving ||
+                              isMarkingAsNew ||
+                              !isOnline
+                            }
+                            aria-disabled={!isOnline}
+                          >
+                            {isAcknowledging ? (
+                              <Loader2 className="animate-spin" />
+                            ) : (
+                              <CheckSquare />
+                            )}
+                            <span>{t("acknowledge_button")}</span>
+                          </Button>
+                        </AlertDialogTrigger>
+                      </TooltipTrigger>
+                      {!isOnline && (
+                        <TooltipContent>
+                          <p>{t("offline_tooltip")}</p>
+                        </TooltipContent>
                       )}
-                      <span>{t("acknowledge_button")}</span>
-                    </Button>
-                  </TooltipTrigger>
-                  {!isOnline && (
-                    <TooltipContent>
-                      <p>{t("offline_tooltip")}</p>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        {t("security_acknowledge_confirm_title")}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {t.rich("security_acknowledge_confirm_description", {
+                          bold: (chunks) => (
+                            <span className="font-bold">{chunks}</span>
+                          ),
+                          repoId,
+                        })}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>
+                        {t("cancel_button")}
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={handleAcknowledge}
+                        disabled={isAcknowledging || !isOnline}
+                      >
+                        {isAcknowledging ? (
+                          <Loader2 className="animate-spin" />
+                        ) : null}
+                        {t("security_acknowledge_confirm_button")}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : (
+                <TooltipProvider delayDuration={100}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        onClick={handleAcknowledge}
+                        disabled={
+                          isAcknowledging ||
+                          isRemoving ||
+                          isMarkingAsNew ||
+                          !isOnline
+                        }
+                        aria-disabled={!isOnline}
+                      >
+                        {isAcknowledging ? (
+                          <Loader2 className="animate-spin" />
+                        ) : (
+                          <CheckSquare />
+                        )}
+                        <span>{t("acknowledge_button")}</span>
+                      </Button>
+                    </TooltipTrigger>
+                    {!isOnline && (
+                      <TooltipContent>
+                        <p>{t("offline_tooltip")}</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
+              )
             ) : (
               showMarkAsNewButton && (
                 <TooltipProvider delayDuration={100}>

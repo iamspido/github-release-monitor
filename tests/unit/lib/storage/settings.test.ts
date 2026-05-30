@@ -79,6 +79,18 @@ describe("storage/settings failure scenarios", () => {
     expect(settings.prioritizeNewSecurityReleases).toBe(false);
   });
 
+  it("defaults security release settings for old settings files", async () => {
+    const { getSettings } = await import("@/lib/storage/settings");
+
+    const settings = await getSettings();
+
+    expect(settings.securityHighlightColorPreset).toBe("yellow");
+    expect(settings.securityHighlightCustomColor).toBe("#eab308");
+    expect(settings.confirmSecurityAcknowledge).toBe(false);
+    expect(settings.includeDefaultSecurityPatterns).toBe(true);
+    expect(settings.customSecurityPatterns).toBeUndefined();
+  });
+
   it("defaults the repository form to expanded for old settings files", async () => {
     const { getSettings } = await import("@/lib/storage/settings");
 
