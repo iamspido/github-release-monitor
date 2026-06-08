@@ -432,7 +432,7 @@ export async function previewComposeImportAction(
     }
 
     const parsedSource = parseSupportedRepoUrl(sourceUrlOrReason);
-    if (!parsedSource || parsedSource.provider !== "github") {
+    if (parsedSource?.provider !== "github") {
       skipped.invalid_source_url++;
       continue;
     }
