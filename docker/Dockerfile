@@ -90,7 +90,7 @@ COPY tests/ ./tests/
 RUN npm test
 
 # E2E Stage (Playwright)
-FROM mcr.microsoft.com/playwright:v1.60.0-jammy AS e2e
+FROM mcr.microsoft.com/playwright:v1.61.0-jammy AS e2e
 
 WORKDIR /app
 
