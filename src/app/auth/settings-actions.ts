@@ -8,6 +8,10 @@ import {
   hasCredentialPasswordAccount,
   isAuthEmailVerificationEnabled,
 } from "@/lib/auth";
+import {
+  getClientIpFromHeaders,
+  isLikelyEmail,
+} from "@/lib/auth/request-context";
 import { logger } from "@/lib/logger";
 import { isPasswordPolicyValid } from "@/lib/password-policy";
 
@@ -32,17 +36,6 @@ export type UpdateAccountPasswordResult = {
   mode?: "set" | "changed";
   errorKey?: string;
 };
-
-function getClientIp(headerStore: Headers): string {
-  const forwardedFor = headerStore.get("x-forwarded-for");
-  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
-  const realIp = headerStore.get("x-real-ip")?.trim();
-  return (firstForwardedIp || realIp || "unknown").slice(0, 128);
-}
-
-function isLikelyEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
 
 function normalizeCallbackPath(value: string | undefined): string {
   if (!value) return "/";
@@ -127,7 +120,7 @@ export async function updateAccountEmailAction(
   await ensureAuthDatabaseReady();
   const emailVerificationEnabled = isAuthEmailVerificationEnabled();
   const headerStore = await headers();
-  const clientIp = getClientIp(headerStore);
+  const clientIp = getClientIpFromHeaders(headerStore);
   const normalizedEmail = input.newEmail.trim().toLowerCase();
   const callbackURL = normalizeCallbackPath(input.callbackURL);
 
@@ -213,7 +206,7 @@ export async function updateAccountPasswordAction(
 ): Promise<UpdateAccountPasswordResult> {
   await ensureAuthDatabaseReady();
   const headerStore = await headers();
-  const clientIp = getClientIp(headerStore);
+  const clientIp = getClientIpFromHeaders(headerStore);
   const newPassword = input.newPassword.trim();
   const currentPassword =
     typeof input.currentPassword === "string" ? input.currentPassword : "";

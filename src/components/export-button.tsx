@@ -2,23 +2,22 @@
 
 import { Download, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import * as React from "react";
 
 import { getRepositoriesForExport } from "@/app/actions";
 import { Button } from "@/components/ui/button";
+import { useActionTransition } from "@/hooks/use-action-transition";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
-import { reloadIfServerActionStale } from "@/lib/server-action-error";
 
 export function ExportButton() {
   const t = useTranslations("HomePage");
   const { toast } = useToast();
-  const [isPending, startTransition] = React.useTransition();
+  const { isPending, runAction } = useActionTransition();
   const { isOnline } = useNetworkStatus();
 
   const handleExport = () => {
-    startTransition(async () => {
-      try {
+    runAction(
+      async () => {
         const result = await getRepositoriesForExport();
 
         if (result.success && result.data) {
@@ -61,17 +60,15 @@ export function ExportButton() {
             variant: "destructive",
           });
         }
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
+      },
+      () => {
         toast({
           title: t("toast_export_error_title"),
           description: t("toast_export_error_description"),
           variant: "destructive",
         });
-      }
-    });
+      },
+    );
   };
 
   return (

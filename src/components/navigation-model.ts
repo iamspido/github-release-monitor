@@ -1,0 +1,101 @@
+import { FlaskConical, Home, Settings } from "lucide-react";
+import { pathnames } from "@/i18n/routing";
+import type { AuthAccess } from "@/lib/auth/mode";
+
+export type NavPage = "home" | "settings" | "test";
+
+export type NavLink = {
+  href: keyof typeof pathnames;
+  label: string;
+  icon: typeof Home;
+  page: NavPage;
+};
+
+export const defaultAuthAccess: AuthAccess = {
+  authenticationMethod: "Basic",
+  isAuthenticated: true,
+  canMutate: true,
+  canAccessRestrictedPages: true,
+  showLogin: false,
+  showLogout: true,
+  showSettings: true,
+  showTest: true,
+};
+
+export function getNavLinks(
+  authAccess: AuthAccess,
+  t: (key: string) => string,
+): NavLink[] {
+  return [
+    { href: "/", label: t("home_aria"), icon: Home, page: "home" },
+    ...(authAccess.showSettings
+      ? [
+          {
+            href: "/settings" as const,
+            label: t("settings_aria"),
+            icon: Settings,
+            page: "settings" as const,
+          },
+        ]
+      : []),
+    ...(authAccess.showTest
+      ? [
+          {
+            href: "/test" as const,
+            label: t("test_aria"),
+            icon: FlaskConical,
+            page: "test" as const,
+          },
+        ]
+      : []),
+  ];
+}
+
+export function normalizeLocalizedPath(
+  path: string | null | undefined,
+  locale: string,
+): string {
+  if (!path) {
+    return "/";
+  }
+
+  const localePrefix = `/${locale}`;
+  let normalized = path;
+
+  if (normalized === localePrefix) {
+    return "/";
+  }
+
+  if (normalized.startsWith(`${localePrefix}/`)) {
+    normalized = normalized.slice(localePrefix.length);
+  }
+
+  if (!normalized.startsWith("/")) {
+    normalized = `/${normalized}`;
+  }
+
+  if (normalized.length > 1 && normalized.endsWith("/")) {
+    normalized = normalized.slice(0, -1);
+  }
+
+  return normalized;
+}
+
+export function isNavLinkActive(args: {
+  href: keyof typeof pathnames;
+  locale: string;
+  pathname: string | null | undefined;
+}): boolean {
+  const currentPath = normalizeLocalizedPath(args.pathname, args.locale);
+  const candidates = new Set<string>();
+
+  candidates.add(normalizeLocalizedPath(args.href, args.locale));
+
+  const routeConfig = pathnames[args.href];
+  const localizedPath = routeConfig?.[args.locale as "en" | "de"];
+  if (localizedPath) {
+    candidates.add(normalizeLocalizedPath(localizedPath, args.locale));
+  }
+
+  return candidates.has(currentPath);
+}

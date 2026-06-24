@@ -1,0 +1,68 @@
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { JsonFileStore } from "@/lib/storage/json-file-store";
+
+type TestValue = {
+  value: string;
+};
+
+function parseTestValue(value: unknown): TestValue {
+  if (
+    value &&
+    typeof value === "object" &&
+    "value" in value &&
+    typeof (value as { value?: unknown }).value === "string"
+  ) {
+    return { value: (value as { value: string }).value };
+  }
+  throw new Error("invalid test value");
+}
+
+describe("storage/JsonFileStore", () => {
+  let tempDir: string;
+  let filePath: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "json-file-store-"));
+    filePath = path.join(tempDir, "store.json");
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  function createStore(options?: {
+    readFallback?: () => TestValue;
+    defaultValue?: TestValue;
+  }) {
+    return new JsonFileStore<TestValue>({
+      filePath,
+      defaultValue: options?.defaultValue ?? { value: "default" },
+      scope: "JsonFileStoreTest",
+      parse: parseTestValue,
+      readFallback: options?.readFallback,
+      writeErrorMessage: "write failed",
+    });
+  }
+
+  it("returns the configured fallback when the JSON file is corrupt", async () => {
+    await writeFile(filePath, "{", "utf8");
+    const store = createStore({
+      readFallback: () => ({ value: "fallback" }),
+    });
+
+    await expect(store.read()).resolves.toEqual({ value: "fallback" });
+  });
+
+  it("creates and replaces the JSON file through a temporary file without leaving temp files behind", async () => {
+    const store = createStore();
+
+    await store.write({ value: "next" });
+
+    await expect(readFile(filePath, "utf8")).resolves.toBe(
+      `${JSON.stringify({ value: "next" }, null, 2)}\n`,
+    );
+    await expect(readdir(tempDir)).resolves.toEqual(["store.json"]);
+  });
+});

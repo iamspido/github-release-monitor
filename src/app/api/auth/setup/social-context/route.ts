@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import { ensureAuthDatabaseReady, hasAnyAuthUser } from "@/lib/auth";
+import {
+  getAuthSetupToken,
+  isAuthSetupTokenConfigured,
+  isSocialProviderConfigured,
+} from "@/lib/auth/config";
+import { getClientIpFromHeaders } from "@/lib/auth/request-context";
 import { isAuthSetupLocked } from "@/lib/auth/setup-lock";
 import {
   buildSetupSocialContextSetCookieHeader,
@@ -21,11 +27,6 @@ function toSafeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function isSetupEnabledByEnv() {
-  const token = process.env.AUTH_SETUP_TOKEN;
-  return typeof token === "string" && token.length >= 32;
-}
-
 function isValidUsername(value: string) {
   return isUsernamePolicyValid(value);
 }
@@ -34,24 +35,8 @@ function isSupportedProvider(value: string): value is "github" | "google" {
   return value === "github" || value === "google";
 }
 
-function isProviderConfigured(provider: "github" | "google") {
-  if (provider === "github") {
-    return Boolean(
-      process.env.AUTH_GITHUB_CLIENT_ID?.trim() &&
-        process.env.AUTH_GITHUB_CLIENT_SECRET?.trim(),
-    );
-  }
-  return Boolean(
-    process.env.AUTH_GOOGLE_CLIENT_ID?.trim() &&
-      process.env.AUTH_GOOGLE_CLIENT_SECRET?.trim(),
-  );
-}
-
 function getClientIp(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  return (firstForwardedIp || realIp || "unknown").slice(0, 128);
+  return getClientIpFromHeaders(request.headers);
 }
 
 function disabledResponse() {
@@ -68,7 +53,7 @@ export async function POST(request: Request) {
 
   await ensureAuthDatabaseReady();
 
-  if (!isSetupEnabledByEnv()) {
+  if (!isAuthSetupTokenConfigured()) {
     log.warn(
       `Rejected initial social setup context from ip='${clientIp}' because AUTH_SETUP_TOKEN is invalid.`,
     );
@@ -106,7 +91,7 @@ export async function POST(request: Request) {
   const username = toSafeString(payload.username);
   const name = toSafeString(payload.name);
 
-  if (token !== process.env.AUTH_SETUP_TOKEN) {
+  if (token !== getAuthSetupToken()) {
     log.warn(
       `Rejected initial social setup context from ip='${clientIp}' due to invalid setup token.`,
     );
@@ -116,7 +101,7 @@ export async function POST(request: Request) {
   if (!isSupportedProvider(provider)) {
     return NextResponse.json({ error: "invalid_provider" }, { status: 400 });
   }
-  if (!isProviderConfigured(provider)) {
+  if (!isSocialProviderConfigured(provider)) {
     return NextResponse.json(
       { error: "provider_not_configured" },
       { status: 400 },

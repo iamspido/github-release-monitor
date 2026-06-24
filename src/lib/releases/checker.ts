@@ -1,12 +1,8 @@
 import { sendNotification } from "@/lib/notifications";
 import { getLatestReleasesForRepos } from "@/lib/releases";
-import {
-  applyEtagUpdate,
-  canReplaceCachedReleaseWithVirtual,
-  resolveParallelRepoFetches,
-  toCachedRelease,
-} from "@/lib/releases/filters";
+import { resolveParallelRepoFetches } from "@/lib/releases/filters";
 import { hasAnyGitlabTokenForAllowedHosts } from "@/lib/repositories/providers";
+import { applyReleaseFetchResultToRepository } from "@/lib/repositories/release-cache-update";
 import { filterRepositoriesDueForBackgroundCheck } from "@/lib/runtime/repository-schedule";
 import { scheduleTask } from "@/lib/runtime/task-scheduler";
 import { log } from "@/lib/server-action-helpers";
@@ -78,38 +74,12 @@ async function _checkForNewReleasesUnscheduled(options?: {
       repoWasUpdated = true;
     }
 
-    if (applyEtagUpdate(repo, enrichedRelease.newEtag)) {
+    if (applyReleaseFetchResultToRepository(repo, enrichedRelease)) {
       repoWasUpdated = true;
     }
 
     if (enrichedRelease.release) {
       const isVirtual = enrichedRelease.release.id === 0; // tag-fallback or reconstructed data
-      const newCachedRelease = toCachedRelease(enrichedRelease.release);
-
-      // Do not overwrite an existing real release with a virtual one.
-      if (
-        !isVirtual ||
-        canReplaceCachedReleaseWithVirtual(repo.latestRelease)
-      ) {
-        if (
-          JSON.stringify(repo.latestRelease) !==
-          JSON.stringify(newCachedRelease)
-        ) {
-          repoWasUpdated = true;
-        }
-        repo.latestRelease = newCachedRelease;
-      } else if (
-        isVirtual &&
-        repo.latestRelease &&
-        newCachedRelease.fetched_at
-      ) {
-        // Still update the last successful fetch time when ETag says not modified
-        if (repo.latestRelease.fetched_at !== newCachedRelease.fetched_at) {
-          repo.latestRelease.fetched_at = newCachedRelease.fetched_at;
-          repoWasUpdated = true;
-        }
-      }
-
       const newTag = enrichedRelease.release.tag_name;
       const isNewRelease =
         !isVirtual &&

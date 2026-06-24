@@ -1,16 +1,33 @@
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import { logger } from "@/lib/logger";
+import { JsonFileStore } from "@/lib/storage/json-file-store";
 import type { Repository } from "@/types";
 
 // Resolve the path to the data file.
 // Using process.cwd() ensures the path is correct whether running in dev or prod.
 const dataFilePath = path.join(process.cwd(), "data", "repositories.json");
-const dataDirPath = path.dirname(dataFilePath);
 const isPrefixedRepoId = (repoId: string) =>
   /^[^/]+:(?:[^/]+\/)+[^/]+$/i.test(repoId);
 
 let migrationInFlight: Promise<void> | null = null;
+
+const repositoryStore = new JsonFileStore<Repository[]>({
+  filePath: dataFilePath,
+  defaultValue: [],
+  scope: "Repositories",
+  parse: (value) => (Array.isArray(value) ? (value as Repository[]) : []),
+  readFallback: () => [],
+  writeErrorMessage: (error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code)
+        : undefined;
+    return `Failed to write to repository file. Please check file permissions. Server Error: ${
+      code || message
+    }`;
+  },
+});
 
 function mergeRepositoriesPreferFirst(
   base: Repository,
@@ -69,26 +86,10 @@ function migrateRepositoriesIds(repositories: Repository[]): {
   return { migrated, changed };
 }
 
-async function ensureDataFileExists() {
-  try {
-    // Ensure the directory exists first.
-    await fs.mkdir(dataDirPath, { recursive: true });
-    // Then check for the file.
-    await fs.access(dataFilePath);
-  } catch {
-    // File doesn't exist, create it with an empty array.
-    await fs.writeFile(dataFilePath, JSON.stringify([], null, 2), "utf8");
-    logger
-      .withScope("Repositories")
-      .info(`Created repository data file at: ${dataFilePath}`);
-  }
-}
-
 export async function getRepositories(): Promise<Repository[]> {
-  await ensureDataFileExists();
+  await repositoryStore.ensureExists();
   try {
-    const fileContent = await fs.readFile(dataFilePath, "utf8");
-    const data = JSON.parse(fileContent) as Repository[];
+    const data = await repositoryStore.read();
 
     const hasLegacyIds = Array.isArray(data)
       ? data.some(
@@ -121,8 +122,7 @@ export async function getRepositories(): Promise<Repository[]> {
       }
 
       await migrationInFlight;
-      const migratedContent = await fs.readFile(dataFilePath, "utf8");
-      return JSON.parse(migratedContent) as Repository[];
+      return repositoryStore.read();
     }
 
     return data;
@@ -138,24 +138,5 @@ export async function getRepositories(): Promise<Repository[]> {
 export async function saveRepositories(
   repositories: Repository[],
 ): Promise<void> {
-  await ensureDataFileExists();
-  try {
-    const fileContent = JSON.stringify(repositories, null, 2);
-    await fs.writeFile(dataFilePath, fileContent, "utf8");
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    const code =
-      error && typeof error === "object" && "code" in error
-        ? String((error as { code?: unknown }).code)
-        : undefined;
-    logger
-      .withScope("Repositories")
-      .error("Error writing to repositories.json:", error);
-    // Throw a more specific error that can be caught by the server action
-    throw new Error(
-      `Failed to write to repository file. Please check file permissions. Server Error: ${
-        code || message
-      }`,
-    );
-  }
+  await repositoryStore.write(repositories);
 }

@@ -25,4 +25,23 @@ describe("runtime/task-scheduler", () => {
     expect(b).toBe("B");
     expect(order).toEqual(["start-A", "end-A", "start-B", "end-B"]);
   });
+
+  it("continues running queued tasks after a task rejects", async () => {
+    const order: string[] = [];
+    const failure = new Error("boom");
+
+    const taskA = scheduleTask("rejecting task", async () => {
+      order.push("start-A");
+      throw failure;
+    });
+
+    const taskB = scheduleTask("following task", async () => {
+      order.push("start-B");
+      return "B";
+    });
+
+    await expect(taskA).rejects.toThrow("boom");
+    await expect(taskB).resolves.toBe("B");
+    expect(order).toEqual(["start-A", "start-B"]);
+  });
 });

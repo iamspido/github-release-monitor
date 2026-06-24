@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { sendTestAppriseNotification } from "@/lib/notifications";
+import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
 import { sendTestEmail } from "@/lib/notifications/email";
 import {
   getBasicAppriseTestBody,
@@ -99,20 +100,8 @@ export async function triggerReleaseCheckAction(): Promise<{
     return { success: false, message: await getRestrictedActionError() };
   }
 
-  const {
-    MAIL_HOST,
-    MAIL_PORT,
-    MAIL_FROM_ADDRESS,
-    MAIL_TO_ADDRESS,
-    APPRISE_URL,
-  } = process.env;
-  const isSmtpConfigured = !!(
-    MAIL_HOST &&
-    MAIL_PORT &&
-    MAIL_FROM_ADDRESS &&
-    MAIL_TO_ADDRESS
-  );
-  const isAppriseConfigured = !!APPRISE_URL;
+  const { isSmtpConfigured, isAppriseConfigured } =
+    getNotificationRuntimeConfig();
 
   if (!isSmtpConfigured && !isAppriseConfigured) {
     return {

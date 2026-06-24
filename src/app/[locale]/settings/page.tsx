@@ -10,6 +10,8 @@ import {
 import { SocialAccountsSettingsCard } from "@/components/social-accounts-settings-card";
 import { TwoFactorSettingsCard } from "@/components/two-factor-settings-card";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
+import { getAuthFeatureConfig } from "@/lib/auth/config";
+import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
 import { getUpdateNotificationState } from "@/lib/runtime/app-update-notice";
 import { getSettings } from "@/lib/storage/settings";
 import type { AppSettings } from "@/types";
@@ -25,22 +27,10 @@ export default async function SettingsPage({
     namespace: "SettingsPage",
   });
   const currentSettings: AppSettings = await getSettings();
-  const isAppriseConfigured = !!process.env.APPRISE_URL;
+  const { isAppriseConfigured } = getNotificationRuntimeConfig();
   const isGithubTokenSet = !!process.env.GITHUB_ACCESS_TOKEN?.trim();
-  const isPasskeyEnabled = process.env.AUTH_ENABLE_PASSKEY !== "false";
-  const enabledSocialProviders: Array<"github" | "google"> = [];
-  if (
-    process.env.AUTH_GITHUB_CLIENT_ID?.trim() &&
-    process.env.AUTH_GITHUB_CLIENT_SECRET?.trim()
-  ) {
-    enabledSocialProviders.push("github");
-  }
-  if (
-    process.env.AUTH_GOOGLE_CLIENT_ID?.trim() &&
-    process.env.AUTH_GOOGLE_CLIENT_SECRET?.trim()
-  ) {
-    enabledSocialProviders.push("google");
-  }
+  const { passkeyEnabled: isPasskeyEnabled, enabledSocialProviders } =
+    getAuthFeatureConfig();
   const updateNotice = await getUpdateNotificationState();
   const authAccess = await getCurrentAuthAccess();
   const showInternalAuthSettings =

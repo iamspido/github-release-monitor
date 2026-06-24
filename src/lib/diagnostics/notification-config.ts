@@ -1,8 +1,15 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
+import { getAuthSecret } from "@/lib/auth/config";
 import { getAuthenticationMethod } from "@/lib/auth/mode";
+import { getClientIpFromHeaders } from "@/lib/auth/request-context";
+import {
+  decodeSignedJsonCookieValue,
+  encodeSignedJsonCookieValue,
+} from "@/lib/auth/signed-cookie";
 import { logger } from "@/lib/logger";
+import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
 import type { NotificationConfig } from "@/types";
 
 const MASKED_VALUE = "••••••••";
@@ -68,50 +75,23 @@ function hasValue(value: string | undefined): boolean {
 }
 
 function getStepUpSecret() {
-  return process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET || "";
-}
-
-function toBase64Url(value: string) {
-  return Buffer.from(value, "utf8").toString("base64url");
-}
-
-function fromBase64Url(value: string) {
-  return Buffer.from(value, "base64url").toString("utf8");
-}
-
-function signStepUpPayload(payloadPart: string) {
-  const secret = getStepUpSecret();
-  if (secret.length < 32) return "";
-  return createHmac("sha256", secret).update(payloadPart).digest("base64url");
+  return getAuthSecret();
 }
 
 function encodeStepUpCookie(payload: StepUpCookiePayload) {
-  const payloadPart = toBase64Url(JSON.stringify(payload));
-  const signature = signStepUpPayload(payloadPart);
-  return signature ? `${payloadPart}.${signature}` : "";
+  return encodeSignedJsonCookieValue(payload, {
+    secret: getStepUpSecret(),
+    minSecretLength: 32,
+  });
 }
 
 function decodeStepUpCookie(value: string | undefined) {
-  if (!value) return null;
-  const [payloadPart, signaturePart] = value.split(".");
-  if (!payloadPart || !signaturePart) return null;
-
-  const expectedSignature = signStepUpPayload(payloadPart);
-  if (!expectedSignature) return null;
   try {
-    const valid = timingSafeEqual(
-      Buffer.from(signaturePart, "utf8"),
-      Buffer.from(expectedSignature, "utf8"),
-    );
-    if (!valid) return null;
-  } catch {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(
-      fromBase64Url(payloadPart),
-    ) as Partial<StepUpCookiePayload>;
+    const parsed = decodeSignedJsonCookieValue(value, {
+      secret: getStepUpSecret(),
+      minSecretLength: 32,
+    }) as Partial<StepUpCookiePayload> | null;
+    if (!parsed) return null;
     if (
       typeof parsed.userId !== "string" ||
       !parsed.userId ||
@@ -228,13 +208,8 @@ export function sanitizeDiagnosticUrl(
 export function buildNotificationConfig(
   env: Partial<NodeJS.ProcessEnv> = process.env,
 ): NotificationConfig {
-  const isSmtpConfigured = Boolean(
-    env.MAIL_HOST &&
-      env.MAIL_PORT &&
-      env.MAIL_FROM_ADDRESS &&
-      env.MAIL_TO_ADDRESS,
-  );
-  const isAppriseConfigured = Boolean(env.APPRISE_URL);
+  const { isSmtpConfigured, isAppriseConfigured } =
+    getNotificationRuntimeConfig(env);
   const authenticationMethod = getAuthenticationMethod(env);
   const mailPasswordSet = hasValue(env.MAIL_PASSWORD);
   const mailPasswordRevealMode = mailPasswordSet
@@ -324,13 +299,6 @@ export function buildNotificationConfig(
   };
 }
 
-function getClientIp(headerStore: Headers): string {
-  const forwardedFor = headerStore.get("x-forwarded-for");
-  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
-  const realIp = headerStore.get("x-real-ip")?.trim();
-  return (firstForwardedIp || realIp || "unknown").slice(0, 128);
-}
-
 async function verifyDiagnosticRevealAccess(
   input: { currentPassword?: string } | undefined,
   envKey: "MAIL_PASSWORD" | "APPRISE_URL",
@@ -339,7 +307,7 @@ async function verifyDiagnosticRevealAccess(
   | { success: false; errorKey: RevealDiagnosticSecretErrorKey }
 > {
   const headerStore = await headers();
-  const clientIp = getClientIp(headerStore);
+  const clientIp = getClientIpFromHeaders(headerStore);
   const access = await getCurrentAuthAccess();
 
   if (!access.canAccessRestrictedPages) {
@@ -426,7 +394,7 @@ async function getAuthenticatedRevealUser(headerStore: Headers) {
 
 async function getInternalRevealContext() {
   const headerStore = await headers();
-  const clientIp = getClientIp(headerStore);
+  const clientIp = getClientIpFromHeaders(headerStore);
   const access = await getCurrentAuthAccess();
   if (!access.canAccessRestrictedPages) {
     return {

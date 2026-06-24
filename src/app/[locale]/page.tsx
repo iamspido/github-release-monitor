@@ -5,6 +5,7 @@ import { Header } from "@/components/header";
 import { HomePageClient } from "@/components/home-page-client";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
+import { toGithubReleaseFromCache } from "@/lib/releases/filters";
 import { getUpdateNotificationState } from "@/lib/runtime/app-update-notice";
 import { getRepositories } from "@/lib/storage/repositories";
 import { getSettings } from "@/lib/storage/settings";
@@ -12,7 +13,6 @@ import type {
   AppSettings,
   EnrichedRelease,
   FetchError,
-  GithubRelease,
   Repository,
 } from "@/types";
 
@@ -42,20 +42,10 @@ export default async function HomePage({
     repositories = await getRepositories();
     if (repositories.length > 0) {
       releases = repositories.map((repo) => {
-        const cached = repo.latestRelease;
-        const reconstructedRelease: GithubRelease | undefined = cached
-          ? {
-              ...cached,
-              id: 0, // Cached releases might not have a full ID
-              prerelease: false, // This info isn't in CachedRelease
-              draft: false, // This info isn't in CachedRelease
-            }
-          : undefined;
-
         return {
           repoId: repo.id,
           repoUrl: repo.url,
-          release: reconstructedRelease,
+          release: toGithubReleaseFromCache(repo.latestRelease),
           isNew: repo.isNew,
           repoSettings: {
             releaseChannels: repo.releaseChannels,

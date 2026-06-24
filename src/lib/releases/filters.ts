@@ -8,6 +8,10 @@ import type {
 } from "@/types";
 import { allPreReleaseTypes } from "@/types";
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function isPreReleaseByTagName(
   tagName: string,
   preReleaseSubChannels?: PreReleaseChannelType[],
@@ -24,7 +28,9 @@ export function isPreReleaseByTagName(
   // (or the end of the string), preventing matches like `beta` in `betamax`.
   // This matches `-b3`, `v1.0-beta`, `v1.0rc1`, and `release_candidate_1.0rc2`.
   const preReleaseRegex = new RegExp(
-    `(?:^|[^a-zA-Z])(${preReleaseSubChannels.join("|")})(?=[^a-zA-Z]|$)`,
+    `(?:^|[^a-zA-Z])(${preReleaseSubChannels
+      .map(escapeRegExp)
+      .join("|")})(?=[^a-zA-Z]|$)`,
     "i",
   );
   return preReleaseRegex.test(tagName);
@@ -41,6 +47,20 @@ export function toCachedRelease(release: GithubRelease): CachedRelease {
     published_at_unknown: release.published_at_unknown,
     fetched_at: release.fetched_at,
     source: release.id === 0 ? "tag" : "release",
+  };
+}
+
+export function toGithubReleaseFromCache(
+  release: CachedRelease | undefined,
+  fetchedAt?: string,
+): GithubRelease | undefined {
+  if (!release) return undefined;
+  return {
+    ...release,
+    id: 0,
+    prerelease: false,
+    draft: false,
+    ...(fetchedAt ? { fetched_at: fetchedAt } : {}),
   };
 }
 

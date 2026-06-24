@@ -8,7 +8,7 @@ import { reloadIfServerActionStale } from "@/lib/server-action-error";
 // Periodically asks the server to check repositories that are due by their
 // per-repository background schedule, then refreshes Server Components.
 export function AutoRefresher({
-  intervalMinutes: _intervalMinutes,
+  intervalMinutes,
 }: {
   intervalMinutes: number;
 }) {
@@ -16,7 +16,7 @@ export function AutoRefresher({
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    const intervalMs = 60 * 1000;
+    const intervalMs = Math.max(1, intervalMinutes) * 60 * 1000;
 
     const intervalId = setInterval(() => {
       // Don't stack refreshes if one is already in progress.
@@ -44,7 +44,7 @@ export function AutoRefresher({
 
     // Clean up the interval when the component unmounts or the interval changes.
     return () => clearInterval(intervalId);
-  }, [router, isPending]);
+  }, [router, isPending, intervalMinutes]);
 
   return null; // This component doesn't render any UI.
 }

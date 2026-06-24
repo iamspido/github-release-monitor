@@ -1,8 +1,8 @@
 import { logger } from "@/lib/logger";
 
 // This promise is used to create a sequential task queue.
-// All actions that modify the repository list should be wrapped in `scheduleTask`.
-let currentUpdatePromise: Promise<unknown> = Promise.resolve();
+// All actions that modify shared JSON-backed state should be wrapped in `scheduleTask`.
+let currentUpdatePromise: Promise<void> = Promise.resolve();
 
 /**
  * Schedules a task to be executed sequentially, preventing race conditions
@@ -27,6 +27,12 @@ export function scheduleTask<T>(
     }
   });
 
-  currentUpdatePromise = taskPromise;
+  currentUpdatePromise = taskPromise.then(
+    () => undefined,
+    (error) => {
+      log.error(`Task failed: ${taskName}`, error);
+      return undefined;
+    },
+  );
   return taskPromise;
 }

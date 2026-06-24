@@ -5,6 +5,7 @@ import {
   getAuthenticationMethod,
 } from "@/lib/auth/mode";
 import { logger } from "@/lib/logger";
+import { getAllowedGitlabHosts } from "@/lib/repositories/providers";
 import {
   NEXT_LOCALE_COOKIE,
   nextLocaleCookieOptions,
@@ -209,32 +210,6 @@ function getRouteKeyForPath(
   const { restPath } = splitLocaleFromPath(pathname);
   const normalizedPath = normalizedRestPath(restPath);
   return reversePathLookup[locale][normalizedPath] ?? null;
-}
-
-function normalizeGitlabHost(value: string): string | null {
-  const host = value.trim().toLowerCase();
-  if (!host) return null;
-  if (host.includes("://")) return null;
-  if (host.includes("/")) return null;
-  if (host.includes(":")) return null;
-  if (host.includes("?") || host.includes("#")) return null;
-  if (!/^[a-z0-9.-]+$/.test(host)) return null;
-  if (host.startsWith(".") || host.endsWith(".")) return null;
-  return host;
-}
-
-function getAllowedGitlabHosts(): string[] {
-  const hosts = new Set<string>(["gitlab.com"]);
-  const raw = process.env.GITLAB_ADDITIONAL_HOSTS;
-  if (!raw) return [...hosts];
-
-  for (const entry of raw.split(",")) {
-    const normalized = normalizeGitlabHost(entry);
-    if (!normalized) continue;
-    hosts.add(normalized);
-  }
-
-  return [...hosts];
 }
 
 function getSecurityHeaders() {

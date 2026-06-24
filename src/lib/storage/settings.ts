@@ -1,8 +1,6 @@
 import type { Stats } from "node:fs";
-import { promises as fs } from "node:fs";
 import path from "node:path";
 import { defaultLocale, locales } from "@/i18n/routing";
-import { logger } from "@/lib/logger";
 import {
   normalizeProviderSortOrder,
   normalizeReleaseSortOrder,
@@ -11,11 +9,11 @@ import {
   defaultSecurityHighlightColorPreset,
   defaultSecurityHighlightCustomColor,
 } from "@/lib/security-release";
+import { JsonFileStore } from "@/lib/storage/json-file-store";
 import type { AppSettings, Locale } from "@/types";
 import { allPreReleaseTypes, defaultProviderSortOrder } from "@/types";
 
 const dataFilePath = path.join(process.cwd(), "data", "settings.json");
-const dataDirPath = path.dirname(dataFilePath);
 
 const hasGithubToken = Boolean(process.env.GITHUB_ACCESS_TOKEN?.trim());
 const defaultParallelRepoFetches = hasGithubToken ? 5 : 1;
@@ -55,21 +53,6 @@ const CACHE_CHECK_INTERVAL_MS = 500;
 let cachedSettings: AppSettings | null = null;
 let cachedMtimeMs: number | null = null;
 let lastMtimeCheck = 0;
-async function ensureDataFileExists() {
-  try {
-    await fs.mkdir(dataDirPath, { recursive: true });
-    await fs.access(dataFilePath);
-  } catch {
-    await fs.writeFile(
-      dataFilePath,
-      JSON.stringify(defaultSettings, null, 2),
-      "utf8",
-    );
-    logger
-      .withScope("Settings")
-      .info(`Created settings data file at: ${dataFilePath}`);
-  }
-}
 
 function cloneSettings(settings: AppSettings): AppSettings {
   return {
@@ -83,35 +66,39 @@ function cloneSettings(settings: AppSettings): AppSettings {
   };
 }
 
+function normalizeSettings(value: unknown): AppSettings {
+  const merged = {
+    ...defaultSettings,
+    ...(value as Partial<AppSettings>),
+  };
+  merged.releaseSortOrder = normalizeReleaseSortOrder(merged.releaseSortOrder);
+  merged.providerSortOrder = normalizeProviderSortOrder(
+    merged.providerSortOrder,
+  );
+  return cloneSettings(merged);
+}
+
+const settingsStore = new JsonFileStore<AppSettings>({
+  filePath: dataFilePath,
+  defaultValue: defaultSettings,
+  scope: "Settings",
+  parse: normalizeSettings,
+  readFallback: () => cloneSettings(defaultSettings),
+  writeErrorMessage: "Could not save settings data.",
+});
+
 async function refreshCache(existingStat?: Stats) {
-  try {
-    const [fileContent, stat] = await Promise.all([
-      fs.readFile(dataFilePath, "utf8"),
-      existingStat ? Promise.resolve(existingStat) : fs.stat(dataFilePath),
-    ]);
-    const data = JSON.parse(fileContent);
-    const merged = { ...defaultSettings, ...(data as Partial<AppSettings>) };
-    merged.releaseSortOrder = normalizeReleaseSortOrder(
-      merged.releaseSortOrder,
-    );
-    merged.providerSortOrder = normalizeProviderSortOrder(
-      merged.providerSortOrder,
-    );
-    cachedSettings = cloneSettings(merged);
-    cachedMtimeMs = stat.mtimeMs;
-    lastMtimeCheck = Date.now();
-  } catch (error) {
-    logger
-      .withScope("Settings")
-      .error("Error reading or parsing settings.json:", error);
-    cachedSettings = cloneSettings(defaultSettings);
-    cachedMtimeMs = null;
-    lastMtimeCheck = Date.now();
-  }
+  const [settings, stat] = await Promise.all([
+    settingsStore.read(),
+    existingStat ? Promise.resolve(existingStat) : settingsStore.stat(),
+  ]);
+  cachedSettings = cloneSettings(settings);
+  cachedMtimeMs = stat.mtimeMs;
+  lastMtimeCheck = Date.now();
 }
 
 async function ensureCache() {
-  await ensureDataFileExists();
+  await settingsStore.ensureExists();
 
   if (!cachedSettings) {
     await refreshCache();
@@ -124,13 +111,12 @@ async function ensureCache() {
   }
 
   try {
-    const stat = await fs.stat(dataFilePath);
+    const stat = await settingsStore.stat();
     lastMtimeCheck = now;
     if (cachedMtimeMs === null || stat.mtimeMs !== cachedMtimeMs) {
       await refreshCache(stat);
     }
-  } catch (error) {
-    logger.withScope("Settings").error("Error accessing settings.json:", error);
+  } catch {
     cachedSettings = cloneSettings(defaultSettings);
     cachedMtimeMs = null;
     lastMtimeCheck = now;
@@ -154,24 +140,11 @@ export async function getLocaleSetting(): Promise<Locale> {
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
-  await ensureDataFileExists();
-  try {
-    const fileContent = JSON.stringify(settings, null, 2);
-    await fs.writeFile(dataFilePath, fileContent, "utf8");
-    const stat = await fs.stat(dataFilePath);
-    const merged = {
-      ...defaultSettings,
-      ...(settings as Partial<AppSettings>),
-    };
-    cachedSettings = cloneSettings(merged);
-    cachedMtimeMs = stat.mtimeMs;
-    lastMtimeCheck = Date.now();
-  } catch (error) {
-    logger
-      .withScope("Settings")
-      .error("Error writing to settings.json:", error);
-    throw new Error("Could not save settings data.");
-  }
+  await settingsStore.write(settings);
+  const stat = await settingsStore.stat();
+  cachedSettings = normalizeSettings(settings);
+  cachedMtimeMs = stat.mtimeMs;
+  lastMtimeCheck = Date.now();
 }
 
 export async function __clearSettingsCacheForTests__(): Promise<void> {

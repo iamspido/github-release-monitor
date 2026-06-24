@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { logger } from "@/lib/logger";
+import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
 import {
   escapeMarkdownLinkDestination,
   escapeMarkdownText,
@@ -223,18 +224,18 @@ export async function sendNotification(
   locale: string,
   settings: AppSettings,
 ) {
-  const { MAIL_HOST, APPRISE_URL } = process.env;
+  const { hasMailHost, isAppriseConfigured } = getNotificationRuntimeConfig();
   const notificationPromises = [];
 
   // Check and send SMTP email
-  if (MAIL_HOST) {
+  if (hasMailHost) {
     notificationPromises.push(
       sendNewReleaseEmail(repository, release, locale, settings.timeFormat),
     );
   }
 
   // Check and send Apprise notification
-  if (APPRISE_URL) {
+  if (isAppriseConfigured) {
     notificationPromises.push(
       sendAppriseNotification(repository, release, locale, settings),
     );

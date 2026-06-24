@@ -2,12 +2,8 @@ import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { getLatestReleasesForRepos } from "@/lib/releases";
-import {
-  applyEtagUpdate,
-  canReplaceCachedReleaseWithVirtual,
-  toCachedRelease,
-} from "@/lib/releases/filters";
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
+import { applyReleaseFetchResultToRepository } from "@/lib/repositories/release-cache-update";
 import { isValidRepoId } from "@/lib/repositories/validation";
 import { trackBackgroundTask } from "@/lib/runtime/background-tasks";
 import {
@@ -258,25 +254,7 @@ export async function refreshSingleRepositoryAction(repoId: string) {
     const repoIndex = allRepos.findIndex((r) => r.id === repoId);
     if (repoIndex === -1) return; // Should not happen
 
-    applyEtagUpdate(allRepos[repoIndex], enrichedRelease.newEtag);
-    if (enrichedRelease.release) {
-      const isVirtual = enrichedRelease.release.id === 0;
-      const newCached = toCachedRelease(enrichedRelease.release);
-      // Avoid overwriting existing real release data with virtual (tag-fallback) data
-      if (
-        !isVirtual ||
-        canReplaceCachedReleaseWithVirtual(allRepos[repoIndex].latestRelease)
-      ) {
-        allRepos[repoIndex].latestRelease = newCached;
-      } else if (
-        isVirtual &&
-        allRepos[repoIndex].latestRelease &&
-        newCached.fetched_at
-      ) {
-        // Update last successful fetch time on 304 not modified
-        allRepos[repoIndex].latestRelease.fetched_at = newCached.fetched_at;
-      }
-    }
+    applyReleaseFetchResultToRepository(allRepos[repoIndex], enrichedRelease);
 
     await saveRepositories(allRepos);
     revalidatePath("/"); // Revalidate the home page to show the new data
@@ -309,29 +287,9 @@ export async function refreshMultipleRepositoriesAction(
       const updatedRepos = allRepos.map((repo) => {
         const enriched = enrichedMap.get(repo.id);
         if (enriched) {
-          if (enriched.release) {
-            const isVirtual = enriched.release.id === 0;
-            const newCached = toCachedRelease(enriched.release);
-            // Avoid overwriting existing real release data with virtual (tag-fallback) data
-            if (
-              !isVirtual ||
-              canReplaceCachedReleaseWithVirtual(repo.latestRelease)
-            ) {
-              repo.latestRelease = newCached;
-            } else if (
-              isVirtual &&
-              repo.latestRelease &&
-              newCached.fetched_at
-            ) {
-              // Update last successful fetch time on 304 not modified
-              repo.latestRelease.fetched_at = newCached.fetched_at;
-            }
-            // Do not initialize lastSeenReleaseTag from a virtual (tag-fallback) release
-            if (!repo.lastSeenReleaseTag && !isVirtual) {
-              repo.lastSeenReleaseTag = enriched.release.tag_name;
-            }
-          }
-          applyEtagUpdate(repo, enriched.newEtag);
+          applyReleaseFetchResultToRepository(repo, enriched, {
+            initializeLastSeenFromRealRelease: true,
+          });
         }
         return repo;
       });

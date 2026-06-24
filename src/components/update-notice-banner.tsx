@@ -6,7 +6,7 @@ import * as React from "react";
 
 import { dismissUpdateNotificationAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { reloadIfServerActionStale } from "@/lib/server-action-error";
+import { useActionTransition } from "@/hooks/use-action-transition";
 import type { UpdateNotificationState } from "@/types";
 
 type UpdateNoticeBannerProps = {
@@ -19,7 +19,7 @@ export function UpdateNoticeBanner({
   canDismiss = true,
 }: UpdateNoticeBannerProps) {
   const t = useTranslations("UpdateNotice");
-  const [isPending, startTransition] = React.useTransition();
+  const { isPending, runAction } = useActionTransition();
   const [isVisible, setIsVisible] = React.useState<boolean>(
     notice?.shouldNotify ?? false,
   );
@@ -39,17 +39,15 @@ export function UpdateNoticeBanner({
 
   const handleDismiss = () => {
     setIsVisible(false);
-    startTransition(async () => {
-      try {
+    runAction(
+      async () => {
         await dismissUpdateNotificationAction();
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
+      },
+      (error) => {
         // eslint-disable-next-line no-console
         console.error("Failed to dismiss update notice:", error);
-      }
-    });
+      },
+    );
   };
 
   return (

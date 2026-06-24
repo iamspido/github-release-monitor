@@ -1,17 +1,14 @@
 import { fetchLatestReleaseWithCache } from "@/lib/releases/cache";
-import { resolveParallelRepoFetches } from "@/lib/releases/filters";
+import {
+  resolveParallelRepoFetches,
+  toGithubReleaseFromCache,
+} from "@/lib/releases/filters";
 import {
   hasAnyGitlabTokenForAllowedHosts,
   parseSupportedRepoUrl,
 } from "@/lib/repositories/providers";
 import { log } from "@/lib/server-action-helpers";
-import type {
-  AppSettings,
-  CachedRelease,
-  EnrichedRelease,
-  GithubRelease,
-  Repository,
-} from "@/types";
+import type { AppSettings, EnrichedRelease, Repository } from "@/types";
 
 export async function getLatestReleasesForRepos(
   repositories: Repository[],
@@ -77,19 +74,10 @@ export async function getLatestReleasesForRepos(
     );
 
     if (error?.type === "not_modified") {
-      const cached: CachedRelease | undefined = repo.latestRelease;
-      const reconstructedRelease: GithubRelease | undefined = cached
-        ? {
-            ...cached,
-            id: 0,
-            prerelease: false,
-            draft: false,
-          }
-        : undefined;
-
-      if (reconstructedRelease) {
-        reconstructedRelease.fetched_at = new Date().toISOString();
-      }
+      const reconstructedRelease = toGithubReleaseFromCache(
+        repo.latestRelease,
+        new Date().toISOString(),
+      );
 
       return {
         repoId: repo.id,

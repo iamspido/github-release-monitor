@@ -7,6 +7,11 @@ import { nextCookies } from "better-auth/next-js";
 import { twoFactor, username } from "better-auth/plugins";
 import Database from "better-sqlite3";
 import nodemailer from "nodemailer";
+import {
+  getAuthFeatureConfig,
+  getAuthSecret,
+  getAuthSmtpConfig,
+} from "@/lib/auth/config";
 import type { SocialLoginProvider } from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
 import { isUsernamePolicyValid } from "@/lib/username-policy";
@@ -36,29 +41,24 @@ function openAuthDatabase() {
 }
 
 const db = openAuthDatabase();
-const signupEnabled = process.env.AUTH_ENABLE_SIGNUP === "true";
-const passkeyEnabled = process.env.AUTH_ENABLE_PASSKEY !== "false";
+const authFeatureConfig = getAuthFeatureConfig();
+const signupEnabled = authFeatureConfig.signupEnabled;
+const passkeyEnabled = authFeatureConfig.passkeyEnabled;
 const trustedSocialLinkingEnabled =
-  process.env.AUTH_TRUST_SOCIAL_LINKING !== "false";
-const secret = process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET;
+  authFeatureConfig.trustedSocialLinkingEnabled;
+const secret = getAuthSecret();
 const githubClientId = process.env.AUTH_GITHUB_CLIENT_ID?.trim();
 const githubClientSecret = process.env.AUTH_GITHUB_CLIENT_SECRET?.trim();
 const googleClientId = process.env.AUTH_GOOGLE_CLIENT_ID?.trim();
 const googleClientSecret = process.env.AUTH_GOOGLE_CLIENT_SECRET?.trim();
-const smtpHost = process.env.MAIL_HOST?.trim() || "";
-const smtpPortRaw = process.env.MAIL_PORT?.trim() || "";
-const smtpFromAddress = process.env.MAIL_FROM_ADDRESS?.trim() || "";
-const smtpFromName =
-  process.env.MAIL_FROM_NAME?.trim() || "GitHub Release Monitor";
-const smtpUsername = process.env.MAIL_USERNAME?.trim() || "";
-const smtpPassword = process.env.MAIL_PASSWORD?.trim() || "";
-const smtpPort = Number.parseInt(smtpPortRaw, 10);
-
-const authEmailVerificationEnabled =
-  smtpHost.length > 0 &&
-  Number.isFinite(smtpPort) &&
-  smtpPort > 0 &&
-  smtpFromAddress.length > 0;
+const smtpConfig = getAuthSmtpConfig();
+const smtpHost = smtpConfig.host;
+const smtpPort = smtpConfig.port;
+const smtpFromAddress = smtpConfig.fromAddress;
+const smtpFromName = smtpConfig.fromName;
+const smtpUsername = smtpConfig.username;
+const smtpPassword = smtpConfig.password;
+const authEmailVerificationEnabled = smtpConfig.emailVerificationEnabled;
 
 let authEmailTransporter: nodemailer.Transporter | null = null;
 

@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { getLocale, getTranslations } from "next-intl/server";
 
-import { canPerformRestrictedAction } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
 import {
   normalizeProviderSortOrder,
@@ -19,6 +18,10 @@ import {
   normalizeSecurityHighlightCustomColor,
 } from "@/lib/security-release";
 import {
+  getRestrictedActionError,
+  isRestrictedActionAllowed,
+} from "@/lib/server-action-helpers";
+import {
   NEXT_LOCALE_COOKIE,
   nextLocaleCookieOptions,
   SETTINGS_LOCALE_COOKIE,
@@ -28,32 +31,15 @@ import { getRepositories, saveRepositories } from "@/lib/storage/repositories";
 import { getSettings, saveSettings } from "@/lib/storage/settings";
 import type { AppSettings } from "@/types";
 
-async function getRestrictedActionMessage() {
-  const locale = await getLocale();
-  const t = await getTranslations({ locale, namespace: "Actions" });
-  return t("error_auth_required");
-}
-
-async function isRestrictedActionAllowed(): Promise<boolean> {
-  const allowed = await canPerformRestrictedAction();
-  if (!allowed) {
-    logger
-      .withScope("Settings")
-      .warn(
-        "Rejected restricted settings action because the request is unauthenticated.",
-      );
-  }
-  return allowed;
-}
-
 export async function updateSettingsAction(newSettings: AppSettings) {
   return scheduleTask("updateSettingsAction", async () => {
     if (!(await isRestrictedActionAllowed())) {
+      const restrictedActionError = await getRestrictedActionError();
       return {
         success: false,
         message: {
-          title: await getRestrictedActionMessage(),
-          description: await getRestrictedActionMessage(),
+          title: restrictedActionError,
+          description: restrictedActionError,
         },
       };
     }
@@ -400,11 +386,12 @@ export async function updateSettingsAction(newSettings: AppSettings) {
 export async function deleteAllRepositoriesAction() {
   return scheduleTask("deleteAllRepositoriesAction", async () => {
     if (!(await isRestrictedActionAllowed())) {
+      const restrictedActionError = await getRestrictedActionError();
       return {
         success: false,
         message: {
-          title: await getRestrictedActionMessage(),
-          description: await getRestrictedActionMessage(),
+          title: restrictedActionError,
+          description: restrictedActionError,
         },
       };
     }
