@@ -57,6 +57,25 @@ import {
   normalizeSecurityHighlightCustomColor,
 } from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
+import {
+  shouldSelectAllPreReleaseSubChannels,
+  togglePreReleaseSubChannel,
+  toggleReleaseChannel,
+} from "@/lib/settings/release-channel-fields";
+import {
+  buildCronExpression,
+  type CronPreset,
+  defaultCronExpression,
+  inferCronParts,
+  inferCronPresetValue,
+  inferCronWeekday,
+  isValidFiveFieldCron,
+  MAX_INTERVAL_MINUTES,
+  MINUTES_IN_DAY,
+  MINUTES_IN_HOUR,
+  minutesToDhms,
+  weekdays,
+} from "@/lib/settings/schedule-fields";
 import { cn } from "@/lib/utils";
 import type {
   AppriseFormat,
@@ -71,84 +90,7 @@ import type {
 } from "@/types";
 import { allPreReleaseTypes, defaultProviderSortOrder } from "@/types";
 
-const MINUTES_IN_DAY = 24 * 60;
-const MINUTES_IN_HOUR = 60;
-const MAX_INTERVAL_MINUTES = 5256000;
-
-function minutesToDhms(totalMinutes: number) {
-  const d = Math.floor(totalMinutes / MINUTES_IN_DAY);
-  const h = Math.floor((totalMinutes % MINUTES_IN_DAY) / MINUTES_IN_HOUR);
-  const m = totalMinutes % MINUTES_IN_HOUR;
-  return { d, h, m };
-}
-
 type GlobalAutomationMode = "interval" | "cron";
-type CronPreset = "daily" | "weekdays" | "weekly" | "custom";
-
-const defaultCronExpression = "0 8 * * *";
-const weekdays = [
-  { value: "1", labelKey: "cron_weekday_monday" },
-  { value: "2", labelKey: "cron_weekday_tuesday" },
-  { value: "3", labelKey: "cron_weekday_wednesday" },
-  { value: "4", labelKey: "cron_weekday_thursday" },
-  { value: "5", labelKey: "cron_weekday_friday" },
-  { value: "6", labelKey: "cron_weekday_saturday" },
-  { value: "0", labelKey: "cron_weekday_sunday" },
-] as const;
-
-function splitCronTime(cron?: string) {
-  const [minute, hour] = (cron || defaultCronExpression).split(" ");
-  const h = Number.parseInt(hour, 10);
-  const m = Number.parseInt(minute, 10);
-  return `${String(Number.isFinite(h) ? h : 8).padStart(2, "0")}:${String(
-    Number.isFinite(m) ? m : 0,
-  ).padStart(2, "0")}`;
-}
-
-function inferCronPreset(cron?: string): CronPreset {
-  if (!cron) return "daily";
-  const parts = cron.trim().replace(/\s+/g, " ").split(" ");
-  if (parts.length !== 5) return "custom";
-  const [, , dayOfMonth, month, dayOfWeek] = parts;
-  if (dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
-    return "daily";
-  }
-  if (dayOfMonth === "*" && month === "*" && dayOfWeek === "1-5") {
-    return "weekdays";
-  }
-  if (dayOfMonth === "*" && month === "*" && /^[0-6]$/.test(dayOfWeek)) {
-    return "weekly";
-  }
-  return "custom";
-}
-
-function inferCronWeekday(cron?: string) {
-  const parts = cron?.trim().replace(/\s+/g, " ").split(" ") ?? [];
-  return parts.length === 5 && /^[0-6]$/.test(parts[4]) ? parts[4] : "1";
-}
-
-function buildCronExpression(
-  preset: CronPreset,
-  time: string,
-  weekday: string,
-  customExpression: string,
-) {
-  if (preset === "custom") return customExpression.trim().replace(/\s+/g, " ");
-  const [hour = "8", minute = "0"] = time.split(":");
-  const h = Number.parseInt(hour, 10);
-  const m = Number.parseInt(minute, 10);
-  const safeHour = Number.isFinite(h) ? Math.min(Math.max(h, 0), 23) : 8;
-  const safeMinute = Number.isFinite(m) ? Math.min(Math.max(m, 0), 59) : 0;
-  if (preset === "weekdays") return `${safeMinute} ${safeHour} * * 1-5`;
-  if (preset === "weekly") return `${safeMinute} ${safeHour} * * ${weekday}`;
-  return `${safeMinute} ${safeHour} * * *`;
-}
-
-function isValidFiveFieldCron(cron: string) {
-  const parts = cron.trim().replace(/\s+/g, " ").split(" ");
-  if (parts.length !== 5) return false;
-  return parts.every((part) => part.length > 0);
-}
 
 type SaveStatus =
   | "idle"
@@ -426,10 +368,10 @@ export function SettingsForm({
       currentSettings.backgroundCheckCron ? "cron" : "interval",
     );
   const [cronPreset, setCronPreset] = React.useState<CronPreset>(() =>
-    inferCronPreset(currentSettings.backgroundCheckCron),
+    inferCronPresetValue(currentSettings.backgroundCheckCron),
   );
-  const [cronTime, setCronTime] = React.useState(() =>
-    splitCronTime(currentSettings.backgroundCheckCron),
+  const [cronTime, setCronTime] = React.useState(
+    () => inferCronParts(currentSettings.backgroundCheckCron).time,
   );
   const [cronWeekday, setCronWeekday] = React.useState(() =>
     inferCronWeekday(currentSettings.backgroundCheckCron),
@@ -835,9 +777,7 @@ export function SettingsForm({
   ]);
 
   const handleChannelChange = (channel: ReleaseChannel) => {
-    const newChannels = channels.includes(channel)
-      ? channels.filter((c) => c !== channel)
-      : [...channels, channel];
+    const newChannels = toggleReleaseChannel(channels, channel);
 
     if (newChannels.length === 0) {
       toast({
@@ -849,7 +789,7 @@ export function SettingsForm({
     }
     setChannels(newChannels);
 
-    if (channel === "prerelease" && newChannels.includes("prerelease")) {
+    if (shouldSelectAllPreReleaseSubChannels(channel, newChannels)) {
       setPreReleaseSubChannels(allPreReleaseTypes);
     }
   };
@@ -858,9 +798,7 @@ export function SettingsForm({
     subChannel: PreReleaseChannelType,
   ) => {
     setPreReleaseSubChannels((prev) =>
-      prev.includes(subChannel)
-        ? prev.filter((sc) => sc !== subChannel)
-        : [...prev, subChannel],
+      togglePreReleaseSubChannel(prev, subChannel),
     );
   };
 

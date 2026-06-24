@@ -54,6 +54,21 @@ import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
+import {
+  shouldSelectAllPreReleaseSubChannels,
+  togglePreReleaseSubChannel,
+  toggleReleaseChannel,
+} from "@/lib/settings/release-channel-fields";
+import {
+  buildCronExpression,
+  type CronPreset,
+  inferCronParts,
+  isValidFiveFieldCron,
+  MAX_INTERVAL_MINUTES,
+  MINUTES_IN_DAY,
+  MINUTES_IN_HOUR,
+  minutesToDhms,
+} from "@/lib/settings/schedule-fields";
 import { cn } from "@/lib/utils";
 import type {
   AppriseFormat,
@@ -77,18 +92,6 @@ type IntervalValidationError = "too_low" | "too_high" | null;
 type RegexError = "invalid" | null;
 type CronError = "invalid" | null;
 type AutomationMode = "global" | "interval" | "cron";
-type CronPreset = "daily" | "weekdays" | "weekly" | "custom";
-
-const MINUTES_IN_DAY = 24 * 60;
-const MINUTES_IN_HOUR = 60;
-const MAX_INTERVAL_MINUTES = 5_256_000;
-
-function minutesToDhms(totalMinutes: number) {
-  const d = Math.floor(totalMinutes / MINUTES_IN_DAY);
-  const h = Math.floor((totalMinutes % MINUTES_IN_DAY) / MINUTES_IN_HOUR);
-  const m = totalMinutes % MINUTES_IN_HOUR;
-  return { d, h, m };
-}
 
 function getAutomationMode(
   settings?: Pick<Repository, "refreshInterval" | "backgroundCheckCron">,
@@ -96,81 +99,6 @@ function getAutomationMode(
   if (settings?.backgroundCheckCron) return "cron";
   if (typeof settings?.refreshInterval === "number") return "interval";
   return "global";
-}
-
-function normalizeTimeInput(value: string) {
-  return /^\d{2}:\d{2}$/.test(value) ? value : "08:00";
-}
-
-function timeToCronParts(time: string) {
-  const [hour = "8", minute = "0"] = normalizeTimeInput(time).split(":");
-  return { hour: Number(hour), minute: Number(minute) };
-}
-
-function inferCronPreset(cron: string | undefined): {
-  preset: CronPreset;
-  time: string;
-  weekday: string;
-  expression: string;
-} {
-  const fallback = {
-    preset: "daily" as CronPreset,
-    time: "08:00",
-    weekday: "1",
-    expression: "",
-  };
-  if (!cron) return fallback;
-
-  const parts = cron.trim().split(/\s+/);
-  if (parts.length !== 5) {
-    return { ...fallback, preset: "custom", expression: cron };
-  }
-
-  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-  const hourNumber = Number(hour);
-  const minuteNumber = Number(minute);
-  const hasSimpleTime =
-    Number.isInteger(hourNumber) &&
-    hourNumber >= 0 &&
-    hourNumber <= 23 &&
-    Number.isInteger(minuteNumber) &&
-    minuteNumber >= 0 &&
-    minuteNumber <= 59;
-  const time = hasSimpleTime
-    ? `${String(hourNumber).padStart(2, "0")}:${String(minuteNumber).padStart(2, "0")}`
-    : fallback.time;
-
-  if (hasSimpleTime && dayOfMonth === "*" && month === "*") {
-    if (dayOfWeek === "*") return { ...fallback, preset: "daily", time };
-    if (dayOfWeek === "1-5") return { ...fallback, preset: "weekdays", time };
-    if (/^[0-6]$/.test(dayOfWeek)) {
-      return { ...fallback, preset: "weekly", time, weekday: dayOfWeek };
-    }
-  }
-
-  return { ...fallback, preset: "custom", expression: cron };
-}
-
-function buildCronExpression(
-  preset: CronPreset,
-  time: string,
-  weekday: string,
-  customExpression: string,
-) {
-  if (preset === "custom") return customExpression.trim();
-  const { hour, minute } = timeToCronParts(time);
-  if (preset === "weekdays") return `${minute} ${hour} * * 1-5`;
-  if (preset === "weekly") return `${minute} ${hour} * * ${weekday}`;
-  return `${minute} ${hour} * * *`;
-}
-
-function isValidFiveFieldCron(value: string) {
-  const trimmed = value.trim().replace(/\s+/g, " ");
-  if (!trimmed) return false;
-  if (trimmed.split(" ").length !== 5) return false;
-  return /^[-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+$/.test(
-    trimmed,
-  );
 }
 
 function SaveStatusIndicator({ status }: { status: SaveStatus }) {
@@ -327,8 +255,7 @@ export function RepoSettingsDialog({
     String(minutesToDhms(currentRepoSettings?.cacheInterval ?? 0).m),
   );
   const cronInitial = React.useMemo(
-    () =>
-      inferCronPreset(currentRepoSettings?.backgroundCheckCron ?? undefined),
+    () => inferCronParts(currentRepoSettings?.backgroundCheckCron ?? undefined),
     [currentRepoSettings?.backgroundCheckCron],
   );
   const [cronPreset, setCronPreset] = React.useState<CronPreset>(
@@ -412,7 +339,7 @@ export function RepoSettingsDialog({
       setCacheDays(String(cacheParts.d));
       setCacheHours(String(cacheParts.h));
       setCacheMinutes(String(cacheParts.m));
-      const inferredCron = inferCronPreset(initialSettings.backgroundCheckCron);
+      const inferredCron = inferCronParts(initialSettings.backgroundCheckCron);
       setCronPreset(inferredCron.preset);
       setCronTime(inferredCron.time);
       setCronWeekday(inferredCron.weekday);
@@ -776,9 +703,7 @@ export function RepoSettingsDialog({
       ? globalSettings.releaseChannels
       : channels;
 
-    const newChannels = baseChannels.includes(channel)
-      ? baseChannels.filter((c) => c !== channel)
-      : [...baseChannels, channel];
+    const newChannels = toggleReleaseChannel(baseChannels, channel);
 
     if (newChannels.length === 0) {
       toast({
@@ -794,8 +719,7 @@ export function RepoSettingsDialog({
     if (
       useGlobalChannels &&
       useGlobalSubChannels &&
-      channel === "prerelease" &&
-      newChannels.includes("prerelease")
+      shouldSelectAllPreReleaseSubChannels(channel, newChannels)
     ) {
       setPreReleaseSubChannels(
         globalSettings.preReleaseSubChannels || allPreReleaseTypes,
@@ -811,9 +735,10 @@ export function RepoSettingsDialog({
       ? globalSettings.preReleaseSubChannels || allPreReleaseTypes
       : preReleaseSubChannels || [];
 
-    const newSubChannels = baseSubChannels.includes(subChannel)
-      ? baseSubChannels.filter((sc) => sc !== subChannel)
-      : [...baseSubChannels, subChannel];
+    const newSubChannels = togglePreReleaseSubChannel(
+      baseSubChannels,
+      subChannel,
+    );
     setPreReleaseSubChannels(newSubChannels);
   };
 

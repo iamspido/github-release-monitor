@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, Loader2, LogIn, UserPlus } from "lucide-react";
+import { Loader2, LogIn, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -8,8 +8,8 @@ import * as React from "react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { register } from "@/app/auth/actions";
-import { GoogleSignInButton } from "@/components/google-sign-in-button";
-import { GithubBrandIcon } from "@/components/icons/simple-brand-icon";
+import { PasswordVisibilityButton } from "@/components/auth/password-visibility-button";
+import { SocialProviderList } from "@/components/auth/social-provider-list";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,76 +24,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
 import {
+  type AuthSocialProvider,
+  isValidSocialUsername,
+  mapOauthErrorToMessageKey,
+  mapRegisterSocialPrecheckErrorToMessageKey,
+  normalizeApiErrorCode,
+  readApiErrorCode,
+} from "@/lib/auth/client-flow-utils";
+import {
   isPasswordPolicyValid,
   PASSWORD_MIN_LENGTH,
 } from "@/lib/password-policy";
-import { isUsernamePolicyValid } from "@/lib/username-policy";
 
-type SocialProvider = "github" | "google";
+type SocialProvider = AuthSocialProvider;
 
 interface RegisterFormProps {
   loginPath: string;
   enabledSocialProviders: SocialProvider[];
-}
-
-function mapOauthErrorToMessageKey(errorCode: string | null): string | null {
-  if (!errorCode) return null;
-
-  const normalized = errorCode.trim().toLowerCase();
-  if (!normalized) return null;
-
-  const oauthErrorMap: Record<string, string> = {
-    signup_disabled: "error_social_signup_disabled",
-    unable_to_link_account: "error_social_signup_disabled",
-    user_not_found: "error_social_signup_disabled",
-    oauth_provider_not_found: "error_social_provider_not_found",
-    state_mismatch: "error_social_state_mismatch",
-    state_not_found: "error_social_state_mismatch",
-    account_already_linked_to_different_user:
-      "error_social_account_linked_elsewhere",
-  };
-
-  return oauthErrorMap[normalized] || "error_social_login_failed";
-}
-
-function normalizeApiErrorCode(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().toLowerCase();
-  return normalized || null;
-}
-
-async function readApiErrorCode(response: Response): Promise<string | null> {
-  try {
-    const data = (await response.clone().json()) as {
-      error?: unknown;
-      code?: unknown;
-    };
-    return (
-      normalizeApiErrorCode(data.error) || normalizeApiErrorCode(data.code)
-    );
-  } catch {
-    return null;
-  }
-}
-
-function mapRegisterSocialPrecheckErrorToMessageKey(errorCode: string | null) {
-  if (!errorCode) return "error_social_login_failed";
-
-  const errorMap: Record<string, string> = {
-    signup_disabled: "error_setup_unavailable",
-    invalid_username: "error_setup_invalid_username",
-    invalid_email: "error_setup_invalid_email",
-    username_in_use: "error_setup_username_in_use",
-    email_in_use: "error_setup_email_in_use",
-    provider_not_configured: "error_setup_provider_not_configured",
-    invalid_provider: "error_setup_invalid_provider",
-  };
-
-  return errorMap[errorCode] || "error_social_login_failed";
-}
-
-function isValidSocialUsername(value: string) {
-  return isUsernamePolicyValid(value.trim());
 }
 
 function RegisterButton() {
@@ -305,23 +252,12 @@ export function RegisterForm({
                 className={passwordInputClass}
                 required
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
-                onClick={() => setShowPassword((prev) => !prev)}
-                aria-label={
-                  showPassword ? t("hide_password") : t("show_password")
-                }
-                title={showPassword ? t("hide_password") : t("show_password")}
-              >
-                {showPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </Button>
+              <PasswordVisibilityButton
+                visible={showPassword}
+                showLabel={t("show_password")}
+                hideLabel={t("hide_password")}
+                onToggle={() => setShowPassword((prev) => !prev)}
+              />
             </div>
             <p className={policyHintClass} aria-live="polite">
               {t("password_requirements")}
@@ -337,45 +273,19 @@ export function RegisterForm({
               <div className="text-center text-sm text-muted-foreground">
                 {tLogin("alternative_login_divider")}
               </div>
-              {enabledSocialProviders.map((provider) => {
-                const isPending = socialPendingProvider === provider;
-                const isDisabled =
-                  Boolean(socialPendingProvider) || !hasUsernameForSocial;
-                const buttonLabel = tLogin("social_sign_in_button", {
-                  provider: providerLabel[provider],
-                });
-
-                if (provider === "google") {
-                  return (
-                    <GoogleSignInButton
-                      key={provider}
-                      label={buttonLabel}
-                      disabled={isDisabled}
-                      pending={isPending}
-                      onClick={() => void handleSocialSignUp(provider)}
-                    />
-                  );
+              <SocialProviderList
+                providers={enabledSocialProviders}
+                pendingProvider={socialPendingProvider}
+                disabled={() =>
+                  Boolean(socialPendingProvider) || !hasUsernameForSocial
                 }
-
-                return (
-                  <Button
-                    key={provider}
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    disabled={isDisabled}
-                    onClick={() => void handleSocialSignUp(provider)}
-                    aria-busy={isPending}
-                  >
-                    {isPending ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <GithubBrandIcon className="mr-2 h-4 w-4" />
-                    )}
-                    {buttonLabel}
-                  </Button>
-                );
-              })}
+                getLabel={(provider) =>
+                  tLogin("social_sign_in_button", {
+                    provider: providerLabel[provider],
+                  })
+                }
+                onSelect={(provider) => void handleSocialSignUp(provider)}
+              />
             </div>
           )}
         </CardContent>

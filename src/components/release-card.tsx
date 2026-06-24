@@ -15,7 +15,7 @@ import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
-import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import rehypeSanitize from "rehype-sanitize";
 import remarkGemoji from "remark-gemoji";
 import remarkGfm from "remark-gfm";
 
@@ -55,147 +55,22 @@ import {
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
-import {
-  defaultSecurityHighlightCustomColor,
-  isSecurityRelease,
-  normalizeSecurityHighlightColorPreset,
-  normalizeSecurityHighlightCustomColor,
-} from "@/lib/security-release";
+import { isSecurityRelease } from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
-import type {
-  AppSettings,
-  EnrichedRelease,
-  FetchError,
-  SecurityHighlightColorPreset,
-} from "@/types";
+import type { AppSettings, EnrichedRelease } from "@/types";
+import {
+  getReleaseErrorMessage,
+  getSecurityHighlightStyle,
+  markdownSanitizeSchema,
+} from "./release-card-helpers";
 import { RepoSettingsDialog } from "./repo-settings-dialog";
-
-function getErrorMessage(
-  error: FetchError,
-  t: (key: string) => string,
-): string {
-  switch (error.type) {
-    case "rate_limit":
-      return t("error_rate_limit");
-    case "no_matching_releases":
-      return t("error_no_matching_releases");
-    case "repo_not_found":
-      return t("error_repo_not_found");
-    case "invalid_url":
-      return t("error_invalid_url");
-    case "no_releases_found":
-      return t("error_no_releases_found");
-    default:
-      return t("error_generic_fetch");
-  }
-}
 
 interface ReleaseCardProps {
   enrichedRelease: EnrichedRelease;
   settings: AppSettings;
   canMutate?: boolean;
 }
-
-type SecurityHighlightStyle = {
-  cardClassName: string;
-  badgeClassName: string;
-  style?: React.CSSProperties;
-};
-
-const securityHighlightPresetStyles: Record<
-  Exclude<SecurityHighlightColorPreset, "custom">,
-  SecurityHighlightStyle
-> = {
-  yellow: {
-    cardClassName:
-      "border-yellow-500/70 ring-2 ring-yellow-500/60 ring-offset-2 ring-offset-background",
-    badgeClassName:
-      "border-yellow-500/70 bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
-  },
-  red: {
-    cardClassName:
-      "border-red-500/70 ring-2 ring-red-500/60 ring-offset-2 ring-offset-background",
-    badgeClassName:
-      "border-red-500/70 bg-red-500/15 text-red-700 dark:text-red-300",
-  },
-  orange: {
-    cardClassName:
-      "border-orange-500/70 ring-2 ring-orange-500/60 ring-offset-2 ring-offset-background",
-    badgeClassName:
-      "border-orange-500/70 bg-orange-500/15 text-orange-700 dark:text-orange-300",
-  },
-  blue: {
-    cardClassName:
-      "border-blue-500/70 ring-2 ring-blue-500/60 ring-offset-2 ring-offset-background",
-    badgeClassName:
-      "border-blue-500/70 bg-blue-500/15 text-blue-700 dark:text-blue-300",
-  },
-  purple: {
-    cardClassName:
-      "border-purple-500/70 ring-2 ring-purple-500/60 ring-offset-2 ring-offset-background",
-    badgeClassName:
-      "border-purple-500/70 bg-purple-500/15 text-purple-700 dark:text-purple-300",
-  },
-};
-
-function hexToRgba(hex: string, alpha: number): string {
-  const normalized = normalizeSecurityHighlightCustomColor(hex);
-  const red = Number.parseInt(normalized.slice(1, 3), 16);
-  const green = Number.parseInt(normalized.slice(3, 5), 16);
-  const blue = Number.parseInt(normalized.slice(5, 7), 16);
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
-}
-
-function getSecurityHighlightStyle(
-  settings: AppSettings,
-): SecurityHighlightStyle {
-  const preset = normalizeSecurityHighlightColorPreset(
-    settings.securityHighlightColorPreset,
-  );
-
-  if (preset !== "custom") {
-    return securityHighlightPresetStyles[preset];
-  }
-
-  const color = normalizeSecurityHighlightCustomColor(
-    settings.securityHighlightCustomColor ??
-      defaultSecurityHighlightCustomColor,
-  );
-  const style = {
-    "--security-highlight-border": hexToRgba(color, 0.7),
-    "--security-highlight-ring": hexToRgba(color, 0.6),
-    "--security-highlight-bg": hexToRgba(color, 0.15),
-  } as React.CSSProperties;
-
-  return {
-    cardClassName:
-      "border-[var(--security-highlight-border)] ring-2 ring-[var(--security-highlight-ring)] ring-offset-2 ring-offset-background",
-    badgeClassName:
-      "border-[var(--security-highlight-border)] bg-[var(--security-highlight-bg)] text-foreground",
-    style,
-  };
-}
-
-const markdownSanitizeSchema: typeof defaultSchema = {
-  ...defaultSchema,
-  attributes: {
-    ...(defaultSchema.attributes || {}),
-    a: [...(defaultSchema.attributes?.a || []), "target", "rel"],
-    img: [
-      ...(defaultSchema.attributes?.img || []),
-      "src",
-      "alt",
-      "title",
-      "width",
-      "height",
-    ],
-  },
-  protocols: {
-    ...(defaultSchema.protocols || {}),
-    src: ["http", "https"],
-  },
-};
 
 export function ReleaseCard({
   enrichedRelease,
@@ -359,7 +234,7 @@ export function ReleaseCard({
     repoSettings?.appriseFormat;
 
   if (error && error.type !== "not_modified") {
-    const errorMessage = getErrorMessage(error, tActions);
+    const errorMessage = getReleaseErrorMessage(error, tActions);
     return (
       <>
         {canMutate && (

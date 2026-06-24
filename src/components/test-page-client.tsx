@@ -4,7 +4,6 @@ import { format } from "date-fns";
 import {
   AlertTriangle,
   Bell,
-  CheckCircle2,
   Eye,
   EyeOff,
   Fingerprint,
@@ -15,7 +14,6 @@ import {
   RefreshCw,
   ShieldCheck,
   Workflow,
-  XCircle,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
@@ -34,6 +32,13 @@ import {
   triggerReleaseCheckAction,
   verifySecretRevealTotpAction,
 } from "@/app/actions";
+import {
+  SECRET_REVEAL_TARGET_STORAGE_KEY,
+  type SecretRevealMethods,
+  type SecretRevealSocialProvider,
+  type SecretRevealTarget,
+} from "@/components/diagnostics/secret-reveal-model";
+import { StatusIndicator } from "@/components/diagnostics/status-indicator";
 import { GoogleBrandIcon } from "@/components/google-brand-icon";
 import {
   CodebergBrandIcon,
@@ -80,46 +85,6 @@ interface TestPageClientProps {
   notificationConfig: NotificationConfig;
   appriseStatus: AppriseStatus;
   updateNotice: UpdateNotificationState;
-}
-
-type SecretRevealTarget = "mail_password" | "apprise_url";
-type SecretRevealSocialProvider = "github" | "google";
-type SecretRevealMethods = {
-  password: boolean;
-  totp: boolean;
-  passkey: boolean;
-  socialProviders: SecretRevealSocialProvider[];
-};
-
-const SECRET_REVEAL_TARGET_STORAGE_KEY = "diagnosticSecretRevealTarget";
-
-function StatusIndicator({
-  status,
-  text,
-}: {
-  status: "success" | "warning" | "error";
-  text: string;
-}) {
-  const icons = {
-    success: CheckCircle2,
-    warning: AlertTriangle,
-    error: XCircle,
-  };
-  const colors = {
-    success: "text-green-500",
-    warning: "text-yellow-500",
-    error: "text-destructive",
-  };
-
-  const Icon = icons[status];
-  const color = colors[status];
-
-  return (
-    <div className="flex items-center gap-2">
-      <Icon className={`size-5 shrink-0 ${color}`} />
-      <span className="font-medium">{text}</span>
-    </div>
-  );
 }
 
 export function TestPageClient({

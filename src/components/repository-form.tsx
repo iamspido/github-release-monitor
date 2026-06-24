@@ -8,7 +8,6 @@ import { useActionState } from "react";
 
 import {
   addRepositoriesAction,
-  getJobStatusAction,
   importRepositoriesAction,
   previewComposeImportAction,
   resolveRepoProvidersAction,
@@ -33,11 +32,21 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { useJobPolling } from "@/hooks/use-job-polling";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type { Repository } from "@/types";
+import {
+  getRepositoryDisplayName,
+  getRepositoryProviderName,
+  initialRepositoryFormState,
+  isComposeFileName,
+  isHttpUrl,
+  isOwnerRepoShorthand,
+  type ProviderChoiceCandidate,
+} from "./repository-form-helpers";
 
 function SubmitButton({
   isDisabled,
@@ -64,37 +73,6 @@ function SubmitButton({
   );
 }
 
-const initialState = {
-  success: false,
-  toast: undefined,
-  error: undefined,
-};
-
-const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim());
-const isOwnerRepoShorthand = (value: string) =>
-  /^[a-z0-9-._]+\/[a-z0-9-._]+$/i.test(value.trim());
-const isComposeFileName = (value: string) => /\.(ya?ml)$/i.test(value);
-
-const getRepositoryDisplayName = (repo: Repository) => {
-  if (repo.id.startsWith("github:")) return repo.id.slice("github:".length);
-  if (repo.id.startsWith("codeberg:")) return repo.id.slice("codeberg:".length);
-  if (repo.id.startsWith("gitlab:")) return repo.id.slice("gitlab:".length);
-  return repo.id;
-};
-
-const getRepositoryProviderName = (repo: Repository) => {
-  if (repo.id.startsWith("github:")) return "GitHub";
-  if (repo.id.startsWith("codeberg:")) return "Codeberg";
-  if (repo.id.startsWith("gitlab:")) return "GitLab";
-  return null;
-};
-
-type ProviderChoiceCandidate = {
-  provider: "github" | "codeberg" | "gitlab";
-  providerHost?: string;
-  canonicalRepoUrl: string;
-};
-
 interface RepositoryFormProps {
   currentRepositories: Repository[];
   isExpanded: boolean;
@@ -117,7 +95,7 @@ export function RepositoryForm({
 
   const [state, formAction, isPending] = useActionState(
     addRepositoriesAction,
-    initialState,
+    initialRepositoryFormState,
   );
   const [jobId, setJobId] = React.useState<string | undefined>(undefined);
   const hasProcessedResult = React.useRef(true);
@@ -185,62 +163,41 @@ export function RepositoryForm({
     }
   }, [state, t, toast]);
 
-  React.useEffect(() => {
-    if (!jobId) return;
+  const handleJobComplete = React.useCallback(() => {
+    toast({
+      title: t("toast_refresh_success_title"),
+      description: t("toast_refresh_success_description"),
+    });
+    router.refresh();
+  }, [router, t, toast]);
 
-    const POLLING_INTERVAL = 2000; // 2 seconds
-    const POLLING_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+  const handleJobError = React.useCallback(() => {
+    toast({
+      title: t("toast_refresh_error_title"),
+      description: t("toast_refresh_error_description"),
+      variant: "destructive",
+    });
+  }, [t, toast]);
 
-    const startTime = Date.now();
+  const handleJobTimeout = React.useCallback(() => {
+    toast({
+      title: t("toast_refresh_timeout_title"),
+      description: t("toast_refresh_timeout_description"),
+      variant: "destructive",
+    });
+  }, [t, toast]);
 
-    const intervalId = setInterval(async () => {
-      if (Date.now() - startTime > POLLING_TIMEOUT) {
-        clearInterval(intervalId);
-        toast({
-          title: t("toast_refresh_timeout_title"),
-          description: t("toast_refresh_timeout_description"),
-          variant: "destructive",
-        });
-        setJobId(undefined);
-        return;
-      }
+  const handleJobDone = React.useCallback(() => {
+    setJobId(undefined);
+  }, []);
 
-      try {
-        const { status } = await getJobStatusAction(jobId);
-
-        if (status === "complete") {
-          clearInterval(intervalId);
-          toast({
-            title: t("toast_refresh_success_title"),
-            description: t("toast_refresh_success_description"),
-          });
-          router.refresh();
-          setJobId(undefined);
-        } else if (status === "error") {
-          clearInterval(intervalId);
-          toast({
-            title: t("toast_refresh_error_title"),
-            description: t("toast_refresh_error_description"),
-            variant: "destructive",
-          });
-          setJobId(undefined);
-        }
-      } catch (error: unknown) {
-        clearInterval(intervalId);
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        toast({
-          title: t("toast_refresh_error_title"),
-          description: t("toast_refresh_error_description"),
-          variant: "destructive",
-        });
-        setJobId(undefined);
-      }
-    }, POLLING_INTERVAL);
-
-    return () => clearInterval(intervalId);
-  }, [jobId, router, t, toast]);
+  useJobPolling({
+    jobId,
+    onComplete: handleJobComplete,
+    onError: handleJobError,
+    onTimeout: handleJobTimeout,
+    onDone: handleJobDone,
+  });
 
   React.useEffect(() => {
     const textarea = textareaRef.current;
