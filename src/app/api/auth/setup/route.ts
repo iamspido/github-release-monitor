@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { ensureAuthDatabaseReady, hasAnyAuthUser, setupAuth } from "@/lib/auth";
 import {
+  getClientIpFromRequest,
+  isLikelyEmail,
+  readJsonPayload,
+  toSafeString,
+} from "@/lib/auth/request-context";
+import {
   acquireAuthSetupBootstrapLock,
   getAuthSetupLockPath,
   isAuthSetupLocked,
@@ -31,14 +37,6 @@ type SetupErrorBody = {
   code?: unknown;
 };
 
-function getClientIp(request: Request | undefined) {
-  if (!request) return "unknown";
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  return (firstForwardedIp || realIp || "unknown").slice(0, 128);
-}
-
 function isSetupEnabledByEnv() {
   const token = process.env.AUTH_SETUP_TOKEN;
   return typeof token === "string" && token.length >= 32;
@@ -60,14 +58,6 @@ function disabledResponse() {
 
 function setupStateUnknownResponse() {
   return NextResponse.json({ error: "setup_state_unknown" }, { status: 503 });
-}
-
-function toSafeString(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function isLikelyEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function isValidUsername(value: string) {
@@ -186,7 +176,7 @@ async function disableSetupAfterSuccessfulBootstrap(email: string) {
 }
 
 export async function GET(request?: Request) {
-  const clientIp = getClientIp(request);
+  const clientIp = getClientIpFromRequest(request);
   log.info(`Auth setup status check requested from ip='${clientIp}'.`);
 
   await ensureAuthDatabaseReady();
@@ -222,7 +212,7 @@ export async function GET(request?: Request) {
 }
 
 export async function POST(request: Request) {
-  const clientIp = getClientIp(request);
+  const clientIp = getClientIpFromRequest(request);
   log.info(`Initial setup attempt received from ip='${clientIp}'.`);
 
   await ensureAuthDatabaseReady();
@@ -254,15 +244,14 @@ export async function POST(request: Request) {
     return disabledResponse();
   }
 
-  let payload: SetupPayload;
-  try {
-    payload = (await request.json()) as SetupPayload;
-  } catch {
+  const jsonResult = await readJsonPayload<SetupPayload>(request);
+  if (!jsonResult.ok) {
     log.warn(
       `Rejected setup attempt from ip='${clientIp}' due to invalid JSON body.`,
     );
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
+  const payload = jsonResult.payload;
 
   const token = toSafeString(payload.token);
   const email = toSafeString(payload.email).toLowerCase();

@@ -83,4 +83,49 @@ describe("storage/repositories", () => {
     );
     writeSpy.mockRestore();
   });
+
+  it("preserves null repository overrides while merging duplicate migrated ids", async () => {
+    const { getRepositories } = await import("@/lib/storage/repositories");
+    const dataDir = path.join(tmpDir, "data");
+    await fs.mkdir(dataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(dataDir, "repositories.json"),
+      JSON.stringify([
+        {
+          id: "owner/repo",
+          url: "https://github.com/owner/repo",
+          releasesPerPage: null,
+          refreshInterval: null,
+          cacheInterval: null,
+          backgroundCheckCron: null,
+          includeRegex: "base-only",
+        },
+        {
+          id: "github:owner/repo",
+          url: "https://github.com/owner/repo",
+          releasesPerPage: 50,
+          refreshInterval: 30,
+          cacheInterval: 15,
+          backgroundCheckCron: "0 21 * * *",
+          excludeRegex: "incoming-only",
+        },
+      ] satisfies Repository[]),
+      "utf8",
+    );
+
+    const repos = await getRepositories();
+
+    expect(repos).toEqual([
+      {
+        id: "github:owner/repo",
+        url: "https://github.com/owner/repo",
+        releasesPerPage: null,
+        refreshInterval: null,
+        cacheInterval: null,
+        backgroundCheckCron: null,
+        includeRegex: "base-only",
+        excludeRegex: "incoming-only",
+      },
+    ]);
+  });
 });

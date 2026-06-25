@@ -5,7 +5,12 @@ import {
   isAuthSetupTokenConfigured,
   isSocialProviderConfigured,
 } from "@/lib/auth/config";
-import { getClientIpFromHeaders } from "@/lib/auth/request-context";
+import {
+  getClientIpFromRequest,
+  isSupportedAuthSocialProvider,
+  readJsonPayload,
+  toSafeString,
+} from "@/lib/auth/request-context";
 import { isAuthSetupLocked } from "@/lib/auth/setup-lock";
 import {
   buildSetupSocialContextSetCookieHeader,
@@ -23,20 +28,8 @@ type SetupSocialPayload = {
   name?: unknown;
 };
 
-function toSafeString(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
 function isValidUsername(value: string) {
   return isUsernamePolicyValid(value);
-}
-
-function isSupportedProvider(value: string): value is "github" | "google" {
-  return value === "github" || value === "google";
-}
-
-function getClientIp(request: Request) {
-  return getClientIpFromHeaders(request.headers);
 }
 
 function disabledResponse() {
@@ -48,7 +41,7 @@ function setupStateUnknownResponse() {
 }
 
 export async function POST(request: Request) {
-  const clientIp = getClientIp(request);
+  const clientIp = getClientIpFromRequest(request);
   log.info(`Initial social setup context requested from ip='${clientIp}'.`);
 
   await ensureAuthDatabaseReady();
@@ -79,12 +72,11 @@ export async function POST(request: Request) {
     return disabledResponse();
   }
 
-  let payload: SetupSocialPayload;
-  try {
-    payload = (await request.json()) as SetupSocialPayload;
-  } catch {
+  const jsonResult = await readJsonPayload<SetupSocialPayload>(request);
+  if (!jsonResult.ok) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
+  const payload = jsonResult.payload;
 
   const token = toSafeString(payload.token);
   const provider = toSafeString(payload.provider).toLowerCase();
@@ -98,7 +90,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_setup_token" }, { status: 401 });
   }
 
-  if (!isSupportedProvider(provider)) {
+  if (!isSupportedAuthSocialProvider(provider)) {
     return NextResponse.json({ error: "invalid_provider" }, { status: 400 });
   }
   if (!isSocialProviderConfigured(provider)) {

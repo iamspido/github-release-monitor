@@ -21,10 +21,6 @@ const nextConfig = {
     NEXT_PUBLIC_APP_VERSION: packageJson.version ?? '0.0.0',
   },
 
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-
   images: {
     remotePatterns: [
       {

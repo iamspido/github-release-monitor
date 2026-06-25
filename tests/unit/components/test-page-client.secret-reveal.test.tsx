@@ -160,10 +160,60 @@ async function renderClient(notificationConfig: NotificationConfig) {
   return {
     div,
     cleanup: () => {
-      root.unmount();
+      act(() => {
+        root.unmount();
+      });
       div.remove();
     },
   };
+}
+
+async function flushReactWork() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
+async function waitForExpectation(assertion: () => void, attempts = 30) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    await flushReactWork();
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  assertion();
+  throw lastError;
+}
+
+function getButtonByAriaLabel(container: ParentNode, ariaLabel: string) {
+  const button = container.querySelector(
+    `button[aria-label="${ariaLabel}"]`,
+  ) as HTMLButtonElement | null;
+  expect(button).toBeTruthy();
+  return button as HTMLButtonElement;
+}
+
+async function clickButtonAndWaitFor(
+  container: ParentNode,
+  ariaLabel: string,
+  assertion: () => void,
+) {
+  let button: HTMLButtonElement | null = null;
+  await waitForExpectation(() => {
+    button = getButtonByAriaLabel(container, ariaLabel);
+    expect(button.disabled).toBe(false);
+  });
+
+  act(() => {
+    button?.click();
+  });
+  await waitForExpectation(assertion);
 }
 
 function getButtonByText(container: ParentNode, text: string) {
@@ -185,6 +235,7 @@ function setInputValue(input: HTMLInputElement, value: string) {
 
 describe("TestPageClient mail password reveal", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     revealMailPasswordActionMock.mockReset();
     revealAppriseUrlActionMock.mockReset();
     getSecretRevealOptionsActionMock.mockReset();
@@ -218,30 +269,23 @@ describe("TestPageClient mail password reveal", () => {
       expect(div.textContent).toContain("MAIL_PASSWORD=••••••••");
       expect(div.textContent).not.toContain("mail-secret");
 
-      await act(async () => {
-        (
-          div.querySelector(
-            'button[aria-label="show_password"]',
-          ) as HTMLButtonElement
-        ).click();
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+      await clickButtonAndWaitFor(
+        div,
+        "show_password",
+        () => {
+          expect(revealMailPasswordActionMock).toHaveBeenCalledTimes(1);
+          expect(div.textContent).toContain("MAIL_PASSWORD=mail-secret");
+        },
+      );
 
-      expect(revealMailPasswordActionMock).toHaveBeenCalledTimes(1);
-      expect(div.textContent).toContain("MAIL_PASSWORD=mail-secret");
-
-      await act(async () => {
-        (
-          div.querySelector(
-            'button[aria-label="hide_password"]',
-          ) as HTMLButtonElement
-        ).click();
-        await Promise.resolve();
-      });
-
-      expect(div.textContent).toContain("MAIL_PASSWORD=••••••••");
-      expect(div.textContent).not.toContain("mail-secret");
+      await clickButtonAndWaitFor(
+        div,
+        "hide_password",
+        () => {
+          expect(div.textContent).toContain("MAIL_PASSWORD=••••••••");
+          expect(div.textContent).not.toContain("mail-secret");
+        },
+      );
     } finally {
       cleanup();
     }
@@ -479,33 +523,26 @@ describe("TestPageClient mail password reveal", () => {
       );
       expect(div.textContent).not.toContain("/notify/key");
 
-      await act(async () => {
-        (
-          div.querySelector(
-            'button[aria-label="show_secret"]',
-          ) as HTMLButtonElement
-        ).click();
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(div.textContent).toContain(
-        "APPRISE_URL=http://apprise:8000/notify/key",
+      await clickButtonAndWaitFor(
+        div,
+        "show_secret",
+        () => {
+          expect(div.textContent).toContain(
+            "APPRISE_URL=http://apprise:8000/notify/key",
+          );
+        },
       );
 
-      await act(async () => {
-        (
-          div.querySelector(
-            'button[aria-label="hide_secret"]',
-          ) as HTMLButtonElement
-        ).click();
-        await Promise.resolve();
-      });
-
-      expect(div.textContent).toContain(
-        "APPRISE_URL=http://apprise:8000/notify/<hidden>",
+      await clickButtonAndWaitFor(
+        div,
+        "hide_secret",
+        () => {
+          expect(div.textContent).toContain(
+            "APPRISE_URL=http://apprise:8000/notify/<hidden>",
+          );
+          expect(div.textContent).not.toContain("/notify/key");
+        },
       );
-      expect(div.textContent).not.toContain("/notify/key");
     } finally {
       cleanup();
     }

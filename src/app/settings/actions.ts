@@ -22,6 +22,13 @@ import {
   isRestrictedActionAllowed,
 } from "@/lib/server-action-helpers";
 import {
+  pushArrayChange as appendArrayChange,
+  pushValueChange as appendValueChange,
+  areArraysEqualIgnoringOrder,
+  getReleaseCacheInvalidationReasons,
+  shouldInvalidateReleaseCache,
+} from "@/lib/settings/change-detection";
+import {
   NEXT_LOCALE_COOKIE,
   nextLocaleCookieOptions,
   SETTINGS_LOCALE_COOKIE,
@@ -75,19 +82,22 @@ export async function updateSettingsAction(newSettings: AppSettings) {
       const regexChanged =
         prevInclude !== nextInclude || prevExclude !== nextExclude;
 
-      // Compare arrays ignoring order
-      const normArray = <T>(arr?: T[] | null) => {
-        if (!arr || arr.length === 0) return [] as T[];
-        return [...arr].sort();
-      };
-      const channelsChanged =
-        JSON.stringify(normArray(currentSettings.releaseChannels)) !==
-        JSON.stringify(normArray(newSettings.releaseChannels));
-      const preSubsChanged =
-        JSON.stringify(normArray(currentSettings.preReleaseSubChannels)) !==
-        JSON.stringify(normArray(newSettings.preReleaseSubChannels));
+      const channelsChanged = !areArraysEqualIgnoringOrder(
+        currentSettings.releaseChannels,
+        newSettings.releaseChannels,
+      );
+      const preSubsChanged = !areArraysEqualIgnoringOrder(
+        currentSettings.preReleaseSubChannels,
+        newSettings.preReleaseSubChannels,
+      );
       const rppChanged =
         currentSettings.releasesPerPage !== newSettings.releasesPerPage;
+      const releaseCacheInvalidation = {
+        filtersChanged: regexChanged,
+        releaseChannelsChanged: channelsChanged,
+        preReleaseSubChannelsChanged: preSubsChanged,
+        releasesPerPageChanged: rppChanged,
+      };
       const incomingCron = (newSettings.backgroundCheckCron ?? "").trim();
       const sanitizedBackgroundCheckCron = incomingCron
         ? normalizeBackgroundCheckCron(incomingCron)
@@ -169,32 +179,16 @@ export async function updateSettingsAction(newSettings: AppSettings) {
       const oldS = currentSettings;
       const newS = settingsToSave;
       const changes: string[] = [];
-      const fmt = (value: unknown): string => {
-        if (value === undefined) return "undefined";
-        const serialized = JSON.stringify(value);
-        return serialized ?? String(value);
-      };
-      const cmpArr = (a?: unknown[] | null, b?: unknown[] | null) =>
-        JSON.stringify((a ?? []).slice().sort()) ===
-        JSON.stringify((b ?? []).slice().sort());
       const pushValueChange = (
         label: string,
         previous: unknown,
         next: unknown,
-      ) => {
-        if (!Object.is(previous, next)) {
-          changes.push(`${label}: ${fmt(previous)} -> ${fmt(next)}`);
-        }
-      };
-      const pushArrayChange = (
+      ) => appendValueChange(changes, label, previous, next);
+      const pushArrayChange = <T>(
         label: string,
-        previous?: unknown[] | null,
-        next?: unknown[] | null,
-      ) => {
-        if (!cmpArr(previous, next)) {
-          changes.push(`${label}: ${fmt(previous)} -> ${fmt(next)}`);
-        }
-      };
+        previous?: T[] | null,
+        next?: T[] | null,
+      ) => appendArrayChange(changes, label, previous, next);
       pushValueChange("timeFormat", oldS.timeFormat, newS.timeFormat);
       pushValueChange("locale", oldS.locale, newS.locale);
       pushValueChange(
@@ -300,18 +294,17 @@ export async function updateSettingsAction(newSettings: AppSettings) {
       pushValueChange("appriseFormat", oldS.appriseFormat, newS.appriseFormat);
 
       // If regex changed globally, clear ETags so next fetch doesn't short-circuit on 304
-      if (regexChanged || channelsChanged || preSubsChanged || rppChanged) {
+      if (shouldInvalidateReleaseCache(releaseCacheInvalidation)) {
         const allRepos = await getRepositories();
         const cleared = allRepos.map((repository) => ({
           ...repository,
           etag: undefined,
         }));
         await saveRepositories(cleared);
-        const reasons: string[] = [];
-        if (regexChanged) reasons.push("regexChanged");
-        if (channelsChanged) reasons.push("releaseChannelsChanged");
-        if (preSubsChanged) reasons.push("preReleaseSubChannelsChanged");
-        if (rppChanged) reasons.push("releasesPerPageChanged");
+        const reasons = getReleaseCacheInvalidationReasons(
+          releaseCacheInvalidation,
+          { filtersReason: "regexChanged" },
+        );
         logger
           .withScope("Settings")
           .info(
@@ -331,7 +324,7 @@ export async function updateSettingsAction(newSettings: AppSettings) {
       }
 
       // Only trigger refresh if filter/pagination settings changed (not UI or Apprise settings)
-      if (regexChanged || channelsChanged || preSubsChanged || rppChanged) {
+      if (shouldInvalidateReleaseCache(releaseCacheInvalidation)) {
         logger
           .withScope("Settings")
           .info("Filter/API settings changed - triggering repository refresh");

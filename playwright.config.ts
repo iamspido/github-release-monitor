@@ -1,6 +1,6 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices, type ReporterDescription } from '@playwright/test';
 
-const reporters: any[] = [['list']];
+const reporters: ReporterDescription[] = [['list']];
 if (process.env.CI) {
   reporters.push(['html', { outputFolder: 'playwright-report', open: 'never' }]);
 }
@@ -19,7 +19,7 @@ export default defineConfig({
     video: 'retain-on-failure',
     headless: true,
   },
-  reporter: reporters as any,
+  reporter: reporters,
   projects: [
     {
       name: 'chromium',

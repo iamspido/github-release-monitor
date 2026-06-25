@@ -18,6 +18,14 @@ import {
   log,
   updateReleaseCacheTags,
 } from "@/lib/server-action-helpers";
+import {
+  areArraysEqualIgnoringOrder,
+  formatChangeValue,
+  getReleaseCacheInvalidationReasons,
+  pushArrayChange,
+  pushValueChange,
+  shouldInvalidateReleaseCache,
+} from "@/lib/settings/change-detection";
 import { getJobStatus, type JobStatus, setJobStatus } from "@/lib/storage/jobs";
 import { getRepositories, saveRepositories } from "@/lib/storage/repositories";
 import { getSettings } from "@/lib/storage/settings";
@@ -468,24 +476,27 @@ export async function updateRepositorySettingsAction(
       const filtersChanged =
         prevInclude !== newInclude || prevExclude !== newExclude;
 
-      // Normalize arrays for comparison (treat empty array as undefined/global)
-      const normArray = <T>(arr?: T[] | null) => {
-        if (!arr || arr.length === 0) return undefined;
-        return [...arr].sort();
-      };
-      const prevChannels = normArray(existing.releaseChannels);
-      const newChannels = normArray(settings.releaseChannels);
-      const channelsChanged =
-        JSON.stringify(prevChannels) !== JSON.stringify(newChannels);
+      const channelsChanged = !areArraysEqualIgnoringOrder(
+        existing.releaseChannels,
+        settings.releaseChannels,
+        { emptyAsUndefined: true },
+      );
 
-      const prevPreSubs = normArray(existing.preReleaseSubChannels);
-      const newPreSubs = normArray(settings.preReleaseSubChannels);
-      const preSubsChanged =
-        JSON.stringify(prevPreSubs) !== JSON.stringify(newPreSubs);
+      const preSubsChanged = !areArraysEqualIgnoringOrder(
+        existing.preReleaseSubChannels,
+        settings.preReleaseSubChannels,
+        { emptyAsUndefined: true },
+      );
 
       const prevRpp = existing.releasesPerPage ?? undefined;
       const newRpp = settings.releasesPerPage ?? undefined;
       const rppChanged = prevRpp !== newRpp;
+      const releaseCacheInvalidation = {
+        filtersChanged,
+        releaseChannelsChanged: channelsChanged,
+        preReleaseSubChannelsChanged: preSubsChanged,
+        releasesPerPageChanged: rppChanged,
+      };
       const refreshIntervalChanged =
         (existing.refreshInterval ?? null) !== newRefreshInterval;
       const cacheIntervalChanged =
@@ -495,71 +506,67 @@ export async function updateRepositorySettingsAction(
 
       // Build change summary for logging
       const changes: string[] = [];
-      const fmt = (value: unknown) =>
-        value === undefined ? "undefined" : JSON.stringify(value);
-      const cmpArr = (a?: unknown[] | null, b?: unknown[] | null) =>
-        JSON.stringify((a || []).slice().sort()) ===
-        JSON.stringify((b || []).slice().sort());
-      if (!cmpArr(existing.releaseChannels, settings.releaseChannels)) {
-        changes.push(
-          `releaseChannels: ${fmt(existing.releaseChannels)} -> ${fmt(settings.releaseChannels)}`,
-        );
-      }
-      if (
-        !cmpArr(existing.preReleaseSubChannels, settings.preReleaseSubChannels)
-      ) {
-        changes.push(
-          `preReleaseSubChannels: ${fmt(existing.preReleaseSubChannels)} -> ${fmt(settings.preReleaseSubChannels)}`,
-        );
-      }
-      if (
-        (existing.releasesPerPage ?? undefined) !==
-        (settings.releasesPerPage ?? undefined)
-      ) {
-        changes.push(
-          `releasesPerPage: ${fmt(existing.releasesPerPage)} -> ${fmt(settings.releasesPerPage)}`,
-        );
-      }
+      pushArrayChange(
+        changes,
+        "releaseChannels",
+        existing.releaseChannels,
+        settings.releaseChannels,
+        { emptyAsUndefined: true },
+      );
+      pushArrayChange(
+        changes,
+        "preReleaseSubChannels",
+        existing.preReleaseSubChannels,
+        settings.preReleaseSubChannels,
+        { emptyAsUndefined: true },
+      );
+      pushValueChange(
+        changes,
+        "releasesPerPage",
+        existing.releasesPerPage ?? undefined,
+        settings.releasesPerPage ?? undefined,
+      );
       if (refreshIntervalChanged) {
         changes.push(
-          `refreshInterval: ${fmt(existing.refreshInterval)} -> ${fmt(newRefreshInterval)}`,
+          `refreshInterval: ${formatChangeValue(existing.refreshInterval)} -> ${formatChangeValue(newRefreshInterval)}`,
         );
       }
       if (cacheIntervalChanged) {
         changes.push(
-          `cacheInterval: ${fmt(existing.cacheInterval)} -> ${fmt(newCacheInterval)}`,
+          `cacheInterval: ${formatChangeValue(existing.cacheInterval)} -> ${formatChangeValue(newCacheInterval)}`,
         );
       }
       if (backgroundCheckCronChanged) {
         changes.push(
-          `backgroundCheckCron: ${fmt(existing.backgroundCheckCron)} -> ${fmt(newBackgroundCheckCron)}`,
+          `backgroundCheckCron: ${formatChangeValue(existing.backgroundCheckCron)} -> ${formatChangeValue(newBackgroundCheckCron)}`,
         );
       }
       if (prevInclude !== newInclude) {
-        changes.push(`includeRegex: ${fmt(prevInclude)} -> ${fmt(newInclude)}`);
+        changes.push(
+          `includeRegex: ${formatChangeValue(prevInclude)} -> ${formatChangeValue(newInclude)}`,
+        );
       }
       if (prevExclude !== newExclude) {
-        changes.push(`excludeRegex: ${fmt(prevExclude)} -> ${fmt(newExclude)}`);
-      }
-      if (
-        (existing.appriseTags ?? undefined) !==
-        (settings.appriseTags ?? undefined)
-      ) {
         changes.push(
-          `appriseTags: ${fmt(existing.appriseTags)} -> ${fmt(settings.appriseTags)}`,
+          `excludeRegex: ${formatChangeValue(prevExclude)} -> ${formatChangeValue(newExclude)}`,
         );
       }
-      if (
-        (existing.appriseFormat ?? undefined) !==
-        (settings.appriseFormat ?? undefined)
-      ) {
-        changes.push(
-          `appriseFormat: ${fmt(existing.appriseFormat)} -> ${fmt(settings.appriseFormat)}`,
-        );
-      }
+      pushValueChange(
+        changes,
+        "appriseTags",
+        existing.appriseTags ?? undefined,
+        settings.appriseTags ?? undefined,
+      );
+      pushValueChange(
+        changes,
+        "appriseFormat",
+        existing.appriseFormat ?? undefined,
+        settings.appriseFormat ?? undefined,
+      );
 
-      const etagInvalidated =
-        filtersChanged || channelsChanged || preSubsChanged || rppChanged;
+      const etagInvalidated = shouldInvalidateReleaseCache(
+        releaseCacheInvalidation,
+      );
 
       currentRepos[repoIndex] = {
         ...existing,
@@ -583,11 +590,9 @@ export async function updateRepositorySettingsAction(
       await saveRepositories(currentRepos);
       revalidatePath("/");
       if (etagInvalidated) {
-        const reasons: string[] = [];
-        if (filtersChanged) reasons.push("filtersChanged");
-        if (channelsChanged) reasons.push("releaseChannelsChanged");
-        if (preSubsChanged) reasons.push("preReleaseSubChannelsChanged");
-        if (rppChanged) reasons.push("releasesPerPageChanged");
+        const reasons = getReleaseCacheInvalidationReasons(
+          releaseCacheInvalidation,
+        );
         log.info(`Cleared ETag for ${repoId} due to: ${reasons.join(", ")}`);
       }
       if (changes.length > 0) {

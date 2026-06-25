@@ -12,6 +12,8 @@ import {
 import {
   getLoginRequestContext,
   isLikelyEmail,
+  readJsonPayload,
+  toSafeString,
 } from "@/lib/auth/request-context";
 import { logger } from "@/lib/logger";
 
@@ -78,18 +80,16 @@ function normalizeRedirectPath(next: unknown, locale: string) {
 }
 
 export async function POST(request: Request) {
-  let payload: LoginPayload;
-  try {
-    payload = (await request.json()) as LoginPayload;
-  } catch {
+  const jsonResult = await readJsonPayload<LoginPayload>(request);
+  if (!jsonResult.ok) {
     return NextResponse.json(
       { errorKey: "error_invalid_credentials" },
       { status: 400 },
     );
   }
+  const payload = jsonResult.payload;
 
-  const identifier =
-    typeof payload.identifier === "string" ? payload.identifier.trim() : "";
+  const identifier = toSafeString(payload.identifier);
   const password = typeof payload.password === "string" ? payload.password : "";
   const locale = normalizeLocale(payload.locale);
   const { rateLimitKey, clientIp } = getLoginRequestContext(

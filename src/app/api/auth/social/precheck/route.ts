@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { ensureAuthDatabaseReady, precheckSocialLogin } from "@/lib/auth";
 import {
+  getClientIpFromRequest,
+  isSupportedAuthSocialProvider,
+  readJsonPayload,
+  toSafeString,
+} from "@/lib/auth/request-context";
+import {
   buildSocialLoginIntentSetCookieHeader,
   buildSocialLoginIntentValue,
-  type SocialLoginProvider,
 } from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
 
@@ -14,35 +19,19 @@ type SocialPrecheckPayload = {
   provider?: unknown;
 };
 
-function toSafeString(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function isSupportedProvider(value: string): value is SocialLoginProvider {
-  return value === "github" || value === "google";
-}
-
-function getClientIp(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  return (firstForwardedIp || realIp || "unknown").slice(0, 128);
-}
-
 export async function POST(request: Request) {
   await ensureAuthDatabaseReady();
-  const clientIp = getClientIp(request);
+  const clientIp = getClientIpFromRequest(request);
 
-  let payload: SocialPrecheckPayload;
-  try {
-    payload = (await request.json()) as SocialPrecheckPayload;
-  } catch {
+  const jsonResult = await readJsonPayload<SocialPrecheckPayload>(request);
+  if (!jsonResult.ok) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
+  const payload = jsonResult.payload;
 
   const identifier = toSafeString(payload.identifier);
   const provider = toSafeString(payload.provider).toLowerCase();
-  if (!isSupportedProvider(provider)) {
+  if (!isSupportedAuthSocialProvider(provider)) {
     return NextResponse.json({ error: "invalid_provider" }, { status: 400 });
   }
 

@@ -11,6 +11,18 @@ const isPrefixedRepoId = (repoId: string) =>
 
 let migrationInFlight: Promise<void> | null = null;
 
+function preferDefined<T>(base: T, incoming: T): T;
+function preferDefined<T>(
+  base: T | undefined,
+  incoming: T | undefined,
+): T | undefined;
+function preferDefined<T>(
+  base: T | undefined,
+  incoming: T | undefined,
+): T | undefined {
+  return base === undefined ? incoming : base;
+}
+
 const repositoryStore = new JsonFileStore<Repository[]>({
   filePath: dataFilePath,
   defaultValue: [],
@@ -33,19 +45,46 @@ function mergeRepositoriesPreferFirst(
   base: Repository,
   incoming: Repository,
 ): Repository {
-  const merged: Repository = { ...base };
-
-  for (const [key, value] of Object.entries(incoming) as Array<
-    [keyof Repository, Repository[keyof Repository]]
-  >) {
-    if (key === "id") continue;
-    if (merged[key] === undefined && value !== undefined) {
-      // @ts-expect-error dynamic assignment is safe for Repository keys
-      merged[key] = value;
-    }
-  }
-
-  return merged;
+  return {
+    id: base.id,
+    url: preferDefined(base.url, incoming.url),
+    lastSeenReleaseTag: preferDefined(
+      base.lastSeenReleaseTag,
+      incoming.lastSeenReleaseTag,
+    ),
+    isNew: preferDefined(base.isNew, incoming.isNew),
+    etag: preferDefined(base.etag, incoming.etag),
+    latestRelease: preferDefined(base.latestRelease, incoming.latestRelease),
+    releaseChannels: preferDefined(
+      base.releaseChannels,
+      incoming.releaseChannels,
+    ),
+    preReleaseSubChannels: preferDefined(
+      base.preReleaseSubChannels,
+      incoming.preReleaseSubChannels,
+    ),
+    releasesPerPage: preferDefined(
+      base.releasesPerPage,
+      incoming.releasesPerPage,
+    ),
+    refreshInterval: preferDefined(
+      base.refreshInterval,
+      incoming.refreshInterval,
+    ),
+    cacheInterval: preferDefined(base.cacheInterval, incoming.cacheInterval),
+    backgroundCheckCron: preferDefined(
+      base.backgroundCheckCron,
+      incoming.backgroundCheckCron,
+    ),
+    lastBackgroundCheckAt: preferDefined(
+      base.lastBackgroundCheckAt,
+      incoming.lastBackgroundCheckAt,
+    ),
+    includeRegex: preferDefined(base.includeRegex, incoming.includeRegex),
+    excludeRegex: preferDefined(base.excludeRegex, incoming.excludeRegex),
+    appriseTags: preferDefined(base.appriseTags, incoming.appriseTags),
+    appriseFormat: preferDefined(base.appriseFormat, incoming.appriseFormat),
+  };
 }
 
 function migrateRepositoriesIds(repositories: Repository[]): {
