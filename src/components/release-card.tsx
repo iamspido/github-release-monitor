@@ -72,6 +72,126 @@ interface ReleaseCardProps {
   canMutate?: boolean;
 }
 
+function CustomSettingsBadge() {
+  const t = useTranslations("ReleaseCard");
+
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className="border-accent text-accent">
+            {t("custom_settings_badge")}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{t("custom_settings_tooltip")}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function RepoSettingsTrigger({
+  buttonRef,
+  className,
+  onOpen,
+}: {
+  buttonRef?: React.Ref<HTMLButtonElement>;
+  className?: string;
+  onOpen: () => void;
+}) {
+  const t = useTranslations("ReleaseCard");
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn("size-8 shrink-0 text-muted-foreground", className)}
+      onClick={onOpen}
+      ref={buttonRef}
+      aria-label={t("settings_button_aria")}
+    >
+      <Settings className="size-4" />
+    </Button>
+  );
+}
+
+function RemoveRepositoryButton({
+  buttonClassName,
+  buttonVariant = "ghost",
+  disabled = false,
+  isOnline,
+  isRemoving,
+  onRemove,
+  repoId,
+}: {
+  buttonClassName?: string;
+  buttonVariant?: React.ComponentProps<typeof Button>["variant"];
+  disabled?: boolean;
+  isOnline: boolean;
+  isRemoving: boolean;
+  onRemove: () => void;
+  repoId: string;
+}) {
+  const t = useTranslations("ReleaseCard");
+
+  const triggerButton = (
+    <Button
+      variant={buttonVariant}
+      size="sm"
+      className={buttonClassName}
+      disabled={disabled || isRemoving || !isOnline}
+      aria-disabled={!isOnline}
+    >
+      {isRemoving ? <Loader2 className="animate-spin" /> : <Trash2 />}
+      {t("remove_button")}
+    </Button>
+  );
+
+  return (
+    <AlertDialog>
+      {buttonVariant === "ghost" ? (
+        <TooltipProvider delayDuration={100}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <AlertDialogTrigger asChild>{triggerButton}</AlertDialogTrigger>
+            </TooltipTrigger>
+            {!isOnline && (
+              <TooltipContent>
+                <p>{t("offline_tooltip")}</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        <AlertDialogTrigger asChild>{triggerButton}</AlertDialogTrigger>
+      )}
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("confirm_dialog_title")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t.rich("confirm_dialog_description_long", {
+              bold: (chunks) => <span className="font-bold">{chunks}</span>,
+              repoId,
+            })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("cancel_button")}</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={onRemove}
+            disabled={isRemoving || !isOnline}
+          >
+            {isRemoving ? <Loader2 className="animate-spin" /> : null}
+            {t("confirm_button")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export function ReleaseCard({
   enrichedRelease,
   settings,
@@ -265,33 +385,12 @@ export function ReleaseCard({
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                {repoHasCustomSettings && (
-                  <TooltipProvider delayDuration={100}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant="outline"
-                          className="border-accent text-accent"
-                        >
-                          {t("custom_settings_badge")}
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{t("custom_settings_tooltip")}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+                {repoHasCustomSettings && <CustomSettingsBadge />}
                 {canMutate && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
+                  <RepoSettingsTrigger
                     className="size-8 shrink-0 text-red-400/80 hover:bg-red-400/10 hover:text-red-400"
-                    onClick={() => setIsSettingsOpen(true)}
-                    aria-label={t("settings_button_aria")}
-                  >
-                    <Settings className="size-4" />
-                  </Button>
+                    onOpen={() => setIsSettingsOpen(true)}
+                  />
                 )}
               </div>
             </div>
@@ -306,49 +405,13 @@ export function ReleaseCard({
           </CardContent>
           {canMutate && (
             <CardFooter className="pt-4 flex items-start">
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={isRemoving || !isOnline}
-                    aria-disabled={!isOnline}
-                  >
-                    {isRemoving ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <Trash2 />
-                    )}
-                    {t("remove_button")}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t("confirm_dialog_title")}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t.rich("confirm_dialog_description_long", {
-                        bold: (chunks) => (
-                          <span className="font-bold">{chunks}</span>
-                        ),
-                        repoId,
-                      })}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("cancel_button")}</AlertDialogCancel>
-                    <AlertDialogAction
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      onClick={handleRemove}
-                      disabled={isRemoving || !isOnline}
-                    >
-                      {isRemoving ? <Loader2 className="animate-spin" /> : null}
-                      {t("confirm_button")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <RemoveRepositoryButton
+                buttonVariant="destructive"
+                isOnline={isOnline}
+                isRemoving={isRemoving}
+                onRemove={handleRemove}
+                repoId={repoId}
+              />
             </CardFooter>
           )}
         </Card>
@@ -383,34 +446,12 @@ export function ReleaseCard({
                 </a>
               </div>
               <div className="flex items-center gap-2">
-                {repoHasCustomSettings && (
-                  <TooltipProvider delayDuration={100}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant="outline"
-                          className="border-accent text-accent"
-                        >
-                          {t("custom_settings_badge")}
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{t("custom_settings_tooltip")}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+                {repoHasCustomSettings && <CustomSettingsBadge />}
                 {canMutate && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 shrink-0 text-muted-foreground"
-                    onClick={() => setIsSettingsOpen(true)}
-                    ref={settingsButtonRef}
-                    aria-label={t("settings_button_aria")}
-                  >
-                    <Settings className="size-4" />
-                  </Button>
+                  <RepoSettingsTrigger
+                    buttonRef={settingsButtonRef}
+                    onOpen={() => setIsSettingsOpen(true)}
+                  />
                 )}
               </div>
             </div>
@@ -423,49 +464,13 @@ export function ReleaseCard({
           </CardContent>
           {canMutate && (
             <CardFooter className="justify-between pt-4">
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={isRemoving || !isOnline}
-                    aria-disabled={!isOnline}
-                  >
-                    {isRemoving ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <Trash2 />
-                    )}
-                    {t("remove_button")}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t("confirm_dialog_title")}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t.rich("confirm_dialog_description_long", {
-                        bold: (chunks) => (
-                          <span className="font-bold">{chunks}</span>
-                        ),
-                        repoId,
-                      })}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("cancel_button")}</AlertDialogCancel>
-                    <AlertDialogAction
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      onClick={handleRemove}
-                      disabled={isRemoving || !isOnline}
-                    >
-                      {isRemoving ? <Loader2 className="animate-spin" /> : null}
-                      {t("confirm_button")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <RemoveRepositoryButton
+                buttonVariant="destructive"
+                isOnline={isOnline}
+                isRemoving={isRemoving}
+                onRemove={handleRemove}
+                repoId={repoId}
+              />
               <Skeleton className="h-8 w-32" />
             </CardFooter>
           )}
@@ -542,34 +547,12 @@ export function ReleaseCard({
                     {t("security_release_badge")}
                   </Badge>
                 )}
-                {repoHasCustomSettings && (
-                  <TooltipProvider delayDuration={100}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant="outline"
-                          className="border-accent text-accent"
-                        >
-                          {t("custom_settings_badge")}
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{t("custom_settings_tooltip")}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+                {repoHasCustomSettings && <CustomSettingsBadge />}
                 {canMutate && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 shrink-0 text-muted-foreground"
-                    onClick={() => setIsSettingsOpen(true)}
-                    ref={settingsButtonRef}
-                    aria-label={t("settings_button_aria")}
-                  >
-                    <Settings className="size-4" />
-                  </Button>
+                  <RepoSettingsTrigger
+                    buttonRef={settingsButtonRef}
+                    onOpen={() => setIsSettingsOpen(true)}
+                  />
                 )}
               </div>
             </div>
@@ -761,61 +744,14 @@ export function ReleaseCard({
             ))}
           <div className="flex items-center justify-between">
             {canMutate ? (
-              <AlertDialog>
-                <TooltipProvider delayDuration={100}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-muted-foreground"
-                          disabled={isRemoving || isMarkingAsNew || !isOnline}
-                          aria-disabled={!isOnline}
-                        >
-                          {isRemoving ? (
-                            <Loader2 className="animate-spin" />
-                          ) : (
-                            <Trash2 />
-                          )}
-                          {t("remove_button")}
-                        </Button>
-                      </AlertDialogTrigger>
-                    </TooltipTrigger>
-                    {!isOnline && (
-                      <TooltipContent>
-                        <p>{t("offline_tooltip")}</p>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                </TooltipProvider>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t("confirm_dialog_title")}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t.rich("confirm_dialog_description_long", {
-                        bold: (chunks) => (
-                          <span className="font-bold">{chunks}</span>
-                        ),
-                        repoId,
-                      })}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("cancel_button")}</AlertDialogCancel>
-                    <AlertDialogAction
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      onClick={handleRemove}
-                      disabled={isRemoving || !isOnline}
-                    >
-                      {isRemoving ? <Loader2 className="animate-spin" /> : null}
-                      {t("confirm_button")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <RemoveRepositoryButton
+                buttonClassName="text-muted-foreground"
+                disabled={isMarkingAsNew}
+                isOnline={isOnline}
+                isRemoving={isRemoving}
+                onRemove={handleRemove}
+                repoId={repoId}
+              />
             ) : (
               <span />
             )}

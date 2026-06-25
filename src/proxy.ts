@@ -47,13 +47,7 @@ export async function proxy(request: NextRequest) {
   const authenticationMethod = getAuthenticationMethod();
 
   const pathname = request.nextUrl.pathname;
-  if (
-    pathname.startsWith("/api/") ||
-    pathname.startsWith("/trpc/") ||
-    pathname.startsWith("/_next/") ||
-    pathname.startsWith("/_vercel/") ||
-    pathname.includes(".")
-  ) {
+  if (shouldBypassProxy(pathname)) {
     return NextResponse.next();
   }
 
@@ -84,69 +78,34 @@ export async function proxy(request: NextRequest) {
   const handleI18nRouting = createIntlMiddleware(routing);
   const response = handleI18nRouting(request);
 
-  const headerLocale = response.headers.get("x-next-intl-locale");
-  const currentLocale = (locales as readonly string[]).includes(
-    headerLocale || "",
-  )
-    ? (headerLocale as LocaleKey)
-    : settingsLocale;
+  const currentLocale = getCurrentLocaleFromResponse(response, settingsLocale);
 
-  const loginPaths = pathnames["/login"];
-  const loginPathForLocale =
-    loginPaths[currentLocale as "en" | "de"] || loginPaths.en;
   const routeKey = getRouteKeyForPath(currentLocale, request.nextUrl.pathname);
   const isLoginPage = routeKey === "/login";
   const isRegisterPage = routeKey === "/register";
-  let isAuthenticated = false;
-  if (authenticationMethod !== "External") {
-    try {
-      logAuth.debug(`Checking session for path '${pathname}'.`);
-      const { auth, ensureAuthDatabaseReady } = await import("@/lib/auth");
-      await ensureAuthDatabaseReady();
-      const session = await auth.api.getSession({
-        headers: request.headers,
-      });
-      isAuthenticated = Boolean(session?.session && session?.user);
-      logAuth.debug(
-        `Session check result for path '${pathname}': authenticated=${isAuthenticated}.`,
-      );
-    } catch (error) {
-      logAuth.error("Failed to validate session in proxy.", error);
-    }
-  }
+  const isAuthenticated = await checkSessionAuthentication({
+    authenticationMethod,
+    headers: request.headers,
+    pathname,
+  });
 
   if (authenticationMethod === "External" && (isLoginPage || isRegisterPage)) {
     logAuth.info("External auth mode active, redirecting auth page to home.");
-    const redirectResponse = NextResponse.redirect(
-      new URL(`/${currentLocale}`, request.url),
-    );
-    attachLocaleCookies(redirectResponse, currentLocale);
-    return redirectResponse;
+    return buildLocaleRedirectResponse(request, currentLocale, "/");
   }
 
-  const isPublicAuthPage = isLoginPage || isRegisterPage;
-  const canReadPublicHome =
-    routeKey === "/" && canReadHomeUnauthenticated(authenticationMethod);
-  const shouldRequireAuth =
-    authenticationMethod === "Basic"
-      ? !isPublicAuthPage
-      : authenticationMethod === "AllowUnauthenticated"
-        ? !isPublicAuthPage && !canReadPublicHome
-        : false;
+  const authGate = evaluateAuthGate({
+    authenticationMethod,
+    routeKey,
+    isLoginPage,
+    isRegisterPage,
+  });
 
-  if (!isAuthenticated && shouldRequireAuth) {
-    const redirectUrl = new URL(
-      `/${currentLocale}${loginPathForLocale}`,
-      request.url,
-    );
-    const originalPathname = request.nextUrl.pathname;
-    redirectUrl.searchParams.set("next", originalPathname);
+  if (!isAuthenticated && authGate.requiresAuth) {
     logAuth.warn(
-      `Unauthenticated request to '${originalPathname}', redirecting to login.`,
+      `Unauthenticated request to '${request.nextUrl.pathname}', redirecting to login.`,
     );
-    const redirectResponse = NextResponse.redirect(redirectUrl);
-    attachLocaleCookies(redirectResponse, currentLocale);
-    return redirectResponse;
+    return buildLoginRedirectResponse(request, currentLocale);
   }
 
   if (
@@ -155,45 +114,170 @@ export async function proxy(request: NextRequest) {
     (isLoginPage || isRegisterPage)
   ) {
     logAuth.info("Logged-in user on auth page, redirecting to home.");
-    const redirectResponse = NextResponse.redirect(
-      new URL(`/${currentLocale}`, request.url),
-    );
-    attachLocaleCookies(redirectResponse, currentLocale);
-    return redirectResponse;
+    return buildLocaleRedirectResponse(request, currentLocale, "/");
   }
 
   if (isAuthenticated) {
     logAuth.debug(`Authenticated request allowed for path '${pathname}'.`);
   } else if (authenticationMethod === "External") {
     logAuth.debug(`External auth mode allowed request for path '${pathname}'.`);
-  } else if (isLoginPage || isRegisterPage || canReadPublicHome) {
+  } else if (authGate.isPublicAccessAllowed) {
     logAuth.debug(
       `Unauthenticated request allowed for public path '${pathname}'.`,
     );
   }
 
-  if (process.env.NODE_ENV === "development") {
-    const allowedDevOrigins = getAllowedDevOrigins();
-    const origin = request.headers.get("origin");
-    if (
-      origin &&
-      allowedDevOrigins.length > 0 &&
-      !allowedDevOrigins.includes(origin)
-    ) {
-      logSecurity.warn(`Blocked development origin: ${origin}`);
-      return new NextResponse("Forbidden", { status: 403 });
-    }
+  const blockedOriginResponse = getBlockedDevOriginResponse(request);
+  if (blockedOriginResponse) {
+    logSecurity.warn(
+      `Blocked development origin: ${request.headers.get("origin")}`,
+    );
+    return blockedOriginResponse;
   }
 
   attachLocaleCookies(response, currentLocale);
+  applySecurityHeaders(response);
+  logSecurity.debug("Applied security headers");
 
+  return response;
+}
+
+function shouldBypassProxy(pathname: string): boolean {
+  return (
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/trpc/") ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/_vercel/") ||
+    pathname.includes(".")
+  );
+}
+
+function getCurrentLocaleFromResponse(
+  response: NextResponse,
+  fallbackLocale: LocaleKey,
+): LocaleKey {
+  const headerLocale = response.headers.get("x-next-intl-locale");
+  return (locales as readonly string[]).includes(headerLocale || "")
+    ? (headerLocale as LocaleKey)
+    : fallbackLocale;
+}
+
+function getLocalizedLoginPath(locale: LocaleKey): string {
+  const loginPaths = pathnames["/login"];
+  return loginPaths[locale as "en" | "de"] || loginPaths.en;
+}
+
+async function checkSessionAuthentication(args: {
+  authenticationMethod: ReturnType<typeof getAuthenticationMethod>;
+  headers: Headers;
+  pathname: string;
+}): Promise<boolean> {
+  if (args.authenticationMethod === "External") {
+    return false;
+  }
+
+  const logAuth = logger.withScope("Auth");
+  try {
+    logAuth.debug(`Checking session for path '${args.pathname}'.`);
+    const { auth, ensureAuthDatabaseReady } = await import("@/lib/auth");
+    await ensureAuthDatabaseReady();
+    const session = await auth.api.getSession({
+      headers: args.headers,
+    });
+    const isAuthenticated = Boolean(session?.session && session?.user);
+    logAuth.debug(
+      `Session check result for path '${args.pathname}': authenticated=${isAuthenticated}.`,
+    );
+    return isAuthenticated;
+  } catch (error) {
+    logAuth.error("Failed to validate session in proxy.", error);
+    return false;
+  }
+}
+
+function evaluateAuthGate(args: {
+  authenticationMethod: ReturnType<typeof getAuthenticationMethod>;
+  routeKey: RouteKey | null;
+  isLoginPage: boolean;
+  isRegisterPage: boolean;
+}): { requiresAuth: boolean; isPublicAccessAllowed: boolean } {
+  const isPublicAuthPage = args.isLoginPage || args.isRegisterPage;
+  const canReadPublicHome =
+    args.routeKey === "/" &&
+    canReadHomeUnauthenticated(args.authenticationMethod);
+
+  if (args.authenticationMethod === "Basic") {
+    return {
+      requiresAuth: !isPublicAuthPage,
+      isPublicAccessAllowed: isPublicAuthPage,
+    };
+  }
+
+  if (args.authenticationMethod === "AllowUnauthenticated") {
+    return {
+      requiresAuth: !isPublicAuthPage && !canReadPublicHome,
+      isPublicAccessAllowed: isPublicAuthPage || canReadPublicHome,
+    };
+  }
+
+  return {
+    requiresAuth: false,
+    isPublicAccessAllowed: isPublicAuthPage || canReadPublicHome,
+  };
+}
+
+function buildLocaleRedirectResponse(
+  request: NextRequest,
+  locale: LocaleKey,
+  restPath: string,
+): NextResponse {
+  const redirectResponse = NextResponse.redirect(
+    new URL(
+      restPath === "/" ? `/${locale}` : `/${locale}${restPath}`,
+      request.url,
+    ),
+  );
+  attachLocaleCookies(redirectResponse, locale);
+  return redirectResponse;
+}
+
+function buildLoginRedirectResponse(
+  request: NextRequest,
+  locale: LocaleKey,
+): NextResponse {
+  const redirectUrl = new URL(
+    `/${locale}${getLocalizedLoginPath(locale)}`,
+    request.url,
+  );
+  redirectUrl.searchParams.set("next", request.nextUrl.pathname);
+  const redirectResponse = NextResponse.redirect(redirectUrl);
+  attachLocaleCookies(redirectResponse, locale);
+  return redirectResponse;
+}
+
+function getBlockedDevOriginResponse(
+  request: NextRequest,
+): NextResponse | null {
+  if (process.env.NODE_ENV !== "development") {
+    return null;
+  }
+  const allowedDevOrigins = getAllowedDevOrigins();
+  const origin = request.headers.get("origin");
+  if (
+    origin &&
+    allowedDevOrigins.length > 0 &&
+    !allowedDevOrigins.includes(origin)
+  ) {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
+  return null;
+}
+
+function applySecurityHeaders(response: NextResponse): void {
   const securityHeaders = getSecurityHeaders();
   securityHeaders.forEach((header) => {
     response.headers.set(header.key, header.value);
   });
-  logSecurity.debug("Applied security headers");
-
-  return response;
 }
 
 function getAllowedDevOrigins(): string[] {

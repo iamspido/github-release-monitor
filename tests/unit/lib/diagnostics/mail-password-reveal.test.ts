@@ -53,6 +53,7 @@ describe("revealMailPasswordActionImpl", () => {
     vi.resetModules();
     process.env = {
       ...env,
+      BETTER_AUTH_SECRET: "x".repeat(64),
       MAIL_PASSWORD: "mail-secret",
       APPRISE_URL: "http://user:pass@apprise:8000/notify/key",
     };
@@ -194,7 +195,7 @@ describe("revealMailPasswordActionImpl", () => {
       methods: {
         password: true,
         totp: true,
-        passkey: true,
+        passkey: false,
         socialProviders: ["github"],
       },
     });
@@ -252,6 +253,57 @@ describe("revealMailPasswordActionImpl", () => {
     expect(mocks.setSocialLoginIntentCookie).toHaveBeenCalledWith(
       "intent.value",
     );
+  });
+
+  it("does not complete step-up from a pending cookie alone", async () => {
+    mocks.access.mockResolvedValue({
+      authenticationMethod: "Basic",
+      canAccessRestrictedPages: true,
+    });
+    mocks.getSession.mockResolvedValue({
+      user: { id: "user-1", email: "user@example.com" },
+    });
+    const { completeSecretRevealStepUpActionImpl } = await import(
+      "@/lib/diagnostics/notification-config"
+    );
+
+    await expect(completeSecretRevealStepUpActionImpl()).resolves.toEqual({
+      success: false,
+      errorKey: "error_step_up_failed",
+    });
+  });
+
+  it("completes step-up when a verified proof cookie matches the session user", async () => {
+    mocks.access.mockResolvedValue({
+      authenticationMethod: "Basic",
+      canAccessRestrictedPages: true,
+    });
+    mocks.getSession.mockResolvedValue({
+      user: { id: "user-1", email: "user@example.com" },
+    });
+    const {
+      createSecretRevealStepUpPayload,
+      encodeSecretRevealStepUpCookieValue,
+    } = await import("@/lib/diagnostics/secret-reveal-step-up");
+    const verifiedCookieValue = encodeSecretRevealStepUpCookieValue(
+      createSecretRevealStepUpPayload({
+        userId: "user-1",
+        method: "social",
+        provider: "github",
+      }),
+    );
+    mocks.cookieGet.mockImplementation((name: string) =>
+      name === "diagnostic_secret_reveal_verified"
+        ? { value: verifiedCookieValue }
+        : undefined,
+    );
+    const { completeSecretRevealStepUpActionImpl } = await import(
+      "@/lib/diagnostics/notification-config"
+    );
+
+    await expect(completeSecretRevealStepUpActionImpl()).resolves.toEqual({
+      success: true,
+    });
   });
 
   it("returns an error when MAIL_PASSWORD is not configured", async () => {

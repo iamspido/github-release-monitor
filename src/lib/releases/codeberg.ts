@@ -1,17 +1,19 @@
 import { getTranslations } from "next-intl/server";
 import { buildCodebergAuthChain } from "@/lib/releases/auth-chains";
 import { fetchJsonResponseWithRetryAuthChain } from "@/lib/releases/fetch";
+import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
 import {
-  isPreReleaseByTagName,
-  resolveEffectiveRepoFilters,
-} from "@/lib/releases/filters";
+  notModifiedResult,
+  resolvePageCount,
+  resolvePageSize,
+  selectLatestMatchingRelease,
+} from "@/lib/releases/provider-pipeline";
 import type {
   LatestReleaseFetchResult,
   RepoSettingsForFetch,
 } from "@/lib/releases/types";
 import { log, normalizeEnvToken } from "@/lib/server-action-helpers";
 import type { AppSettings, GithubRelease } from "@/types";
-import { allPreReleaseTypes } from "@/types";
 
 type CodebergReleaseApi = {
   id: number;
@@ -160,17 +162,12 @@ export async function fetchLatestReleaseFromCodeberg(
   log.info(`Fetching Codeberg release for ${owner}/${repo}`);
   const fetchedAtTimestamp = new Date().toISOString();
 
-  const {
-    effectiveReleaseChannels,
-    effectivePreReleaseSubChannels,
-    totalReleasesToFetch,
-    effectiveIncludeRegex,
-    effectiveExcludeRegex,
-  } = resolveEffectiveRepoFilters(repoSettings, globalSettings);
+  const filters = resolveEffectiveRepoFilters(repoSettings, globalSettings);
+  const { totalReleasesToFetch } = filters;
 
   const CODEBERG_API_BASE_URL = `https://codeberg.org/api/v1/repos/${owner}/${repo}`;
   const MAX_PER_PAGE = 50;
-  const pagesToFetch = Math.ceil(totalReleasesToFetch / MAX_PER_PAGE);
+  const pagesToFetch = resolvePageCount(totalReleasesToFetch, MAX_PER_PAGE);
   let allReleases: GithubRelease[] = [];
   let newEtag: string | undefined;
   let tagFallbackReason: string | undefined;
@@ -183,10 +180,11 @@ export async function fetchLatestReleaseFromCodeberg(
 
   try {
     for (let page = 1; page <= pagesToFetch; page++) {
-      const releasesOnThisPage = Math.min(
-        MAX_PER_PAGE,
-        totalReleasesToFetch - allReleases.length,
-      );
+      const releasesOnThisPage = resolvePageSize({
+        maxPerPage: MAX_PER_PAGE,
+        totalItemsToFetch: totalReleasesToFetch,
+        alreadyFetched: allReleases.length,
+      });
       if (releasesOnThisPage <= 0) break;
 
       const url = `${CODEBERG_API_BASE_URL}/releases?limit=${releasesOnThisPage}&page=${page}`;
@@ -213,12 +211,10 @@ export async function fetchLatestReleaseFromCodeberg(
       if (page === 1) {
         newEtag = response.headers.get("etag") || undefined;
         if (response.status === 304) {
-          log.info(`[ETag] No changes for codeberg:${owner}/${repo}.`);
-          return {
-            release: null,
-            error: { type: "not_modified" },
-            newEtag: repoSettings.etag,
-          };
+          return notModifiedResult(
+            `codeberg:${owner}/${repo}`,
+            repoSettings.etag,
+          );
         }
       }
 
@@ -400,66 +396,19 @@ export async function fetchLatestReleaseFromCodeberg(
       allReleases = [virtualRelease];
     }
 
-    const filteredReleases = allReleases.filter((r) => {
-      try {
-        if (effectiveExcludeRegex) {
-          const exclude = new RegExp(effectiveExcludeRegex, "i");
-          if (exclude.test(r.tag_name)) return false;
-        }
-        if (effectiveIncludeRegex) {
-          const include = new RegExp(effectiveIncludeRegex, "i");
-          return include.test(r.tag_name);
-        }
-      } catch (e) {
-        log.error(
-          `Invalid regex for repo codeberg:${owner}/${repo}. Regex filters will be ignored. Error:`,
-          e,
-        );
-      }
-
-      if (r.draft) {
-        return effectiveReleaseChannels.includes("draft");
-      }
-
-      const isTagMarkedPreRelease = isPreReleaseByTagName(
-        r.tag_name,
-        allPreReleaseTypes,
-      );
-      const isConsideredPreRelease = r.prerelease || isTagMarkedPreRelease;
-
-      if (isConsideredPreRelease) {
-        if (!effectiveReleaseChannels.includes("prerelease")) return false;
-
-        // If the tag explicitly includes a pre-release marker (e.g. -beta/-rc),
-        // apply the configured sub-channel filter. Otherwise, fall back to the API flag.
-        if (isTagMarkedPreRelease) {
-          return isPreReleaseByTagName(
-            r.tag_name,
-            effectivePreReleaseSubChannels,
-          );
-        }
-
-        return true;
-      }
-
-      return effectiveReleaseChannels.includes("stable");
+    const latestRelease = selectLatestMatchingRelease({
+      releases: allReleases,
+      filters,
+      repoIdForLog: `codeberg:${owner}/${repo}`,
     });
 
-    if (filteredReleases.length === 0) {
+    if (!latestRelease) {
       return {
         release: null,
         error: { type: "no_matching_releases" },
         newEtag,
       };
     }
-
-    const sortedReleases = filteredReleases.slice().sort((a, b) => {
-      const aTime = new Date(a.published_at || a.created_at).getTime();
-      const bTime = new Date(b.published_at || b.created_at).getTime();
-      return bTime - aTime;
-    });
-
-    const latestRelease = sortedReleases[0];
 
     if (
       latestRelease.id !== 0 &&

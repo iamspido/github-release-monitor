@@ -1,5 +1,6 @@
 import { logger } from "@/lib/logger";
 import { checkForNewReleases } from "@/lib/releases/checker";
+import { getSchedulerRuntimeSummary } from "@/lib/runtime/scheduler-capabilities";
 import { runApplicationUpdateCheck } from "@/lib/runtime/update-check";
 
 const log = logger.withScope("WebServer");
@@ -43,6 +44,7 @@ export function startBackgroundWorkers(): void {
     !process.env.BACKGROUND_POLLING_INITIALIZED
   ) {
     log.info(`Initializing dynamic background polling.`);
+    log.info(getSchedulerRuntimeSummary());
     process.env.BACKGROUND_POLLING_INITIALIZED = "true";
     setTimeout(backgroundPollingLoop, 5000);
   }

@@ -1,14 +1,17 @@
 import { getTranslations } from "next-intl/server";
 import { buildGitlabAuthChain } from "@/lib/releases/auth-chains";
 import { fetchJsonResponseWithRetryAuthChain } from "@/lib/releases/fetch";
-import {
-  isPreReleaseByTagName,
-  resolveEffectiveRepoFilters,
-} from "@/lib/releases/filters";
+import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
 import {
   fetchGitlabTagsViaGitTransport,
   tryFetchGitlabCommitMetadataViaGitTransport,
 } from "@/lib/releases/gitlab-git-transport";
+import {
+  notModifiedResult,
+  resolvePageCount,
+  resolvePageSize,
+  selectLatestMatchingRelease,
+} from "@/lib/releases/provider-pipeline";
 import type {
   LatestReleaseFetchResult,
   RepoSettingsForFetch,
@@ -19,7 +22,6 @@ import {
 } from "@/lib/repositories/providers";
 import { log } from "@/lib/server-action-helpers";
 import type { AppSettings, GithubRelease } from "@/types";
-import { allPreReleaseTypes } from "@/types";
 
 type GitlabReleaseApi = {
   name?: string | null;
@@ -114,17 +116,12 @@ export async function fetchLatestReleaseFromGitLab(
   log.info(`Fetching GitLab release for ${projectPath} on ${gitlabHost}`);
   const fetchedAtTimestamp = new Date().toISOString();
 
-  const {
-    effectiveReleaseChannels,
-    effectivePreReleaseSubChannels,
-    totalReleasesToFetch,
-    effectiveIncludeRegex,
-    effectiveExcludeRegex,
-  } = resolveEffectiveRepoFilters(repoSettings, globalSettings);
+  const filters = resolveEffectiveRepoFilters(repoSettings, globalSettings);
+  const { totalReleasesToFetch } = filters;
 
   const GITLAB_API_BASE_URL = `https://${gitlabHost}/api/v4/projects/${encodeURIComponent(projectPath)}`;
   const MAX_PER_PAGE = 100;
-  const pagesToFetch = Math.ceil(totalReleasesToFetch / MAX_PER_PAGE);
+  const pagesToFetch = resolvePageCount(totalReleasesToFetch, MAX_PER_PAGE);
   let allReleases: GithubRelease[] = [];
   let newEtag: string | undefined;
   let fellBackToTagsAfterReleases404 = false;
@@ -138,10 +135,11 @@ export async function fetchLatestReleaseFromGitLab(
 
   try {
     for (let page = 1; page <= pagesToFetch; page += 1) {
-      const releasesOnThisPage = Math.min(
-        MAX_PER_PAGE,
-        totalReleasesToFetch - allReleases.length,
-      );
+      const releasesOnThisPage = resolvePageSize({
+        maxPerPage: MAX_PER_PAGE,
+        totalItemsToFetch: totalReleasesToFetch,
+        alreadyFetched: allReleases.length,
+      });
       if (releasesOnThisPage <= 0) break;
 
       const url = `${GITLAB_API_BASE_URL}/releases?per_page=${releasesOnThisPage}&page=${page}`;
@@ -165,14 +163,10 @@ export async function fetchLatestReleaseFromGitLab(
       if (page === 1) {
         newEtag = response.headers.get("etag") || undefined;
         if (response.status === 304) {
-          log.info(
-            `[ETag] No changes for gitlab:${gitlabHost}/${projectPath}.`,
+          return notModifiedResult(
+            `gitlab:${gitlabHost}/${projectPath}`,
+            repoSettings.etag,
           );
-          return {
-            release: null,
-            error: { type: "not_modified" },
-            newEtag: repoSettings.etag,
-          };
         }
       }
 
@@ -476,64 +470,19 @@ export async function fetchLatestReleaseFromGitLab(
       }
     }
 
-    const filteredReleases = allReleases.filter((r) => {
-      try {
-        if (effectiveExcludeRegex) {
-          const exclude = new RegExp(effectiveExcludeRegex, "i");
-          if (exclude.test(r.tag_name)) return false;
-        }
-        if (effectiveIncludeRegex) {
-          const include = new RegExp(effectiveIncludeRegex, "i");
-          return include.test(r.tag_name);
-        }
-      } catch (e) {
-        log.error(
-          `Invalid regex for repo gitlab:${gitlabHost}/${projectPath}. Regex filters will be ignored. Error:`,
-          e,
-        );
-      }
-
-      if (r.draft) {
-        return effectiveReleaseChannels.includes("draft");
-      }
-
-      const isTagMarkedPreRelease = isPreReleaseByTagName(
-        r.tag_name,
-        allPreReleaseTypes,
-      );
-      const isConsideredPreRelease = r.prerelease || isTagMarkedPreRelease;
-
-      if (isConsideredPreRelease) {
-        if (!effectiveReleaseChannels.includes("prerelease")) return false;
-
-        if (isTagMarkedPreRelease) {
-          return isPreReleaseByTagName(
-            r.tag_name,
-            effectivePreReleaseSubChannels,
-          );
-        }
-
-        return true;
-      }
-
-      return effectiveReleaseChannels.includes("stable");
+    const latestRelease = selectLatestMatchingRelease({
+      releases: allReleases,
+      filters,
+      repoIdForLog: `gitlab:${gitlabHost}/${projectPath}`,
     });
 
-    if (filteredReleases.length === 0) {
+    if (!latestRelease) {
       return {
         release: null,
         error: { type: "no_matching_releases" },
         newEtag,
       };
     }
-
-    const sortedReleases = filteredReleases.slice().sort((a, b) => {
-      const aTime = new Date(a.published_at || a.created_at).getTime();
-      const bTime = new Date(b.published_at || b.created_at).getTime();
-      return bTime - aTime;
-    });
-
-    const latestRelease = sortedReleases[0];
 
     if (
       latestRelease.published_at_unknown &&

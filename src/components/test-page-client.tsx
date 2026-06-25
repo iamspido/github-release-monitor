@@ -20,16 +20,10 @@ import * as React from "react";
 
 import {
   beginSecretRevealStepUpAction,
-  checkAppriseStatusAction,
   completeSecretRevealStepUpAction,
   getSecretRevealOptionsAction,
   revealAppriseUrlAction,
   revealMailPasswordAction,
-  sendTestAppriseAction,
-  sendTestEmailAction,
-  setupTestRepositoryAction,
-  triggerAppUpdateCheckAction,
-  triggerReleaseCheckAction,
   verifySecretRevealTotpAction,
 } from "@/app/actions";
 import {
@@ -63,6 +57,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useDiagnosticsActions } from "@/hooks/use-diagnostics-actions";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { authClient } from "@/lib/auth/client";
@@ -97,14 +92,6 @@ export function TestPageClient({
   updateNotice: initialUpdateNotice,
 }: TestPageClientProps) {
   const t = useTranslations("TestPage");
-  const [isSendingMail, startMailTransition] = React.useTransition();
-  const [isSettingUpRepo, startSetupRepoTransition] = React.useTransition();
-  const [isTriggeringCheck, startTriggerCheckTransition] =
-    React.useTransition();
-  const [isSendingApprise, startAppriseTransition] = React.useTransition();
-  const [isCheckingApprise, startAppriseCheckTransition] =
-    React.useTransition();
-  const [isCheckingUpdate, startUpdateTransition] = React.useTransition();
   const [isRevealingMailPassword, startMailPasswordRevealTransition] =
     React.useTransition();
   const [isRevealingAppriseUrl, startAppriseUrlRevealTransition] =
@@ -112,11 +99,29 @@ export function TestPageClient({
 
   const { toast } = useToast();
   const [resetTime, setResetTime] = React.useState(t("not_available"));
-  const [customEmail, setCustomEmail] = React.useState("");
-  const [isEmailInvalid, setIsEmailInvalid] = React.useState(false);
-  const [appriseStatus, setAppriseStatus] =
-    React.useState(initialAppriseStatus);
-  const [updateNotice, setUpdateNotice] = React.useState(initialUpdateNotice);
+  const {
+    appriseStatus,
+    customEmail,
+    handleEmailChange,
+    handleManualUpdateCheck,
+    handleRefreshAppriseStatus,
+    handleSendTestApprise,
+    handleSendTestEmail,
+    handleSetupTestRepo,
+    handleTriggerReleaseCheck,
+    isCheckingApprise,
+    isCheckingUpdate,
+    isEmailInvalid,
+    isSendingApprise,
+    isSendingMail,
+    isSettingUpRepo,
+    isTriggeringCheck,
+    updateNotice,
+  } = useDiagnosticsActions({
+    initialAppriseStatus,
+    initialUpdateNotice,
+    t,
+  });
   const [revealedMailPassword, setRevealedMailPassword] = React.useState<
     string | null
   >(null);
@@ -365,192 +370,6 @@ export function TestPageClient({
   codebergDetails.push(
     <p key="codeberg-api-limit">{t("codeberg_api_limit", { limit: 2000 })}</p>,
   );
-
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const email = e.target.value;
-    setCustomEmail(email);
-    if (email.trim().length > 0) {
-      // Basic regex for email format validation
-      const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-      setIsEmailInvalid(!isValid);
-    } else {
-      setIsEmailInvalid(false); // Clear error if the field is empty
-    }
-  };
-
-  const handleSendTestEmail = () => {
-    if (isEmailInvalid) return;
-
-    startMailTransition(async () => {
-      try {
-        const result = await sendTestEmailAction(customEmail);
-        if (result.success) {
-          toast({
-            title: t("toast_email_success_title"),
-            description: t("toast_email_success_description"),
-          });
-        } else {
-          toast({
-            title: t("toast_email_error_title"),
-            description: result.error || t("toast_email_error_description"),
-            variant: "destructive",
-          });
-        }
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        toast({
-          title: t("toast_email_error_title"),
-          description: t("toast_email_error_description"),
-          variant: "destructive",
-        });
-      }
-    });
-  };
-
-  const handleSendTestApprise = () => {
-    startAppriseTransition(async () => {
-      try {
-        const result = await sendTestAppriseAction();
-        if (result.success) {
-          toast({
-            title: t("toast_apprise_success_title"),
-            description: t("toast_apprise_success_description"),
-          });
-        } else {
-          toast({
-            title: t("toast_apprise_error_title"),
-            description: result.error,
-            variant: "destructive",
-          });
-        }
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        toast({
-          title: t("toast_apprise_error_title"),
-          description: t("toast_apprise_not_configured_error"),
-          variant: "destructive",
-        });
-      }
-    });
-  };
-
-  const handleManualUpdateCheck = () => {
-    startUpdateTransition(async () => {
-      try {
-        const result = await triggerAppUpdateCheckAction();
-        setUpdateNotice(result.notice);
-
-        if (result.notice.lastCheckError) {
-          toast({
-            title: t("toast_error_title"),
-            description: t("toast_update_error_description", {
-              error: result.notice.lastCheckError,
-            }),
-            variant: "destructive",
-          });
-          return;
-        }
-
-        if (result.notice.shouldNotify) {
-          toast({
-            title: t("toast_success_title"),
-            description: t("toast_update_available_description", {
-              version: result.notice.latestVersion ?? t("not_available"),
-            }),
-          });
-        } else {
-          toast({
-            title: t("toast_success_title"),
-            description: t("toast_update_not_available_description"),
-          });
-        }
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        const errorMessage =
-          error instanceof Error ? error.message : String(error ?? "unknown");
-        toast({
-          title: t("toast_error_title"),
-          description: t("toast_update_error_description", {
-            error: errorMessage,
-          }),
-          variant: "destructive",
-        });
-      }
-    });
-  };
-
-  const handleSetupTestRepo = () => {
-    startSetupRepoTransition(async () => {
-      try {
-        const result = await setupTestRepositoryAction();
-        toast({
-          title: result.success
-            ? t("toast_success_title")
-            : t("toast_error_title"),
-          description: result.message,
-          variant: result.success ? "default" : "destructive",
-        });
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        toast({
-          title: t("toast_error_title"),
-          description: t("toast_setup_test_repo_error"),
-          variant: "destructive",
-        });
-      }
-    });
-  };
-
-  const handleTriggerReleaseCheck = () => {
-    startTriggerCheckTransition(async () => {
-      try {
-        const result = await triggerReleaseCheckAction();
-        toast({
-          title: result.success
-            ? t("toast_success_title")
-            : t("toast_error_title"),
-          description: result.message,
-          variant: result.success ? "default" : "destructive",
-        });
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        toast({
-          title: t("toast_error_title"),
-          description: t("toast_trigger_check_error"),
-          variant: "destructive",
-        });
-      }
-    });
-  };
-
-  const handleRefreshAppriseStatus = () => {
-    startAppriseCheckTransition(async () => {
-      try {
-        const status = await checkAppriseStatusAction();
-        setAppriseStatus(status);
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        // Keep previous state, just inform user.
-        toast({
-          title: t("toast_error_title"),
-          description: t("apprise_error"),
-          variant: "destructive",
-        });
-      }
-    });
-  };
 
   const handleMailPasswordRevealResult = (
     result: Awaited<ReturnType<typeof revealMailPasswordAction>>,

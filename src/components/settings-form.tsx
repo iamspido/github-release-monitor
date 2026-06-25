@@ -58,6 +58,10 @@ import {
 } from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import {
+  type RegexValidationError,
+  validateRegexInput,
+} from "@/lib/settings/form-model";
+import {
   shouldSelectAllPreReleaseSubChannels,
   togglePreReleaseSubChannel,
   toggleReleaseChannel,
@@ -102,7 +106,7 @@ type SaveStatus =
 type IntervalValidationError = "too_low" | "too_high" | null;
 type ReleasesPerPageError = "too_low" | "too_high" | null;
 type ParallelRepoFetchError = "too_low" | "too_high" | null;
-type RegexError = "invalid" | null;
+type RegexError = RegexValidationError;
 type CronValidationError = "invalid" | null;
 type HexColorError = "invalid" | null;
 type SecurityPatternsError = "invalid" | null;
@@ -582,29 +586,8 @@ export function SettingsForm({
       setParallelRepoFetchesError(null);
     }
 
-    // Include Regex Validation
-    if (!includeRegex.trim()) {
-      setIncludeRegexError(null);
-    } else {
-      try {
-        new RegExp(includeRegex);
-        setIncludeRegexError(null);
-      } catch {
-        setIncludeRegexError("invalid");
-      }
-    }
-
-    // Exclude Regex Validation
-    if (!excludeRegex.trim()) {
-      setExcludeRegexError(null);
-    } else {
-      try {
-        new RegExp(excludeRegex);
-        setExcludeRegexError(null);
-      } catch {
-        setExcludeRegexError("invalid");
-      }
-    }
+    setIncludeRegexError(validateRegexInput(includeRegex));
+    setExcludeRegexError(validateRegexInput(excludeRegex));
 
     if (
       securityHighlightColorPreset === "custom" &&

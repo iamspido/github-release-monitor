@@ -35,7 +35,7 @@ export function toSafeString(value: unknown): string {
 }
 
 export function isSupportedAuthSocialProvider(
-  value: string,
+  value: string | null | undefined,
 ): value is AuthSocialProvider {
   return value === "github" || value === "google";
 }

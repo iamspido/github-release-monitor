@@ -46,6 +46,8 @@ import {
   isHttpUrl,
   isOwnerRepoShorthand,
   type ProviderChoiceCandidate,
+  parseRepositoryImportJson,
+  readTextFile,
 } from "./repository-form-helpers";
 
 function SubmitButton({
@@ -330,102 +332,67 @@ export function RepositoryForm({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const content = e.target?.result as string;
+    try {
+      const content = await readTextFile(file);
 
-        if (isComposeFileName(file.name)) {
-          startImportTransition(async () => {
-            try {
-              const result = await previewComposeImportAction(
-                file.name,
-                content,
-              );
-              if (!result.success) {
-                toast({
-                  title: t("toast_import_error_title"),
-                  description:
-                    result.error ?? t("toast_import_error_description"),
-                  variant: "destructive",
-                });
-                return;
-              }
-
-              const skippedImages = Object.values(result.skipped).reduce(
-                (sum, count) => sum + count,
-                0,
-              );
-              if (result.repositories.length === 0 && skippedImages === 0) {
-                toast({
-                  title: t("toast_import_error_title"),
-                  description: t("toast_import_error_no_compose_images"),
-                  variant: "destructive",
-                });
-                return;
-              }
-
-              prepareImportPreview(result.repositories, skippedImages);
-            } catch (error: unknown) {
-              if (reloadIfServerActionStale(error)) {
-                return;
-              }
+      if (isComposeFileName(file.name)) {
+        startImportTransition(async () => {
+          try {
+            const result = await previewComposeImportAction(file.name, content);
+            if (!result.success) {
               toast({
                 title: t("toast_import_error_title"),
-                description: t("toast_import_error_description"),
+                description:
+                  result.error ?? t("toast_import_error_description"),
                 variant: "destructive",
               });
+              return;
             }
-          });
-          return;
-        }
 
-        const importedData = JSON.parse(content);
+            const skippedImages = Object.values(result.skipped).reduce(
+              (sum, count) => sum + count,
+              0,
+            );
+            if (result.repositories.length === 0 && skippedImages === 0) {
+              toast({
+                title: t("toast_import_error_title"),
+                description: t("toast_import_error_no_compose_images"),
+                variant: "destructive",
+              });
+              return;
+            }
 
-        if (Array.isArray(importedData)) {
-          const isValidFormat = importedData.every(
-            (item) =>
-              typeof item === "object" &&
-              item !== null &&
-              "id" in item &&
-              "url" in item,
-          );
-
-          if (!isValidFormat) {
-            throw new Error(t("toast_import_error_invalid_format"));
+            prepareImportPreview(result.repositories, skippedImages);
+          } catch (error: unknown) {
+            if (reloadIfServerActionStale(error)) {
+              return;
+            }
+            toast({
+              title: t("toast_import_error_title"),
+              description: t("toast_import_error_description"),
+              variant: "destructive",
+            });
           }
-
-          prepareImportPreview(importedData);
-        } else {
-          toast({
-            title: t("toast_import_error_title"),
-            description: t("toast_import_error_invalid_format"),
-            variant: "destructive",
-          });
-        }
-      } catch (error: unknown) {
-        const description =
-          error instanceof Error && error.message
-            ? error.message
-            : typeof error === "string"
-              ? error
-              : t("toast_import_error_parsing");
-        toast({
-          title: t("toast_import_error_title"),
-          description,
-          variant: "destructive",
         });
+        return;
       }
-    };
-    reader.onerror = () => {
+
+      prepareImportPreview(parseRepositoryImportJson(content));
+    } catch (error: unknown) {
+      const description =
+        error instanceof Error && error.message === "invalid_format"
+          ? t("toast_import_error_invalid_format")
+          : error instanceof Error && error.message === "file_read_failed"
+            ? t("toast_import_error_reading")
+            : t("toast_import_error_parsing");
       toast({
         title: t("toast_import_error_title"),
-        description: t("toast_import_error_reading"),
+        description,
         variant: "destructive",
       });
-    };
-    reader.readAsText(file);
-    setFileInputKey(Date.now());
+    } finally {
+      setFileInputKey(Date.now());
+    }
   };
 
   const handleConfirmImport = () => {

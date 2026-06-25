@@ -91,3 +91,121 @@ export function mapRegisterSocialPrecheckErrorToMessageKey(
 
   return errorMap[errorCode] || "error_social_login_failed";
 }
+
+export type PasswordLoginApiState = {
+  errorKey?: string;
+  requiresTwoFactor?: boolean;
+  redirectTo?: string;
+};
+
+export async function checkSetupRequired() {
+  try {
+    const response = await fetch("/api/auth/setup", {
+      method: "GET",
+      cache: "no-store",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function submitPasswordLogin(input: {
+  identifier: string;
+  password: string;
+  next?: string;
+  locale: string;
+}): Promise<PasswordLoginApiState> {
+  try {
+    const response = await fetch("/api/login/password", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const data = (await response
+      .json()
+      .catch(() => ({}))) as PasswordLoginApiState;
+    if (!response.ok) {
+      return {
+        errorKey: data.errorKey || "error_invalid_credentials",
+      };
+    }
+    return data;
+  } catch {
+    return { errorKey: "error_invalid_credentials" };
+  }
+}
+
+export async function precheckSocialLogin(input: {
+  identifier: string;
+  provider: AuthSocialProvider;
+}) {
+  const response = await fetch("/api/auth/social/precheck", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (response.status === 400) {
+    return "invalid_input" as const;
+  }
+  if (!response.ok) {
+    return "failed" as const;
+  }
+
+  const data = (await response.json()) as {
+    canProceed?: unknown;
+  };
+  return data.canProceed === true
+    ? ("allowed" as const)
+    : ("unavailable" as const);
+}
+
+export async function submitSetup(input: {
+  token: string;
+  email: string;
+  password: string;
+  name: string;
+  username: string;
+}) {
+  const response = await fetch("/api/auth/setup", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+
+  if (response.status === 404) return "unavailable" as const;
+  if (response.status === 401) return "invalid_token" as const;
+  if (!response.ok) {
+    return {
+      errorKey: mapSetupApiErrorToMessageKey(await readApiErrorCode(response)),
+    };
+  }
+  return "success" as const;
+}
+
+export async function submitSetupSocialContext(input: {
+  token: string;
+  provider: AuthSocialProvider;
+  username: string;
+  name: string;
+}) {
+  const response = await fetch("/api/auth/setup/social-context", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (response.status === 404) return "unavailable" as const;
+  if (response.status === 401) return "invalid_token" as const;
+  if (!response.ok) {
+    return {
+      errorKey: mapSetupApiErrorToMessageKey(await readApiErrorCode(response)),
+    };
+  }
+  return "success" as const;
+}

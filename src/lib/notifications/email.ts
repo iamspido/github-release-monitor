@@ -1,5 +1,4 @@
 import { getTranslations } from "next-intl/server";
-import nodemailer from "nodemailer";
 import { remark } from "remark";
 import remarkGfm from "remark-gfm";
 import remarkHtml from "remark-html";
@@ -9,6 +8,7 @@ import {
   escapeHtmlAttribute,
   safeExternalUrl,
 } from "@/lib/notifications/content-safety";
+import { sendEmailMessage } from "@/lib/notifications/email-transport";
 import type { GithubRelease, Repository, TimeFormat } from "@/types";
 
 export async function getFormattedDate(
@@ -318,16 +318,6 @@ export async function sendNewReleaseEmail(
 
   const port = parseInt(MAIL_PORT, 10);
 
-  const transporter = nodemailer.createTransport({
-    host: MAIL_HOST,
-    port: port,
-    secure: port === 465,
-    auth: {
-      user: MAIL_USERNAME,
-      pass: MAIL_PASSWORD,
-    },
-  });
-
   const subject = t("subject", {
     repoId: repository.id,
     tagName: release.tag_name,
@@ -346,18 +336,22 @@ export async function sendNewReleaseEmail(
   );
 
   try {
-    await transporter.sendMail({
-      from: `"${MAIL_FROM_NAME || t("from_name_fallback")}" <${MAIL_FROM_ADDRESS}>`,
-      to: recipient,
-      subject: subject,
-      text: textBody,
-      html: htmlBody,
-    });
-    logger
-      .withScope("Email")
-      .info(
-        `Email notification sent to ${recipient} for ${repository.id} ${release.tag_name}`,
-      );
+    await sendEmailMessage(
+      {
+        host: MAIL_HOST,
+        port,
+        username: MAIL_USERNAME,
+        password: MAIL_PASSWORD,
+      },
+      {
+        fromName: MAIL_FROM_NAME || t("from_name_fallback"),
+        fromAddress: MAIL_FROM_ADDRESS,
+        to: recipient,
+        subject,
+        text: textBody,
+        html: htmlBody,
+      },
+    );
   } catch (error: unknown) {
     logger
       .withScope("Email")

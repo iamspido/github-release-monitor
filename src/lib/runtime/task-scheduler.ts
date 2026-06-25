@@ -1,8 +1,16 @@
 import { logger } from "@/lib/logger";
+import { getSchedulerRuntimeSummary } from "@/lib/runtime/scheduler-capabilities";
 
 // This promise is used to create a sequential task queue.
 // All actions that modify shared JSON-backed state should be wrapped in `scheduleTask`.
 let currentUpdatePromise: Promise<void> = Promise.resolve();
+let runtimeModelLogged = false;
+
+function logRuntimeModelOnce() {
+  if (runtimeModelLogged) return;
+  runtimeModelLogged = true;
+  logger.withScope("Scheduler").info(getSchedulerRuntimeSummary());
+}
 
 /**
  * Schedules a task to be executed sequentially, preventing race conditions
@@ -15,6 +23,7 @@ export function scheduleTask<T>(
   taskName: string,
   taskFunction: () => Promise<T>,
 ): Promise<T> {
+  logRuntimeModelOnce();
   const log = logger.withScope("Scheduler");
   log.info(`Queuing task: ${taskName}`);
 

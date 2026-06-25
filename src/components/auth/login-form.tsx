@@ -22,11 +22,14 @@ import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
 import {
   type AuthSocialProvider,
+  checkSetupRequired,
   isSocialErrorKey,
   isValidSocialUsername,
   mapOauthErrorToMessageKey,
-  mapSetupApiErrorToMessageKey,
-  readApiErrorCode,
+  precheckSocialLogin,
+  submitPasswordLogin,
+  submitSetup,
+  submitSetupSocialContext,
 } from "@/lib/auth/client-flow-utils";
 import {
   isPasswordPolicyValid,
@@ -131,15 +134,9 @@ export function LoginForm({
     let active = true;
     (async () => {
       try {
-        const response = await fetch("/api/auth/setup", {
-          method: "GET",
-          cache: "no-store",
-        });
+        const isSetupRequired = await checkSetupRequired();
         if (!active) return;
-        setSetupRequired(response.ok);
-      } catch {
-        if (!active) return;
-        setSetupRequired(false);
+        setSetupRequired(isSetupRequired);
       } finally {
         if (active) {
           setSetupLoading(false);
@@ -236,25 +233,12 @@ export function LoginForm({
       const formData = new FormData(form);
       const identifier = String(formData.get("email") || "");
       const password = String(formData.get("password") || "");
-      const response = await fetch("/api/login/password", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          identifier,
-          password,
-          next: safeNext,
-          locale,
-        }),
+      const data = await submitPasswordLogin({
+        identifier,
+        password,
+        next: safeNext,
+        locale,
       });
-      const data = (await response
-        .json()
-        .catch(() => ({}))) as PasswordLoginState;
-      if (!response.ok) {
-        setPasswordLoginState({
-          errorKey: data.errorKey || "error_invalid_credentials",
-        });
-        return;
-      }
       setPasswordLoginState(data);
     } catch {
       setPasswordLoginState({ errorKey: "error_invalid_credentials" });
@@ -279,30 +263,20 @@ export function LoginForm({
         return;
       }
 
-      const precheckResponse = await fetch("/api/auth/social/precheck", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          identifier: normalizedIdentifier,
-          provider,
-        }),
+      const precheck = await precheckSocialLogin({
+        identifier: normalizedIdentifier,
+        provider,
       });
 
-      if (precheckResponse.status === 400) {
+      if (precheck === "invalid_input") {
         setClientErrorKey("error_social_identifier_required");
         return;
       }
-      if (!precheckResponse.ok) {
+      if (precheck === "failed") {
         setClientErrorKey("error_social_login_failed");
         return;
       }
-
-      const precheckData = (await precheckResponse.json()) as {
-        canProceed?: unknown;
-      };
-      if (precheckData.canProceed !== true) {
+      if (precheck !== "allowed") {
         setClientErrorKey("error_social_login_unavailable");
         return;
       }
@@ -381,34 +355,27 @@ export function LoginForm({
       const name = String(formData.get("name") || "").trim();
       const username = String(formData.get("username") || "").trim();
 
-      const response = await fetch("/api/auth/setup", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          token,
-          email,
-          password,
-          name,
-          username,
-        }),
+      const result = await submitSetup({
+        token,
+        email,
+        password,
+        name,
+        username,
       });
 
-      if (response.status === 404) {
+      if (result === "unavailable") {
         setSetupRequired(false);
         setSetupErrorKey("error_setup_unavailable");
         return;
       }
 
-      if (response.status === 401) {
+      if (result === "invalid_token") {
         setSetupErrorKey("error_invalid_setup_token");
         return;
       }
 
-      if (!response.ok) {
-        const errorCode = await readApiErrorCode(response);
-        setSetupErrorKey(mapSetupApiErrorToMessageKey(errorCode));
+      if (result !== "success") {
+        setSetupErrorKey(result.errorKey);
         return;
       }
 
@@ -462,29 +429,24 @@ export function LoginForm({
     setSetupSocialPendingProvider(provider);
 
     try {
-      const response = await fetch("/api/auth/setup/social-context", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          token,
-          provider,
-          username,
-          name,
-        }),
+      const contextResult = await submitSetupSocialContext({
+        token,
+        provider,
+        username,
+        name,
       });
 
-      if (response.status === 404) {
+      if (contextResult === "unavailable") {
         setSetupRequired(false);
         setSetupErrorKey("error_setup_unavailable");
         return;
       }
-      if (response.status === 401) {
+      if (contextResult === "invalid_token") {
         setSetupErrorKey("error_invalid_setup_token");
         return;
       }
-      if (!response.ok) {
-        const errorCode = await readApiErrorCode(response);
-        setSetupErrorKey(mapSetupApiErrorToMessageKey(errorCode));
+      if (contextResult !== "success") {
+        setSetupErrorKey(contextResult.errorKey);
         return;
       }
 

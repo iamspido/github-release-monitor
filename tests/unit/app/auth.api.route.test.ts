@@ -103,6 +103,7 @@ describe("auth catch-all route setup social cookie handling", () => {
     process.env = {
       ...env,
       AUTH_SETUP_TOKEN: "x".repeat(64),
+      BETTER_AUTH_SECRET: "y".repeat(64),
     };
     ensureAuthDatabaseReadyMock.mockResolvedValue(undefined);
     hasAnyAuthUserMock.mockReturnValue("no_user");
@@ -292,6 +293,127 @@ describe("auth catch-all route setup social cookie handling", () => {
 
     expect(response.status).toBe(302);
     expect(authGetMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks diagnostic social step-up verified on successful provider callback", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    const {
+      createSecretRevealStepUpPayload,
+      encodeSecretRevealStepUpCookieValue,
+    } = await import("@/lib/diagnostics/secret-reveal-step-up");
+    const pendingCookieValue = encodeSecretRevealStepUpCookieValue(
+      createSecretRevealStepUpPayload({
+        userId: "user-1",
+        method: "social",
+        provider: "github",
+      }),
+    );
+    authGetMock.mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { location: "http://localhost/test?secretRevealStepUp=1" },
+      }),
+    );
+
+    const { GET } = await import("@/app/api/auth/[...all]/route");
+    const response = await GET(
+      new Request("http://localhost/api/auth/callback/github", {
+        method: "GET",
+        headers: {
+          cookie: `diagnostic_secret_reveal_pending=${pendingCookieValue}`,
+        },
+      }),
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("set-cookie")).toContain(
+      "diagnostic_secret_reveal_pending=",
+    );
+    expect(response.headers.get("set-cookie")).toContain(
+      "diagnostic_secret_reveal_verified=",
+    );
+  });
+
+  it("does not verify diagnostic social step-up when provider callback carries an OAuth error", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    const {
+      createSecretRevealStepUpPayload,
+      encodeSecretRevealStepUpCookieValue,
+    } = await import("@/lib/diagnostics/secret-reveal-step-up");
+    const pendingCookieValue = encodeSecretRevealStepUpCookieValue(
+      createSecretRevealStepUpPayload({
+        userId: "user-1",
+        method: "social",
+        provider: "github",
+      }),
+    );
+    authGetMock.mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: {
+          location: "http://localhost/test?secretRevealStepUp=1",
+        },
+      }),
+    );
+
+    const { GET } = await import("@/app/api/auth/[...all]/route");
+    const response = await GET(
+      new Request(
+        "http://localhost/api/auth/callback/github?error=access_denied",
+        {
+          method: "GET",
+          headers: {
+            cookie: `diagnostic_secret_reveal_pending=${pendingCookieValue}`,
+          },
+        },
+      ),
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("set-cookie")).not.toContain(
+      "diagnostic_secret_reveal_verified=",
+    );
+  });
+
+  it("does not verify diagnostic social step-up when auth handler redirects with an OAuth error", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    const {
+      createSecretRevealStepUpPayload,
+      encodeSecretRevealStepUpCookieValue,
+    } = await import("@/lib/diagnostics/secret-reveal-step-up");
+    const pendingCookieValue = encodeSecretRevealStepUpCookieValue(
+      createSecretRevealStepUpPayload({
+        userId: "user-1",
+        method: "social",
+        provider: "github",
+      }),
+    );
+    authGetMock.mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: {
+          location: "http://localhost/en/login?error=signup_disabled",
+        },
+      }),
+    );
+
+    const { GET } = await import("@/app/api/auth/[...all]/route");
+    const response = await GET(
+      new Request("http://localhost/api/auth/callback/github", {
+        method: "GET",
+        headers: {
+          cookie: `diagnostic_secret_reveal_pending=${pendingCookieValue}`,
+        },
+      }),
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("set-cookie")).not.toContain(
+      "diagnostic_secret_reveal_verified=",
+    );
   });
 
   it("blocks setup social callback when another setup bootstrap is in progress", async () => {

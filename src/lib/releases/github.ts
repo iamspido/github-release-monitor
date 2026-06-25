@@ -3,9 +3,15 @@ import { getComprehensiveMarkdownBody } from "@/lib/notifications/test-release-p
 import { fetchJsonResponseWithRetry } from "@/lib/releases/fetch";
 import {
   isCachedTagFallbackRelease,
-  releaseMatchesEffectiveFilters,
   resolveEffectiveRepoFilters,
 } from "@/lib/releases/filters";
+import {
+  notModifiedResult,
+  resolvePageCount,
+  resolvePageSize,
+  selectFirstMatchingRelease,
+  selectLatestMatchingRelease,
+} from "@/lib/releases/provider-pipeline";
 import type {
   LatestReleaseFetchResult,
   RepoSettingsForFetch,
@@ -23,13 +29,8 @@ export async function fetchLatestReleaseFromGitHub(
   log.info(`Fetching GitHub release for ${owner}/${repo}`);
   const fetchedAtTimestamp = new Date().toISOString();
 
-  const {
-    effectiveReleaseChannels,
-    effectivePreReleaseSubChannels,
-    totalReleasesToFetch,
-    effectiveIncludeRegex,
-    effectiveExcludeRegex,
-  } = resolveEffectiveRepoFilters(repoSettings, globalSettings);
+  const filters = resolveEffectiveRepoFilters(repoSettings, globalSettings);
+  const { totalReleasesToFetch } = filters;
 
   // --- Special handling for the virtual test repository ---
   if (owner === "test" && repo === "test") {
@@ -52,7 +53,7 @@ export async function fetchLatestReleaseFromGitHub(
   // --- GitHub API Fetching with Pagination ---
   const GITHUB_API_BASE_URL = `https://api.github.com/repos/${owner}/${repo}`;
   const MAX_PER_PAGE = 100;
-  const pagesToFetch = Math.ceil(totalReleasesToFetch / MAX_PER_PAGE);
+  const pagesToFetch = resolvePageCount(totalReleasesToFetch, MAX_PER_PAGE);
   let allReleases: GithubRelease[] = [];
   let newEtag: string | null | undefined;
 
@@ -68,10 +69,11 @@ export async function fetchLatestReleaseFromGitHub(
 
   try {
     for (let page = 1; page <= pagesToFetch; page++) {
-      const releasesOnThisPage = Math.min(
-        MAX_PER_PAGE,
-        totalReleasesToFetch - allReleases.length,
-      );
+      const releasesOnThisPage = resolvePageSize({
+        maxPerPage: MAX_PER_PAGE,
+        totalItemsToFetch: totalReleasesToFetch,
+        alreadyFetched: allReleases.length,
+      });
       if (releasesOnThisPage <= 0) break;
 
       const url = `${GITHUB_API_BASE_URL}/releases?per_page=${releasesOnThisPage}&page=${page}`;
@@ -101,12 +103,7 @@ export async function fetchLatestReleaseFromGitHub(
       if (page === 1) {
         newEtag = response.headers.get("etag") || undefined;
         if (response.status === 304) {
-          log.info(`[ETag] No changes for ${owner}/${repo}.`);
-          return {
-            release: null,
-            error: { type: "not_modified" },
-            newEtag: repoSettings.etag,
-          };
+          return notModifiedResult(`${owner}/${repo}`, repoSettings.etag);
         }
       }
 
@@ -161,10 +158,11 @@ export async function fetchLatestReleaseFromGitHub(
 
       const allTags: { name: string; commit: { sha: string } }[] = [];
       for (let page = 1; page <= pagesToFetch; page++) {
-        const tagsOnThisPage = Math.min(
-          MAX_PER_PAGE,
-          totalReleasesToFetch - allTags.length,
-        );
+        const tagsOnThisPage = resolvePageSize({
+          maxPerPage: MAX_PER_PAGE,
+          totalItemsToFetch: totalReleasesToFetch,
+          alreadyFetched: allTags.length,
+        });
         if (tagsOnThisPage <= 0) break;
 
         const { response: tagsResponse, data: pageTags } =
@@ -220,18 +218,10 @@ export async function fetchLatestReleaseFromGitHub(
         } satisfies GithubRelease,
       }));
 
-      const selectedCandidate = tagCandidates.find(({ release }) =>
-        releaseMatchesEffectiveFilters(
-          release,
-          {
-            effectiveReleaseChannels,
-            effectivePreReleaseSubChannels,
-            totalReleasesToFetch,
-            effectiveIncludeRegex,
-            effectiveExcludeRegex,
-          },
-          `${owner}/${repo}`,
-        ),
+      const selectedCandidate = selectFirstMatchingRelease(
+        tagCandidates,
+        filters,
+        `${owner}/${repo}`,
       );
 
       if (!selectedCandidate) {
@@ -323,37 +313,19 @@ export async function fetchLatestReleaseFromGitHub(
       allReleases = [virtualRelease];
     }
 
-    // Filter releases according to configured channels/regex
-    const filteredReleases = allReleases.filter((release) =>
-      releaseMatchesEffectiveFilters(
-        release,
-        {
-          effectiveReleaseChannels,
-          effectivePreReleaseSubChannels,
-          totalReleasesToFetch,
-          effectiveIncludeRegex,
-          effectiveExcludeRegex,
-        },
-        `${owner}/${repo}`,
-      ),
-    );
+    const latestRelease = selectLatestMatchingRelease({
+      releases: allReleases,
+      filters,
+      repoIdForLog: `${owner}/${repo}`,
+    });
 
-    if (filteredReleases.length === 0) {
+    if (!latestRelease) {
       return {
         release: null,
         error: { type: "no_matching_releases" },
         newEtag,
       };
     }
-
-    // Sort by published_at (fallback to created_at) desc to ensure stability
-    const sortedReleases = filteredReleases.slice().sort((a, b) => {
-      const aTime = new Date(a.published_at || a.created_at).getTime();
-      const bTime = new Date(b.published_at || b.created_at).getTime();
-      return bTime - aTime;
-    });
-
-    const latestRelease = sortedReleases[0];
 
     // This check is for formal releases that have an empty body.
     // The tag fallback already populates the body with a commit message.

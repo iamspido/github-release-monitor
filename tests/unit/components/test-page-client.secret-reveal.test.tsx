@@ -171,6 +171,14 @@ async function renderClient(notificationConfig: NotificationConfig) {
 async function flushReactWork() {
   await act(async () => {
     await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+async function flushReactMicrotasks() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
   });
 }
 
@@ -269,23 +277,21 @@ describe("TestPageClient mail password reveal", () => {
       expect(div.textContent).toContain("MAIL_PASSWORD=••••••••");
       expect(div.textContent).not.toContain("mail-secret");
 
-      await clickButtonAndWaitFor(
-        div,
-        "show_password",
-        () => {
-          expect(revealMailPasswordActionMock).toHaveBeenCalledTimes(1);
-          expect(div.textContent).toContain("MAIL_PASSWORD=mail-secret");
-        },
-      );
+      await act(async () => {
+        getButtonByAriaLabel(div, "show_password").click();
+        await revealMailPasswordActionMock.mock.results[0]?.value;
+      });
+      await flushReactMicrotasks();
 
-      await clickButtonAndWaitFor(
-        div,
-        "hide_password",
-        () => {
-          expect(div.textContent).toContain("MAIL_PASSWORD=••••••••");
-          expect(div.textContent).not.toContain("mail-secret");
-        },
-      );
+      expect(revealMailPasswordActionMock).toHaveBeenCalledTimes(1);
+      expect(div.textContent).toContain("MAIL_PASSWORD=mail-secret");
+
+      act(() => {
+        getButtonByAriaLabel(div, "hide_password").click();
+      });
+
+      expect(div.textContent).toContain("MAIL_PASSWORD=••••••••");
+      expect(div.textContent).not.toContain("mail-secret");
     } finally {
       cleanup();
     }
@@ -314,13 +320,13 @@ describe("TestPageClient mail password reveal", () => {
     }
   });
 
-  it("shows configured step-up alternatives for internal auth mode", async () => {
+  it("shows supported step-up alternatives for internal auth mode", async () => {
     getSecretRevealOptionsActionMock.mockResolvedValue({
       success: true,
       methods: {
         password: false,
         totp: true,
-        passkey: true,
+        passkey: false,
         socialProviders: ["github", "google"],
       },
     });
@@ -343,7 +349,7 @@ describe("TestPageClient mail password reveal", () => {
           'input[placeholder="secret_reveal_totp_placeholder"]',
         ),
       ).toBeTruthy();
-      expect(document.body.textContent).toContain(
+      expect(document.body.textContent).not.toContain(
         "secret_reveal_passkey_button",
       );
       expect(
@@ -403,56 +409,6 @@ describe("TestPageClient mail password reveal", () => {
       expect(verifySecretRevealTotpActionMock).toHaveBeenCalledWith({
         code: "123456",
       });
-      expect(revealMailPasswordActionMock).toHaveBeenCalledWith();
-      expect(div.textContent).toContain("MAIL_PASSWORD=mail-secret");
-    } finally {
-      cleanup();
-    }
-  });
-
-  it("reveals MAIL_PASSWORD after passkey step-up", async () => {
-    getSecretRevealOptionsActionMock.mockResolvedValue({
-      success: true,
-      methods: {
-        password: false,
-        totp: false,
-        passkey: true,
-        socialProviders: [],
-      },
-    });
-    beginSecretRevealStepUpActionMock.mockResolvedValue({ success: true });
-    passkeySignInMock.mockResolvedValue({ data: {}, error: null });
-    completeSecretRevealStepUpActionMock.mockResolvedValue({ success: true });
-    revealMailPasswordActionMock.mockResolvedValue({
-      success: true,
-      value: "mail-secret",
-    });
-    const { div, cleanup } = await renderClient(
-      makeNotificationConfig("password_confirm"),
-    );
-    try {
-      await act(async () => {
-        (
-          div.querySelector(
-            'button[aria-label="show_password"]',
-          ) as HTMLButtonElement
-        ).click();
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      await act(async () => {
-        getButtonByText(document.body, "secret_reveal_passkey_button").click();
-        await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(beginSecretRevealStepUpActionMock).toHaveBeenCalledWith({
-        method: "passkey",
-      });
-      expect(passkeySignInMock).toHaveBeenCalled();
-      expect(completeSecretRevealStepUpActionMock).toHaveBeenCalled();
       expect(revealMailPasswordActionMock).toHaveBeenCalledWith();
       expect(div.textContent).toContain("MAIL_PASSWORD=mail-secret");
     } finally {

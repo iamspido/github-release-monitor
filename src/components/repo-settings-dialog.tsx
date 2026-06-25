@@ -55,6 +55,12 @@ import { useToast } from "@/hooks/use-toast";
 import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import {
+  areSettingsSnapshotsEqual,
+  hasRefreshSensitiveRepoSettingChanges,
+  type RegexValidationError,
+  validateRegexInput,
+} from "@/lib/settings/form-model";
+import {
   shouldSelectAllPreReleaseSubChannels,
   togglePreReleaseSubChannel,
   toggleReleaseChannel,
@@ -89,7 +95,7 @@ type SaveStatus =
   | "paused";
 type ReleasesPerPageError = "too_low" | "too_high" | null;
 type IntervalValidationError = "too_low" | "too_high" | null;
-type RegexError = "invalid" | null;
+type RegexError = RegexValidationError;
 type CronError = "invalid" | null;
 type AutomationMode = "global" | "interval" | "cron";
 
@@ -539,27 +545,8 @@ export function RepoSettingsDialog({
       setCronError(null);
     }
 
-    if (!includeRegex.trim()) {
-      setIncludeRegexError(null);
-    } else {
-      try {
-        new RegExp(includeRegex);
-        setIncludeRegexError(null);
-      } catch {
-        setIncludeRegexError("invalid");
-      }
-    }
-
-    if (!excludeRegex.trim()) {
-      setExcludeRegexError(null);
-    } else {
-      try {
-        new RegExp(excludeRegex);
-        setExcludeRegexError(null);
-      } catch {
-        setExcludeRegexError("invalid");
-      }
-    }
+    setIncludeRegexError(validateRegexInput(includeRegex));
+    setExcludeRegexError(validateRegexInput(excludeRegex));
   }, [
     releasesPerPage,
     automationMode,
@@ -587,9 +574,7 @@ export function RepoSettingsDialog({
       return;
     }
 
-    if (
-      JSON.stringify(newSettings) === JSON.stringify(prevSettingsRef.current)
-    ) {
+    if (areSettingsSnapshotsEqual(newSettings, prevSettingsRef.current)) {
       return;
     }
 
@@ -620,33 +605,11 @@ export function RepoSettingsDialog({
           if (mountedRef.current) {
             setSaveStatus("success");
 
-            // Track if filter settings changed to determine if refresh is needed
-            const filtersChanged =
-              (prevSettingsRef.current.includeRegex ?? "").trim() !==
-                (newSettings.includeRegex ?? "").trim() ||
-              (prevSettingsRef.current.excludeRegex ?? "").trim() !==
-                (newSettings.excludeRegex ?? "").trim();
-
-            const channelsChanged =
-              JSON.stringify(
-                (prevSettingsRef.current.releaseChannels || []).sort(),
-              ) !== JSON.stringify((newSettings.releaseChannels || []).sort());
-
-            const preSubsChanged =
-              JSON.stringify(
-                (prevSettingsRef.current.preReleaseSubChannels || []).sort(),
-              ) !==
-              JSON.stringify((newSettings.preReleaseSubChannels || []).sort());
-
-            const rppChanged =
-              prevSettingsRef.current.releasesPerPage !==
-              newSettings.releasesPerPage;
-
             if (
-              filtersChanged ||
-              channelsChanged ||
-              preSubsChanged ||
-              rppChanged
+              hasRefreshSensitiveRepoSettingChanges(
+                prevSettingsRef.current,
+                newSettings,
+              )
             ) {
               filterSettingsChangedRef.current = true;
             }
