@@ -1,3 +1,5 @@
+import { CronExpressionParser } from "cron-parser";
+
 export const MINUTES_IN_DAY = 24 * 60;
 export const MINUTES_IN_HOUR = 60;
 export const MAX_INTERVAL_MINUTES = 5_256_000;
@@ -133,7 +135,11 @@ export function isValidFiveFieldCron(value: string) {
   if (!trimmed) return false;
   const parts = trimmed.split(" ");
   if (parts.length !== 5) return false;
-  return /^[-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+$/.test(
-    trimmed,
-  );
+
+  try {
+    CronExpressionParser.parse(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
 }

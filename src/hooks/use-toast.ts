@@ -55,7 +55,7 @@ interface State {
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
-const addToRemoveQueue = (toastId: string) => {
+const queueToastRemoval = (toastId: string) => {
   if (toastTimeouts.has(toastId)) {
     return;
   }
@@ -69,6 +69,20 @@ const addToRemoveQueue = (toastId: string) => {
   }, TOAST_REMOVE_DELAY);
 
   toastTimeouts.set(toastId, timeout);
+};
+
+const queueDismissedToastRemoval = (
+  state: State,
+  toastId: ToasterToast["id"] | undefined,
+) => {
+  if (toastId) {
+    queueToastRemoval(toastId);
+    return;
+  }
+
+  state.toasts.forEach((toast) => {
+    queueToastRemoval(toast.id);
+  });
 };
 
 export const reducer = (state: State, action: Action): State => {
@@ -89,16 +103,6 @@ export const reducer = (state: State, action: Action): State => {
 
     case "DISMISS_TOAST": {
       const { toastId } = action;
-
-      // ! Side effects ! - This could be extracted into a dismissToast() action,
-      // but I'll keep it here for simplicity
-      if (toastId) {
-        addToRemoveQueue(toastId);
-      } else {
-        state.toasts.forEach((toast) => {
-          addToRemoveQueue(toast.id);
-        });
-      }
 
       return {
         ...state,
@@ -131,6 +135,10 @@ const listeners: Array<(state: State) => void> = [];
 let memoryState: State = { toasts: [] };
 
 function dispatch(action: Action) {
+  if (action.type === "DISMISS_TOAST") {
+    queueDismissedToastRemoval(memoryState, action.toastId);
+  }
+
   memoryState = reducer(memoryState, action);
   listeners.forEach((listener) => {
     listener(memoryState);

@@ -27,10 +27,12 @@ export function useJobPolling({
     if (!jobId) return;
 
     const startTime = Date.now();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
 
-    const intervalId = setInterval(async () => {
+    const poll = async () => {
+      if (cancelled) return;
       if (Date.now() - startTime > timeoutMs) {
-        clearInterval(intervalId);
         onTimeout();
         onDone();
         return;
@@ -38,26 +40,32 @@ export function useJobPolling({
 
       try {
         const { status } = await getJobStatusAction(jobId);
+        if (cancelled) return;
 
         if (status === "complete") {
-          clearInterval(intervalId);
           onComplete();
           onDone();
         } else if (status === "error") {
-          clearInterval(intervalId);
           onError();
           onDone();
+        } else {
+          timeoutId = setTimeout(poll, intervalMs);
         }
       } catch (error: unknown) {
-        clearInterval(intervalId);
+        if (cancelled) return;
         if (reloadIfServerActionStale(error)) {
           return;
         }
         onError();
         onDone();
       }
-    }, intervalMs);
+    };
 
-    return () => clearInterval(intervalId);
+    timeoutId = setTimeout(poll, intervalMs);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [intervalMs, jobId, onComplete, onDone, onError, onTimeout, timeoutMs]);
 }

@@ -152,6 +152,16 @@ describe("auth actions", () => {
     expect((globalThis as Record<string, unknown>).__redirectCalls).toEqual([]);
   });
 
+  it("login: does not strip locale-looking prefixes from normal path segments", async () => {
+    const { login } = await import("@/app/auth/actions");
+    const fd = new FormData();
+    fd.set("email", "user@example.com");
+    fd.set("password", "pass");
+    fd.set("next", "/enterprise");
+    const result = await login(undefined, fd);
+    expect(result).toEqual({ redirectTo: "/en/enterprise" });
+  });
+
   it("logout: signs out and redirects to login path", async () => {
     const { logout } = await import("@/app/auth/actions");
     await expect(logout()).rejects.toThrow("__REDIRECT__");

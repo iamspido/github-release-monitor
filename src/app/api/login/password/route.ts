@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { auth, ensureAuthDatabaseReady } from "@/lib/auth";
+import { normalizeLocalizedRedirectPath } from "@/lib/auth/client-flow-utils";
 import {
   clearFailedLoginAttempts,
   getLoginLockoutRemainingSeconds,
@@ -58,25 +59,6 @@ function attachSetCookieHeaders(response: NextResponse, source: Response) {
   for (const cookie of getSetCookieHeaders(source.headers)) {
     response.headers.append("set-cookie", cookie);
   }
-}
-
-function normalizeRedirectPath(next: unknown, locale: string) {
-  if (
-    typeof next !== "string" ||
-    !next.startsWith("/") ||
-    next.startsWith("//") ||
-    next.includes("..")
-  ) {
-    return "";
-  }
-
-  const pathWithoutLocale = next.startsWith(`/${locale}`)
-    ? next.substring(`/${locale}`.length)
-    : next;
-  const normalized = pathWithoutLocale.startsWith("/")
-    ? pathWithoutLocale
-    : `/${pathWithoutLocale}`;
-  return normalized === "/" ? "" : normalized;
 }
 
 export async function POST(request: Request) {
@@ -180,7 +162,10 @@ export async function POST(request: Request) {
     return response;
   }
 
-  const finalPath = normalizeRedirectPath(payload.next, locale);
+  const finalPath = normalizeLocalizedRedirectPath(
+    typeof payload.next === "string" ? payload.next : undefined,
+    locale,
+  );
   logger
     .withScope("Auth")
     .info(

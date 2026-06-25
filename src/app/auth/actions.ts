@@ -9,6 +9,7 @@ import {
   ensureAuthDatabaseReady,
   findRegistrationConflict,
 } from "@/lib/auth";
+import { normalizeLocalizedRedirectPath } from "@/lib/auth/client-flow-utils";
 import { isAuthSignupEnabled } from "@/lib/auth/config";
 import {
   clearExpiredLoginLockout,
@@ -48,6 +49,27 @@ function normalizeAuthApiErrorCode(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+const registerErrorMap: Record<string, string> = {
+  user_already_exists: "error_setup_email_in_use",
+  email_already_exists: "error_setup_email_in_use",
+  email_already_in_use: "error_setup_email_in_use",
+  email_in_use: "error_setup_email_in_use",
+  username_already_exists: "error_setup_username_in_use",
+  username_already_in_use: "error_setup_username_in_use",
+  username_in_use: "error_setup_username_in_use",
+  username_taken: "error_setup_username_in_use",
+  invalid_email: "error_setup_invalid_email",
+  email_invalid: "error_setup_invalid_email",
+  invalid_username: "error_setup_invalid_username",
+  username_invalid: "error_setup_invalid_username",
+  invalid_password: "error_setup_invalid_password_policy",
+  weak_password: "error_setup_invalid_password_policy",
+  password_too_weak: "error_setup_invalid_password_policy",
+  password_policy_violation: "error_setup_invalid_password_policy",
+  signup_disabled: "error_setup_invalid_input",
+  invalid_input: "error_setup_invalid_input",
+};
+
 async function getAuthApiErrorCode(response: Response) {
   try {
     const payload = (await response.clone().json()) as {
@@ -67,47 +89,7 @@ function mapRegisterErrorToSetupError(errorCode: string): string {
   if (!errorCode) {
     return "error_setup_failed";
   }
-
-  if (
-    errorCode === "user_already_exists" ||
-    errorCode === "email_already_exists" ||
-    errorCode === "email_already_in_use" ||
-    errorCode === "email_in_use"
-  ) {
-    return "error_setup_email_in_use";
-  }
-
-  if (
-    errorCode === "username_already_exists" ||
-    errorCode === "username_already_in_use" ||
-    errorCode === "username_in_use" ||
-    errorCode === "username_taken"
-  ) {
-    return "error_setup_username_in_use";
-  }
-
-  if (errorCode === "invalid_email" || errorCode === "email_invalid") {
-    return "error_setup_invalid_email";
-  }
-
-  if (errorCode === "invalid_username" || errorCode === "username_invalid") {
-    return "error_setup_invalid_username";
-  }
-
-  if (
-    errorCode === "invalid_password" ||
-    errorCode === "weak_password" ||
-    errorCode === "password_too_weak" ||
-    errorCode === "password_policy_violation"
-  ) {
-    return "error_setup_invalid_password_policy";
-  }
-
-  if (errorCode === "signup_disabled" || errorCode === "invalid_input") {
-    return "error_setup_invalid_input";
-  }
-
-  return "error_setup_failed";
+  return registerErrorMap[errorCode] ?? "error_setup_failed";
 }
 
 async function hasTwoFactorRedirectFlag(payload: unknown): Promise<boolean> {
@@ -239,21 +221,10 @@ export async function login(
 
     revalidatePath("/", "layout");
     const locale = await getLocale();
-    let finalPath = "/";
-    if (
-      typeof next === "string" &&
-      next.startsWith("/") &&
-      !next.startsWith("//") &&
-      !next.includes("..")
-    ) {
-      const pathWithoutLocale = next.startsWith(`/${locale}`)
-        ? next.substring(`/${locale}`.length)
-        : next;
-      finalPath =
-        (pathWithoutLocale.startsWith("/")
-          ? pathWithoutLocale
-          : `/${pathWithoutLocale}`) || "/";
-    }
+    const finalPath = normalizeLocalizedRedirectPath(
+      typeof next === "string" ? next : undefined,
+      locale,
+    );
 
     logger
       .withScope("Auth")

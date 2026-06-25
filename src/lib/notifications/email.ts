@@ -3,6 +3,7 @@ import { remark } from "remark";
 import remarkGfm from "remark-gfm";
 import remarkHtml from "remark-html";
 import { logger } from "@/lib/logger";
+import { getEmailRuntimeConfig } from "@/lib/notifications/config";
 import {
   escapeHtml,
   escapeHtmlAttribute,
@@ -295,19 +296,9 @@ export async function sendNewReleaseEmail(
 ) {
   const t = await getTranslations({ locale, namespace: "Email" });
 
-  const {
-    MAIL_HOST,
-    MAIL_PORT,
-    MAIL_USERNAME,
-    MAIL_PASSWORD,
-    MAIL_FROM_ADDRESS,
-    MAIL_FROM_NAME,
-    MAIL_TO_ADDRESS,
-  } = process.env;
+  const emailConfig = getEmailRuntimeConfig(process.env, toAddress);
 
-  const recipient = toAddress || MAIL_TO_ADDRESS;
-
-  if (!MAIL_HOST || !MAIL_PORT || !MAIL_FROM_ADDRESS || !recipient) {
+  if (!emailConfig.isComplete) {
     logger
       .withScope("Email")
       .warn(
@@ -315,8 +306,6 @@ export async function sendNewReleaseEmail(
       );
     throw new Error(t("error_config_incomplete"));
   }
-
-  const port = parseInt(MAIL_PORT, 10);
 
   const subject = t("subject", {
     repoId: repository.id,
@@ -338,15 +327,15 @@ export async function sendNewReleaseEmail(
   try {
     await sendEmailMessage(
       {
-        host: MAIL_HOST,
-        port,
-        username: MAIL_USERNAME,
-        password: MAIL_PASSWORD,
+        host: emailConfig.host,
+        port: emailConfig.port,
+        username: emailConfig.username,
+        password: emailConfig.password,
       },
       {
-        fromName: MAIL_FROM_NAME || t("from_name_fallback"),
-        fromAddress: MAIL_FROM_ADDRESS,
-        to: recipient,
+        fromName: emailConfig.fromName || t("from_name_fallback"),
+        fromAddress: emailConfig.fromAddress,
+        to: emailConfig.recipient,
         subject,
         text: textBody,
         html: htmlBody,
@@ -369,7 +358,7 @@ export async function sendTestEmail(
   timeFormat: TimeFormat,
   toAddress?: string,
 ) {
-  const recipient = toAddress || process.env.MAIL_TO_ADDRESS;
+  const recipient = getEmailRuntimeConfig(process.env, toAddress).recipient;
   logger.withScope("Email").info(`Sending test email to ${recipient}...`);
   return sendNewReleaseEmail(
     repository,

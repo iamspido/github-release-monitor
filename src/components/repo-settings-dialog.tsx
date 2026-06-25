@@ -56,8 +56,14 @@ import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import {
   areSettingsSnapshotsEqual,
+  type CronValidationError,
   hasRefreshSensitiveRepoSettingChanges,
+  isCacheIntervalInvalid,
+  type RangeValidationError,
   type RegexValidationError,
+  validateCronInput,
+  validateFilledInterval,
+  validateOptionalIntegerInput,
   validateRegexInput,
 } from "@/lib/settings/form-model";
 import {
@@ -69,7 +75,6 @@ import {
   buildCronExpression,
   type CronPreset,
   inferCronParts,
-  isValidFiveFieldCron,
   MAX_INTERVAL_MINUTES,
   MINUTES_IN_DAY,
   MINUTES_IN_HOUR,
@@ -93,10 +98,10 @@ type SaveStatus =
   | "success"
   | "error"
   | "paused";
-type ReleasesPerPageError = "too_low" | "too_high" | null;
-type IntervalValidationError = "too_low" | "too_high" | null;
+type ReleasesPerPageError = RangeValidationError;
+type IntervalValidationError = RangeValidationError;
 type RegexError = RegexValidationError;
-type CronError = "invalid" | null;
+type CronError = CronValidationError;
 type AutomationMode = "global" | "interval" | "cron";
 
 function getAutomationMode(
@@ -487,36 +492,20 @@ export function RepoSettingsDialog({
   const prevSettingsRef = React.useRef(newSettings);
 
   React.useEffect(() => {
-    if (String(releasesPerPage).trim() !== "") {
-      const numReleases = parseInt(String(releasesPerPage), 10);
-      if (Number.isNaN(numReleases)) {
-        setReleasesPerPageError(null);
-      } else if (numReleases < 1) {
-        setReleasesPerPageError("too_low");
-      } else if (numReleases > 1000) {
-        setReleasesPerPageError("too_high");
-      } else {
-        setReleasesPerPageError(null);
-      }
-    } else {
-      setReleasesPerPageError(null);
-    }
+    setReleasesPerPageError(
+      validateOptionalIntegerInput(releasesPerPage, 1, 1000),
+    );
 
     if (automationMode === "interval") {
       const fieldsFilled =
         intervalDays !== "" && intervalHours !== "" && intervalMinutes !== "";
-      if (fieldsFilled) {
-        const interval = newSettings.refreshInterval ?? 0;
-        if (interval < 1) {
-          setIntervalError("too_low");
-        } else if (interval > MAX_INTERVAL_MINUTES) {
-          setIntervalError("too_high");
-        } else {
-          setIntervalError(null);
-        }
-      } else {
-        setIntervalError(null);
-      }
+      setIntervalError(
+        validateFilledInterval(
+          newSettings.refreshInterval ?? 0,
+          fieldsFilled,
+          MAX_INTERVAL_MINUTES,
+        ),
+      );
     } else {
       setIntervalError(null);
     }
@@ -530,20 +519,20 @@ export function RepoSettingsDialog({
       automationMode === "interval"
         ? (newSettings.refreshInterval ?? 0)
         : globalSettings.refreshInterval;
-    const cacheIsLarger =
-      effectiveAutomationUsesInterval &&
-      useCustomCache &&
-      cacheFieldsFilled &&
-      (newSettings.cacheInterval ?? 0) > 0 &&
-      (newSettings.cacheInterval ?? 0) > effectiveRefreshInterval;
-    setIsCacheInvalid(cacheIsLarger);
-
-    if (automationMode === "cron") {
-      const cron = newSettings.backgroundCheckCron ?? "";
-      setCronError(isValidFiveFieldCron(cron) ? null : "invalid");
-    } else {
-      setCronError(null);
-    }
+    setIsCacheInvalid(
+      isCacheIntervalInvalid({
+        enabled: effectiveAutomationUsesInterval && useCustomCache,
+        fieldsFilled: cacheFieldsFilled,
+        cacheInterval: newSettings.cacheInterval ?? 0,
+        refreshInterval: effectiveRefreshInterval,
+      }),
+    );
+    setCronError(
+      validateCronInput(
+        newSettings.backgroundCheckCron,
+        automationMode === "cron",
+      ),
+    );
 
     setIncludeRegexError(validateRegexInput(includeRegex));
     setExcludeRegexError(validateRegexInput(excludeRegex));

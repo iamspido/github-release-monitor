@@ -58,7 +58,13 @@ import {
 } from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import {
+  type CronValidationError,
+  isCacheIntervalInvalid,
+  type RangeValidationError,
   type RegexValidationError,
+  validateCronInput,
+  validateFilledInterval,
+  validateOptionalIntegerInput,
   validateRegexInput,
 } from "@/lib/settings/form-model";
 import {
@@ -73,7 +79,6 @@ import {
   inferCronParts,
   inferCronPresetValue,
   inferCronWeekday,
-  isValidFiveFieldCron,
   MAX_INTERVAL_MINUTES,
   MINUTES_IN_DAY,
   MINUTES_IN_HOUR,
@@ -103,11 +108,10 @@ type SaveStatus =
   | "success"
   | "error"
   | "paused";
-type IntervalValidationError = "too_low" | "too_high" | null;
-type ReleasesPerPageError = "too_low" | "too_high" | null;
-type ParallelRepoFetchError = "too_low" | "too_high" | null;
+type IntervalValidationError = RangeValidationError;
+type ReleasesPerPageError = RangeValidationError;
+type ParallelRepoFetchError = RangeValidationError;
 type RegexError = RegexValidationError;
-type CronValidationError = "invalid" | null;
 type HexColorError = "invalid" | null;
 type SecurityPatternsError = "invalid" | null;
 
@@ -538,53 +542,31 @@ export function SettingsForm({
     const releasesPerPageFilled = releasesPerPage !== "";
     const parallelRepoFetchesFilled = parallelRepoFetches !== "";
 
-    // Refresh Interval Validation
-    if (automationMode === "interval" && refreshFieldsFilled) {
-      if (newSettings.refreshInterval < 1) {
-        setIntervalError("too_low");
-      } else if (newSettings.refreshInterval > MAX_INTERVAL_MINUTES) {
-        setIntervalError("too_high");
-      } else {
-        setIntervalError(null);
-      }
-    } else {
-      setIntervalError(null);
-    }
-
-    if (automationMode === "cron") {
-      const cron = newSettings.backgroundCheckCron ?? "";
-      setCronError(isValidFiveFieldCron(cron) ? null : "invalid");
-    } else {
-      setCronError(null);
-    }
-
-    // Releases Per Page Validation
-    if (releasesPerPageFilled) {
-      const numReleases = parseInt(releasesPerPage, 10);
-      if (numReleases < 1) {
-        setReleasesPerPageError("too_low");
-      } else if (numReleases > 1000) {
-        setReleasesPerPageError("too_high");
-      } else {
-        setReleasesPerPageError(null);
-      }
-    } else {
-      setReleasesPerPageError(null);
-    }
-
-    // Parallel Repo Fetches Validation
-    if (parallelRepoFetchesFilled) {
-      const numParallel = parseInt(parallelRepoFetches, 10);
-      if (numParallel < 1) {
-        setParallelRepoFetchesError("too_low");
-      } else if (numParallel > 50) {
-        setParallelRepoFetchesError("too_high");
-      } else {
-        setParallelRepoFetchesError(null);
-      }
-    } else {
-      setParallelRepoFetchesError(null);
-    }
+    setIntervalError(
+      automationMode === "interval"
+        ? validateFilledInterval(
+            newSettings.refreshInterval,
+            refreshFieldsFilled,
+            MAX_INTERVAL_MINUTES,
+          )
+        : null,
+    );
+    setCronError(
+      validateCronInput(
+        newSettings.backgroundCheckCron,
+        automationMode === "cron",
+      ),
+    );
+    setReleasesPerPageError(
+      releasesPerPageFilled
+        ? validateOptionalIntegerInput(releasesPerPage, 1, 1000)
+        : null,
+    );
+    setParallelRepoFetchesError(
+      parallelRepoFetchesFilled
+        ? validateOptionalIntegerInput(parallelRepoFetches, 1, 50)
+        : null,
+    );
 
     setIncludeRegexError(validateRegexInput(includeRegex));
     setExcludeRegexError(validateRegexInput(excludeRegex));
@@ -605,16 +587,13 @@ export function SettingsForm({
     );
 
     // Cache Validation
-    const isCacheEnabled = newSettings.cacheInterval > 0;
-    const cacheIsLarger =
-      automationMode === "interval" &&
-      newSettings.cacheInterval > newSettings.refreshInterval;
     setIsCacheInvalid(
-      automationMode === "interval" &&
-        refreshFieldsFilled &&
-        cacheFieldsFilled &&
-        isCacheEnabled &&
-        cacheIsLarger,
+      isCacheIntervalInvalid({
+        enabled: automationMode === "interval" && refreshFieldsFilled,
+        fieldsFilled: cacheFieldsFilled,
+        cacheInterval: newSettings.cacheInterval,
+        refreshInterval: newSettings.refreshInterval,
+      }),
     );
   }, [
     days,

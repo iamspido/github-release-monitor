@@ -32,6 +32,41 @@ export function isValidSocialUsername(value: string) {
   return isUsernamePolicyValid(value.trim());
 }
 
+export function normalizeSafeRelativePath(
+  value: string | null | undefined,
+  fallback = "/",
+): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return fallback;
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return fallback;
+  if (trimmed.includes("..")) return fallback;
+  return trimmed;
+}
+
+export function normalizeOptionalSafeRelativePath(
+  value: string | null | undefined,
+): string | undefined {
+  return normalizeSafeRelativePath(value, "") || undefined;
+}
+
+export function normalizeLocalizedRedirectPath(
+  value: string | null | undefined,
+  locale: string,
+): string {
+  const safePath = normalizeSafeRelativePath(value);
+  const localePrefix = `/${locale}`;
+  const hasLocalePrefix =
+    safePath === localePrefix || safePath.startsWith(`${localePrefix}/`);
+  const pathWithoutLocale = hasLocalePrefix
+    ? safePath.substring(`/${locale}`.length)
+    : safePath;
+  return (
+    (pathWithoutLocale.startsWith("/")
+      ? pathWithoutLocale
+      : `/${pathWithoutLocale}`) || "/"
+  );
+}
+
 export function normalizeApiErrorCode(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().toLowerCase();

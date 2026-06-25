@@ -26,6 +26,7 @@ import {
   isSocialErrorKey,
   isValidSocialUsername,
   mapOauthErrorToMessageKey,
+  normalizeOptionalSafeRelativePath,
   precheckSocialLogin,
   submitPasswordLogin,
   submitSetup,
@@ -111,13 +112,10 @@ export function LoginForm({
     () => mapOauthErrorToMessageKey(oauthErrorCode),
     [oauthErrorCode],
   );
-  const safeNext = React.useMemo(() => {
-    if (!next) return undefined;
-    if (!next.startsWith("/") || next.startsWith("//") || next.includes("..")) {
-      return undefined;
-    }
-    return next;
-  }, [next]);
+  const safeNext = React.useMemo(
+    () => normalizeOptionalSafeRelativePath(next),
+    [next],
+  );
 
   const formRef = React.useRef<HTMLFormElement>(null);
   const setupFormRef = React.useRef<HTMLFormElement>(null);

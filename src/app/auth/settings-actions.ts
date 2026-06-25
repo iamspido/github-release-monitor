@@ -8,6 +8,7 @@ import {
   hasCredentialPasswordAccount,
   isAuthEmailVerificationEnabled,
 } from "@/lib/auth";
+import { normalizeSafeRelativePath } from "@/lib/auth/client-flow-utils";
 import {
   getClientIpFromHeaders,
   isLikelyEmail,
@@ -36,19 +37,6 @@ export type UpdateAccountPasswordResult = {
   mode?: "set" | "changed";
   errorKey?: string;
 };
-
-function normalizeCallbackPath(value: string | undefined): string {
-  if (!value) return "/";
-  const trimmed = value.trim();
-  if (
-    !trimmed?.startsWith("/") ||
-    trimmed.startsWith("//") ||
-    trimmed.includes("..")
-  ) {
-    return "/";
-  }
-  return trimmed;
-}
 
 async function getAuthenticatedUserId(headerStore: Headers) {
   const session = await auth.api.getSession({
@@ -122,7 +110,7 @@ export async function updateAccountEmailAction(
   const headerStore = await headers();
   const clientIp = getClientIpFromHeaders(headerStore);
   const normalizedEmail = input.newEmail.trim().toLowerCase();
-  const callbackURL = normalizeCallbackPath(input.callbackURL);
+  const callbackURL = normalizeSafeRelativePath(input.callbackURL);
 
   if (!isLikelyEmail(normalizedEmail)) {
     logger

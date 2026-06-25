@@ -54,6 +54,15 @@ export type SecretRevealStepUpResult =
   | { success: true }
   | { success: false; errorKey: RevealDiagnosticSecretErrorKey };
 
+type DiagnosticSecretPolicy = {
+  envKey: "MAIL_PASSWORD" | "APPRISE_URL";
+  notSetErrorKey: Extract<
+    RevealDiagnosticSecretErrorKey,
+    "error_mail_password_not_set" | "error_apprise_url_not_set"
+  >;
+  notSetLabel: string;
+};
+
 async function verifyDiagnosticRevealAccess(
   input: { currentPassword?: string } | undefined,
   envKey: "MAIL_PASSWORD" | "APPRISE_URL",
@@ -326,47 +335,44 @@ export async function verifySecretRevealTotpActionImpl(input: {
 export async function revealMailPasswordActionImpl(input?: {
   currentPassword?: string;
 }): Promise<RevealMailPasswordResult> {
-  const access = await verifyDiagnosticRevealAccess(input, "MAIL_PASSWORD");
-  if (!access.success) {
-    return { success: false, errorKey: access.errorKey };
-  }
-
-  const mailPassword = process.env.MAIL_PASSWORD;
-  if (!mailPassword) {
-    log.info(
-      `MAIL_PASSWORD reveal requested from ip='${access.clientIp}' but no password is configured.`,
-    );
-    return { success: false, errorKey: "error_mail_password_not_set" };
-  }
-
-  log.warn(
-    access.userId
-      ? `MAIL_PASSWORD revealed after password confirmation for user='${access.userId}' from ip='${access.clientIp}'.`
-      : `MAIL_PASSWORD revealed via external auth from ip='${access.clientIp}'.`,
-  );
-  return { success: true, value: mailPassword };
+  return revealDiagnosticSecret(input, {
+    envKey: "MAIL_PASSWORD",
+    notSetErrorKey: "error_mail_password_not_set",
+    notSetLabel: "password",
+  });
 }
 
 export async function revealAppriseUrlActionImpl(input?: {
   currentPassword?: string;
 }): Promise<RevealAppriseUrlResult> {
-  const access = await verifyDiagnosticRevealAccess(input, "APPRISE_URL");
+  return revealDiagnosticSecret(input, {
+    envKey: "APPRISE_URL",
+    notSetErrorKey: "error_apprise_url_not_set",
+    notSetLabel: "URL",
+  });
+}
+
+async function revealDiagnosticSecret(
+  input: { currentPassword?: string } | undefined,
+  policy: DiagnosticSecretPolicy,
+): Promise<RevealMailPasswordResult> {
+  const access = await verifyDiagnosticRevealAccess(input, policy.envKey);
   if (!access.success) {
     return { success: false, errorKey: access.errorKey };
   }
 
-  const appriseUrl = process.env.APPRISE_URL;
-  if (!appriseUrl) {
+  const value = process.env[policy.envKey];
+  if (!value) {
     log.info(
-      `APPRISE_URL reveal requested from ip='${access.clientIp}' but no URL is configured.`,
+      `${policy.envKey} reveal requested from ip='${access.clientIp}' but no ${policy.notSetLabel} is configured.`,
     );
-    return { success: false, errorKey: "error_apprise_url_not_set" };
+    return { success: false, errorKey: policy.notSetErrorKey };
   }
 
   log.warn(
     access.userId
-      ? `APPRISE_URL revealed after password confirmation for user='${access.userId}' from ip='${access.clientIp}'.`
-      : `APPRISE_URL revealed via external auth from ip='${access.clientIp}'.`,
+      ? `${policy.envKey} revealed after password confirmation for user='${access.userId}' from ip='${access.clientIp}'.`
+      : `${policy.envKey} revealed via external auth from ip='${access.clientIp}'.`,
   );
-  return { success: true, value: appriseUrl };
+  return { success: true, value };
 }

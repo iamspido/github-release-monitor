@@ -44,38 +44,10 @@ function parseOwnerRepoShorthand(
   return owner && repo ? { owner, repo } : null;
 }
 
-export async function resolveRepoProvidersAction(input: string): Promise<{
-  success: boolean;
-  candidates: RepoProviderResolutionCandidate[];
-}> {
-  if (!(await isRestrictedActionAllowed())) {
-    return { success: false, candidates: [] };
-  }
-
-  const parsed = parseOwnerRepoShorthand(input);
-  if (!parsed) {
-    log.debug(
-      `Repo provider resolution skipped (not shorthand input): ${input.trim()}`,
-    );
-    return { success: true, candidates: [] };
-  }
-
-  const { owner, repo } = parsed;
-  const candidates: RepoProviderResolutionCandidate[] = [];
-  const githubTokenConfigured = Boolean(
-    normalizeEnvToken(process.env.GITHUB_ACCESS_TOKEN),
-  );
-  const codebergTokenConfigured = Boolean(
-    normalizeEnvToken(process.env.CODEBERG_ACCESS_TOKEN),
-  );
-  const gitlabTokenConfigured = hasAnyGitlabTokenForAllowedHosts();
-  const gitlabHosts = getAllowedGitlabHosts();
-
-  log.debug(
-    `Resolving providers for shorthand repo ${owner}/${repo} (GitHub token=${githubTokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}, GitLab token=${gitlabTokenConfigured ? "yes" : "no"}, GitLab hosts=${gitlabHosts.join(",")}).`,
-  );
-
-  // GitHub lookup
+async function lookupGithubCandidate(
+  owner: string,
+  repo: string,
+): Promise<RepoProviderResolutionCandidate | null> {
   try {
     const githubToken = normalizeEnvToken(process.env.GITHUB_ACCESS_TOKEN);
     const headers: Record<string, string> = {
@@ -95,18 +67,23 @@ export async function resolveRepoProvidersAction(input: string): Promise<{
     log.debug(
       `GitHub repo lookup for ${owner}/${repo}: ${response.status} ${response.statusText}`,
     );
-    if (response.ok) {
-      candidates.push({
-        provider: "github",
-        id: `github:${owner}/${repo}`.toLowerCase(),
-        canonicalRepoUrl: `https://github.com/${owner}/${repo}`,
-      });
-    }
+    if (!response.ok) return null;
+
+    return {
+      provider: "github",
+      id: `github:${owner}/${repo}`.toLowerCase(),
+      canonicalRepoUrl: `https://github.com/${owner}/${repo}`,
+    };
   } catch (error) {
     log.debug(`GitHub repo lookup threw for ${owner}/${repo}:`, error);
+    return null;
   }
+}
 
-  // Codeberg lookup
+async function lookupCodebergCandidate(
+  owner: string,
+  repo: string,
+): Promise<RepoProviderResolutionCandidate | null> {
   try {
     const headersWithoutAuth: Record<string, string> = {
       Accept: "application/json",
@@ -123,53 +100,101 @@ export async function resolveRepoProvidersAction(input: string): Promise<{
     log.debug(
       `Codeberg repo lookup for ${owner}/${repo}: ${response.status} ${response.statusText} (auth=${mode})`,
     );
-    if (response.ok) {
-      candidates.push({
-        provider: "codeberg",
-        id: `codeberg:${owner}/${repo}`.toLowerCase(),
-        canonicalRepoUrl: `https://codeberg.org/${owner}/${repo}`,
-      });
-    }
+    if (!response.ok) return null;
+
+    return {
+      provider: "codeberg",
+      id: `codeberg:${owner}/${repo}`.toLowerCase(),
+      canonicalRepoUrl: `https://codeberg.org/${owner}/${repo}`,
+    };
   } catch (error) {
     log.debug(`Codeberg repo lookup threw for ${owner}/${repo}:`, error);
+    return null;
+  }
+}
+
+async function lookupGitlabCandidate(
+  owner: string,
+  repo: string,
+  gitlabHost: string,
+): Promise<RepoProviderResolutionCandidate | null> {
+  try {
+    const headersWithoutAuth: Record<string, string> = {
+      Accept: "application/json",
+      "User-Agent": "GitHubReleaseMonitorApp",
+    };
+    const gitlabAuth = getGitlabAuthForHost(gitlabHost);
+    const chain = buildGitlabAuthChain(headersWithoutAuth, gitlabAuth);
+    const projectPath = `${owner}/${repo}`;
+    const url = `https://${gitlabHost}/api/v4/projects/${encodeURIComponent(projectPath)}`;
+    const { response, mode } = await fetchResponseWithRetryAuthChain(
+      url,
+      chain,
+      {
+        description: `GitLab repo lookup for ${owner}/${repo} on ${gitlabHost}`,
+      },
+    );
+    log.debug(
+      `GitLab repo lookup for ${owner}/${repo} on ${gitlabHost}: ${response.status} ${response.statusText} (auth=${mode})`,
+    );
+    if (!response.ok) return null;
+
+    return {
+      provider: "gitlab",
+      providerHost: gitlabHost,
+      id: `gitlab:${gitlabHost}/${projectPath}`.toLowerCase(),
+      canonicalRepoUrl: `https://${gitlabHost}/${owner}/${repo}`,
+    };
+  } catch (error) {
+    log.debug(
+      `GitLab repo lookup threw for ${owner}/${repo} on ${gitlabHost}:`,
+      error,
+    );
+    return null;
+  }
+}
+
+export async function resolveRepoProvidersAction(input: string): Promise<{
+  success: boolean;
+  candidates: RepoProviderResolutionCandidate[];
+}> {
+  if (!(await isRestrictedActionAllowed())) {
+    return { success: false, candidates: [] };
   }
 
-  // GitLab lookup (all allowed instances)
-  for (const gitlabHost of gitlabHosts) {
-    try {
-      const headersWithoutAuth: Record<string, string> = {
-        Accept: "application/json",
-        "User-Agent": "GitHubReleaseMonitorApp",
-      };
-      const gitlabAuth = getGitlabAuthForHost(gitlabHost);
-      const chain = buildGitlabAuthChain(headersWithoutAuth, gitlabAuth);
-      const projectPath = `${owner}/${repo}`;
-      const url = `https://${gitlabHost}/api/v4/projects/${encodeURIComponent(projectPath)}`;
-      const { response, mode } = await fetchResponseWithRetryAuthChain(
-        url,
-        chain,
-        {
-          description: `GitLab repo lookup for ${owner}/${repo} on ${gitlabHost}`,
-        },
-      );
-      log.debug(
-        `GitLab repo lookup for ${owner}/${repo} on ${gitlabHost}: ${response.status} ${response.statusText} (auth=${mode})`,
-      );
-      if (response.ok) {
-        candidates.push({
-          provider: "gitlab",
-          providerHost: gitlabHost,
-          id: `gitlab:${gitlabHost}/${projectPath}`.toLowerCase(),
-          canonicalRepoUrl: `https://${gitlabHost}/${owner}/${repo}`,
-        });
-      }
-    } catch (error) {
-      log.debug(
-        `GitLab repo lookup threw for ${owner}/${repo} on ${gitlabHost}:`,
-        error,
-      );
-    }
+  const parsed = parseOwnerRepoShorthand(input);
+  if (!parsed) {
+    log.debug(
+      `Repo provider resolution skipped (not shorthand input): ${input.trim()}`,
+    );
+    return { success: true, candidates: [] };
   }
+
+  const { owner, repo } = parsed;
+  const githubTokenConfigured = Boolean(
+    normalizeEnvToken(process.env.GITHUB_ACCESS_TOKEN),
+  );
+  const codebergTokenConfigured = Boolean(
+    normalizeEnvToken(process.env.CODEBERG_ACCESS_TOKEN),
+  );
+  const gitlabTokenConfigured = hasAnyGitlabTokenForAllowedHosts();
+  const gitlabHosts = getAllowedGitlabHosts();
+
+  log.debug(
+    `Resolving providers for shorthand repo ${owner}/${repo} (GitHub token=${githubTokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}, GitLab token=${gitlabTokenConfigured ? "yes" : "no"}, GitLab hosts=${gitlabHosts.join(",")}).`,
+  );
+
+  const candidates = (
+    await Promise.all([
+      lookupGithubCandidate(owner, repo),
+      lookupCodebergCandidate(owner, repo),
+      ...gitlabHosts.map((gitlabHost) =>
+        lookupGitlabCandidate(owner, repo, gitlabHost),
+      ),
+    ])
+  ).filter((candidate): candidate is RepoProviderResolutionCandidate =>
+    Boolean(candidate),
+  );
 
   log.debug(
     `Repo provider resolution for ${owner}/${repo}: candidates=${candidates.map((c) => c.provider).join(",") || "none"}`,

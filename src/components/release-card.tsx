@@ -62,6 +62,7 @@ import type { AppSettings, EnrichedRelease } from "@/types";
 import {
   getReleaseErrorMessage,
   getSecurityHighlightStyle,
+  hasCustomRepoSettings,
   markdownSanitizeSchema,
 } from "./release-card-helpers";
 import { RepoSettingsDialog } from "./repo-settings-dialog";
@@ -336,22 +337,7 @@ export function ReleaseCard({
     });
   };
 
-  const repoHasCustomSettings =
-    (repoSettings?.releaseChannels &&
-      repoSettings.releaseChannels.length > 0) ||
-    (repoSettings?.preReleaseSubChannels &&
-      repoSettings.preReleaseSubChannels.length > 0) ||
-    (repoSettings?.releasesPerPage !== null &&
-      typeof repoSettings?.releasesPerPage === "number") ||
-    (repoSettings?.refreshInterval !== null &&
-      typeof repoSettings?.refreshInterval === "number") ||
-    (repoSettings?.cacheInterval !== null &&
-      typeof repoSettings?.cacheInterval === "number") ||
-    repoSettings?.backgroundCheckCron ||
-    repoSettings?.includeRegex ||
-    repoSettings?.excludeRegex ||
-    repoSettings?.appriseTags ||
-    repoSettings?.appriseFormat;
+  const repoHasCustomSettings = hasCustomRepoSettings(repoSettings);
 
   if (error && error.type !== "not_modified") {
     const errorMessage = getReleaseErrorMessage(error, tActions);

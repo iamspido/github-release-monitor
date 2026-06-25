@@ -5,6 +5,9 @@ import {
   mapRegisterSocialPrecheckErrorToMessageKey,
   mapSetupApiErrorToMessageKey,
   normalizeApiErrorCode,
+  normalizeLocalizedRedirectPath,
+  normalizeOptionalSafeRelativePath,
+  normalizeSafeRelativePath,
   readApiErrorCode,
 } from "@/lib/auth/client-flow-utils";
 
@@ -32,6 +35,36 @@ describe("auth/client-flow-utils", () => {
     expect(isValidSocialUsername(" admin_user.1 ")).toBe(true);
     expect(isValidSocialUsername("ad")).toBe(false);
     expect(isValidSocialUsername("admin-user")).toBe(false);
+  });
+
+  it("normalizes safe relative paths", () => {
+    expect(normalizeSafeRelativePath("/settings")).toBe("/settings");
+    expect(normalizeSafeRelativePath("https://evil.example")).toBe("/");
+    expect(normalizeSafeRelativePath("//evil.example")).toBe("/");
+    expect(normalizeSafeRelativePath("/../settings")).toBe("/");
+    expect(normalizeOptionalSafeRelativePath("/settings")).toBe("/settings");
+    expect(normalizeOptionalSafeRelativePath("https://evil.example")).toBe(
+      undefined,
+    );
+  });
+
+  it("normalizes localized redirects only for full locale path segments", () => {
+    expect(normalizeLocalizedRedirectPath("/en/settings", "en")).toBe(
+      "/settings",
+    );
+    expect(normalizeLocalizedRedirectPath("/en", "en")).toBe("/");
+    expect(normalizeLocalizedRedirectPath("/enterprise", "en")).toBe(
+      "/enterprise",
+    );
+    expect(normalizeLocalizedRedirectPath("/english/docs", "en")).toBe(
+      "/english/docs",
+    );
+    expect(normalizeLocalizedRedirectPath("/de/settings", "en")).toBe(
+      "/de/settings",
+    );
+    expect(normalizeLocalizedRedirectPath("https://evil.example", "en")).toBe(
+      "/",
+    );
   });
 
   it("normalizes API error code values", () => {

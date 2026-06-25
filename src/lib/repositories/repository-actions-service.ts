@@ -19,11 +19,9 @@ import {
   updateReleaseCacheTags,
 } from "@/lib/server-action-helpers";
 import {
-  areArraysEqualIgnoringOrder,
-  formatChangeValue,
+  buildRepositorySettingsChangeLog,
   getReleaseCacheInvalidationReasons,
-  pushArrayChange,
-  pushValueChange,
+  getRepositoryReleaseCacheInvalidationChanges,
   shouldInvalidateReleaseCache,
 } from "@/lib/settings/change-detection";
 import { getJobStatus, type JobStatus, setJobStatus } from "@/lib/storage/jobs";
@@ -450,8 +448,6 @@ export async function updateRepositorySettingsAction(
 
       const existing = currentRepos[repoIndex];
 
-      const prevInclude = (existing.includeRegex ?? "").trim() || undefined;
-      const prevExclude = (existing.excludeRegex ?? "").trim() || undefined;
       const newInclude = (settings.includeRegex ?? "").trim() || undefined;
       const newExclude = (settings.excludeRegex ?? "").trim() || undefined;
       const cronInput = (settings.backgroundCheckCron ?? "").trim();
@@ -473,96 +469,16 @@ export async function updateRepositorySettingsAction(
           ? (normalizeCacheInterval(settings.cacheInterval) ?? null)
           : null;
 
-      const filtersChanged =
-        prevInclude !== newInclude || prevExclude !== newExclude;
-
-      const channelsChanged = !areArraysEqualIgnoringOrder(
-        existing.releaseChannels,
-        settings.releaseChannels,
-        { emptyAsUndefined: true },
-      );
-
-      const preSubsChanged = !areArraysEqualIgnoringOrder(
-        existing.preReleaseSubChannels,
-        settings.preReleaseSubChannels,
-        { emptyAsUndefined: true },
-      );
-
-      const prevRpp = existing.releasesPerPage ?? undefined;
-      const newRpp = settings.releasesPerPage ?? undefined;
-      const rppChanged = prevRpp !== newRpp;
-      const releaseCacheInvalidation = {
-        filtersChanged,
-        releaseChannelsChanged: channelsChanged,
-        preReleaseSubChannelsChanged: preSubsChanged,
-        releasesPerPageChanged: rppChanged,
-      };
-      const refreshIntervalChanged =
-        (existing.refreshInterval ?? null) !== newRefreshInterval;
-      const cacheIntervalChanged =
-        (existing.cacheInterval ?? null) !== newCacheInterval;
+      const releaseCacheInvalidation =
+        getRepositoryReleaseCacheInvalidationChanges(existing, settings);
       const backgroundCheckCronChanged =
         (existing.backgroundCheckCron ?? undefined) !== newBackgroundCheckCron;
 
-      // Build change summary for logging
-      const changes: string[] = [];
-      pushArrayChange(
-        changes,
-        "releaseChannels",
-        existing.releaseChannels,
-        settings.releaseChannels,
-        { emptyAsUndefined: true },
-      );
-      pushArrayChange(
-        changes,
-        "preReleaseSubChannels",
-        existing.preReleaseSubChannels,
-        settings.preReleaseSubChannels,
-        { emptyAsUndefined: true },
-      );
-      pushValueChange(
-        changes,
-        "releasesPerPage",
-        existing.releasesPerPage ?? undefined,
-        settings.releasesPerPage ?? undefined,
-      );
-      if (refreshIntervalChanged) {
-        changes.push(
-          `refreshInterval: ${formatChangeValue(existing.refreshInterval)} -> ${formatChangeValue(newRefreshInterval)}`,
-        );
-      }
-      if (cacheIntervalChanged) {
-        changes.push(
-          `cacheInterval: ${formatChangeValue(existing.cacheInterval)} -> ${formatChangeValue(newCacheInterval)}`,
-        );
-      }
-      if (backgroundCheckCronChanged) {
-        changes.push(
-          `backgroundCheckCron: ${formatChangeValue(existing.backgroundCheckCron)} -> ${formatChangeValue(newBackgroundCheckCron)}`,
-        );
-      }
-      if (prevInclude !== newInclude) {
-        changes.push(
-          `includeRegex: ${formatChangeValue(prevInclude)} -> ${formatChangeValue(newInclude)}`,
-        );
-      }
-      if (prevExclude !== newExclude) {
-        changes.push(
-          `excludeRegex: ${formatChangeValue(prevExclude)} -> ${formatChangeValue(newExclude)}`,
-        );
-      }
-      pushValueChange(
-        changes,
-        "appriseTags",
-        existing.appriseTags ?? undefined,
-        settings.appriseTags ?? undefined,
-      );
-      pushValueChange(
-        changes,
-        "appriseFormat",
-        existing.appriseFormat ?? undefined,
-        settings.appriseFormat ?? undefined,
-      );
+      const changes = buildRepositorySettingsChangeLog(existing, settings, {
+        refreshInterval: newRefreshInterval,
+        cacheInterval: newCacheInterval,
+        backgroundCheckCron: newBackgroundCheckCron,
+      });
 
       const etagInvalidated = shouldInvalidateReleaseCache(
         releaseCacheInvalidation,

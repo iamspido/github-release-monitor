@@ -7,6 +7,7 @@ import {
 } from "@/lib/security-release";
 import type {
   AppSettings,
+  EnrichedRelease,
   FetchError,
   SecurityHighlightColorPreset,
 } from "@/types";
@@ -29,6 +30,31 @@ export function getReleaseErrorMessage(
     default:
       return t("error_generic_fetch");
   }
+}
+
+type RepoSettings = NonNullable<EnrichedRelease["repoSettings"]>;
+
+export function hasCustomRepoSettings(
+  repoSettings: RepoSettings | undefined,
+): boolean {
+  if (!repoSettings) return false;
+
+  return Boolean(
+    (repoSettings.releaseChannels && repoSettings.releaseChannels.length > 0) ||
+      (repoSettings.preReleaseSubChannels &&
+        repoSettings.preReleaseSubChannels.length > 0) ||
+      (repoSettings.releasesPerPage !== null &&
+        typeof repoSettings.releasesPerPage === "number") ||
+      (repoSettings.refreshInterval !== null &&
+        typeof repoSettings.refreshInterval === "number") ||
+      (repoSettings.cacheInterval !== null &&
+        typeof repoSettings.cacheInterval === "number") ||
+      repoSettings.backgroundCheckCron ||
+      repoSettings.includeRegex ||
+      repoSettings.excludeRegex ||
+      repoSettings.appriseTags ||
+      repoSettings.appriseFormat,
+  );
 }
 
 type SecurityHighlightStyle = {

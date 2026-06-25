@@ -22,9 +22,8 @@ import {
   isRestrictedActionAllowed,
 } from "@/lib/server-action-helpers";
 import {
-  pushArrayChange as appendArrayChange,
-  pushValueChange as appendValueChange,
-  areArraysEqualIgnoringOrder,
+  buildGlobalSettingsChangeLog,
+  getGlobalReleaseCacheInvalidationChanges,
   getReleaseCacheInvalidationReasons,
   shouldInvalidateReleaseCache,
 } from "@/lib/settings/change-detection";
@@ -72,32 +71,10 @@ export async function updateSettingsAction(newSettings: AppSettings) {
         await saveRepositories(updatedRepos);
       }
 
-      // Detect if regex filters changed (affects local filtering and should bypass ETag once)
-      const prevInclude =
-        (currentSettings.includeRegex ?? "").trim() || undefined;
-      const prevExclude =
-        (currentSettings.excludeRegex ?? "").trim() || undefined;
-      const nextInclude = (newSettings.includeRegex ?? "").trim() || undefined;
-      const nextExclude = (newSettings.excludeRegex ?? "").trim() || undefined;
-      const regexChanged =
-        prevInclude !== nextInclude || prevExclude !== nextExclude;
-
-      const channelsChanged = !areArraysEqualIgnoringOrder(
-        currentSettings.releaseChannels,
-        newSettings.releaseChannels,
+      const releaseCacheInvalidation = getGlobalReleaseCacheInvalidationChanges(
+        currentSettings,
+        newSettings,
       );
-      const preSubsChanged = !areArraysEqualIgnoringOrder(
-        currentSettings.preReleaseSubChannels,
-        newSettings.preReleaseSubChannels,
-      );
-      const rppChanged =
-        currentSettings.releasesPerPage !== newSettings.releasesPerPage;
-      const releaseCacheInvalidation = {
-        filtersChanged: regexChanged,
-        releaseChannelsChanged: channelsChanged,
-        preReleaseSubChannelsChanged: preSubsChanged,
-        releasesPerPageChanged: rppChanged,
-      };
       const incomingCron = (newSettings.backgroundCheckCron ?? "").trim();
       const sanitizedBackgroundCheckCron = incomingCron
         ? normalizeBackgroundCheckCron(incomingCron)
@@ -175,123 +152,10 @@ export async function updateSettingsAction(newSettings: AppSettings) {
           newSettings.confirmSecurityAcknowledge === true,
       };
 
-      // Compute a concise diff of global settings
-      const oldS = currentSettings;
-      const newS = settingsToSave;
-      const changes: string[] = [];
-      const pushValueChange = (
-        label: string,
-        previous: unknown,
-        next: unknown,
-      ) => appendValueChange(changes, label, previous, next);
-      const pushArrayChange = <T>(
-        label: string,
-        previous?: T[] | null,
-        next?: T[] | null,
-      ) => appendArrayChange(changes, label, previous, next);
-      pushValueChange("timeFormat", oldS.timeFormat, newS.timeFormat);
-      pushValueChange("locale", oldS.locale, newS.locale);
-      pushValueChange(
-        "refreshInterval",
-        oldS.refreshInterval,
-        newS.refreshInterval,
+      const changes = buildGlobalSettingsChangeLog(
+        currentSettings,
+        settingsToSave,
       );
-      pushValueChange("cacheInterval", oldS.cacheInterval, newS.cacheInterval);
-      pushValueChange(
-        "backgroundCheckCron",
-        oldS.backgroundCheckCron,
-        newS.backgroundCheckCron,
-      );
-      pushValueChange(
-        "releasesPerPage",
-        oldS.releasesPerPage,
-        newS.releasesPerPage,
-      );
-      pushValueChange(
-        "parallelRepoFetches",
-        oldS.parallelRepoFetches,
-        newS.parallelRepoFetches,
-      );
-      pushArrayChange(
-        "releaseChannels",
-        oldS.releaseChannels,
-        newS.releaseChannels,
-      );
-      pushArrayChange(
-        "preReleaseSubChannels",
-        oldS.preReleaseSubChannels,
-        newS.preReleaseSubChannels,
-      );
-      pushValueChange(
-        "releaseSortOrder",
-        oldS.releaseSortOrder,
-        newS.releaseSortOrder,
-      );
-      pushArrayChange(
-        "providerSortOrder",
-        oldS.providerSortOrder,
-        newS.providerSortOrder,
-      );
-      pushValueChange(
-        "prioritizeNewSecurityReleases",
-        oldS.prioritizeNewSecurityReleases,
-        newS.prioritizeNewSecurityReleases,
-      );
-      pushValueChange(
-        "securityHighlightColorPreset",
-        oldS.securityHighlightColorPreset,
-        newS.securityHighlightColorPreset,
-      );
-      pushValueChange(
-        "securityHighlightCustomColor",
-        oldS.securityHighlightCustomColor,
-        newS.securityHighlightCustomColor,
-      );
-      pushValueChange(
-        "confirmSecurityAcknowledge",
-        oldS.confirmSecurityAcknowledge,
-        newS.confirmSecurityAcknowledge,
-      );
-      pushValueChange(
-        "includeDefaultSecurityPatterns",
-        oldS.includeDefaultSecurityPatterns,
-        newS.includeDefaultSecurityPatterns,
-      );
-      pushValueChange(
-        "customSecurityPatterns",
-        oldS.customSecurityPatterns,
-        newS.customSecurityPatterns,
-      );
-      pushValueChange(
-        "showAcknowledge",
-        oldS.showAcknowledge,
-        newS.showAcknowledge,
-      );
-      pushValueChange("showMarkAsNew", oldS.showMarkAsNew, newS.showMarkAsNew);
-      pushValueChange(
-        "showProviderPrefixInRepoId",
-        oldS.showProviderPrefixInRepoId,
-        newS.showProviderPrefixInRepoId,
-      );
-      pushValueChange(
-        "showProviderDomainInRepoId",
-        oldS.showProviderDomainInRepoId,
-        newS.showProviderDomainInRepoId,
-      );
-      pushValueChange(
-        "repositoryFormExpanded",
-        oldS.repositoryFormExpanded,
-        newS.repositoryFormExpanded,
-      );
-      pushValueChange("includeRegex", oldS.includeRegex, newS.includeRegex);
-      pushValueChange("excludeRegex", oldS.excludeRegex, newS.excludeRegex);
-      pushValueChange(
-        "appriseMaxCharacters",
-        oldS.appriseMaxCharacters,
-        newS.appriseMaxCharacters,
-      );
-      pushValueChange("appriseTags", oldS.appriseTags, newS.appriseTags);
-      pushValueChange("appriseFormat", oldS.appriseFormat, newS.appriseFormat);
 
       // If regex changed globally, clear ETags so next fetch doesn't short-circuit on 304
       if (shouldInvalidateReleaseCache(releaseCacheInvalidation)) {
