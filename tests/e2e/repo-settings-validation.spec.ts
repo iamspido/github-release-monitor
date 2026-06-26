@@ -1,16 +1,21 @@
-import { test, expect } from '@playwright/test';
-import { login, ensureTestRepo } from './utils';
+import { expect, test } from "@playwright/test";
+import { ensureTestRepo, login } from "./utils";
 
-test('repo settings regex validation shows and clears error', async ({ page }) => {
+test("repo settings regex validation shows and clears error", async ({
+  page,
+}) => {
   await login(page);
   await ensureTestRepo(page);
-  await page.goto('/en');
+  await page.goto("/en");
   // Open settings dialog on the first card
-  await page.getByRole('button', { name: 'Open settings for this repository' }).first().click();
+  await page
+    .getByRole("button", { name: "Open settings for this repository" })
+    .first()
+    .click();
   // Enter invalid regex
-  await page.getByLabel('Include Pattern').fill('([');
-  await expect(page.getByText('Invalid regular expression.')).toBeVisible();
+  await page.getByLabel("Include Pattern").fill("([");
+  await expect(page.getByText("Invalid regular expression.")).toBeVisible();
   // Enter valid regex
-  await page.getByLabel('Include Pattern').fill('^v[0-9]+$');
-  await expect(page.getByText('Invalid regular expression.')).toHaveCount(0);
+  await page.getByLabel("Include Pattern").fill("^v[0-9]+$");
+  await expect(page.getByText("Invalid regular expression.")).toHaveCount(0);
 });

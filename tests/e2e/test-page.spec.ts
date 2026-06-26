@@ -1,28 +1,37 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
 async function login(page) {
-  const username = process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || 'test@example.com';
-  const password = process.env.AUTH_PASSWORD || 'TestPassword123';
-  await page.goto('/en/login');
+  const username =
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+  const password = process.env.AUTH_PASSWORD || "TestPassword123";
+  await page.goto("/en/login");
   await page.getByLabel(/email|e-mail/i).fill(username);
   await page.locator('input[name="password"]').fill(password);
   await page.locator('button[type="submit"]').first().click();
   await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
 }
 
-test('apprise not configured notice and disabled actions', async ({ page }) => {
+test("apprise not configured notice and disabled actions", async ({ page }) => {
   await login(page);
-  await page.goto('/en/test');
-  await expect(page.getByText('Apprise is not configured.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Refresh Status' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Send Test Notification' })).toBeDisabled();
+  await page.goto("/en/test");
+  await expect(page.getByText("Apprise is not configured.")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Refresh Status" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Send Test Notification" }),
+  ).toBeDisabled();
   // "Trigger Check" requires at least one notification service
-  await expect(page.getByRole('button', { name: 'Trigger Check' })).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Trigger Check" }),
+  ).toBeDisabled();
 });
 
-test('send direct test email button is disabled without SMTP config', async ({ page }) => {
+test("send direct test email button is disabled without SMTP config", async ({
+  page,
+}) => {
   await login(page);
-  await page.goto('/en/test');
-  const btn = page.getByRole('button', { name: 'Send Direct Test Email' });
+  await page.goto("/en/test");
+  const btn = page.getByRole("button", { name: "Send Direct Test Email" });
   await expect(btn).toBeDisabled();
 });

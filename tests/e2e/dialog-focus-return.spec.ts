@@ -1,26 +1,28 @@
-import { test, expect } from '@playwright/test';
-import { login, ensureTestRepo } from './utils';
+import { expect, test } from "@playwright/test";
+import { ensureTestRepo, login } from "./utils";
 
-test('repo dialog returns focus to trigger on ESC and Close', async ({ page }) => {
+test("repo dialog returns focus to trigger on ESC and Close", async ({
+  page,
+}) => {
   await login(page);
   await ensureTestRepo(page);
-  await page.goto('/en');
+  await page.goto("/en");
 
   const trigger = page
-    .getByRole('button', {
+    .getByRole("button", {
       name: /Open settings for this repository|Einstellungen für dieses Repository öffnen/,
     })
     .first();
   await trigger.click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(trigger).toBeFocused();
 
   // Open again and close via X
   await trigger.click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: 'Close' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(trigger).toBeFocused();
 });

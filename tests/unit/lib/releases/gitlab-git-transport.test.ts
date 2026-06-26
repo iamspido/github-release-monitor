@@ -55,7 +55,9 @@ function buildPack(objects: Array<{ type: number; text: string }>): Uint8Array {
 
   return new Uint8Array([
     ...packHeader,
-    ...objects.flatMap((object) => [...encodeGitObject(object.type, object.text)]),
+    ...objects.flatMap((object) => [
+      ...encodeGitObject(object.type, object.text),
+    ]),
     ...new Uint8Array(20),
   ]);
 }
@@ -72,15 +74,11 @@ describe("gitlab git transport parsers", () => {
       ...pktLine(
         "1111111111111111111111111111111111111111 refs/heads/main\u0000multi_ack\n",
       ),
-      ...pktLine(
-        "2222222222222222222222222222222222222222 refs/tags/v1.0.0\n",
-      ),
+      ...pktLine("2222222222222222222222222222222222222222 refs/tags/v1.0.0\n"),
       ...pktLine(
         "3333333333333333333333333333333333333333 refs/tags/v1.0.0^{}\n",
       ),
-      ...pktLine(
-        "4444444444444444444444444444444444444444 refs/tags/v2.0.0\n",
-      ),
+      ...pktLine("4444444444444444444444444444444444444444 refs/tags/v2.0.0\n"),
     ]);
 
     expect(parseGitSmartHttpTagRefs(payload)).toEqual([
@@ -145,16 +143,21 @@ describe("gitlab git transport parsers", () => {
     );
     const splitIndex = Math.floor(pack.length / 2);
     const sidebandResponse = new Uint8Array([
-      ...pktLineBytes(new Uint8Array([2, ...new TextEncoder().encode("counting\n")])),
+      ...pktLineBytes(
+        new Uint8Array([2, ...new TextEncoder().encode("counting\n")]),
+      ),
       ...pktLineBytes(new Uint8Array([1, ...pack.slice(0, splitIndex)])),
       ...pktLineBytes(new Uint8Array([1, ...pack.slice(splitIndex)])),
       ...new TextEncoder().encode("0000"),
     ]);
 
-    const extracted = extractPackPayloadFromUploadPackResponse(sidebandResponse);
+    const extracted =
+      extractPackPayloadFromUploadPackResponse(sidebandResponse);
 
     expect(extracted).toEqual(pack);
-    expect(parseFirstGitObjectMetadataFromPack(extracted ?? new Uint8Array())).toEqual({
+    expect(
+      parseFirstGitObjectMetadataFromPack(extracted ?? new Uint8Array()),
+    ).toEqual({
       date: "2023-11-14T22:13:21.000Z",
       message: "Sideband commit message",
     });

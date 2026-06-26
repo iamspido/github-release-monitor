@@ -45,7 +45,9 @@ describe("server action boundary", () => {
       expect(start).toBeGreaterThanOrEqual(0);
       const nextExport = source.indexOf("\nexport async function ", start + 1);
       const body =
-        nextExport === -1 ? source.slice(start) : source.slice(start, nextExport);
+        nextExport === -1
+          ? source.slice(start)
+          : source.slice(start, nextExport);
       expect(body).toContain("canCallExposedRestrictedAction()");
     }
   });

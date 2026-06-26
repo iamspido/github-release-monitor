@@ -82,7 +82,9 @@ describe("auth/client-flow-utils", () => {
     await expect(
       readApiErrorCode(new Response(JSON.stringify({ code: "EMAIL_IN_USE" }))),
     ).resolves.toBe("email_in_use");
-    await expect(readApiErrorCode(new Response("not-json"))).resolves.toBeNull();
+    await expect(
+      readApiErrorCode(new Response("not-json")),
+    ).resolves.toBeNull();
   });
 
   it("maps setup API errors to setup translation keys", () => {

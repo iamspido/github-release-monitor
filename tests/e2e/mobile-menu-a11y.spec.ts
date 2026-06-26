@@ -1,27 +1,28 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
-test('mobile menu a11y attributes and roles', async ({ page }) => {
-  const username = process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || 'test@example.com';
-  const password = process.env.AUTH_PASSWORD || 'TestPassword123';
+test("mobile menu a11y attributes and roles", async ({ page }) => {
+  const username =
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+  const password = process.env.AUTH_PASSWORD || "TestPassword123";
   await page.setViewportSize({ width: 420, height: 900 });
 
-  await page.goto('/en/login');
+  await page.goto("/en/login");
   await page.getByLabel(/email|e-mail/i).fill(username);
   await page.locator('input[name="password"]').fill(password);
   await page.locator('button[type="submit"]').first().click();
   await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
 
-  const trigger = page.getByRole('button', { name: 'Open menu' });
+  const trigger = page.getByRole("button", { name: "Open menu" });
   await trigger.click();
 
   // Menu has role=menu and items role=menuitem
-  const menu = page.getByRole('menu');
+  const menu = page.getByRole("menu");
   await expect(menu).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Home' })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Settings' })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Test Page' })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Home" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Test Page" })).toBeVisible();
 
   // ESC closes menu
-  await page.keyboard.press('Escape');
+  await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
 });

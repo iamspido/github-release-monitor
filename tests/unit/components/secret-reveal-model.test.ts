@@ -20,7 +20,9 @@ describe("secret-reveal-model", () => {
       removeItem: vi.fn((key: string) => values.delete(key)),
     };
 
-    expect(getSecretRevealTargetFromSessionStorage(storage)).toBe("apprise_url");
+    expect(getSecretRevealTargetFromSessionStorage(storage)).toBe(
+      "apprise_url",
+    );
     expect(storage.removeItem).toHaveBeenCalledWith(
       SECRET_REVEAL_TARGET_STORAGE_KEY,
     );

@@ -1,3 +1,4 @@
+import type { EffectiveRepoFilters } from "@/lib/releases/filters";
 import {
   notModifiedResult,
   resolvePageCount,
@@ -5,7 +6,6 @@ import {
   selectFirstMatchingRelease,
   selectLatestMatchingRelease,
 } from "@/lib/releases/provider-pipeline";
-import type { EffectiveRepoFilters } from "@/lib/releases/filters";
 import type { GithubRelease } from "@/types";
 
 const stableOnlyFilters: EffectiveRepoFilters = {

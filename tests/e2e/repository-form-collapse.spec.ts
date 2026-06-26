@@ -1,11 +1,13 @@
-import { test, expect } from '@playwright/test';
-import { login, waitForAutosave } from './utils';
+import { expect, test } from "@playwright/test";
+import { login, waitForAutosave } from "./utils";
 
-test('add repositories form collapse state persists and can be restored from settings', async ({ page }) => {
+test("add repositories form collapse state persists and can be restored from settings", async ({
+  page,
+}) => {
   await login(page);
 
-  await page.goto('/en/settings');
-  const setting = page.getByRole('checkbox', {
+  await page.goto("/en/settings");
+  const setting = page.getByRole("checkbox", {
     name: /Show add repositories form expanded by default/i,
   });
   if (!(await setting.isChecked())) {
@@ -13,31 +15,31 @@ test('add repositories form collapse state persists and can be restored from set
     await waitForAutosave(page);
   }
 
-  await page.goto('/en');
+  await page.goto("/en");
   const textarea = page.locator('textarea[name="urls"]');
   await expect(textarea).toBeVisible();
 
-  const collapseButton = page.getByRole('button', {
-    name: 'Collapse add repositories form',
+  const collapseButton = page.getByRole("button", {
+    name: "Collapse add repositories form",
   });
   await collapseButton.click();
 
-  const expandButton = page.getByRole('button', {
-    name: 'Expand add repositories form',
+  const expandButton = page.getByRole("button", {
+    name: "Expand add repositories form",
   });
   await expect(expandButton).toBeEnabled();
-  await expect(expandButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(expandButton).toHaveAttribute("aria-expanded", "false");
 
   await page.reload();
   await expect(
-    page.getByRole('button', { name: 'Expand add repositories form' }),
-  ).toHaveAttribute('aria-expanded', 'false');
+    page.getByRole("button", { name: "Expand add repositories form" }),
+  ).toHaveAttribute("aria-expanded", "false");
 
-  await page.goto('/en/settings');
+  await page.goto("/en/settings");
   await expect(setting).not.toBeChecked();
   await setting.check();
   await waitForAutosave(page);
 
-  await page.goto('/en');
+  await page.goto("/en");
   await expect(page.locator('textarea[name="urls"]')).toBeVisible();
 });

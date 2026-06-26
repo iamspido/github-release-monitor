@@ -1,11 +1,17 @@
-import { test, expect } from '@playwright/test';
-import { ensureAppLocale, openSettingsForLocale, switchLocaleFromSettings } from './utils/locale';
+import { expect, test } from "@playwright/test";
+import {
+  ensureAppLocale,
+  openSettingsForLocale,
+  switchLocaleFromSettings,
+} from "./utils/locale";
 
-test('history works across locale switches without duplication', async ({ page }) => {
+test("history works across locale switches without duplication", async ({
+  page,
+}) => {
   try {
-    await ensureAppLocale(page, 'en');
-    await openSettingsForLocale(page, 'en');
-    await switchLocaleFromSettings(page, 'de');
+    await ensureAppLocale(page, "en");
+    await openSettingsForLocale(page, "en");
+    await switchLocaleFromSettings(page, "de");
     await expect(page).toHaveURL(/\/de\/einstellungen$/);
 
     await page.goBack();
@@ -15,6 +21,6 @@ test('history works across locale switches without duplication', async ({ page }
     await page.goForward();
     await expect(page).toHaveURL(/\/de\/einstellungen$/);
   } finally {
-    await ensureAppLocale(page, 'en');
+    await ensureAppLocale(page, "en");
   }
 });

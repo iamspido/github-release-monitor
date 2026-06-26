@@ -1,7 +1,7 @@
 import {
   areSettingsSnapshotsEqual,
-  type RefreshSensitiveRepoSettings,
   hasRefreshSensitiveRepoSettingChanges,
+  type RefreshSensitiveRepoSettings,
   validateRegexInput,
 } from "@/lib/settings/form-model";
 
