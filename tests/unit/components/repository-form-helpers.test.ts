@@ -1,11 +1,13 @@
 import {
   getRepositoryDisplayName,
+  getRepositoryImportStats,
   getRepositoryProviderName,
   isComposeFileName,
   isHttpUrl,
   isOwnerRepoShorthand,
   parseRepositoryImportJson,
   readTextFile,
+  sortProviderChoiceCandidates,
 } from "@/components/repository-form-helpers";
 
 const originalFileReader = globalThis.FileReader;
@@ -56,6 +58,53 @@ describe("repository-form-helpers", () => {
         url: "https://codeberg.org/owner/repo",
       }),
     ).toBe("Codeberg");
+  });
+
+  it("sorts provider choices by preferred provider order and host", () => {
+    expect(
+      sortProviderChoiceCandidates([
+        {
+          provider: "codeberg",
+          canonicalRepoUrl: "https://codeberg.org/owner/repo",
+        },
+        {
+          provider: "gitlab",
+          providerHost: "z.gitlab.example",
+          canonicalRepoUrl: "https://z.gitlab.example/owner/repo",
+        },
+        {
+          provider: "github",
+          canonicalRepoUrl: "https://github.com/owner/repo",
+        },
+        {
+          provider: "gitlab",
+          providerHost: "a.gitlab.example",
+          canonicalRepoUrl: "https://a.gitlab.example/owner/repo",
+        },
+      ]).map((candidate) => candidate.canonicalRepoUrl),
+    ).toEqual([
+      "https://github.com/owner/repo",
+      "https://a.gitlab.example/owner/repo",
+      "https://z.gitlab.example/owner/repo",
+      "https://codeberg.org/owner/repo",
+    ]);
+  });
+
+  it("calculates import preview stats against current repositories", () => {
+    expect(
+      getRepositoryImportStats(
+        [
+          { id: "github:owner/repo", url: "https://github.com/owner/repo" },
+          { id: "codeberg:owner/repo", url: "https://codeberg.org/owner/repo" },
+        ],
+        new Set(["github:owner/repo"]),
+        3,
+      ),
+    ).toEqual({
+      newCount: 1,
+      existingCount: 1,
+      skippedImages: 3,
+    });
   });
 
   it("reads text files through the FileReader boundary", async () => {

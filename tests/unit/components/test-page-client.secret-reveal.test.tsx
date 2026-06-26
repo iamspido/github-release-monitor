@@ -171,13 +171,9 @@ async function renderClient(notificationConfig: NotificationConfig) {
 async function flushReactWork() {
   await act(async () => {
     await Promise.resolve();
-    await new Promise((resolve) => setTimeout(resolve, 0));
   });
-}
-
-async function flushReactMicrotasks() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
   await act(async () => {
-    await Promise.resolve();
     await Promise.resolve();
   });
 }
@@ -218,8 +214,9 @@ async function clickButtonAndWaitFor(
     expect(button.disabled).toBe(false);
   });
 
-  act(() => {
+  await act(async () => {
     button?.click();
+    await Promise.resolve();
   });
   await waitForExpectation(assertion);
 }
@@ -277,21 +274,15 @@ describe("TestPageClient mail password reveal", () => {
       expect(div.textContent).toContain("MAIL_PASSWORD=••••••••");
       expect(div.textContent).not.toContain("mail-secret");
 
-      await act(async () => {
-        getButtonByAriaLabel(div, "show_password").click();
-        await revealMailPasswordActionMock.mock.results[0]?.value;
-      });
-      await flushReactMicrotasks();
-
-      expect(revealMailPasswordActionMock).toHaveBeenCalledTimes(1);
-      expect(div.textContent).toContain("MAIL_PASSWORD=mail-secret");
-
-      act(() => {
-        getButtonByAriaLabel(div, "hide_password").click();
+      await clickButtonAndWaitFor(div, "show_password", () => {
+        expect(revealMailPasswordActionMock).toHaveBeenCalledTimes(1);
+        expect(div.textContent).toContain("MAIL_PASSWORD=mail-secret");
       });
 
-      expect(div.textContent).toContain("MAIL_PASSWORD=••••••••");
-      expect(div.textContent).not.toContain("mail-secret");
+      await clickButtonAndWaitFor(div, "hide_password", () => {
+        expect(div.textContent).toContain("MAIL_PASSWORD=••••••••");
+        expect(div.textContent).not.toContain("mail-secret");
+      });
     } finally {
       cleanup();
     }
@@ -302,13 +293,10 @@ describe("TestPageClient mail password reveal", () => {
       makeNotificationConfig("password_confirm"),
     );
     try {
-      await act(async () => {
-        (
-          div.querySelector(
-            'button[aria-label="show_password"]',
-          ) as HTMLButtonElement
-        ).click();
-        await Promise.resolve();
+      await clickButtonAndWaitFor(div, "show_password", () => {
+        expect(document.body.textContent).toContain(
+          "mail_password_reveal_title",
+        );
       });
 
       expect(document.body.textContent).toContain(
@@ -334,14 +322,12 @@ describe("TestPageClient mail password reveal", () => {
       makeNotificationConfig("password_confirm"),
     );
     try {
-      await act(async () => {
-        (
-          div.querySelector(
-            'button[aria-label="show_password"]',
-          ) as HTMLButtonElement
-        ).click();
-        await Promise.resolve();
-        await Promise.resolve();
+      await clickButtonAndWaitFor(div, "show_password", () => {
+        expect(
+          document.body.querySelector(
+            'input[placeholder="secret_reveal_totp_placeholder"]',
+          ),
+        ).toBeTruthy();
       });
 
       expect(
@@ -381,14 +367,12 @@ describe("TestPageClient mail password reveal", () => {
       makeNotificationConfig("password_confirm"),
     );
     try {
-      await act(async () => {
-        (
-          div.querySelector(
-            'button[aria-label="show_password"]',
-          ) as HTMLButtonElement
-        ).click();
-        await Promise.resolve();
-        await Promise.resolve();
+      await clickButtonAndWaitFor(div, "show_password", () => {
+        expect(
+          document.body.querySelector(
+            'input[placeholder="secret_reveal_totp_placeholder"]',
+          ),
+        ).toBeTruthy();
       });
 
       const input = document.body.querySelector(
@@ -402,15 +386,15 @@ describe("TestPageClient mail password reveal", () => {
       await act(async () => {
         getButtonByText(document.body, "secret_reveal_totp_button").click();
         await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
+      });
+      await waitForExpectation(() => {
+        expect(div.textContent).toContain("MAIL_PASSWORD=mail-secret");
       });
 
       expect(verifySecretRevealTotpActionMock).toHaveBeenCalledWith({
         code: "123456",
       });
       expect(revealMailPasswordActionMock).toHaveBeenCalledWith();
-      expect(div.textContent).toContain("MAIL_PASSWORD=mail-secret");
     } finally {
       cleanup();
     }
@@ -432,19 +416,14 @@ describe("TestPageClient mail password reveal", () => {
       makeNotificationConfig("password_confirm"),
     );
     try {
-      await act(async () => {
-        (
-          div.querySelector(
-            'button[aria-label="show_password"]',
-          ) as HTMLButtonElement
-        ).click();
-        await Promise.resolve();
-        await Promise.resolve();
+      await clickButtonAndWaitFor(div, "show_password", () => {
+        expect(
+          getButtonByText(document.body, "secret_reveal_social_button"),
+        ).toBeTruthy();
       });
 
       await act(async () => {
         getButtonByText(document.body, "secret_reveal_social_button").click();
-        await Promise.resolve();
         await Promise.resolve();
       });
 

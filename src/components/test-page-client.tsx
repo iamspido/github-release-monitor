@@ -27,6 +27,8 @@ import {
   verifySecretRevealTotpAction,
 } from "@/app/actions";
 import {
+  buildSecretRevealCallbackUrl,
+  getSecretRevealTargetFromSessionStorage,
   SECRET_REVEAL_TARGET_STORAGE_KEY,
   type SecretRevealMethods,
   type SecretRevealSocialProvider,
@@ -631,7 +633,7 @@ export function TestPageClient({
         const callbackURL =
           typeof window === "undefined"
             ? "/test?secretRevealStepUp=1"
-            : `${window.location.pathname}?secretRevealStepUp=1`;
+            : buildSecretRevealCallbackUrl(window.location.pathname);
         const socialResult = await authClient.signIn.social({
           provider,
           callbackURL,
@@ -715,12 +717,9 @@ export function TestPageClient({
     const url = new URL(window.location.href);
     if (url.searchParams.get("secretRevealStepUp") !== "1") return;
 
-    const storedTarget = window.sessionStorage.getItem(
-      SECRET_REVEAL_TARGET_STORAGE_KEY,
+    const target = getSecretRevealTargetFromSessionStorage(
+      window.sessionStorage,
     );
-    const target: SecretRevealTarget =
-      storedTarget === "apprise_url" ? "apprise_url" : "mail_password";
-    window.sessionStorage.removeItem(SECRET_REVEAL_TARGET_STORAGE_KEY);
     url.searchParams.delete("secretRevealStepUp");
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
 

@@ -39,6 +39,28 @@ const setupHandler = toNextJsHandler(setupAuth);
 const log = logger.withScope("AuthApi");
 
 type AuthRouteMethod = "GET" | "POST";
+type AuthUserState = ReturnType<typeof hasAnyAuthUser>;
+type SocialIntent = ReturnType<typeof readSocialLoginIntentFromRequest>;
+type SetupSocialContext = ReturnType<typeof readSetupSocialContextFromRequest>;
+type SetupBootstrapLock = Awaited<
+  ReturnType<typeof acquireAuthSetupBootstrapLock>
+>;
+
+interface AuthRouteState {
+  action: string;
+  authUserState: AuthUserState;
+  callbackProvider: string | null;
+  clientIp: string;
+  hasValidSession: boolean;
+  oauthError: string | null;
+  setupBootstrapLock: SetupBootstrapLock | null;
+  setupFlowAllowed: boolean;
+  setupSocialContext: SetupSocialContext;
+  socialAction: boolean;
+  socialIntent: SocialIntent;
+  socialIntentGuardActive: boolean;
+  socialRegistrationSnapshot: ReturnType<typeof getAuthUserIdSnapshot> | null;
+}
 
 function getAuthActionFromPathname(pathname: string) {
   const prefix = "/api/auth/";
@@ -260,22 +282,15 @@ function getOAuthErrorFromResponseLocation(response: Response) {
   }
 }
 
-export async function handleAuthRouteRequest(
-  method: AuthRouteMethod,
-  request: Request,
-) {
-  await ensureAuthDatabaseReady();
-  const start = Date.now();
+async function createAuthRouteState(request: Request): Promise<AuthRouteState> {
   const url = new URL(request.url);
   const action = getAuthActionFromPathname(url.pathname);
-  const clientIp = getClientIpFromRequest(request);
   const setupSocialContext = readSetupSocialContextFromRequest(request);
   const socialAction = isSocialAuthAction(action);
   const socialIntent = socialAction
     ? readSocialLoginIntentFromRequest(request)
     : null;
   const authUserState = hasAnyAuthUser();
-  const authUserStateUnknown = authUserState === "unknown";
   const hasValidSession = hasValidAuthSessionForRequest(request);
   const setupLocked =
     socialAction && setupSocialContext ? await isAuthSetupLocked() : false;
@@ -285,8 +300,6 @@ export async function handleAuthRouteRequest(
     isSetupEnvEnabled() &&
     !setupLocked &&
     authUserState === "no_user";
-  const socialIntentGuardActive =
-    isSocialSignInAction(action) && !setupFlowAllowed && !hasValidSession;
   const callbackProvider = getOAuthProviderFromAction(action);
   const socialRegistrationSnapshot =
     action.startsWith("callback/") &&
@@ -303,16 +316,39 @@ export async function handleAuthRouteRequest(
       })
     : null;
 
-  if (socialAction && setupSocialContext && authUserStateUnknown) {
+  return {
+    action,
+    authUserState,
+    callbackProvider,
+    clientIp: getClientIpFromRequest(request),
+    hasValidSession,
+    oauthError: url.searchParams.get("error"),
+    setupBootstrapLock,
+    setupFlowAllowed,
+    setupSocialContext,
+    socialAction,
+    socialIntent,
+    socialIntentGuardActive:
+      isSocialSignInAction(action) && !setupFlowAllowed && !hasValidSession,
+    socialRegistrationSnapshot,
+  };
+}
+
+async function guardSetupSocialState(state: AuthRouteState) {
+  if (
+    state.socialAction &&
+    state.setupSocialContext &&
+    state.authUserState === "unknown"
+  ) {
     log.error(
-      `Blocked setup social flow '${action}' from ip='${clientIp}' because auth user existence could not be determined.`,
+      `Blocked setup social flow '${state.action}' from ip='${state.clientIp}' because auth user existence could not be determined.`,
     );
     return setupStateUnknownResponse(true);
   }
 
-  if (setupBootstrapLock?.status === "busy") {
+  if (state.setupBootstrapLock?.status === "busy") {
     log.warn(
-      `Blocked setup social callback '${action}' from ip='${clientIp}' because another setup bootstrap is already in progress.`,
+      `Blocked setup social callback '${state.action}' from ip='${state.clientIp}' because another setup bootstrap is already in progress.`,
     );
     return new Response(JSON.stringify({ error: "setup_in_progress" }), {
       status: 409,
@@ -323,154 +359,219 @@ export async function handleAuthRouteRequest(
     });
   }
 
-  if (setupBootstrapLock?.status === "acquired") {
-    if (await isAuthSetupLocked()) {
-      await setupBootstrapLock.release();
-      log.warn(
-        `Blocked setup social callback '${action}' from ip='${clientIp}' because setup became locked during bootstrap.`,
-      );
-      return new Response("Not Found", { status: 404 });
-    }
-    const authUserStateAfterLock = hasAnyAuthUser();
-    if (authUserStateAfterLock === "unknown") {
-      await setupBootstrapLock.release();
-      log.error(
-        `Blocked setup social callback '${action}' from ip='${clientIp}' because auth user existence could not be determined after acquiring bootstrap lock.`,
-      );
-      return setupStateUnknownResponse(true);
-    }
-    if (authUserStateAfterLock === "has_user") {
-      await setupBootstrapLock.release();
-      log.warn(
-        `Blocked setup social callback '${action}' from ip='${clientIp}' because an auth user was created during bootstrap.`,
-      );
-      return new Response("Not Found", { status: 404 });
-    }
+  if (state.setupBootstrapLock?.status !== "acquired") {
+    return null;
   }
 
-  const activeHandler = setupFlowAllowed ? setupHandler : handler;
+  if (await isAuthSetupLocked()) {
+    await state.setupBootstrapLock.release();
+    log.warn(
+      `Blocked setup social callback '${state.action}' from ip='${state.clientIp}' because setup became locked during bootstrap.`,
+    );
+    return new Response("Not Found", { status: 404 });
+  }
 
-  log.info(`Auth API request: ${method} /api/auth/${action} ip='${clientIp}'`);
-  if (setupFlowAllowed) {
+  const authUserStateAfterLock = hasAnyAuthUser();
+  if (authUserStateAfterLock === "unknown") {
+    await state.setupBootstrapLock.release();
+    log.error(
+      `Blocked setup social callback '${state.action}' from ip='${state.clientIp}' because auth user existence could not be determined after acquiring bootstrap lock.`,
+    );
+    return setupStateUnknownResponse(true);
+  }
+
+  if (authUserStateAfterLock === "has_user") {
+    await state.setupBootstrapLock.release();
+    log.warn(
+      `Blocked setup social callback '${state.action}' from ip='${state.clientIp}' because an auth user was created during bootstrap.`,
+    );
+    return new Response("Not Found", { status: 404 });
+  }
+
+  return null;
+}
+
+function logAuthRouteStart(method: AuthRouteMethod, state: AuthRouteState) {
+  log.info(
+    `Auth API request: ${method} /api/auth/${state.action} ip='${state.clientIp}'`,
+  );
+  if (state.setupFlowAllowed) {
     log.info(
-      `Auth setup social flow is active for ${method} /api/auth/${action} from ip='${clientIp}'.`,
+      `Auth setup social flow is active for ${method} /api/auth/${state.action} from ip='${state.clientIp}'.`,
     );
   } else if (
-    action.startsWith("callback/") &&
-    authUserState === "no_user" &&
+    state.action.startsWith("callback/") &&
+    state.authUserState === "no_user" &&
     isSetupEnvEnabled() &&
-    !setupSocialContext
+    !state.setupSocialContext
   ) {
     log.warn(
-      `OAuth callback '${action}' reached auth API without setup context cookie while no users exist. Falling back to normal auth handler.`,
+      `OAuth callback '${state.action}' reached auth API without setup context cookie while no users exist. Falling back to normal auth handler.`,
     );
-  } else if (socialAction && hasValidSession && !setupFlowAllowed) {
+  } else if (
+    state.socialAction &&
+    state.hasValidSession &&
+    !state.setupFlowAllowed
+  ) {
     log.debug(
-      `Skipping social precheck intent guard for authenticated ${method} /api/auth/${action} from ip='${clientIp}'.`,
+      `Skipping social precheck intent guard for authenticated ${method} /api/auth/${state.action} from ip='${state.clientIp}'.`,
     );
   }
 
-  const oauthError = url.searchParams.get("error");
-  if (oauthError) {
-    const provider = getOAuthProviderFromAction(action) || "unknown";
+  if (state.oauthError) {
+    const provider = state.callbackProvider || "unknown";
     log.warn(
-      `OAuth callback returned error='${oauthError}' for provider='${provider}' ip='${clientIp}'.`,
+      `OAuth callback returned error='${state.oauthError}' for provider='${provider}' ip='${state.clientIp}'.`,
     );
   }
+}
 
-  if (socialIntentGuardActive) {
+async function runAuthHandler(
+  method: AuthRouteMethod,
+  request: Request,
+  setupFlowAllowed: boolean,
+) {
+  const activeHandler = setupFlowAllowed ? setupHandler : handler;
+  return method === "GET"
+    ? activeHandler.GET(request)
+    : activeHandler.POST(request);
+}
+
+function applySocialRegistrationProfileForCallback(state: AuthRouteState) {
+  if (
+    !state.socialRegistrationSnapshot ||
+    state.socialIntent?.purpose !== "register"
+  ) {
+    return;
+  }
+
+  const profileResult = applySocialRegistrationProfile({
+    previousUserIds: state.socialRegistrationSnapshot,
+    username: state.socialIntent.username || "",
+    email: state.socialIntent.email,
+  });
+  if (profileResult === "applied") {
+    log.info(
+      `Applied social registration username for provider callback '${state.action}'.`,
+    );
+  } else if (profileResult !== "no_new_user") {
+    log.warn(
+      `Could not apply social registration username for provider callback '${state.action}' (result='${profileResult}').`,
+    );
+  }
+}
+
+async function finalizeSocialSetupCallback(state: AuthRouteState) {
+  if (!state.setupFlowAllowed || !state.action.startsWith("callback/")) {
+    return null;
+  }
+
+  const authUserStateAfterCallback = hasAnyAuthUser();
+  if (authUserStateAfterCallback === "no_user") {
+    log.warn(
+      `Social setup callback '${state.action}' completed without creating a user. Setup remains enabled.`,
+    );
+    return null;
+  }
+  if (authUserStateAfterCallback === "unknown") {
+    log.error(
+      `Social setup callback '${state.action}' completed but auth user existence could not be determined. Setup lock was not written.`,
+    );
+    return setupStateUnknownResponse(true);
+  }
+
+  const profileResult = ensureInitialAuthUserProfile({
+    username: state.setupSocialContext?.username || "",
+    name: state.setupSocialContext?.name,
+  });
+  const lockResult = await writeAuthSetupLock({
+    reason: "setup_completed",
+    email: profileResult?.email || undefined,
+    source: `/api/auth/${state.action}`,
+  });
+  if (lockResult === "created") {
+    log.info(
+      `Initial social setup completed for provider callback '${state.action}'. Setup endpoint permanently disabled.`,
+    );
+  }
+  return null;
+}
+
+async function postProcessAuthResponse(args: {
+  request: Request;
+  response: Response;
+  state: AuthRouteState;
+}) {
+  const { request, response, state } = args;
+  let finalResponse = clearCallbackCookies({
+    response,
+    setupCallback: Boolean(
+      state.setupSocialContext && state.action.startsWith("callback/"),
+    ),
+    socialCallback: state.socialAction && state.action.startsWith("callback/"),
+  });
+  finalResponse = markSecretRevealSocialStepUpVerified({
+    response: finalResponse,
+    request,
+    action: state.action,
+    callbackProvider: state.callbackProvider,
+    oauthError: state.oauthError,
+  });
+
+  if (finalResponse.status < 400) {
+    applySocialRegistrationProfileForCallback(state);
+  }
+
+  return (await finalizeSocialSetupCallback(state)) ?? finalResponse;
+}
+
+export async function handleAuthRouteRequest(
+  method: AuthRouteMethod,
+  request: Request,
+) {
+  await ensureAuthDatabaseReady();
+  const start = Date.now();
+  const state = await createAuthRouteState(request);
+  const setupGuardResponse = await guardSetupSocialState(state);
+  if (setupGuardResponse) return setupGuardResponse;
+
+  logAuthRouteStart(method, state);
+
+  if (state.socialIntentGuardActive) {
     const guardResponse = await guardSocialIntent({
       method,
-      action,
+      action: state.action,
       request,
-      clientIp,
-      socialIntent,
+      clientIp: state.clientIp,
+      socialIntent: state.socialIntent,
     });
     if (guardResponse) return guardResponse;
   }
 
   try {
-    const response =
-      method === "GET"
-        ? await activeHandler.GET(request)
-        : await activeHandler.POST(request);
-    let finalResponse = clearCallbackCookies({
-      response,
-      setupCallback: Boolean(
-        setupSocialContext && action.startsWith("callback/"),
-      ),
-      socialCallback: socialAction && action.startsWith("callback/"),
-    });
-    finalResponse = markSecretRevealSocialStepUpVerified({
-      response: finalResponse,
+    const response = await runAuthHandler(
+      method,
       request,
-      action,
-      callbackProvider,
-      oauthError,
+      state.setupFlowAllowed,
+    );
+    const finalResponse = await postProcessAuthResponse({
+      response,
+      request,
+      state,
     });
 
-    if (
-      socialRegistrationSnapshot &&
-      socialIntent?.purpose === "register" &&
-      finalResponse.status < 400
-    ) {
-      const profileResult = applySocialRegistrationProfile({
-        previousUserIds: socialRegistrationSnapshot,
-        username: socialIntent.username || "",
-        email: socialIntent.email,
-      });
-      if (profileResult === "applied") {
-        log.info(
-          `Applied social registration username for provider callback '${action}'.`,
-        );
-      } else if (profileResult !== "no_new_user") {
-        log.warn(
-          `Could not apply social registration username for provider callback '${action}' (result='${profileResult}').`,
-        );
-      }
-    }
-
-    if (setupFlowAllowed && action.startsWith("callback/")) {
-      const authUserStateAfterCallback = hasAnyAuthUser();
-      if (authUserStateAfterCallback === "no_user") {
-        log.warn(
-          `Social setup callback '${action}' completed without creating a user. Setup remains enabled.`,
-        );
-      } else if (authUserStateAfterCallback === "unknown") {
-        log.error(
-          `Social setup callback '${action}' completed but auth user existence could not be determined. Setup lock was not written.`,
-        );
-        return setupStateUnknownResponse(true);
-      } else {
-        const profileResult = ensureInitialAuthUserProfile({
-          username: setupSocialContext?.username || "",
-          name: setupSocialContext?.name,
-        });
-        const lockResult = await writeAuthSetupLock({
-          reason: "setup_completed",
-          email: profileResult?.email || undefined,
-          source: `/api/auth/${action}`,
-        });
-        if (lockResult === "created") {
-          log.info(
-            `Initial social setup completed for provider callback '${action}'. Setup endpoint permanently disabled.`,
-          );
-        }
-      }
-    }
-
-    logResponse(method, action, finalResponse.status, Date.now() - start);
+    logResponse(method, state.action, finalResponse.status, Date.now() - start);
     return finalResponse;
   } catch (error) {
     log.error(
-      `Unhandled error in Auth API route ${method} /api/auth/${action}.`,
+      `Unhandled error in Auth API route ${method} /api/auth/${state.action}.`,
       error,
     );
     throw error;
   } finally {
-    if (setupBootstrapLock?.status === "acquired") {
+    if (state.setupBootstrapLock?.status === "acquired") {
       try {
-        await setupBootstrapLock.release();
+        await state.setupBootstrapLock.release();
       } catch (error) {
         log.error("Failed to release setup bootstrap lock.", error);
       }

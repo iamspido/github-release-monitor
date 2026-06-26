@@ -6,11 +6,24 @@ export type ProviderChoiceCandidate = {
   canonicalRepoUrl: string;
 };
 
+export interface RepositoryImportStats {
+  newCount: number;
+  existingCount: number;
+  skippedImages?: number;
+}
+
 export const initialRepositoryFormState = {
   success: false,
   toast: undefined,
   error: undefined,
 };
+
+const providerChoiceOrder: Record<ProviderChoiceCandidate["provider"], number> =
+  {
+    github: 0,
+    gitlab: 1,
+    codeberg: 2,
+  };
 
 export const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim());
 
@@ -70,3 +83,28 @@ export const getRepositoryProviderName = (repo: Repository) => {
   if (repo.id.startsWith("gitlab:")) return "GitLab";
   return null;
 };
+
+export function sortProviderChoiceCandidates(
+  candidates: ProviderChoiceCandidate[],
+) {
+  return [...candidates].sort(
+    (a, b) =>
+      providerChoiceOrder[a.provider] - providerChoiceOrder[b.provider] ||
+      (a.providerHost ?? "").localeCompare(b.providerHost ?? ""),
+  );
+}
+
+export function getRepositoryImportStats(
+  importedData: Repository[],
+  currentRepositoryIds: ReadonlySet<string>,
+  skippedImages?: number,
+): RepositoryImportStats {
+  const newRepos = importedData.filter(
+    (repo) => !currentRepositoryIds.has(repo.id),
+  );
+  return {
+    newCount: newRepos.length,
+    existingCount: importedData.length - newRepos.length,
+    skippedImages,
+  };
+}

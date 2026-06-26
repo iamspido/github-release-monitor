@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import type { Repository } from "@/types";
 import {
   getRepositoryDisplayName,
+  getRepositoryImportStats,
   getRepositoryProviderName,
   initialRepositoryFormState,
   isComposeFileName,
@@ -47,7 +48,9 @@ import {
   isOwnerRepoShorthand,
   type ProviderChoiceCandidate,
   parseRepositoryImportJson,
+  type RepositoryImportStats,
   readTextFile,
+  sortProviderChoiceCandidates,
 } from "./repository-form-helpers";
 
 function SubmitButton({
@@ -124,11 +127,8 @@ export function RepositoryForm({
   const [reposToImport, setReposToImport] = React.useState<Repository[] | null>(
     null,
   );
-  const [importStats, setImportStats] = React.useState<{
-    newCount: number;
-    existingCount: number;
-    skippedImages?: number;
-  } | null>(null);
+  const [importStats, setImportStats] =
+    React.useState<RepositoryImportStats | null>(null);
   const [fileInputKey, setFileInputKey] = React.useState(Date.now());
   const currentRepositoryIds = React.useMemo(
     () => new Set(currentRepositories.map((repo) => repo.id)),
@@ -292,16 +292,7 @@ export function RepositoryForm({
   };
 
   const orderedProviderCandidates = React.useMemo(() => {
-    const order: Record<ProviderChoiceCandidate["provider"], number> = {
-      github: 0,
-      gitlab: 1,
-      codeberg: 2,
-    };
-    return [...providerDialogCandidates].sort(
-      (a, b) =>
-        order[a.provider] - order[b.provider] ||
-        (a.providerHost ?? "").localeCompare(b.providerHost ?? ""),
-    );
+    return sortProviderChoiceCandidates(providerDialogCandidates);
   }, [providerDialogCandidates]);
 
   const handleImportClick = () => {
@@ -310,17 +301,14 @@ export function RepositoryForm({
 
   const prepareImportPreview = React.useCallback(
     (importedData: Repository[], skippedImages?: number) => {
-      const newRepos = importedData.filter(
-        (repo) => !currentRepositoryIds.has(repo.id),
-      );
-      const existingCount = importedData.length - newRepos.length;
-
       setReposToImport(importedData);
-      setImportStats({
-        newCount: newRepos.length,
-        existingCount,
-        skippedImages,
-      });
+      setImportStats(
+        getRepositoryImportStats(
+          importedData,
+          currentRepositoryIds,
+          skippedImages,
+        ),
+      );
       setIsDialogVisible(true);
     },
     [currentRepositoryIds],

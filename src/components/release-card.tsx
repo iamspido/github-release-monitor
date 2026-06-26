@@ -1,7 +1,5 @@
 "use client";
 
-import { formatDistanceToNowStrict } from "date-fns";
-import { de } from "date-fns/locale";
 import {
   AlertTriangle,
   BellPlus,
@@ -13,17 +11,13 @@ import {
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeRaw from "rehype-raw";
-import rehypeSanitize from "rehype-sanitize";
-import remarkGemoji from "remark-gemoji";
-import remarkGfm from "remark-gfm";
 
 import {
   acknowledgeNewReleaseAction,
   markAsNewAction,
   removeRepositoryAction,
 } from "@/app/actions";
+import { useReleaseRelativeTimes } from "@/components/release-card-hooks";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,8 +57,8 @@ import {
   getReleaseErrorMessage,
   getSecurityHighlightStyle,
   hasCustomRepoSettings,
-  markdownSanitizeSchema,
 } from "./release-card-helpers";
+import { ReleaseNotesPreview } from "./release-notes-preview";
 import { RepoSettingsDialog } from "./repo-settings-dialog";
 
 interface ReleaseCardProps {
@@ -213,13 +207,14 @@ export function ReleaseCard({
   const [isRemoving, startRemoveTransition] = React.useTransition();
   const [isAcknowledging, startAcknowledgeTransition] = React.useTransition();
   const [isMarkingAsNew, startMarkingAsNewTransition] = React.useTransition();
-  const [timeAgo, setTimeAgo] = React.useState("");
-  const [checkedAgo, setCheckedAgo] = React.useState("");
+  const { checkedAgo, isReleaseTimeUnknown, timeAgo } = useReleaseRelativeTimes(
+    release,
+    locale,
+  );
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const settingsButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const prevIsSettingsOpenRef = React.useRef(false);
   const isTagLink = Boolean(release?.html_url?.includes("/src/tag/"));
-  const isReleaseTimeUnknown = Boolean(release?.published_at_unknown);
 
   React.useEffect(() => {
     // When the settings dialog transitions from open -> closed, return focus to the trigger button.
@@ -230,44 +225,6 @@ export function ReleaseCard({
     }
     prevIsSettingsOpenRef.current = isSettingsOpen;
   }, [isSettingsOpen]);
-
-  React.useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-
-    const updateTimes = () => {
-      // Update release time ago
-      if (release?.created_at && !isReleaseTimeUnknown) {
-        const dateToUse = release.published_at || release.created_at;
-        setTimeAgo(
-          formatDistanceToNowStrict(new Date(dateToUse), {
-            addSuffix: true,
-            locale: locale === "de" ? de : undefined,
-          }),
-        );
-      } else {
-        setTimeAgo("");
-      }
-      // Update checked time ago
-      if (release?.fetched_at) {
-        setCheckedAgo(
-          formatDistanceToNowStrict(new Date(release.fetched_at), {
-            addSuffix: true,
-            locale: locale === "de" ? de : undefined,
-          }),
-        );
-      }
-    };
-
-    updateTimes(); // Initial call
-    intervalId = setInterval(updateTimes, 60000); // Update every minute
-
-    // Clean up the interval when the component unmounts or dependencies change.
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [release, locale, isReleaseTimeUnknown]);
   const handleRemove = () => {
     startRemoveTransition(async () => {
       try {
@@ -564,37 +521,7 @@ export function ReleaseCard({
           </div>
         </CardHeader>
         <CardContent className="grow pt-0 min-w-0">
-          {release.body && release.body.trim() !== "" ? (
-            <div className="relative w-full max-h-72 overflow-hidden rounded-md border bg-background">
-              <div className="prose prose-sm dark:prose-invert max-w-none h-72 overflow-auto break-words p-4 prose-img:rounded prose-img:max-w-full prose-img:h-auto">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkGemoji]}
-                  rehypePlugins={[
-                    rehypeRaw,
-                    [rehypeSanitize, markdownSanitizeSchema],
-                  ]}
-                  skipHtml={false}
-                  components={{
-                    table: ({ node, ...props }) => (
-                      <div className="overflow-x-auto">
-                        <table {...props} className="table-fixed">
-                          {props.children}
-                        </table>
-                      </div>
-                    ),
-                  }}
-                >
-                  {release.body}
-                </ReactMarkdown>
-              </div>
-            </div>
-          ) : (
-            <div className="flex h-72 items-center justify-center rounded-md border border-dashed">
-              <p className="text-center text-sm text-muted-foreground">
-                {t("no_release_notes")}
-              </p>
-            </div>
-          )}
+          <ReleaseNotesPreview body={release.body} />
         </CardContent>
         <CardFooter className="flex flex-col items-stretch gap-3 pt-4">
           {canMutate &&
