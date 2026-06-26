@@ -28,8 +28,30 @@ describe("auth/email HTML rendering", () => {
   });
 
   it("escapes dynamic HTML text and href attributes in auth emails", async () => {
-    const sendMailMock = vi.fn(async () => undefined);
-    const betterAuthMock = vi.fn((config) => ({ config }));
+    type MailOptions = { html: string };
+    type AuthEmailConfig = {
+      emailVerification: {
+        sendVerificationEmail: (args: {
+          user: { email: string };
+          url: string;
+          token: string;
+        }) => Promise<void>;
+      };
+      user: {
+        changeEmail: {
+          sendChangeEmailConfirmation: (args: {
+            user: { email: string };
+            newEmail: string;
+            url: string;
+            token: string;
+          }) => Promise<void>;
+        };
+      };
+    };
+    const sendMailMock = vi.fn<(_mail: MailOptions) => Promise<void>>(
+      async () => undefined,
+    );
+    const betterAuthMock = vi.fn((config: AuthEmailConfig) => ({ config }));
 
     vi.doMock("better-auth", () => ({
       betterAuth: betterAuthMock,
@@ -70,6 +92,9 @@ describe("auth/email HTML rendering", () => {
     const authModule = await import("@/lib/auth");
     void authModule.auth.api;
     const authConfig = betterAuthMock.mock.calls[0]?.[0];
+    if (!authConfig) {
+      throw new Error("Expected Better Auth config");
+    }
 
     await authConfig.emailVerification.sendVerificationEmail({
       user: {
@@ -90,6 +115,9 @@ describe("auth/email HTML rendering", () => {
     expect(sendMailMock).toHaveBeenCalledTimes(2);
     const verificationEmail = sendMailMock.mock.calls[0]?.[0];
     const changeEmail = sendMailMock.mock.calls[1]?.[0];
+    if (!verificationEmail || !changeEmail) {
+      throw new Error("Expected auth emails to be sent");
+    }
 
     expect(verificationEmail.html).toContain(
       "new&lt;user&gt;&quot;&#39;&amp;@example.test",

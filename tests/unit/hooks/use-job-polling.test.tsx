@@ -47,19 +47,19 @@ function TestHarness({
 describe("useJobPolling", () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
-  let onComplete: ReturnType<typeof vi.fn>;
-  let onError: ReturnType<typeof vi.fn>;
-  let onTimeout: ReturnType<typeof vi.fn>;
-  let onDone: ReturnType<typeof vi.fn>;
+  let onComplete: ReturnType<typeof vi.fn<() => void>>;
+  let onError: ReturnType<typeof vi.fn<() => void>>;
+  let onTimeout: ReturnType<typeof vi.fn<() => void>>;
+  let onDone: ReturnType<typeof vi.fn<() => void>>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     getJobStatusActionMock.mockReset();
     reloadIfServerActionStaleMock.mockReset();
-    onComplete = vi.fn();
-    onError = vi.fn();
-    onTimeout = vi.fn();
-    onDone = vi.fn();
+    onComplete = vi.fn<() => void>();
+    onError = vi.fn<() => void>();
+    onTimeout = vi.fn<() => void>();
+    onDone = vi.fn<() => void>();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);

@@ -6,13 +6,14 @@ vi.mock("next-intl/server", () => ({
     key,
 }));
 
+import { installFetchMock, mockFetchResponse } from "../helpers/fetch";
+
 describe("checkAppriseStatusAction", () => {
   const env = { ...process.env };
   const fetchBackup = global.fetch;
   beforeEach(() => {
     vi.resetModules();
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
   });
   afterEach(() => {
     process.env = { ...env };
@@ -28,8 +29,9 @@ describe("checkAppriseStatusAction", () => {
 
   it("returns ok on 200 response", async () => {
     process.env.APPRISE_URL = "http://apprise.test/notify";
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({ ok: true, status: 200 });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200 }),
+    );
     const { checkAppriseStatusAction } = await import("@/app/actions");
     const res = await checkAppriseStatusAction();
     expect(res).toEqual({ status: "ok" });
@@ -37,8 +39,9 @@ describe("checkAppriseStatusAction", () => {
 
   it("returns error with status on non-200", async () => {
     process.env.APPRISE_URL = "http://apprise.test";
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({ ok: false, status: 503 });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 503 }),
+    );
     const { checkAppriseStatusAction } = await import("@/app/actions");
     const res = await checkAppriseStatusAction();
     expect(res.status).toBe("error");
@@ -46,7 +49,6 @@ describe("checkAppriseStatusAction", () => {
 
   it("returns error on fetch throw", async () => {
     process.env.APPRISE_URL = "http://apprise.test";
-    // @ts-expect-error
     vi.mocked(global.fetch).mockRejectedValue(new Error("network"));
     const { checkAppriseStatusAction } = await import("@/app/actions");
     const res = await checkAppriseStatusAction();

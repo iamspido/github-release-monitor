@@ -22,6 +22,7 @@ describe("i18n getRequestConfig callback", () => {
     if (!capturedGetRequestCb) {
       throw new Error("getRequestConfig callback was not captured");
     }
+    return capturedGetRequestCb;
   };
 
   beforeEach(async () => {
@@ -30,8 +31,8 @@ describe("i18n getRequestConfig callback", () => {
   });
 
   it("loads EN messages and returns locale", async () => {
-    await loadRequestModule();
-    const result = await capturedGetRequestCb({
+    const getRequestConfig = await loadRequestModule();
+    const result = await getRequestConfig({
       requestLocale: Promise.resolve("en"),
     });
     const en = (await import("../../../src/messages/en.json")).default;
@@ -40,8 +41,8 @@ describe("i18n getRequestConfig callback", () => {
   });
 
   it("loads DE messages and returns locale", async () => {
-    await loadRequestModule();
-    const result = await capturedGetRequestCb({
+    const getRequestConfig = await loadRequestModule();
+    const result = await getRequestConfig({
       requestLocale: Promise.resolve("de"),
     });
     const de = (await import("../../../src/messages/de.json")).default;
@@ -50,8 +51,8 @@ describe("i18n getRequestConfig callback", () => {
   });
 
   it("falls back to default locale for invalid locale", async () => {
-    await loadRequestModule();
-    const result = await capturedGetRequestCb({
+    const getRequestConfig = await loadRequestModule();
+    const result = await getRequestConfig({
       requestLocale: Promise.resolve("fr"),
     });
     const en = (await import("../../../src/messages/en.json")).default;

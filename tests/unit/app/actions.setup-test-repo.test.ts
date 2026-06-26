@@ -36,7 +36,7 @@ describe("setupTestRepositoryAction", () => {
     expect(res.success).toBe(true);
     const testRepo = mem.repos.find((r) => r.id === "test/test");
     expect(testRepo).toBeTruthy();
-    expect(testRepo.latestRelease).toBeTruthy();
+    expect(testRepo?.latestRelease).toBeTruthy();
   });
 
   it("returns failure with message when saving fails", async () => {
@@ -64,9 +64,9 @@ describe("setupTestRepositoryAction", () => {
     const res = await setupTestRepositoryAction();
     expect(res.success).toBe(true);
     const repo = mem.repos.find((r) => r.id === "test/test");
-    expect(repo.lastSeenReleaseTag).toBe("v0.9.0-reset");
-    expect(repo.isNew).toBe(false);
-    expect(repo.latestRelease).toBeTruthy();
-    expect(repo.latestRelease.tag_name).toBe("v0.9.0-reset");
+    expect(repo?.lastSeenReleaseTag).toBe("v0.9.0-reset");
+    expect(repo?.isNew).toBe(false);
+    expect(repo?.latestRelease).toBeTruthy();
+    expect(repo?.latestRelease?.tag_name).toBe("v0.9.0-reset");
   });
 });

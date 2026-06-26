@@ -6,10 +6,15 @@ vi.mock("next-intl/server", () => ({
 }));
 
 import type { AppSettings, GithubRelease, Repository } from "@/types";
+import {
+  fetchCallBodyText,
+  installFetchMock,
+  mockFetchResponse,
+} from "../../helpers/fetch";
 
 // Mock html body generator to a known value
 vi.mock("@/lib/notifications/email", async (orig) => {
-  const actual = await orig();
+  const actual = await orig<typeof import("@/lib/notifications/email")>();
   return {
     ...actual,
     generateHtmlReleaseBody: async () => "<html>hello</html>",
@@ -21,8 +26,7 @@ describe("notifications/html format route", () => {
   const fetchBackup = global.fetch;
 
   beforeEach(() => {
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
   });
   afterEach(() => {
     process.env = { ...envBackup };
@@ -31,12 +35,9 @@ describe("notifications/html format route", () => {
 
   it("uses HTML generator and does not truncate", async () => {
     process.env.APPRISE_URL = "http://apprise.test";
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => "",
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
     const { sendNotification } = await import("@/lib/notifications");
 
     const repo: Repository = {
@@ -69,7 +70,7 @@ describe("notifications/html format route", () => {
 
     await sendNotification(repo, release, "en", settings);
     const call = vi.mocked(global.fetch).mock.calls[0];
-    const payload = JSON.parse(call[1].body);
+    const payload = JSON.parse(fetchCallBodyText(call));
     expect(payload.format).toBe("html");
     expect(payload.body).toBe("<html>hello</html>");
   });

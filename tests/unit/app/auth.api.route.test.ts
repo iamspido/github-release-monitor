@@ -42,10 +42,30 @@ vi.mock("@/lib/auth", () => ({
   isSignupEnabled: isSignupEnabledMock,
 }));
 
+type SetupSocialContext = {
+  username: string;
+  issuedAt: number;
+  expiresAt: number;
+} | null;
+type SocialLoginIntent = {
+  provider: string;
+  purpose: string;
+  username?: string;
+  email?: string;
+  issuedAt: number;
+  expiresAt: number;
+  nonce: string;
+} | null;
+const releaseAuthSetupBootstrapLockMock = vi.fn(async () => undefined);
+type AuthSetupBootstrapLock =
+  | { status: "acquired"; release: typeof releaseAuthSetupBootstrapLockMock }
+  | { status: "busy"; release: typeof releaseAuthSetupBootstrapLockMock };
+
 const isAuthSetupLockedMock = vi.fn(async () => false);
 const writeAuthSetupLockMock = vi.fn(async () => "created");
-const releaseAuthSetupBootstrapLockMock = vi.fn(async () => undefined);
-const acquireAuthSetupBootstrapLockMock = vi.fn(async () => ({
+const acquireAuthSetupBootstrapLockMock = vi.fn<
+  (_options?: unknown) => Promise<AuthSetupBootstrapLock>
+>(async () => ({
   status: "acquired" as const,
   release: releaseAuthSetupBootstrapLockMock,
 }));
@@ -56,11 +76,13 @@ vi.mock("@/lib/auth/setup-lock", () => ({
   writeAuthSetupLock: writeAuthSetupLockMock,
 }));
 
-const readSetupSocialContextFromRequestMock = vi.fn(() => ({
-  username: "admin",
-  issuedAt: Date.now(),
-  expiresAt: Date.now() + 60_000,
-}));
+const readSetupSocialContextFromRequestMock = vi.fn<() => SetupSocialContext>(
+  () => ({
+    username: "admin",
+    issuedAt: Date.now(),
+    expiresAt: Date.now() + 60_000,
+  }),
+);
 const buildSetupSocialContextSetCookieHeaderMock = vi.fn(
   () => "auth_setup_social_context=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
 );
@@ -71,7 +93,9 @@ vi.mock("@/lib/auth/setup-social-context", () => ({
     buildSetupSocialContextSetCookieHeaderMock,
 }));
 
-const readSocialLoginIntentFromRequestMock = vi.fn(() => null);
+const readSocialLoginIntentFromRequestMock = vi.fn<() => SocialLoginIntent>(
+  () => null,
+);
 const buildSocialLoginIntentSetCookieHeaderMock = vi.fn(
   () => "auth_social_login_intent=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
 );

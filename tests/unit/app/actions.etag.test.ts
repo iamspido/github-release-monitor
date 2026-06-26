@@ -1,6 +1,12 @@
 // vitest globals enabled
 
 import type { Repository } from "@/types";
+import {
+  fetchCallHeaders,
+  headerRecord,
+  installFetchMock,
+  mockFetchResponse,
+} from "../helpers/fetch";
 
 vi.mock("next/cache", () => ({
   unstable_cache: <T extends (...args: never[]) => unknown>(fn: T) => fn,
@@ -26,8 +32,7 @@ describe("ETag updates repo on successful fetch", () => {
   beforeEach(() => {
     vi.resetModules();
     mem.repos = [];
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
   });
   afterEach(() => {
     global.fetch = fetchBackup;
@@ -37,26 +42,25 @@ describe("ETag updates repo on successful fetch", () => {
     const actions = await import("@/app/actions");
 
     const nowIso = new Date().toISOString();
-    // page 1
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: (k: string) => (k === "etag" ? 'W/"123"' : null) },
-      json: async () => [
-        {
-          id: 1,
-          html_url: "#",
-          tag_name: "v1",
-          name: null,
-          body: "x",
-          created_at: nowIso,
-          published_at: nowIso,
-          prerelease: false,
-          draft: false,
-        },
-      ],
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        headers: { etag: 'W/"123"' },
+        json: [
+          {
+            id: 1,
+            html_url: "#",
+            tag_name: "v1",
+            name: null,
+            body: "x",
+            created_at: nowIso,
+            published_at: nowIso,
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
 
     mem.repos = [{ id: "o/r", url: "https://github.com/o/r" }];
 
@@ -68,39 +72,33 @@ describe("ETag updates repo on successful fetch", () => {
     const actions = await import("@/app/actions");
 
     const nowIso = new Date().toISOString();
-    // releases empty
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: {
-        get: (k: string) => (k === "etag" ? 'W/"empty-releases"' : null),
-      },
-      json: async () => [],
-    });
-    // tags
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [{ name: "v2", commit: { sha: "sha2" } }],
-    });
-    // ref to annotated tag? return not annotated
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ object: { type: "commit", url: "unused" } }),
-    });
-    // commit message
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        commit: { message: "msg2", committer: { date: nowIso } },
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        headers: { etag: 'W/"empty-releases"' },
+        json: [],
       }),
-    });
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [{ name: "v2", commit: { sha: "sha2" } }],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: { object: { type: "commit", url: "unused" } },
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: {
+          commit: { message: "msg2", committer: { date: nowIso } },
+        },
+      }),
+    );
 
     mem.repos = [
       {
@@ -121,10 +119,12 @@ describe("ETag updates repo on successful fetch", () => {
     await actions.checkForNewReleases({ skipCache: true });
 
     expect(
-      vi.mocked(global.fetch).mock.calls[0][1].headers["If-None-Match"],
+      headerRecord(fetchCallHeaders(vi.mocked(global.fetch).mock.calls[0]))[
+        "If-None-Match"
+      ],
     ).toBeUndefined();
     expect(mem.repos[0].etag).toBeUndefined();
-    expect(mem.repos[0].latestRelease.tag_name).toBe("v2");
-    expect(mem.repos[0].latestRelease.source).toBe("tag");
+    expect(mem.repos[0].latestRelease?.tag_name).toBe("v2");
+    expect(mem.repos[0].latestRelease?.source).toBe("tag");
   });
 });

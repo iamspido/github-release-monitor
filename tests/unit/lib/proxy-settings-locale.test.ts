@@ -12,10 +12,14 @@ const {
   handleI18nMock,
 } = vi.hoisted(() => {
   const handleI18n = vi.fn();
+  type AuthSession = {
+    session: { id: string };
+    user: { id: string };
+  } | null;
   return {
     createIntlMiddlewareMock: vi.fn(() => handleI18n),
     ensureAuthDatabaseReadyMock: vi.fn(async () => undefined),
-    getSessionMock: vi.fn(async () => null),
+    getSessionMock: vi.fn<() => Promise<AuthSession>>(async () => null),
     handleI18nMock: handleI18n,
   };
 });

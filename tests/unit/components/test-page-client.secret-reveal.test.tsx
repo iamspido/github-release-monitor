@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import type React from "react";
 import { act } from "react";
-import { flushSync } from "react-dom";
 import ReactDOM from "react-dom/client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NotificationConfig, UpdateNotificationState } from "@/types";
+
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 const revealMailPasswordActionMock = vi.fn();
 const revealAppriseUrlActionMock = vi.fn();
@@ -14,6 +17,7 @@ const completeSecretRevealStepUpActionMock = vi.fn();
 const verifySecretRevealTotpActionMock = vi.fn();
 const passkeySignInMock = vi.fn();
 const socialSignInMock = vi.fn();
+let TestPageClientComponent: typeof import("@/components/test-page-client").TestPageClient;
 
 type PassthroughProps = React.HTMLAttributes<HTMLDivElement> & {
   children?: React.ReactNode;
@@ -139,13 +143,12 @@ const updateNotice: UpdateNotificationState = {
 };
 
 async function renderClient(notificationConfig: NotificationConfig) {
-  const { TestPageClient } = await import("@/components/test-page-client");
   const div = document.createElement("div");
   document.body.appendChild(div);
   const root = ReactDOM.createRoot(div);
-  flushSync(() => {
+  await act(async () => {
     root.render(
-      <TestPageClient
+      <TestPageClientComponent
         rateLimitResult={{ data: null }}
         isTokenSet={false}
         gitlabTokenCheck={{ status: "not_set" }}
@@ -155,6 +158,7 @@ async function renderClient(notificationConfig: NotificationConfig) {
         updateNotice={updateNotice}
       />,
     );
+    await Promise.resolve();
   });
 
   return {
@@ -171,14 +175,11 @@ async function renderClient(notificationConfig: NotificationConfig) {
 async function flushReactWork() {
   await act(async () => {
     await Promise.resolve();
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await act(async () => {
     await Promise.resolve();
   });
 }
 
-async function waitForExpectation(assertion: () => void, attempts = 30) {
+async function waitForExpectation(assertion: () => void, attempts = 12) {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -239,6 +240,11 @@ function setInputValue(input: HTMLInputElement, value: string) {
 }
 
 describe("TestPageClient mail password reveal", () => {
+  beforeAll(async () => {
+    const mod = await import("@/components/test-page-client");
+    TestPageClientComponent = mod.TestPageClient;
+  }, 30_000);
+
   beforeEach(() => {
     vi.useRealTimers();
     revealMailPasswordActionMock.mockReset();
@@ -299,9 +305,7 @@ describe("TestPageClient mail password reveal", () => {
         );
       });
 
-      expect(document.body.textContent).toContain(
-        "mail_password_reveal_title",
-      );
+      expect(document.body.textContent).toContain("mail_password_reveal_title");
       expect(revealMailPasswordActionMock).not.toHaveBeenCalled();
     } finally {
       cleanup();
@@ -435,9 +439,9 @@ describe("TestPageClient mail password reveal", () => {
         provider: "github",
         callbackURL: `${window.location.pathname}?secretRevealStepUp=1`,
       });
-      expect(window.sessionStorage.getItem("diagnosticSecretRevealTarget")).toBe(
-        "mail_password",
-      );
+      expect(
+        window.sessionStorage.getItem("diagnosticSecretRevealTarget"),
+      ).toBe("mail_password");
     } finally {
       window.sessionStorage.clear();
       cleanup();
@@ -458,26 +462,18 @@ describe("TestPageClient mail password reveal", () => {
       );
       expect(div.textContent).not.toContain("/notify/key");
 
-      await clickButtonAndWaitFor(
-        div,
-        "show_secret",
-        () => {
-          expect(div.textContent).toContain(
-            "APPRISE_URL=http://apprise:8000/notify/key",
-          );
-        },
-      );
+      await clickButtonAndWaitFor(div, "show_secret", () => {
+        expect(div.textContent).toContain(
+          "APPRISE_URL=http://apprise:8000/notify/key",
+        );
+      });
 
-      await clickButtonAndWaitFor(
-        div,
-        "hide_secret",
-        () => {
-          expect(div.textContent).toContain(
-            "APPRISE_URL=http://apprise:8000/notify/<hidden>",
-          );
-          expect(div.textContent).not.toContain("/notify/key");
-        },
-      );
+      await clickButtonAndWaitFor(div, "hide_secret", () => {
+        expect(div.textContent).toContain(
+          "APPRISE_URL=http://apprise:8000/notify/<hidden>",
+        );
+        expect(div.textContent).not.toContain("/notify/key");
+      });
     } finally {
       cleanup();
     }

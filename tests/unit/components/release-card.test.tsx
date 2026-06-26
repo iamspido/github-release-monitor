@@ -191,6 +191,15 @@ vi.mock("@/app/actions", () => ({
   revalidateReleasesAction: vi.fn(),
 }));
 
+async function mockedActions() {
+  const actions = await import("@/app/actions");
+  return {
+    removeRepositoryAction: vi.mocked(actions.removeRepositoryAction),
+    acknowledgeNewReleaseAction: vi.mocked(actions.acknowledgeNewReleaseAction),
+    markAsNewAction: vi.mocked(actions.markAsNewAction),
+  };
+}
+
 const baseSettings: AppSettings = {
   timeFormat: "24h",
   locale: "en",
@@ -264,7 +273,7 @@ beforeEach(async () => {
   toastSpy.mockClear();
   dismissToastSpy.mockClear();
   networkState = { isOnline: true };
-  const actions = await import("@/app/actions");
+  const actions = await mockedActions();
   actions.removeRepositoryAction.mockClear();
   actions.acknowledgeNewReleaseAction.mockClear();
   actions.markAsNewAction.mockClear();
@@ -373,7 +382,7 @@ describe("ReleaseCard component", () => {
 
   it("acknowledges a new release via the server action", async () => {
     networkState = { isOnline: true };
-    const actions = await import("@/app/actions");
+    const actions = await mockedActions();
     actions.acknowledgeNewReleaseAction.mockResolvedValue({ success: true });
 
     const enrichedRelease = {
@@ -449,7 +458,7 @@ describe("ReleaseCard component", () => {
   });
 
   it("requires confirmation before acknowledging security releases when enabled", async () => {
-    const actions = await import("@/app/actions");
+    const actions = await mockedActions();
     actions.acknowledgeNewReleaseAction.mockResolvedValue({ success: true });
     const enrichedRelease = makeSecurityRelease(true);
 
@@ -466,10 +475,9 @@ describe("ReleaseCard component", () => {
     await Promise.resolve();
     expect(actions.acknowledgeNewReleaseAction).not.toHaveBeenCalled();
 
-    const confirmButton = getElementByText(
-      "button",
-      "Confirm security seen",
-    ) as HTMLButtonElement | undefined;
+    const confirmButton = getElementByText("button", "Confirm security seen") as
+      | HTMLButtonElement
+      | undefined;
     expect(confirmButton).toBeTruthy();
     confirmButton?.click();
 
@@ -506,7 +514,7 @@ describe("ReleaseCard component", () => {
 
   it("shows toast error when mark-as-new action fails", async () => {
     networkState = { isOnline: true };
-    const actions = await import("@/app/actions");
+    const actions = await mockedActions();
     actions.markAsNewAction.mockResolvedValue({ success: false, error: "bad" });
 
     const enrichedRelease = {
@@ -538,7 +546,7 @@ describe("ReleaseCard component", () => {
 
   it("shows validation error when acknowledge action reports failure", async () => {
     networkState = { isOnline: true };
-    const actions = await import("@/app/actions");
+    const actions = await mockedActions();
     actions.acknowledgeNewReleaseAction.mockResolvedValue({
       success: false,
       error: "nope",
@@ -575,7 +583,7 @@ describe("ReleaseCard component", () => {
 
   it("shows generic error toast when acknowledge action throws", async () => {
     networkState = { isOnline: true };
-    const actions = await import("@/app/actions");
+    const actions = await mockedActions();
     actions.acknowledgeNewReleaseAction.mockRejectedValue(new Error("broken"));
 
     const enrichedRelease = {

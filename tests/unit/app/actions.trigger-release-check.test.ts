@@ -1,6 +1,7 @@
 // vitest globals enabled
 
 import type { Repository } from "@/types";
+import { installFetchMock, mockFetchResponse } from "../helpers/fetch";
 
 vi.mock("next-intl/server", () => ({
   getLocale: async () => "en",
@@ -28,8 +29,8 @@ describe("triggerReleaseCheckAction", () => {
   beforeEach(() => {
     vi.resetModules();
     process.env = { ...envBackup };
-    mem.repos = []; /* @ts-ignore */
-    global.fetch = vi.fn();
+    mem.repos = [];
+    installFetchMock();
   });
   afterEach(() => {
     process.env = { ...envBackup };
@@ -59,27 +60,26 @@ describe("triggerReleaseCheckAction", () => {
 
     // First fetch call: GitHub releases
     // Second fetch call: Apprise notify (ok)
-    // @ts-expect-error
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        headers: { get: () => null },
-        json: async () => [
-          {
-            id: 2,
-            html_url: "#",
-            tag_name: "v2",
-            name: "v2",
-            body: "x",
-            created_at: new Date().toISOString(),
-            published_at: new Date().toISOString(),
-            prerelease: false,
-            draft: false,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "" });
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          status: 200,
+          json: [
+            {
+              id: 2,
+              html_url: "#",
+              tag_name: "v2",
+              name: "v2",
+              body: "x",
+              created_at: new Date().toISOString(),
+              published_at: new Date().toISOString(),
+              prerelease: false,
+              draft: false,
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(mockFetchResponse({ status: 200, text: "" }));
 
     const { triggerReleaseCheckAction } = await import("@/app/actions");
     const res = await triggerReleaseCheckAction();

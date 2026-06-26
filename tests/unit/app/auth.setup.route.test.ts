@@ -15,7 +15,12 @@ vi.mock("@/lib/auth", () => ({
 const isAuthSetupLockedMock = vi.fn(async () => false);
 const writeAuthSetupLockMock = vi.fn(async () => "created" as const);
 const releaseAuthSetupBootstrapLockMock = vi.fn(async () => undefined);
-const acquireAuthSetupBootstrapLockMock = vi.fn(async () => ({
+type AuthSetupBootstrapLock =
+  | { status: "acquired"; release: typeof releaseAuthSetupBootstrapLockMock }
+  | { status: "busy"; release: typeof releaseAuthSetupBootstrapLockMock };
+const acquireAuthSetupBootstrapLockMock = vi.fn<
+  (_options?: unknown) => Promise<AuthSetupBootstrapLock>
+>(async () => ({
   status: "acquired" as const,
   release: releaseAuthSetupBootstrapLockMock,
 }));

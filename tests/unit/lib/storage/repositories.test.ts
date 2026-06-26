@@ -5,17 +5,16 @@ import type { Repository } from "@/types";
 
 describe("storage/repositories", () => {
   let tmpDir: string;
+  let cwdSpy: { mockRestore: () => void };
 
   beforeEach(async () => {
     vi.resetModules();
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "grm-repos-"));
-    // @ts-expect-error
-    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
   });
 
   afterEach(async () => {
-    // @ts-expect-error
-    process.cwd.mockRestore?.();
+    cwdSpy.mockRestore();
     try {
       await fs.rm(tmpDir, { recursive: true, force: true });
     } catch {}

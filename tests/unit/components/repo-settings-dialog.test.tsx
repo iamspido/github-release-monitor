@@ -193,17 +193,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     fakeSetTimeout = globalThis.setTimeout;
-    globalThis.setTimeout = ((
-      cb: TimerHandler,
-      delay?: number,
-      ...args: Parameters<typeof globalThis.setTimeout> extends [
-        TimerHandler,
-        number | undefined,
-        ...infer Rest,
-      ]
-        ? Rest
-        : never
-    ) =>
+    globalThis.setTimeout = ((cb: TimerHandler, delay?: number) =>
       fakeSetTimeout(async () => {
         if (typeof cb !== "function") {
           throw new TypeError(
@@ -211,9 +201,9 @@ describe("RepoSettingsDialog autosave behaviour", () => {
           );
         }
         await act(async () => {
-          await cb(...args);
+          await cb();
         });
-      }, delay)) as typeof globalThis.setTimeout;
+      }, delay)) as unknown as typeof globalThis.setTimeout;
     networkState = { isOnline: true };
     toastSpy.mockClear();
     updateSettingsMock.mockReset();

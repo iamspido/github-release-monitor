@@ -190,7 +190,7 @@ describe("storage/settings failure scenarios", () => {
       ...current,
       releaseSortOrder: "not-real",
       providerSortOrder: ["gitlab", "bad", "github"],
-    } as typeof current);
+    } as unknown as typeof current);
 
     await expect(getSettings()).resolves.toMatchObject({
       releaseSortOrder: "latest_first",

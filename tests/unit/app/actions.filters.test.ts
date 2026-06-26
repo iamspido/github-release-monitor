@@ -10,6 +10,7 @@ vi.mock("next-intl/server", () => ({
 }));
 
 import type { AppSettings, Repository } from "@/types";
+import { installFetchMock, mockFetchResponse } from "../helpers/fetch";
 
 describe("filters: include/exclude/channels/subchannels", () => {
   const fetchBackup = global.fetch;
@@ -26,8 +27,7 @@ describe("filters: include/exclude/channels/subchannels", () => {
 
   beforeEach(() => {
     vi.resetModules();
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
   });
   afterEach(() => {
     global.fetch = fetchBackup;
@@ -42,37 +42,34 @@ describe("filters: include/exclude/channels/subchannels", () => {
       excludeRegex: "v2",
     };
 
-    // Releases include v1 and v2; exclude should filter out v2
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 1,
-          html_url: "#",
-          tag_name: "v1",
-          name: null,
-          body: "",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-        {
-          id: 2,
-          html_url: "#",
-          tag_name: "v2",
-          name: null,
-          body: "",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-      ],
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({
+        json: [
+          {
+            id: 1,
+            html_url: "#",
+            tag_name: "v1",
+            name: null,
+            body: "",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+          {
+            id: 2,
+            html_url: "#",
+            tag_name: "v2",
+            name: null,
+            body: "",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -90,25 +87,23 @@ describe("filters: include/exclude/channels/subchannels", () => {
       url: "https://github.com/o/r",
       includeRegex: "([",
     };
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 1,
-          html_url: "#",
-          tag_name: "v1",
-          name: null,
-          body: "",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-      ],
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        json: [
+          {
+            id: 1,
+            html_url: "#",
+            tag_name: "v1",
+            name: null,
+            body: "",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
       baseSettings,
@@ -127,36 +122,34 @@ describe("filters: include/exclude/channels/subchannels", () => {
     };
     // two prerelease-like tags by name
     const now = Date.now();
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 1,
-          html_url: "#",
-          tag_name: "v1.0.0-beta",
-          name: null,
-          body: "",
-          created_at: new Date(now - 2000).toISOString(),
-          published_at: new Date(now - 2000).toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-        {
-          id: 2,
-          html_url: "#",
-          tag_name: "v1.0.0-alpha",
-          name: null,
-          body: "",
-          created_at: new Date(now - 1000).toISOString(),
-          published_at: new Date(now - 1000).toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-      ],
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        json: [
+          {
+            id: 1,
+            html_url: "#",
+            tag_name: "v1.0.0-beta",
+            name: null,
+            body: "",
+            created_at: new Date(now - 2000).toISOString(),
+            published_at: new Date(now - 2000).toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+          {
+            id: 2,
+            html_url: "#",
+            tag_name: "v1.0.0-alpha",
+            name: null,
+            body: "",
+            created_at: new Date(now - 1000).toISOString(),
+            published_at: new Date(now - 1000).toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
 
     // Settings allow only beta/rc
     const enriched = await actions.getLatestReleasesForRepos(
@@ -177,25 +170,23 @@ describe("filters: include/exclude/channels/subchannels", () => {
     };
 
     // Tag name does not include beta/rc, but prerelease flag is true.
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 1,
-          html_url: "#",
-          tag_name: "v1.0.0-1",
-          name: null,
-          body: "",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: true,
-          draft: false,
-        },
-      ],
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        json: [
+          {
+            id: 1,
+            html_url: "#",
+            tag_name: "v1.0.0-1",
+            name: null,
+            body: "",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: true,
+            draft: false,
+          },
+        ],
+      }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -215,25 +206,23 @@ describe("filters: include/exclude/channels/subchannels", () => {
     };
 
     // Tag includes a prerelease marker; global preReleaseSubChannels is empty.
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 1,
-          html_url: "#",
-          tag_name: "v1.0.0-rc1",
-          name: null,
-          body: "",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-      ],
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        json: [
+          {
+            id: 1,
+            html_url: "#",
+            tag_name: "v1.0.0-rc1",
+            name: null,
+            body: "",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
 
     const settingsWithEmptySubs: AppSettings = {
       ...baseSettings,
@@ -256,25 +245,23 @@ describe("filters: include/exclude/channels/subchannels", () => {
       url: "https://github.com/o/r",
       releaseChannels: ["draft"],
     };
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 1,
-          html_url: "#",
-          tag_name: "v1",
-          name: null,
-          body: "",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: false,
-          draft: true,
-        },
-      ],
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        json: [
+          {
+            id: 1,
+            html_url: "#",
+            tag_name: "v1",
+            name: null,
+            body: "",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: false,
+            draft: true,
+          },
+        ],
+      }),
+    );
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
       baseSettings,
@@ -291,26 +278,23 @@ describe("filters: include/exclude/channels/subchannels", () => {
       url: "https://github.com/o/r",
       releaseChannels: ["prerelease"],
     };
-    // betamax should NOT match
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 1,
-          html_url: "#",
-          tag_name: "v1-betamax",
-          name: null,
-          body: "",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-      ],
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        json: [
+          {
+            id: 1,
+            html_url: "#",
+            tag_name: "v1-betamax",
+            name: null,
+            body: "",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
       baseSettings,
@@ -327,25 +311,23 @@ describe("filters: include/exclude/channels/subchannels", () => {
       url: "https://github.com/o/r",
       releaseChannels: ["stable"],
     };
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 1,
-          html_url: "#",
-          tag_name: "release_candidate_1.0rc2",
-          name: null,
-          body: "",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-      ],
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        json: [
+          {
+            id: 1,
+            html_url: "#",
+            tag_name: "release_candidate_1.0rc2",
+            name: null,
+            body: "",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
       baseSettings,

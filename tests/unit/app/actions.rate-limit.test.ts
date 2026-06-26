@@ -1,33 +1,35 @@
 import { getGitHubRateLimit } from "@/app/actions";
+import {
+  headerRecord,
+  installFetchMock,
+  mockFetchResponse,
+} from "../helpers/fetch";
 
 describe("actions.getGitHubRateLimit", () => {
   const fetchBackup = global.fetch;
   beforeEach(() => {
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
   });
   afterEach(() => {
     global.fetch = fetchBackup;
   });
 
   it("returns data on 200 OK", async () => {
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({ rate: { limit: 60 } }),
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ json: { rate: { limit: 60 } } }),
+    );
     const res = await getGitHubRateLimit();
     expect(res.data).toBeTruthy();
     expect(res.error).toBeUndefined();
   });
 
   it("returns invalid_token on 401", async () => {
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: false,
-      status: 401,
-      statusText: "Unauthorized",
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({
+        status: 401,
+        statusText: "Unauthorized",
+      }),
+    );
     const res = await getGitHubRateLimit();
     expect(res.data).toBeNull();
     expect(res.error).toBe("invalid_token");
@@ -37,15 +39,19 @@ describe("actions.getGitHubRateLimit", () => {
     const prev = process.env.GITHUB_ACCESS_TOKEN;
     process.env.GITHUB_ACCESS_TOKEN = "bad-token";
     try {
-      // @ts-expect-error
       vi.mocked(global.fetch).mockImplementation(
-        (_url: string | URL | Request, opts?: RequestInit) => {
-          expect(opts.headers.Authorization).toMatch(/token\s+bad-token/);
-          return Promise.resolve({
-            ok: false,
-            status: 401,
-            statusText: "Unauthorized",
-          });
+        (_url, _opts): Promise<Response> => {
+          if (!_opts?.headers) {
+            throw new Error("Expected Authorization header");
+          }
+          const authorization = headerRecord(_opts.headers).Authorization;
+          expect(authorization).toMatch(/token\s+bad-token/);
+          return Promise.resolve(
+            mockFetchResponse({
+              status: 401,
+              statusText: "Unauthorized",
+            }),
+          );
         },
       );
       const res = await getGitHubRateLimit();
@@ -57,7 +63,6 @@ describe("actions.getGitHubRateLimit", () => {
   });
 
   it("returns api_error on other failure", async () => {
-    // @ts-expect-error
     vi.mocked(global.fetch).mockRejectedValue(new Error("network"));
     const res = await getGitHubRateLimit();
     expect(res.data).toBeNull();
@@ -68,14 +73,16 @@ describe("actions.getGitHubRateLimit", () => {
     const old = process.env.GITHUB_ACCESS_TOKEN;
     process.env.GITHUB_ACCESS_TOKEN = "token123";
     try {
-      // @ts-expect-error
       vi.mocked(global.fetch).mockImplementation(
-        (_url: string | URL | Request, opts?: RequestInit) => {
-          expect(opts.headers.Authorization).toMatch(/token\s+token123/);
-          return Promise.resolve({
-            ok: true,
-            json: async () => ({ rate: { limit: 60 } }),
-          });
+        (_url, _opts): Promise<Response> => {
+          if (!_opts?.headers) {
+            throw new Error("Expected Authorization header");
+          }
+          const authorization = headerRecord(_opts.headers).Authorization;
+          expect(authorization).toMatch(/token\s+token123/);
+          return Promise.resolve(
+            mockFetchResponse({ json: { rate: { limit: 60 } } }),
+          );
         },
       );
       const res = await getGitHubRateLimit();
@@ -87,12 +94,12 @@ describe("actions.getGitHubRateLimit", () => {
   });
 
   it("returns api_error on non-401 non-ok response (e.g., 500)", async () => {
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: false,
-      status: 500,
-      statusText: "Internal Server Error",
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({
+        status: 500,
+        statusText: "Internal Server Error",
+      }),
+    );
     const res = await getGitHubRateLimit();
     expect(res.data).toBeNull();
     expect(res.error).toBe("api_error");

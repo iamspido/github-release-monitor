@@ -7,10 +7,10 @@ vi.mock("next/cache", () => ({
 
 vi.mock("@/i18n/navigation", () => ({
   redirect: (path: string) => {
-    (globalThis as Record<string, unknown>).__redirectCalls = [
-      ...((globalThis as Record<string, unknown>).__redirectCalls || []),
-      path,
-    ];
+    const store = globalThis as typeof globalThis & {
+      __redirectCalls?: string[];
+    };
+    store.__redirectCalls = [...(store.__redirectCalls ?? []), path];
     throw new Error("__REDIRECT__");
   },
 }));
@@ -24,10 +24,12 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-forwarded-for": "198.51.100.23" }),
 }));
 
-const signInEmailMock = vi.fn(async () => ({ ok: true, status: 200 }));
-const signInUsernameMock = vi.fn(async () => ({ ok: true, status: 200 }));
-const signUpEmailMock = vi.fn(async () => ({ ok: true, status: 200 }));
-const signOutMock = vi.fn(async () => ({ ok: true, status: 200 }));
+const signInEmailMock = vi.fn(async () => new Response(null, { status: 200 }));
+const signInUsernameMock = vi.fn(
+  async () => new Response(null, { status: 200 }),
+);
+const signUpEmailMock = vi.fn(async () => new Response(null, { status: 200 }));
+const signOutMock = vi.fn(async () => new Response(null, { status: 200 }));
 const ensureAuthDatabaseReadyMock = vi.fn(async () => undefined);
 const findRegistrationConflictMock = vi.fn(() => "none");
 
@@ -58,10 +60,10 @@ describe("auth actions", () => {
     signOutMock.mockReset();
     ensureAuthDatabaseReadyMock.mockReset();
     findRegistrationConflictMock.mockReset();
-    signInEmailMock.mockResolvedValue({ ok: true, status: 200 });
-    signInUsernameMock.mockResolvedValue({ ok: true, status: 200 });
-    signUpEmailMock.mockResolvedValue({ ok: true, status: 200 });
-    signOutMock.mockResolvedValue({ ok: true, status: 200 });
+    signInEmailMock.mockResolvedValue(new Response(null, { status: 200 }));
+    signInUsernameMock.mockResolvedValue(new Response(null, { status: 200 }));
+    signUpEmailMock.mockResolvedValue(new Response(null, { status: 200 }));
+    signOutMock.mockResolvedValue(new Response(null, { status: 200 }));
     ensureAuthDatabaseReadyMock.mockResolvedValue(undefined);
     findRegistrationConflictMock.mockReturnValue("none");
   });
@@ -105,13 +107,12 @@ describe("auth actions", () => {
   });
 
   it("login: returns requiresTwoFactor when Better Auth signals twoFactorRedirect", async () => {
-    signInEmailMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      clone: () => ({
-        json: async () => ({ twoFactorRedirect: true }),
+    signInEmailMock.mockResolvedValue(
+      new Response(JSON.stringify({ twoFactorRedirect: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
       }),
-    });
+    );
     const { login } = await import("@/app/auth/actions");
     const fd = new FormData();
     fd.set("email", "user@example.com");
@@ -122,7 +123,7 @@ describe("auth actions", () => {
   });
 
   it("login: invalid credentials returns error", async () => {
-    signInEmailMock.mockResolvedValue({ ok: false, status: 401 });
+    signInEmailMock.mockResolvedValue(new Response(null, { status: 401 }));
     const { login } = await import("@/app/auth/actions");
     const fd = new FormData();
     fd.set("email", "user@example.com");
@@ -166,7 +167,12 @@ describe("auth actions", () => {
     const { logout } = await import("@/app/auth/actions");
     await expect(logout()).rejects.toThrow("__REDIRECT__");
     expect(signOutMock).toHaveBeenCalled();
-    const calls = (globalThis as Record<string, unknown>).__redirectCalls;
+    const calls = (globalThis as { __redirectCalls?: string[] })
+      .__redirectCalls;
+    expect(calls).toBeDefined();
+    if (!calls) {
+      throw new Error("Expected redirect call");
+    }
     expect(calls[calls.length - 1]).toMatch(/\/login|\/anmelden/);
   });
 
@@ -175,7 +181,7 @@ describe("auth actions", () => {
     process.env.AUTH_LOGIN_WINDOW_SECONDS = "60";
     process.env.AUTH_LOGIN_LOCKOUT_SECONDS = "60";
 
-    signInEmailMock.mockResolvedValue({ ok: false, status: 401 });
+    signInEmailMock.mockResolvedValue(new Response(null, { status: 401 }));
     const { login } = await import("@/app/auth/actions");
 
     const firstAttempt = new FormData();
@@ -190,7 +196,7 @@ describe("auth actions", () => {
     const secondResult = await login(undefined, secondAttempt);
     expect(secondResult).toEqual({ errorKey: "error_too_many_attempts" });
 
-    signInEmailMock.mockResolvedValue({ ok: true, status: 200 });
+    signInEmailMock.mockResolvedValue(new Response(null, { status: 200 }));
     const correctAttempt = new FormData();
     correctAttempt.set("email", "user@example.com");
     correctAttempt.set("password", "pass");

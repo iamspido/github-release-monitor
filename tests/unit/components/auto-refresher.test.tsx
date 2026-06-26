@@ -24,8 +24,9 @@ describe("AutoRefresher", () => {
         if (typeof cb !== "function") {
           throw new Error("Expected function interval handler");
         }
-        savedCb = cb;
-        cb();
+        const intervalCallback = cb as () => void;
+        savedCb = intervalCallback;
+        intervalCallback();
         return 1 as unknown as ReturnType<typeof setInterval>;
       });
     const ci = vi
@@ -95,7 +96,7 @@ describe("AutoRefresher", () => {
       if (originalOnLine) {
         Object.defineProperty(window.navigator, "onLine", originalOnLine);
       } else {
-        delete (window.navigator as Navigator & { onLine?: boolean }).onLine;
+        Reflect.deleteProperty(window.navigator, "onLine");
       }
       restore();
     }
@@ -150,7 +151,7 @@ describe("AutoRefresher", () => {
       if (originalOnLine) {
         Object.defineProperty(window.navigator, "onLine", originalOnLine);
       } else {
-        delete (window.navigator as Navigator & { onLine?: boolean }).onLine;
+        Reflect.deleteProperty(window.navigator, "onLine");
       }
       restore();
     }
@@ -212,7 +213,7 @@ describe("AutoRefresher", () => {
       if (originalOnLine) {
         Object.defineProperty(window.navigator, "onLine", originalOnLine);
       } else {
-        delete (window.navigator as Navigator & { onLine?: boolean }).onLine;
+        Reflect.deleteProperty(window.navigator, "onLine");
       }
       restore();
     }

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings, GithubRelease, Repository } from "@/types";
+import { installFetchMock, mockFetchResponse } from "../../helpers/fetch";
 
 vi.mock("next-intl/server", () => ({
   getTranslations: async () => (k: string, vars?: Record<string, unknown>) =>
@@ -35,8 +36,7 @@ describe("apprise error details", () => {
   const fetchBackup = global.fetch;
   beforeEach(() => {
     process.env = { ...envBackup };
-    // @ts-expect-error partial fetch mock for notification tests
-    global.fetch = vi.fn();
+    installFetchMock();
   });
   afterEach(() => {
     process.env = { ...envBackup };
@@ -45,13 +45,12 @@ describe("apprise error details", () => {
 
   it("throws with status and details when Apprise returns !ok (via sendTestAppriseNotification)", async () => {
     process.env.APPRISE_URL = "http://apprise.test/notify";
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: false,
-      text: async () => "bad",
-      status: 503,
-      headers: new Headers(),
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({
+        status: 503,
+        text: "bad",
+      }),
+    );
     const { sendTestAppriseNotification } = await import("@/lib/notifications");
     await expect(
       sendTestAppriseNotification(repo, release, "en", baseSettings),

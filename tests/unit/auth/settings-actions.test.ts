@@ -2,7 +2,11 @@ const revalidatePathMock = vi.fn();
 const ensureAuthDatabaseReadyMock = vi.fn(async () => undefined);
 const hasCredentialPasswordAccountMock = vi.fn(() => false);
 const isAuthEmailVerificationEnabledMock = vi.fn(() => false);
-const getSessionMock = vi.fn(async () => ({
+type AuthSession = {
+  user: { id: string; email: string | null };
+  session: { id: string };
+} | null;
+const getSessionMock = vi.fn<() => Promise<AuthSession>>(async () => ({
   user: { id: "user-1", email: null },
   session: { id: "session-1" },
 }));
@@ -24,10 +28,10 @@ vi.mock("@/lib/auth", () => ({
   isAuthEmailVerificationEnabled: isAuthEmailVerificationEnabledMock,
   auth: {
     api: {
-      getSession: (...args: unknown[]) => getSessionMock(...args),
-      setPassword: (...args: unknown[]) => setPasswordMock(...args),
-      changePassword: (...args: unknown[]) => changePasswordMock(...args),
-      changeEmail: (...args: unknown[]) => changeEmailMock(...args),
+      getSession: getSessionMock,
+      setPassword: setPasswordMock,
+      changePassword: changePasswordMock,
+      changeEmail: changeEmailMock,
     },
   },
 }));

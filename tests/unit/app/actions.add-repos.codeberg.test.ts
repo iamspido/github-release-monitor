@@ -49,7 +49,7 @@ describe("addRepositoriesAction accepts Codeberg URLs", () => {
       "github:owner/repo",
     ]);
     const codeberg = mem.repos.find((r) => r.id === "codeberg:owner/repo");
-    expect(codeberg.url).toBe("https://codeberg.org/Owner/Repo");
+    expect(codeberg?.url).toBe("https://codeberg.org/Owner/Repo");
   });
 
   it("parses gitlab.com group paths and prefixes id", async () => {
@@ -73,7 +73,7 @@ describe("addRepositoriesAction accepts Codeberg URLs", () => {
     const gitlab = mem.repos.find(
       (r) => r.id === "gitlab:gitlab.com/group/subgroup/repo",
     );
-    expect(gitlab.url).toBe("https://gitlab.com/group/subgroup/repo");
+    expect(gitlab?.url).toBe("https://gitlab.com/group/subgroup/repo");
   });
 
   it("parses additional self-hosted gitlab domains from env", async () => {

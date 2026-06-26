@@ -5,13 +5,13 @@ vi.mock("next-intl/server", () => ({
 }));
 
 import type { AppSettings, GithubRelease, Repository } from "@/types";
+import { installFetchMock } from "../../helpers/fetch";
 
 describe("sendNotification with no services configured", () => {
   const envBackup = { ...process.env };
   const fetchBackup = global.fetch;
   beforeEach(() => {
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
   });
   afterEach(() => {
     process.env = { ...envBackup };
