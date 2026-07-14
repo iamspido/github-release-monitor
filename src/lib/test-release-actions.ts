@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
+import { fetchWithTimeout } from "@/lib/http/fetch-with-timeout";
 import { sendTestAppriseNotification } from "@/lib/notifications";
 import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
 import { sendTestEmail } from "@/lib/notifications/email";
@@ -281,7 +282,7 @@ export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
     const urlObject = new URL(APPRISE_URL);
     const statusUrl = `${urlObject.protocol}//${urlObject.host}/status`;
 
-    const response = await fetch(statusUrl, {
+    const response = await fetchWithTimeout(statusUrl, {
       headers: {
         Accept: "application/json",
       },

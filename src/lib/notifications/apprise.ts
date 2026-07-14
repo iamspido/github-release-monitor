@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import { fetchWithTimeout } from "@/lib/http/fetch-with-timeout";
 import { logger } from "@/lib/logger";
 import {
   escapeMarkdownLinkDestination,
@@ -172,7 +173,7 @@ export async function sendAppriseNotification(
       ? normalizedAppriseUrl
       : `${normalizedAppriseUrl}/notify`;
 
-    const response = await fetch(notifyUrl, {
+    const response = await fetchWithTimeout(notifyUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

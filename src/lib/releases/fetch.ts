@@ -1,4 +1,5 @@
 import { isRetryableFetchError } from "@/lib/fetch-retry";
+import { fetchWithTimeout } from "@/lib/http/fetch-with-timeout";
 import { log } from "@/lib/server-action-helpers";
 
 const warnRetry = (message: string) => log.warn(message);
@@ -16,6 +17,7 @@ export type FetchRetryContext = {
   maxAttempts?: number;
   initialDelayMs?: number;
   parseAttempts?: number;
+  timeoutMs?: number;
 };
 
 export async function fetchWithRetry(
@@ -30,7 +32,7 @@ export async function fetchWithRetry(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      return await fetch(url, options);
+      return await fetchWithTimeout(url, options, context?.timeoutMs);
     } catch (error) {
       const shouldRetry =
         attempt < maxAttempts &&

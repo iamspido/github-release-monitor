@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from "@/lib/http/fetch-with-timeout";
 import { logger } from "@/lib/logger";
 import { getSystemStatus, saveSystemStatus } from "@/lib/storage/system-status";
 import type { SystemStatus } from "@/types";
@@ -32,7 +33,7 @@ export async function runApplicationUpdateCheck(
   const nowIso = new Date().toISOString();
 
   try {
-    const response = await fetch(GITHUB_RELEASES_API, {
+    const response = await fetchWithTimeout(GITHUB_RELEASES_API, {
       cache: "no-store",
       headers,
     });
