@@ -1,3 +1,5 @@
+import { readSecretEnvValue } from "@/lib/secret-env";
+
 export type AuthSocialProvider = "github" | "google";
 
 type AuthEnv = Partial<NodeJS.ProcessEnv>;
@@ -83,7 +85,7 @@ export function getAuthSmtpConfig(env: AuthEnv = process.env) {
     fromAddress: smtpFromAddress,
     fromName: env.MAIL_FROM_NAME?.trim() || "GitHub Release Monitor",
     username: env.MAIL_USERNAME?.trim() || "",
-    password: env.MAIL_PASSWORD?.trim() || "",
+    password: readSecretEnvValue(env.MAIL_PASSWORD) ?? "",
     emailVerificationEnabled:
       smtpHost.length > 0 &&
       Number.isFinite(smtpPort) &&

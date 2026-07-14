@@ -16,6 +16,7 @@ import {
 } from "@/lib/auth/repository";
 import type { SocialLoginProvider } from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
+import { readSecretEnvValue } from "@/lib/secret-env";
 
 export {
   type AuthUserExistence,
@@ -45,9 +46,13 @@ const trustedSocialLinkingEnabled =
   authFeatureConfig.trustedSocialLinkingEnabled;
 const secret = getAuthSecret();
 const githubClientId = process.env.AUTH_GITHUB_CLIENT_ID?.trim();
-const githubClientSecret = process.env.AUTH_GITHUB_CLIENT_SECRET?.trim();
+const githubClientSecret = readSecretEnvValue(
+  process.env.AUTH_GITHUB_CLIENT_SECRET,
+);
 const googleClientId = process.env.AUTH_GOOGLE_CLIENT_ID?.trim();
-const googleClientSecret = process.env.AUTH_GOOGLE_CLIENT_SECRET?.trim();
+const googleClientSecret = readSecretEnvValue(
+  process.env.AUTH_GOOGLE_CLIENT_SECRET,
+);
 
 function buildSocialProviders(disableImplicitSignUp: boolean) {
   return {
