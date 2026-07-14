@@ -1,8 +1,8 @@
 import { getTranslations } from "next-intl/server";
 import {
   consumeResponseWithTimeout,
+  discardResponseWithTimeout,
   fetchWithTimeout,
-  releaseResponseTimeout,
 } from "@/lib/http/fetch-with-timeout";
 import { logger } from "@/lib/logger";
 import {
@@ -201,7 +201,7 @@ export async function sendAppriseNotification(
         }),
       );
     }
-    releaseResponseTimeout(response);
+    await discardResponseWithTimeout(response);
 
     logger
       .withScope("Notifications")

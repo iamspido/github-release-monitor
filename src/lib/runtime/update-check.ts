@@ -1,7 +1,7 @@
 import {
   consumeResponseWithTimeout,
+  discardResponseWithTimeout,
   fetchWithTimeout,
-  releaseResponseTimeout,
 } from "@/lib/http/fetch-with-timeout";
 import { logger } from "@/lib/logger";
 import { getSystemStatus, saveSystemStatus } from "@/lib/storage/system-status";
@@ -43,7 +43,7 @@ export async function runApplicationUpdateCheck(
     });
 
     if (response.status === 304) {
-      releaseResponseTimeout(response);
+      await discardResponseWithTimeout(response);
       const updated: SystemStatus = {
         ...previousStatus,
         lastCheckedAt: nowIso,
@@ -55,7 +55,7 @@ export async function runApplicationUpdateCheck(
     }
 
     if (!response.ok) {
-      releaseResponseTimeout(response);
+      await discardResponseWithTimeout(response);
       const message = `${response.status} ${response.statusText}`;
       const updated: SystemStatus = {
         ...previousStatus,

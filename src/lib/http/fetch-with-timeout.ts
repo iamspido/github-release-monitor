@@ -28,10 +28,19 @@ export async function consumeResponseWithTimeout<T>(
   }
 }
 
-export function releaseResponseTimeout(response: Response): void {
-  const responseTimeout = responseTimeouts.get(response);
-  responseTimeout?.cleanup();
-  responseTimeouts.delete(response);
+export async function discardResponseWithTimeout(
+  response: Response,
+): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // The response is intentionally being discarded. A body that already
+    // errored or was consumed needs no further handling here.
+  } finally {
+    const responseTimeout = responseTimeouts.get(response);
+    responseTimeout?.cleanup();
+    responseTimeouts.delete(response);
+  }
 }
 
 export async function fetchWithTimeout(

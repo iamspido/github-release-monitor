@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   consumeResponseWithTimeout,
+  discardResponseWithTimeout,
   fetchWithTimeout,
   OutboundRequestTimeoutError,
 } from "@/lib/http/fetch-with-timeout";
@@ -95,5 +96,35 @@ describe("fetchWithTimeout", () => {
 
     await vi.advanceTimersByTimeAsync(25);
     await rejection;
+  });
+
+  it("cancels a discarded response body before releasing its deadline", async () => {
+    vi.useFakeTimers();
+    const cancel = vi.fn();
+    let requestSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, options?: RequestInit) => {
+        requestSignal = options?.signal ?? undefined;
+        return Promise.resolve(
+          new Response(
+            new ReadableStream({
+              cancel,
+            }),
+          ),
+        );
+      }),
+    );
+
+    const response = await fetchWithTimeout(
+      "https://example.test/ignored-body",
+      {},
+      25,
+    );
+    await discardResponseWithTimeout(response);
+    await vi.advanceTimersByTimeAsync(25);
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(requestSignal?.aborted).toBe(false);
   });
 });

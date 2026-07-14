@@ -1,6 +1,9 @@
 import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
-import { fetchWithTimeout } from "@/lib/http/fetch-with-timeout";
+import {
+  discardResponseWithTimeout,
+  fetchWithTimeout,
+} from "@/lib/http/fetch-with-timeout";
 import { sendTestAppriseNotification } from "@/lib/notifications";
 import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
 import { sendTestEmail } from "@/lib/notifications/email";
@@ -288,6 +291,7 @@ export async function checkAppriseStatusAction(): Promise<AppriseStatus> {
       },
       cache: "no-store",
     });
+    await discardResponseWithTimeout(response);
 
     if (response.ok) {
       return { status: "ok" };

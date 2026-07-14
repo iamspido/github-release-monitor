@@ -1,8 +1,8 @@
 import { isRetryableFetchError } from "@/lib/fetch-retry";
 import {
   consumeResponseWithTimeout,
+  discardResponseWithTimeout,
   fetchWithTimeout,
-  releaseResponseTimeout,
 } from "@/lib/http/fetch-with-timeout";
 import { log } from "@/lib/server-action-helpers";
 
@@ -74,7 +74,6 @@ export async function fetchJsonResponseWithRetry<T>(
     const response = await fetchWithRetry(url, options, context);
 
     if (!response.ok) {
-      releaseResponseTimeout(response);
       return { response };
     }
 
@@ -133,6 +132,7 @@ export async function fetchJsonResponseWithRetryAuthChain<T>(
 
     // `304 Not Modified` is a valid response for our ETag usage; don't fall back.
     if (result.response.status === 304) {
+      await discardResponseWithTimeout(result.response);
       return { ...result, mode: candidate.mode };
     }
 
@@ -141,6 +141,7 @@ export async function fetchJsonResponseWithRetryAuthChain<T>(
       !isLast &&
       (result.response.status === 401 || result.response.status === 403)
     ) {
+      await discardResponseWithTimeout(result.response);
       continue;
     }
 
@@ -179,13 +180,13 @@ export async function fetchResponseWithRetryAuthChain(
 
     // `304 Not Modified` is a valid response for our ETag usage; don't fall back.
     if (response.status === 304) {
-      releaseResponseTimeout(response);
+      await discardResponseWithTimeout(response);
       return { response, mode: candidate.mode };
     }
 
     // For auth-related errors, try the next candidate (if any).
     if (!isLast && (response.status === 401 || response.status === 403)) {
-      releaseResponseTimeout(response);
+      await discardResponseWithTimeout(response);
       continue;
     }
 

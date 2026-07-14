@@ -1,3 +1,4 @@
+import { discardResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
 import {
   buildCodebergAuthChain,
   buildGitlabAuthChain,
@@ -85,6 +86,7 @@ async function lookupGithubCandidate(
     log.debug(
       `GitHub repo lookup for ${owner}/${repo}: ${response.status} ${response.statusText}`,
     );
+    await discardResponseWithTimeout(response);
     if (!response.ok) return null;
 
     return {
@@ -118,6 +120,7 @@ async function lookupCodebergCandidate(
     log.debug(
       `Codeberg repo lookup for ${owner}/${repo}: ${response.status} ${response.statusText} (auth=${mode})`,
     );
+    await discardResponseWithTimeout(response);
     if (!response.ok) return null;
 
     return {
@@ -155,6 +158,7 @@ async function lookupGitlabCandidate(
     log.debug(
       `GitLab repo lookup for ${owner}/${repo} on ${gitlabHost}: ${response.status} ${response.statusText} (auth=${mode})`,
     );
+    await discardResponseWithTimeout(response);
     if (!response.ok) return null;
 
     return {
