@@ -102,6 +102,24 @@ describe("repositories/providers", () => {
     expect(logMock.warn).toHaveBeenCalledTimes(4);
   });
 
+  it("never includes invalid GitLab credentials in warning logs", async () => {
+    process.env.GITLAB_ACCESS_TOKENS =
+      "missing-secret-value,bad:443=access-secret,no-token=   ";
+    process.env.GITLAB_DEPLOY_TOKENS =
+      "missing-deploy-secret,bad:443=user:deploy-secret,host=user-without-token";
+    const { getGitlabAccessTokensByHost, getGitlabDeployTokensByHost } =
+      await import("@/lib/repositories/providers");
+
+    getGitlabAccessTokensByHost();
+    getGitlabDeployTokensByHost();
+
+    const warnings = JSON.stringify(logMock.warn.mock.calls);
+    expect(warnings).not.toContain("secret-value");
+    expect(warnings).not.toContain("access-secret");
+    expect(warnings).not.toContain("deploy-secret");
+    expect(warnings).not.toContain("user-without-token");
+  });
+
   it("returns GitLab auth data only for normalized hosts that have usable tokens", async () => {
     process.env.GITLAB_ACCESS_TOKENS = "gitlab.com=access-token";
     process.env.GITLAB_DEPLOY_TOKENS = "gitlab.com=deploy-user:deploy-token";
