@@ -4,7 +4,7 @@ vi.mock("next-intl/server", () => ({
   getTranslations: async () => (key: string) => key,
 }));
 
-import type { AppSettings, GithubRelease, Repository } from "@/types";
+import type { GithubRelease, Repository } from "@/types";
 import { installFetchMock } from "../../helpers/fetch";
 
 describe("sendNotification with no services configured", () => {
@@ -40,13 +40,7 @@ describe("sendNotification with no services configured", () => {
     await expect(
       sendNotification(repo, release, "en", {
         timeFormat: "24h",
-        locale: "en",
-        refreshInterval: 10,
-        cacheInterval: 5,
-        releasesPerPage: 30,
-        parallelRepoFetches: 5,
-        releaseChannels: ["stable"],
-      } satisfies AppSettings),
+      }),
     ).resolves.toBeUndefined();
     expect(warnSpy).toHaveBeenCalled();
     // Ensure no HTTP call attempted

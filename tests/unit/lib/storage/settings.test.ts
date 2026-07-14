@@ -92,13 +92,12 @@ describe("storage/settings failure scenarios", () => {
     expect(first).toHaveProperty("appriseMaxCharacters", 1800);
 
     first.releaseChannels.push("draft");
+    if (!first.providerSortOrder) {
+      throw new Error("Expected complete default provider sort order.");
+    }
     first.providerSortOrder.reverse();
     expect(second.releaseChannels).toEqual(["stable"]);
-    expect(second.providerSortOrder).toEqual([
-      "github",
-      "gitlab",
-      "codeberg",
-    ]);
+    expect(second.providerSortOrder).toEqual(["github", "gitlab", "codeberg"]);
   });
 
   it("defaults security release settings for old settings files", async () => {
