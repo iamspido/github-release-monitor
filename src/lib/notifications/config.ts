@@ -4,16 +4,26 @@ function hasValue(value: string | undefined): boolean {
   return Boolean(value?.trim());
 }
 
+function parseSmtpPort(value: string | undefined): number {
+  const normalizedValue = value?.trim();
+  if (!normalizedValue || !/^\d+$/.test(normalizedValue)) {
+    return Number.NaN;
+  }
+
+  const port = Number(normalizedValue);
+  return Number.isSafeInteger(port) && port >= 1 && port <= 65_535
+    ? port
+    : Number.NaN;
+}
+
 export function getNotificationRuntimeConfig(
   env: NotificationEnv = process.env,
 ) {
+  const emailConfig = getEmailRuntimeConfig(env);
+
   return {
     hasMailHost: hasValue(env.MAIL_HOST),
-    isSmtpConfigured:
-      hasValue(env.MAIL_HOST) &&
-      hasValue(env.MAIL_PORT) &&
-      hasValue(env.MAIL_FROM_ADDRESS) &&
-      hasValue(env.MAIL_TO_ADDRESS),
+    isSmtpConfigured: emailConfig.isComplete,
     isAppriseConfigured: hasValue(env.APPRISE_URL),
     appriseUrl: env.APPRISE_URL?.trim() || "",
     mailToAddress: env.MAIL_TO_ADDRESS?.trim() || "",
@@ -25,7 +35,7 @@ export function getEmailRuntimeConfig(
   toAddress?: string,
 ) {
   const recipient = toAddress?.trim() || env.MAIL_TO_ADDRESS?.trim() || "";
-  const port = Number.parseInt(env.MAIL_PORT ?? "", 10);
+  const port = parseSmtpPort(env.MAIL_PORT);
 
   return {
     host: env.MAIL_HOST?.trim() || "",
