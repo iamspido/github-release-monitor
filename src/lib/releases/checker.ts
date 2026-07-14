@@ -3,6 +3,7 @@ import {
   applyPendingNotificationDeliveryOutcomes,
   attemptPendingNotifications,
   enqueuePendingNotification,
+  pruneAbandonedNotifications,
 } from "@/lib/notifications/pending-deliveries";
 import { getLatestReleasesForRepos } from "@/lib/releases";
 import { resolveParallelRepoFetches } from "@/lib/releases/filters";
@@ -179,17 +180,23 @@ function processPendingNotifications(): Promise<number> {
   const deliveryPromise = currentNotificationDeliveryPromise.then(async () => {
     // Network delivery deliberately happens outside the shared state scheduler.
     // Only the short merge/write phase is serialized with other state changes.
+    const now = new Date();
     const snapshot = await getRepositories();
-    const delivery = await attemptPendingNotifications(snapshot);
-    if (delivery.outcomes.length > 0) {
+    const prunedSnapshot = pruneAbandonedNotifications(snapshot, now);
+    const delivery = await attemptPendingNotifications(
+      prunedSnapshot.repositories,
+      now,
+    );
+    if (prunedSnapshot.changed || delivery.outcomes.length > 0) {
       await scheduleTask("persistNotificationDeliveryResults", async () => {
         const currentRepositories = await getRepositories();
         const applied = applyPendingNotificationDeliveryOutcomes(
           currentRepositories,
           delivery.outcomes,
         );
-        if (applied.changed) {
-          await saveRepositories(applied.repositories);
+        const pruned = pruneAbandonedNotifications(applied.repositories, now);
+        if (applied.changed || pruned.changed) {
+          await saveRepositories(pruned.repositories);
         }
       });
     }
