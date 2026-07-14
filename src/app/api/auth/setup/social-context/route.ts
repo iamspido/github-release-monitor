@@ -11,6 +11,7 @@ import {
   readJsonPayload,
   toSafeString,
 } from "@/lib/auth/request-context";
+import { secretsEqual } from "@/lib/auth/secret";
 import { isAuthSetupLocked } from "@/lib/auth/setup-lock";
 import {
   buildSetupSocialContextSetCookieHeader,
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
   const username = toSafeString(payload.username);
   const name = toSafeString(payload.name);
 
-  if (token !== getAuthSetupToken()) {
+  if (!secretsEqual(token, getAuthSetupToken())) {
     log.warn(
       `Rejected initial social setup context from ip='${clientIp}' due to invalid setup token.`,
     );

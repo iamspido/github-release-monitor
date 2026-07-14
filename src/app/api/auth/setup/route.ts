@@ -6,6 +6,7 @@ import {
   readJsonPayload,
   toSafeString,
 } from "@/lib/auth/request-context";
+import { secretsEqual } from "@/lib/auth/secret";
 import {
   acquireAuthSetupBootstrapLock,
   getAuthSetupLockPath,
@@ -259,7 +260,7 @@ export async function POST(request: Request) {
   const name = toSafeString(payload.name);
   const username = toSafeString(payload.username);
 
-  if (token !== process.env.AUTH_SETUP_TOKEN) {
+  if (!secretsEqual(token, process.env.AUTH_SETUP_TOKEN ?? "")) {
     log.warn(
       `Rejected setup attempt from ip='${clientIp}' due to invalid setup token.`,
     );

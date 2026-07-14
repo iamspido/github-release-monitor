@@ -46,6 +46,12 @@ describe("auth/setup-lock", () => {
     fsMock.access.mockRejectedValueOnce(nodeError("ENOENT"));
 
     await expect(isAuthSetupLocked()).resolves.toBe(false);
+
+    fsMock.access.mockRejectedValueOnce(nodeError("EACCES"));
+
+    await expect(isAuthSetupLocked()).rejects.toMatchObject({
+      code: "EACCES",
+    });
   });
 
   it("writes the permanent setup lock once and treats existing locks as idempotent", async () => {

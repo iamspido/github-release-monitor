@@ -38,8 +38,11 @@ export async function isAuthSetupLocked() {
   try {
     await fs.access(authSetupLockPath);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
   }
 }
 
