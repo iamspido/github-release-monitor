@@ -20,8 +20,11 @@ vi.mock("next-intl/server", () => ({
   getRequestConfig: (_cb: unknown) => ({}),
 }));
 
+const requestHeaders = {
+  current: new Headers({ "x-forwarded-for": "198.51.100.23" }),
+};
 vi.mock("next/headers", () => ({
-  headers: async () => new Headers({ "x-forwarded-for": "198.51.100.23" }),
+  headers: async () => requestHeaders.current,
 }));
 
 const signInEmailMock = vi.fn(async () => new Response(null, { status: 200 }));
@@ -66,6 +69,9 @@ describe("auth actions", () => {
     signOutMock.mockResolvedValue(new Response(null, { status: 200 }));
     ensureAuthDatabaseReadyMock.mockResolvedValue(undefined);
     findRegistrationConflictMock.mockReturnValue("none");
+    requestHeaders.current = new Headers({
+      "x-forwarded-for": "198.51.100.23",
+    });
   });
 
   afterEach(() => {
@@ -202,6 +208,35 @@ describe("auth actions", () => {
     correctAttempt.set("password", "pass");
     const lockedResult = await login(undefined, correctAttempt);
     expect(lockedResult).toEqual({ errorKey: "error_too_many_attempts" });
+  });
+
+  it("login: failures from one IP do not lock the account for another IP", async () => {
+    process.env.AUTH_MAX_LOGIN_ATTEMPTS = "2";
+    process.env.AUTH_LOGIN_WINDOW_SECONDS = "60";
+    process.env.AUTH_LOGIN_LOCKOUT_SECONDS = "60";
+    signInEmailMock.mockResolvedValue(new Response(null, { status: 401 }));
+    const { login } = await import("@/app/auth/actions");
+
+    async function attempt(password: string) {
+      const data = new FormData();
+      data.set("email", "user@example.com");
+      data.set("password", password);
+      return login(undefined, data);
+    }
+
+    await expect(attempt("wrong")).resolves.toEqual({
+      errorKey: "error_invalid_credentials",
+    });
+    await expect(attempt("wrong-again")).resolves.toEqual({
+      errorKey: "error_too_many_attempts",
+    });
+
+    requestHeaders.current = new Headers({
+      "x-forwarded-for": "198.51.100.24",
+    });
+    signInEmailMock.mockResolvedValue(new Response(null, { status: 200 }));
+
+    await expect(attempt("correct")).resolves.toEqual({ redirectTo: "/en/" });
   });
 
   it("login: limits credential spraying across identifiers from one IP", async () => {
