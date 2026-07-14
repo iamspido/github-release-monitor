@@ -260,13 +260,13 @@ describe("actions Codeberg fetcher scenarios", () => {
       url: "https://codeberg.org/o/r",
     };
 
-    vi.mocked(global.fetch).mockResolvedValueOnce(
-      mockFetchResponse({
-        status: 429,
-        statusText: "Too Many Requests",
-        headers: { "retry-after": "60" },
-      }),
-    );
+    const rateLimitResponse = mockFetchResponse({
+      status: 429,
+      statusText: "Too Many Requests",
+      headers: { "retry-after": "60" },
+      text: "slow down",
+    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(rateLimitResponse);
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -275,6 +275,7 @@ describe("actions Codeberg fetcher scenarios", () => {
       { skipCache: true },
     );
     expect(enriched[0].error?.type).toBe("rate_limit");
+    expect(rateLimitResponse.bodyUsed).toBe(true);
   });
 
   it("falls back from token to bearer auth on 401", async () => {

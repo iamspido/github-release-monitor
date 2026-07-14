@@ -1,5 +1,8 @@
 import { getTranslations } from "next-intl/server";
-import { consumeResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
+import {
+  consumeResponseWithTimeout,
+  discardResponseWithTimeout,
+} from "@/lib/http/fetch-with-timeout";
 import { buildGitlabAuthChain } from "@/lib/releases/auth-chains";
 import { fetchJsonResponseWithRetryAuthChain } from "@/lib/releases/fetch";
 import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
@@ -93,7 +96,11 @@ async function tryFetchGitlabCommitMessage(
       await fetchJsonResponseWithRetryAuthChain<GitlabCommitApi>(url, chain, {
         description: `GitLab commit (${refOrSha})`,
       });
-    if (!response.ok || !data) return null;
+    if (!response.ok) {
+      await discardResponseWithTimeout(response);
+      return null;
+    }
+    if (!data) return null;
 
     const message = typeof data.message === "string" ? data.message : undefined;
     const date = extractGitlabCommitDate(data);
@@ -173,6 +180,7 @@ export async function fetchLatestReleaseFromGitLab(
       }
 
       if (!response.ok) {
+        await discardResponseWithTimeout(response);
         if (response.status === 404) {
           if (gitlabAuth?.deployToken && !gitlabAuth.accessToken) {
             log.warn(
@@ -301,6 +309,7 @@ export async function fetchLatestReleaseFromGitLab(
           if (!tagsResponse.ok) {
             // Some GitLab versions don't support order_by/sort on tags. Retry with a simpler endpoint.
             if (tagsResponse.status === 400) {
+              await discardResponseWithTimeout(tagsResponse);
               continue;
             }
             break;
@@ -314,6 +323,10 @@ export async function fetchLatestReleaseFromGitLab(
         if (!pageTags) break;
         tags.push(...pageTags);
         if (pageTags.length < tagsOnThisPage) break;
+      }
+
+      if (hadSuccessfulTagResponse && tagsResponse && !tagsResponse.ok) {
+        await discardResponseWithTimeout(tagsResponse);
       }
 
       if (!hadSuccessfulTagResponse) {

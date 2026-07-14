@@ -1,5 +1,8 @@
 import { getTranslations } from "next-intl/server";
-import { consumeResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
+import {
+  consumeResponseWithTimeout,
+  discardResponseWithTimeout,
+} from "@/lib/http/fetch-with-timeout";
 import { getComprehensiveMarkdownBody } from "@/lib/notifications/test-release-payloads";
 import {
   fetchJsonResponseWithRetry,
@@ -50,6 +53,7 @@ async function fetchLatestMatchingTagFromGithubPage(args: {
     );
 
     if (!response.ok) {
+      await discardResponseWithTimeout(response);
       return null;
     }
 
@@ -175,11 +179,13 @@ export async function fetchLatestReleaseFromGitHub(
       if (page === 1) {
         newEtag = response.headers.get("etag") || undefined;
         if (response.status === 304) {
+          await discardResponseWithTimeout(response);
           return notModifiedResult(`${owner}/${repo}`, repoSettings.etag);
         }
       }
 
       if (!response.ok) {
+        await discardResponseWithTimeout(response);
         if (response.status === 404) {
           log.error(
             `GitHub API error for ${owner}/${repo}: Not Found (404). The repository may not exist or is private.`,
@@ -254,6 +260,7 @@ export async function fetchLatestReleaseFromGitHub(
             );
 
           if (!tagsResponse.ok) {
+            await discardResponseWithTimeout(tagsResponse);
             log.error(
               `Failed to fetch tags for ${owner}/${repo} after failing to find releases.`,
             );
@@ -360,8 +367,12 @@ export async function fetchLatestReleaseFromGitHub(
               }
               publicationDate =
                 annotatedTagData.tagger?.date || publicationDate;
+            } else if (!annotatedTagResponse.ok) {
+              await discardResponseWithTimeout(annotatedTagResponse);
             }
           }
+        } else if (!refResponse.ok) {
+          await discardResponseWithTimeout(refResponse);
         }
 
         // If no annotated tag message was found (either lightweight tag or error), fall back to commit message.
@@ -380,6 +391,7 @@ export async function fetchLatestReleaseFromGitHub(
             bodyContent = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commitData.commit.message}`;
             publicationDate = commitData.commit.committer.date;
           } else {
+            await discardResponseWithTimeout(commitResponse);
             log.error(
               `Failed to fetch commit for tag ${latestTag.name} in ${owner}/${repo}.`,
             );
@@ -446,6 +458,7 @@ export async function fetchLatestReleaseFromGitHub(
             `Commit message for ${owner}/${repo} tag ${latestRelease.tag_name} could not be retrieved from commit data.`,
           );
         } else {
+          await discardResponseWithTimeout(commitResponse);
           log.error(
             `Failed to fetch commit for ${owner}/${repo} tag ${latestRelease.tag_name}: ${commitResponse.status} ${commitResponse.statusText}`,
           );

@@ -1,4 +1,7 @@
-import { consumeResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
+import {
+  consumeResponseWithTimeout,
+  discardResponseWithTimeout,
+} from "@/lib/http/fetch-with-timeout";
 import {
   fetchJsonResponseWithRetry,
   fetchWithRetry,
@@ -41,6 +44,7 @@ export async function getGitHubRateLimit(): Promise<RateLimitResult> {
     );
 
     if (!response.ok) {
+      await discardResponseWithTimeout(response);
       log.error(
         `GitHub API error for rate_limit: ${response.status} ${response.statusText}`,
       );
@@ -111,6 +115,7 @@ export async function getGitlabTokenCheck(): Promise<GitlabTokenCheckResult> {
 
       // Deploy tokens are usually not accepted on `/user` even when valid for repo access.
       if (response.status === 401 || response.status === 403) {
+        await discardResponseWithTimeout(response);
         return {
           status: "valid",
           username: null,
@@ -189,6 +194,7 @@ export async function getGitlabTokenCheck(): Promise<GitlabTokenCheckResult> {
 
       if (!response.ok) {
         if (response.status === 401) {
+          await discardResponseWithTimeout(response);
           continue;
         }
 

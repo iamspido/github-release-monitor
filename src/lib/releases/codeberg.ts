@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import { discardResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
 import { buildCodebergAuthChain } from "@/lib/releases/auth-chains";
 import { fetchJsonResponseWithRetryAuthChain } from "@/lib/releases/fetch";
 import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
@@ -95,7 +96,11 @@ async function tryFetchCodebergCommitMessage(
           chain,
           { description: `Codeberg commit (${refOrSha})` },
         );
-      if (!response.ok || !data) continue;
+      if (!response.ok) {
+        await discardResponseWithTimeout(response);
+        continue;
+      }
+      if (!data) continue;
 
       const message: string | undefined =
         typeof data.message === "string"
@@ -142,10 +147,13 @@ async function fetchCodebergRepoInfo(
     );
 
   if (!response.ok) {
+    const status = response.status;
+    const statusText = response.statusText;
+    await discardResponseWithTimeout(response);
     return {
       ok: false,
-      status: response.status,
-      statusText: response.statusText,
+      status,
+      statusText,
     };
   }
 
@@ -220,6 +228,7 @@ export async function fetchLatestReleaseFromCodeberg(
       }
 
       if (!response.ok) {
+        await discardResponseWithTimeout(response);
         if (response.status === 404) {
           // Codeberg (Gitea/Forgejo) may return 404 on the releases endpoint if releases are disabled,
           // even though the repository exists and tags are available.
@@ -343,6 +352,7 @@ export async function fetchLatestReleaseFromCodeberg(
 
             tagsResponse = result.response;
             if (!tagsResponse.ok) {
+              await discardResponseWithTimeout(tagsResponse);
               continue;
             }
 

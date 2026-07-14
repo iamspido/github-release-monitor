@@ -1,6 +1,9 @@
 import { inflateSync } from "node:zlib";
 
-import { consumeResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
+import {
+  consumeResponseWithTimeout,
+  discardResponseWithTimeout,
+} from "@/lib/http/fetch-with-timeout";
 import { fetchResponseWithRetryAuthChain } from "@/lib/releases/fetch";
 import type { GitlabDeployToken } from "@/lib/repositories/providers";
 import { log } from "@/lib/server-action-helpers";
@@ -383,6 +386,7 @@ export async function tryFetchGitlabCommitMetadataViaGitTransport(
     );
 
     if (!response.ok) {
+      await discardResponseWithTimeout(response);
       log.debug(
         `Git transport commit metadata lookup failed for ${projectPath} on ${gitlabHost}: ${response.status} ${response.statusText} (auth=${mode})`,
       );

@@ -1,6 +1,9 @@
 import { getLocale, getTranslations } from "next-intl/server";
 import { parse as parseYaml } from "yaml";
-import { consumeResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
+import {
+  consumeResponseWithTimeout,
+  discardResponseWithTimeout,
+} from "@/lib/http/fetch-with-timeout";
 import {
   fetchJsonResponseWithRetry,
   fetchWithRetry,
@@ -146,6 +149,7 @@ async function fetchGhcrResponse(
     firstResponse.headers.get("www-authenticate"),
   );
   if (!challenge) return firstResponse;
+  await discardResponseWithTimeout(firstResponse);
 
   const tokenUrl = new URL(challenge.realm);
   if (challenge.service)
@@ -167,7 +171,11 @@ async function fetchGhcrResponse(
     { description: `${description} auth token` },
   );
   const token = data?.token ?? data?.access_token;
-  if (!response.ok || !token) return firstResponse;
+  if (!response.ok) {
+    await discardResponseWithTimeout(response);
+    return firstResponse;
+  }
+  if (!token) return firstResponse;
 
   return fetchWithRetry(
     url,
@@ -194,7 +202,10 @@ async function fetchGhcrJson<T>(
     accept,
     `GHCR ${resource} ${repository}@${reference}`,
   );
-  if (!response.ok) return null;
+  if (!response.ok) {
+    await discardResponseWithTimeout(response);
+    return null;
+  }
 
   try {
     return await consumeResponseWithTimeout(

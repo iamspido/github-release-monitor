@@ -368,13 +368,13 @@ describe("actions fetcher scenarios", () => {
       url: "https://github.com/o/r",
     };
 
-    vi.mocked(global.fetch).mockResolvedValueOnce(
-      mockFetchResponse({
-        status: 403,
-        statusText: "Forbidden",
-        headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1" },
-      }),
-    );
+    const rateLimitResponse = mockFetchResponse({
+      status: 403,
+      statusText: "Forbidden",
+      headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1" },
+      text: "rate limited",
+    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(rateLimitResponse);
     let enriched = await actions.getLatestReleasesForRepos(
       [repo],
       baseSettings,
@@ -382,13 +382,14 @@ describe("actions fetcher scenarios", () => {
       { skipCache: true },
     );
     expect(enriched[0].error?.type).toBe("rate_limit");
+    expect(rateLimitResponse.bodyUsed).toBe(true);
 
-    vi.mocked(global.fetch).mockResolvedValueOnce(
-      mockFetchResponse({
-        status: 404,
-        statusText: "Not Found",
-      }),
-    );
+    const notFoundResponse = mockFetchResponse({
+      status: 404,
+      statusText: "Not Found",
+      text: "missing",
+    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(notFoundResponse);
     enriched = await actions.getLatestReleasesForRepos(
       [repo],
       baseSettings,
@@ -396,6 +397,7 @@ describe("actions fetcher scenarios", () => {
       { skipCache: true },
     );
     expect(enriched[0].error?.type).toBe("repo_not_found");
+    expect(notFoundResponse.bodyUsed).toBe(true);
   });
 
   it("preserves repository order when parallel batches resolve out of order", async () => {
