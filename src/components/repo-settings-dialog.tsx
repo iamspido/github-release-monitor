@@ -190,6 +190,7 @@ interface RepoSettingsDialogProps {
     | "appriseFormat"
   >;
   globalSettings: AppSettings;
+  isAppriseConfigured?: boolean;
 }
 
 export function RepoSettingsDialog({
@@ -198,6 +199,7 @@ export function RepoSettingsDialog({
   repoId,
   currentRepoSettings,
   globalSettings,
+  isAppriseConfigured = false,
 }: RepoSettingsDialogProps) {
   const t = useTranslations("RepoSettingsDialog");
   const tGlobal = useTranslations("SettingsForm");
@@ -306,6 +308,27 @@ export function RepoSettingsDialog({
 
   const savedThisSessionRef = React.useRef(false);
   const filterSettingsChangedRef = React.useRef(false);
+  const isOpenRef = React.useRef(isOpen);
+
+  React.useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  const refreshAfterClosedSave = React.useCallback(() => {
+    if (!savedThisSessionRef.current) return;
+
+    const shouldRefresh = filterSettingsChangedRef.current;
+    savedThisSessionRef.current = false;
+    filterSettingsChangedRef.current = false;
+
+    if (shouldRefresh) {
+      refreshSingleRepositoryAction(repoId).catch((error: unknown) => {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
+      });
+    }
+  }, [repoId]);
 
   const mountedRef = React.useRef(true);
   React.useEffect(() => {
@@ -371,24 +394,12 @@ export function RepoSettingsDialog({
       };
     }
 
-    if (wasOpen && !isOpen) {
-      if (savedThisSessionRef.current && filterSettingsChangedRef.current) {
-        // Fire and forget; avoid unhandled rejection on flaky connections
-        refreshSingleRepositoryAction(repoId).catch((error: unknown) => {
-          if (reloadIfServerActionStale(error)) {
-            return;
-          }
-        });
-        savedThisSessionRef.current = false;
-        filterSettingsChangedRef.current = false;
-      } else if (savedThisSessionRef.current) {
-        // Settings were saved but no filter changes - no refresh needed
-        savedThisSessionRef.current = false;
-      }
-    }
-
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, currentRepoSettings, repoId]);
+  }, [isOpen, currentRepoSettings]);
+
+  React.useEffect(() => {
+    if (!isOpen) refreshAfterClosedSave();
+  }, [isOpen, refreshAfterClosedSave]);
 
   const useGlobalChannels = channels.length === 0;
   const useGlobalSubChannels = preReleaseSubChannels === undefined;
@@ -401,6 +412,7 @@ export function RepoSettingsDialog({
 
   const isUsingAllGlobalSettings =
     useGlobalChannels &&
+    useGlobalSubChannels &&
     useGlobalReleasesPerPage &&
     useGlobalAutomation &&
     useGlobalIncludeRegex &&
@@ -457,7 +469,7 @@ export function RepoSettingsDialog({
 
     return {
       releaseChannels: channels,
-      preReleaseSubChannels: preReleaseSubChannels ?? [],
+      preReleaseSubChannels,
       releasesPerPage: finalReleasesPerPage,
       refreshInterval: finalRefreshInterval,
       cacheInterval: finalCacheInterval,
@@ -605,6 +617,7 @@ export function RepoSettingsDialog({
 
             prevSettingsRef.current = newSettings;
             savedThisSessionRef.current = true;
+            if (!isOpenRef.current) refreshAfterClosedSave();
           } else {
             savedThisSessionRef.current = true;
           }
@@ -647,6 +660,7 @@ export function RepoSettingsDialog({
     toast,
     t,
     isOnline,
+    refreshAfterClosedSave,
   ]);
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -729,7 +743,7 @@ export function RepoSettingsDialog({
   const handleResetAll = () => {
     if (!isOnline) return;
     setChannels([]);
-    setPreReleaseSubChannels([]);
+    setPreReleaseSubChannels(undefined);
     setReleasesPerPage("");
     resetAutomationOverrideState();
     setIncludeRegex("");
@@ -741,7 +755,7 @@ export function RepoSettingsDialog({
   const handleResetFilters = () => {
     if (!isOnline) return;
     setChannels([]);
-    setPreReleaseSubChannels([]);
+    setPreReleaseSubChannels(undefined);
     setIncludeRegex("");
     setExcludeRegex("");
   };
@@ -766,8 +780,6 @@ export function RepoSettingsDialog({
   const effectivePreReleaseSubChannels = useGlobalSubChannels
     ? globalSettings.preReleaseSubChannels || allPreReleaseTypes
     : preReleaseSubChannels || [];
-
-  const isAppriseConfigured = !!globalSettings.appriseMaxCharacters;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>

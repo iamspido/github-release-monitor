@@ -41,6 +41,7 @@ interface HomePageClientProps {
   lastUpdated: Date;
   locale: string;
   canMutate?: boolean;
+  isAppriseConfigured?: boolean;
 }
 
 // Helper to get the translation key for a specific error type.
@@ -68,6 +69,7 @@ export function HomePageClient({
   lastUpdated,
   locale,
   canMutate = true,
+  isAppriseConfigured = false,
 }: HomePageClientProps) {
   const t = useTranslations("HomePage");
   const tActions = useTranslations("Actions");
@@ -314,6 +316,7 @@ export function HomePageClient({
                 enrichedRelease={enrichedRelease}
                 settings={settings}
                 canMutate={canMutate}
+                isAppriseConfigured={isAppriseConfigured}
               />
             ))}
           </div>

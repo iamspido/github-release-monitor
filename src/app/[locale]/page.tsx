@@ -5,6 +5,7 @@ import { Header } from "@/components/header";
 import { HomePageClient } from "@/components/home-page-client";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
+import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
 import { toGithubReleaseFromCache } from "@/lib/releases/filters";
 import { getUpdateNotificationState } from "@/lib/runtime/app-update-notice";
 import { getRepositories } from "@/lib/storage/repositories";
@@ -36,6 +37,7 @@ export default async function HomePage({
   > | null = null;
   const updateNotice = await getUpdateNotificationState();
   const authAccess = await getCurrentAuthAccess();
+  const { isAppriseConfigured } = getNotificationRuntimeConfig();
 
   try {
     settings = await getSettings();
@@ -93,6 +95,7 @@ export default async function HomePage({
           lastUpdated={lastUpdated}
           locale={locale}
           canMutate={authAccess.canMutate}
+          isAppriseConfigured={isAppriseConfigured}
         />
       </main>
       <BackToTopButton />

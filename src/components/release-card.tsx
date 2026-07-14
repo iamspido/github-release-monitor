@@ -65,6 +65,7 @@ interface ReleaseCardProps {
   enrichedRelease: EnrichedRelease;
   settings: AppSettings;
   canMutate?: boolean;
+  isAppriseConfigured?: boolean;
 }
 
 function CustomSettingsBadge() {
@@ -191,6 +192,7 @@ export function ReleaseCard({
   enrichedRelease,
   settings,
   canMutate = true,
+  isAppriseConfigured = false,
 }: ReleaseCardProps) {
   const t = useTranslations("ReleaseCard");
   const tActions = useTranslations("Actions");
@@ -307,6 +309,7 @@ export function ReleaseCard({
             repoId={repoId}
             currentRepoSettings={repoSettings}
             globalSettings={settings}
+            isAppriseConfigured={isAppriseConfigured}
           />
         )}
         <Card className="border-destructive/50 bg-destructive/10 flex flex-col">
@@ -372,6 +375,7 @@ export function ReleaseCard({
             repoId={repoId}
             currentRepoSettings={repoSettings}
             globalSettings={settings}
+            isAppriseConfigured={isAppriseConfigured}
           />
         )}
         <Card className="flex flex-col">
@@ -441,6 +445,7 @@ export function ReleaseCard({
           repoId={repoId}
           currentRepoSettings={repoSettings}
           globalSettings={settings}
+          isAppriseConfigured={isAppriseConfigured}
         />
       )}
       <Card

@@ -126,6 +126,7 @@ vi.mock("@/components/ui/dialog", () => {
 });
 
 const updateSettingsMock = vi.fn();
+const refreshRepositoryMock = vi.fn();
 
 vi.mock("@/app/actions", async () => {
   const actual = await vi.importActual("@/app/actions");
@@ -136,7 +137,8 @@ vi.mock("@/app/actions", async () => {
   return {
     ...actual,
     updateRepositorySettingsAction: vi.fn(updateRepositorySettingsAction),
-    refreshSingleRepositoryAction: vi.fn().mockResolvedValue({}),
+    refreshSingleRepositoryAction: (...args: unknown[]) =>
+      refreshRepositoryMock(...args),
   };
 });
 
@@ -208,6 +210,8 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     toastSpy.mockClear();
     updateSettingsMock.mockReset();
     updateSettingsMock.mockResolvedValue({ success: true });
+    refreshRepositoryMock.mockReset();
+    refreshRepositoryMock.mockResolvedValue({});
     container = document.createElement("div");
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -340,6 +344,59 @@ describe("RepoSettingsDialog autosave behaviour", () => {
       "Offline – this dialog is read-only. Changes will not be saved until you're back online.",
     );
     expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("does not replace inherited prerelease subchannels when opened", async () => {
+    const inheritedSettings = {
+      ...emptyRepoSettings,
+      preReleaseSubChannels: undefined,
+    };
+
+    renderDialog({
+      isOpen: false,
+      currentRepoSettings: inheritedSettings,
+    });
+    renderDialog({ currentRepoSettings: inheritedSettings });
+    await flushEffects();
+    await advanceAutosaveDelay();
+
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("refreshes after a filter save that finishes after the dialog closes", async () => {
+    let resolveSave: ((value: { success: true }) => void) | undefined;
+    updateSettingsMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+
+    renderDialog();
+    const input = await getIncludeInput();
+    await act(async () => {
+      setInputValue(input, "feature");
+    });
+    await flushEffects();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+      await Promise.resolve();
+    });
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+
+    renderDialog({ isOpen: false });
+    await flushEffects();
+    expect(refreshRepositoryMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveSave?.({ success: true });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await expectEventually(() => {
+      expect(refreshRepositoryMock).toHaveBeenCalledWith("owner/repo");
+    });
   });
 
   it("shows success and commits settings when autosave succeeds", async () => {
