@@ -42,6 +42,7 @@ export function getLoginRequestContext(
   identifier: string,
 ): {
   rateLimitKey: readonly string[];
+  identifierRateLimitKey: string;
   clientIp: string;
 } {
   const ip = getClientIpFromHeaders(headerStore);
@@ -49,11 +50,13 @@ export function getLoginRequestContext(
   const identifierHash = createHash("sha256")
     .update(normalizedIdentifier || "unknown")
     .digest("hex");
+  const identifierRateLimitKey = `identifier:${identifierHash}`;
   return {
     rateLimitKey: [
       ...(ip === "unknown" ? [] : [`ip:${ip}`]),
-      `identifier:${identifierHash}`,
+      identifierRateLimitKey,
     ],
+    identifierRateLimitKey,
     clientIp: ip,
   };
 }

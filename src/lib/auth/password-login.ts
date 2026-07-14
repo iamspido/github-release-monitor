@@ -45,10 +45,8 @@ export async function authenticatePassword(input: {
   password: string;
 }): Promise<PasswordLoginResult> {
   const { identifier, password } = input;
-  const { rateLimitKey, clientIp } = getLoginRequestContext(
-    input.headers,
-    identifier,
-  );
+  const { rateLimitKey, identifierRateLimitKey, clientIp } =
+    getLoginRequestContext(input.headers, identifier);
   const identifierLabel = getLoginIdentifierLogLabel(identifier);
   const now = Date.now();
   const methodLabel = isLikelyEmail(identifier) ? "email" : "username";
@@ -126,8 +124,10 @@ export async function authenticatePassword(input: {
   }
 
   const requiresTwoFactor = await hasTwoFactorRedirectFlag(response);
-  const previousFailures = getFailedLoginFailures(rateLimitKey);
-  clearFailedLoginAttempts(rateLimitKey);
+  const previousFailures = getFailedLoginFailures(identifierRateLimitKey);
+  // A valid account may clear its own failure history, but must not erase the
+  // shared IP bucket that protects other accounts from credential spraying.
+  clearFailedLoginAttempts(identifierRateLimitKey);
 
   if (requiresTwoFactor) {
     log.info(

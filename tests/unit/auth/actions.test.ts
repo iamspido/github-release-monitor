@@ -226,6 +226,38 @@ describe("auth actions", () => {
     });
   });
 
+  it("login: a successful account does not reset the shared IP spray limit", async () => {
+    process.env.AUTH_MAX_LOGIN_ATTEMPTS = "3";
+    process.env.AUTH_LOGIN_WINDOW_SECONDS = "60";
+    process.env.AUTH_LOGIN_LOCKOUT_SECONDS = "60";
+    signInEmailMock
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 401 }));
+    const { login } = await import("@/app/auth/actions");
+
+    async function attempt(email: string, password: string) {
+      const data = new FormData();
+      data.set("email", email);
+      data.set("password", password);
+      return login(undefined, data);
+    }
+
+    await expect(attempt("first@example.com", "wrong")).resolves.toEqual({
+      errorKey: "error_invalid_credentials",
+    });
+    await expect(attempt("second@example.com", "wrong")).resolves.toEqual({
+      errorKey: "error_invalid_credentials",
+    });
+    await expect(attempt("valid@example.com", "correct")).resolves.toEqual({
+      redirectTo: "/en/",
+    });
+    await expect(attempt("third@example.com", "wrong")).resolves.toEqual({
+      errorKey: "error_too_many_attempts",
+    });
+  });
+
   it("register: blocks duplicate username before signup API call", async () => {
     process.env.AUTH_ENABLE_SIGNUP = "true";
     findRegistrationConflictMock.mockReturnValue("username_in_use");

@@ -36,6 +36,7 @@ describe("auth request context", () => {
     const logLabel = getLoginIdentifierLogLabel(identifier);
 
     expect(context.rateLimitKey).toHaveLength(2);
+    expect(context.rateLimitKey).toContain(context.identifierRateLimitKey);
     expect(context.rateLimitKey.join(":")).not.toContain(identifier);
     expect(logLabel).not.toContain(identifier);
     expect(logLabel).toMatch(/^identifier_hash='[a-f0-9]{12}'$/);
