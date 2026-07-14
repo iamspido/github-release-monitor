@@ -10,7 +10,7 @@ import {
   getGitlabTokenCheck,
 } from "@/lib/diagnostics/provider-checks";
 import { logger } from "@/lib/logger";
-import { getUpdateNotificationState } from "@/lib/runtime/app-update-notice";
+import { getUpdateNotificationStateOrFallback } from "@/lib/runtime/app-update-notice";
 import type {
   AppriseStatus,
   RateLimitResult,
@@ -30,7 +30,7 @@ export default async function TestPage({
   const codebergTokenCheck = await getCodebergTokenCheck();
   const notificationConfig = buildNotificationConfig();
   const updateNotice: UpdateNotificationState =
-    await getUpdateNotificationState();
+    await getUpdateNotificationStateOrFallback();
   const authAccess = await getCurrentAuthAccess();
 
   let appriseStatus: AppriseStatus;

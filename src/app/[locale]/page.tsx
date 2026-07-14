@@ -8,7 +8,7 @@ import { logger } from "@/lib/logger";
 import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
 import { toGithubReleaseFromCache } from "@/lib/releases/filters";
 import { toPublicRepository } from "@/lib/repositories/public-repository";
-import { getUpdateNotificationState } from "@/lib/runtime/app-update-notice";
+import { getUpdateNotificationStateOrFallback } from "@/lib/runtime/app-update-notice";
 import { getRepositories } from "@/lib/storage/repositories";
 import { createDefaultSettings, getSettings } from "@/lib/storage/settings";
 import type {
@@ -36,7 +36,7 @@ export default async function HomePage({
     Exclude<FetchError["type"], "not_modified">,
     number
   > | null = null;
-  const updateNotice = await getUpdateNotificationState();
+  const updateNotice = await getUpdateNotificationStateOrFallback();
   const authAccess = await getCurrentAuthAccess();
   const { isAppriseConfigured } = getNotificationRuntimeConfig();
 

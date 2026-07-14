@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 import { scheduleTask } from "@/lib/runtime/task-scheduler";
 import { runApplicationUpdateCheck } from "@/lib/runtime/update-check";
 import { isRestrictedActionAllowed } from "@/lib/server-action-helpers";
@@ -84,6 +85,25 @@ export async function getUpdateNotificationState(): Promise<UpdateNotificationSt
     isDismissed,
     shouldNotify: hasUpdate && !isDismissed,
   };
+}
+
+export async function getUpdateNotificationStateOrFallback(): Promise<UpdateNotificationState> {
+  try {
+    return await getUpdateNotificationState();
+  } catch (error) {
+    logger
+      .withScope("UpdateCheck")
+      .error("Could not load the optional update notification state.", error);
+    return {
+      latestVersion: null,
+      currentVersion: process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0",
+      lastCheckedAt: null,
+      lastCheckError: "read_error",
+      hasUpdate: false,
+      isDismissed: false,
+      shouldNotify: false,
+    };
+  }
 }
 
 export async function dismissUpdateNotificationAction(): Promise<{

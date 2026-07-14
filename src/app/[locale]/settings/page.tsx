@@ -12,7 +12,7 @@ import { TwoFactorSettingsCard } from "@/components/two-factor-settings-card";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { getAuthFeatureConfig } from "@/lib/auth/config";
 import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
-import { getUpdateNotificationState } from "@/lib/runtime/app-update-notice";
+import { getUpdateNotificationStateOrFallback } from "@/lib/runtime/app-update-notice";
 import { getSettings } from "@/lib/storage/settings";
 import type { AppSettings } from "@/types";
 
@@ -31,7 +31,7 @@ export default async function SettingsPage({
   const isGithubTokenSet = !!process.env.GITHUB_ACCESS_TOKEN?.trim();
   const { passkeyEnabled: isPasskeyEnabled, enabledSocialProviders } =
     getAuthFeatureConfig();
-  const updateNotice = await getUpdateNotificationState();
+  const updateNotice = await getUpdateNotificationStateOrFallback();
   const authAccess = await getCurrentAuthAccess();
   const showInternalAuthSettings =
     authAccess.authenticationMethod !== "External";
