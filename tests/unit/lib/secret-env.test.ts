@@ -29,6 +29,34 @@ describe("secret environment values", () => {
     expect(config.password).toBe(" password ");
   });
 
+  it.each(["invalid", "587suffix", "0", "65536", "-1", "5.5"])(
+    "does not enable auth email verification when MAIL_PORT is %s",
+    (port) => {
+      const config = getAuthSmtpConfig({
+        MAIL_HOST: "smtp.example.test",
+        MAIL_PORT: port,
+        MAIL_FROM_ADDRESS: "from@example.test",
+      });
+
+      expect(config.emailVerificationEnabled).toBe(false);
+      expect(config.port).toBeNaN();
+    },
+  );
+
+  it.each(["1", "587", "65535"])(
+    "enables auth email verification for valid MAIL_PORT %s",
+    (port) => {
+      const config = getAuthSmtpConfig({
+        MAIL_HOST: "smtp.example.test",
+        MAIL_PORT: port,
+        MAIL_FROM_ADDRESS: "from@example.test",
+      });
+
+      expect(config.emailVerificationEnabled).toBe(true);
+      expect(config.port).toBe(Number(port));
+    },
+  );
+
   it.each([
     ["  github-token  ", "github-token"],
     [' "github-token" ', "github-token"],

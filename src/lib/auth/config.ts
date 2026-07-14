@@ -1,4 +1,5 @@
 import { readSecretEnvValue } from "@/lib/secret-env";
+import { parseSmtpPort } from "@/lib/smtp-config";
 
 export type AuthSocialProvider = "github" | "google";
 
@@ -74,8 +75,7 @@ export function getAuthFeatureConfig(env: AuthEnv = process.env) {
 }
 
 export function getAuthSmtpConfig(env: AuthEnv = process.env) {
-  const smtpPortRaw = env.MAIL_PORT?.trim() || "";
-  const smtpPort = Number.parseInt(smtpPortRaw, 10);
+  const smtpPort = parseSmtpPort(env.MAIL_PORT);
   const smtpHost = env.MAIL_HOST?.trim() || "";
   const smtpFromAddress = env.MAIL_FROM_ADDRESS?.trim() || "";
 
@@ -89,7 +89,6 @@ export function getAuthSmtpConfig(env: AuthEnv = process.env) {
     emailVerificationEnabled:
       smtpHost.length > 0 &&
       Number.isFinite(smtpPort) &&
-      smtpPort > 0 &&
       smtpFromAddress.length > 0,
   };
 }
