@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
 import type { AuthSocialProvider } from "@/lib/auth/config";
+import { logger } from "@/lib/logger";
+
+let proxyCompatibilityWarningShown = false;
 
 function normalizeIpCandidate(value: string | undefined): string | null {
   const candidate = value?.trim();
@@ -20,7 +23,20 @@ function getTrustedProxyHops(): number {
 }
 
 export function getClientIpFromHeaders(headerStore: Headers): string {
-  if (process.env.AUTH_TRUST_PROXY_HEADERS === "false") return "unknown";
+  const proxySetting = process.env.AUTH_TRUST_PROXY_HEADERS;
+  if (
+    proxySetting !== "true" &&
+    proxySetting !== "false" &&
+    !proxyCompatibilityWarningShown
+  ) {
+    proxyCompatibilityWarningShown = true;
+    logger
+      .withScope("Auth")
+      .warn(
+        "AUTH_TRUST_PROXY_HEADERS is unset or invalid; preserving the 2.x compatibility default and trusting proxy client-address headers. Set it explicitly to true only behind a trusted proxy, or false for direct exposure. The default will become false in the next major release.",
+      );
+  }
+  if (proxySetting === "false") return "unknown";
 
   const forwardedIps = (headerStore.get("x-forwarded-for") ?? "")
     .split(",")
@@ -50,24 +66,15 @@ export function getLoginRequestContext(
   const identifierHash = createHash("sha256")
     .update(normalizedIdentifier || "unknown")
     .digest("hex");
-  const fallbackClientHash = createHash("sha256")
-    .update(
-      [
-        headerStore.get("user-agent") ?? "",
-        headerStore.get("accept-language") ?? "",
-        headerStore.get("sec-ch-ua") ?? "",
-        headerStore.get("sec-ch-ua-platform") ?? "",
-      ].join("\n") || "unknown-client",
-    )
-    .digest("hex");
-  const clientKey =
-    ip === "unknown" ? `client-fingerprint:${fallbackClientHash}` : `ip:${ip}`;
+  const clientKey = ip === "unknown" ? null : `ip:${ip}`;
   const accountRateLimitKey =
     ip === "unknown"
-      ? `client-fingerprint-identifier:${fallbackClientHash}:${identifierHash}`
+      ? `identifier:${identifierHash}`
       : `ip-identifier:${ip}:${identifierHash}`;
   return {
-    rateLimitKey: [clientKey, accountRateLimitKey],
+    rateLimitKey: clientKey
+      ? [clientKey, accountRateLimitKey]
+      : [accountRateLimitKey],
     accountRateLimitKey,
     clientIp: ip,
   };

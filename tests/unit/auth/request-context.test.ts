@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getClientIpFromHeaders,
   getLoginIdentifierLogLabel,
@@ -10,9 +10,11 @@ describe("auth request context", () => {
 
   afterEach(() => {
     process.env = { ...originalEnv };
+    vi.restoreAllMocks();
   });
 
   it("uses the trusted side of a forwarded chain", () => {
+    process.env.AUTH_TRUST_PROXY_HEADERS = "true";
     const headers = new Headers({
       "x-forwarded-for": "203.0.113.10, 198.51.100.20",
     });
@@ -20,14 +22,31 @@ describe("auth request context", () => {
     expect(getClientIpFromHeaders(headers)).toBe("198.51.100.20");
   });
 
-  it("allows deployments to disable proxy-derived client addresses", () => {
-    process.env.AUTH_TRUST_PROXY_HEADERS = "false";
+  it("preserves the 2.x proxy-header default when unset", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    delete process.env.AUTH_TRUST_PROXY_HEADERS;
     const headers = new Headers({ "x-forwarded-for": "203.0.113.10" });
+
+    expect(getClientIpFromHeaders(headers)).toBe("203.0.113.10");
+    expect(getClientIpFromHeaders(headers)).toBe("203.0.113.10");
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("preserving the 2.x compatibility default"),
+    );
+  });
+
+  it("allows direct deployments to reject proxy-derived addresses", () => {
+    process.env.AUTH_TRUST_PROXY_HEADERS = "false";
+    const headers = new Headers({
+      "x-forwarded-for": "203.0.113.10",
+      "x-real-ip": "198.51.100.20",
+    });
 
     expect(getClientIpFromHeaders(headers)).toBe("unknown");
   });
 
   it("does not store or log the raw login identifier", () => {
+    process.env.AUTH_TRUST_PROXY_HEADERS = "true";
     const identifier = "Sensitive.User@example.com";
     const context = getLoginRequestContext(
       new Headers({ "x-real-ip": "198.51.100.20" }),
@@ -43,6 +62,7 @@ describe("auth request context", () => {
   });
 
   it("scopes account login attempts to the client address", () => {
+    process.env.AUTH_TRUST_PROXY_HEADERS = "true";
     const first = getLoginRequestContext(
       new Headers({ "x-real-ip": "198.51.100.20" }),
       "user@example.com",
@@ -55,7 +75,7 @@ describe("auth request context", () => {
     expect(first.accountRateLimitKey).not.toBe(second.accountRateLimitKey);
   });
 
-  it("uses a private client fingerprint when no client IP is available", () => {
+  it("uses a stable identifier hash when no trusted client IP is available", () => {
     process.env.AUTH_TRUST_PROXY_HEADERS = "false";
 
     const context = getLoginRequestContext(
@@ -67,18 +87,15 @@ describe("auth request context", () => {
       "user@example.com",
     );
 
-    expect(context.rateLimitKey).toHaveLength(2);
-    expect(context.rateLimitKey[0]).toMatch(
-      /^client-fingerprint:[a-f0-9]{64}$/,
-    );
+    expect(context.rateLimitKey).toHaveLength(1);
     expect(context.accountRateLimitKey).toMatch(
-      /^client-fingerprint-identifier:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      /^identifier:[a-f0-9]{64}$/,
     );
     expect(context.rateLimitKey.join(":")).not.toContain("test-browser");
     expect(context.rateLimitKey.join(":")).not.toContain("user@example.com");
   });
 
-  it("separates fallback rate limits for different client fingerprints", () => {
+  it("does not let client-controlled headers rotate fallback rate limits", () => {
     process.env.AUTH_TRUST_PROXY_HEADERS = "false";
 
     const first = getLoginRequestContext(
@@ -90,7 +107,7 @@ describe("auth request context", () => {
       "user@example.com",
     );
 
-    expect(first.rateLimitKey[0]).not.toBe(second.rateLimitKey[0]);
-    expect(first.accountRateLimitKey).not.toBe(second.accountRateLimitKey);
+    expect(first.rateLimitKey).toEqual(second.rateLimitKey);
+    expect(first.accountRateLimitKey).toBe(second.accountRateLimitKey);
   });
 });

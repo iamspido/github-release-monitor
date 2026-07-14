@@ -97,6 +97,10 @@ Navigate to the `example/` directory. You will need to configure the environment
    AUTH_LOGIN_WINDOW_SECONDS=900
    # Maximum failed login attempts before lockout starts.
    AUTH_MAX_LOGIN_ATTEMPTS=5
+   # Trust client IP headers only when a known reverse proxy overwrites them.
+   AUTH_TRUST_PROXY_HEADERS=true
+   # Number of trusted proxy entries at the right side of X-Forwarded-For.
+   AUTH_TRUSTED_PROXY_HOPS=1
 
    # Better Auth secret (at least 32 chars). Generate: openssl rand -base64 32
    BETTER_AUTH_SECRET=your_super_secret_better_auth_key_here
@@ -119,6 +123,8 @@ Navigate to the `example/` directory. You will need to configure the environment
    # You can generate one using: openssl rand -base64 32
    AUTH_SECRET=your_super_secret_better_auth_key_here
    ```
+
+   For backward compatibility, version 2.x continues to trust proxy client-address headers when `AUTH_TRUST_PROXY_HEADERS` is unset. Set the value explicitly: use `true` only when a trusted reverse proxy overwrites these headers, and `false` when the app is exposed directly. The default will change to `false` in the next major release.
 
    **Protocol (HTTP/HTTPS)**
    By default, the application runs in secure (HTTPS) mode. If you are not using a reverse proxy and need to run the app on plain HTTP, you must set this variable.
@@ -379,6 +385,10 @@ AUTH_LOGIN_LOCKOUT_SECONDS=900
 AUTH_LOGIN_WINDOW_SECONDS=900
 # Maximum failed login attempts before lockout starts.
 AUTH_MAX_LOGIN_ATTEMPTS=5
+# Enable only when a trusted reverse proxy overwrites client IP headers.
+AUTH_TRUST_PROXY_HEADERS=false
+# Number of trusted proxy entries at the right side of X-Forwarded-For.
+AUTH_TRUSTED_PROXY_HOPS=1
 
 # Better Auth secret (at least 32 chars). Generate: openssl rand -base64 32
 BETTER_AUTH_SECRET=your_super_secret_better_auth_key_here
@@ -400,6 +410,8 @@ AUTH_TRUST_SOCIAL_LINKING=true
 # Optional fallback for older setups
 AUTH_SECRET=your_super_secret_better_auth_key_here
 ```
+
+Version 2.x retains the previous trusted-header behavior when `AUTH_TRUST_PROXY_HEADERS` is unset. Configure it explicitly so a future major upgrade does not change the deployment's client-address handling unexpectedly.
 
 #### **Protocol (HTTP/HTTPS)**
 
@@ -598,6 +610,8 @@ Here is a complete list of all environment variables used by the application.
 | `AUTH_LOGIN_LOCKOUT_SECONDS` | Lockout duration (seconds) after too many failed login attempts.                                   | No                     | `900`                      |
 | `AUTH_LOGIN_WINDOW_SECONDS` | Time window (seconds) used to count failed login attempts.                                          | No                     | `900`                      |
 | `AUTH_MAX_LOGIN_ATTEMPTS` | Maximum failed login attempts before a temporary lockout is applied.                                 | No                     | `5`                        |
+| `AUTH_TRUST_PROXY_HEADERS` | Trusts `X-Forwarded-For`/`X-Real-IP` for per-client login limits. Set to `true` only behind a proxy that overwrites these headers; use `false` for direct exposure. Version 2.x preserves the trusted-header behavior when unset; the next major will default to `false`. | No | `true` (2.x compatibility) |
+| `AUTH_TRUSTED_PROXY_HOPS` | Number of trusted proxy entries counted from the right side of `X-Forwarded-For` (1-10).                | No                     | `1`                        |
 | `AUTH_ENABLE_SIGNUP`  | Enables self-service signup when set to `true`. Keep `false` for single-user mode.                     | No                     | `false`                    |
 | `AUTH_ENABLE_PASSKEY` | Enables WebAuthn passkey features when set to `true`.                                                   | No                     | `true`                     |
 | `AUTH_TRUST_SOCIAL_LINKING` | Trusts configured social providers for automatic account linking by email (`github`, `google`).         | No                     | `true`                     |

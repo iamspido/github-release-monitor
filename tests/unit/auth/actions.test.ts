@@ -72,6 +72,7 @@ describe("auth actions", () => {
     requestHeaders.current = new Headers({
       "x-forwarded-for": "198.51.100.23",
     });
+    process.env.AUTH_TRUST_PROXY_HEADERS = "true";
   });
 
   afterEach(() => {
@@ -239,7 +240,7 @@ describe("auth actions", () => {
     await expect(attempt("correct")).resolves.toEqual({ redirectTo: "/en/" });
   });
 
-  it("login: retains rate limiting when proxy addresses are disabled", async () => {
+  it("login: cannot rotate fallback rate limits with request headers", async () => {
     process.env.AUTH_TRUST_PROXY_HEADERS = "false";
     process.env.AUTH_MAX_LOGIN_ATTEMPTS = "2";
     process.env.AUTH_LOGIN_WINDOW_SECONDS = "60";
@@ -262,9 +263,15 @@ describe("auth actions", () => {
       errorKey: "error_too_many_attempts",
     });
 
-    requestHeaders.current = new Headers({ "user-agent": "second-browser" });
-    signInEmailMock.mockResolvedValue(new Response(null, { status: 200 }));
-    await expect(attempt("correct")).resolves.toEqual({ redirectTo: "/en/" });
+    requestHeaders.current = new Headers({
+      "user-agent": "second-browser",
+      "accept-language": "de-DE",
+      "x-forwarded-for": "203.0.113.99",
+    });
+    await expect(attempt("third-guess")).resolves.toEqual({
+      errorKey: "error_too_many_attempts",
+    });
+    expect(signInEmailMock).toHaveBeenCalledTimes(2);
   });
 
   it("login: limits credential spraying across identifiers from one IP", async () => {
