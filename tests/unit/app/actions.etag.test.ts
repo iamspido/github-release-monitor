@@ -80,6 +80,9 @@ describe("ETag updates repo on successful fetch", () => {
       }),
     );
     vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
       mockFetchResponse({
         status: 200,
         json: [{ name: "v2", commit: { sha: "sha2" } }],

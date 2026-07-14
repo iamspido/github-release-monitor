@@ -1,10 +1,14 @@
 import { getTranslations } from "next-intl/server";
 import { getComprehensiveMarkdownBody } from "@/lib/notifications/test-release-payloads";
-import { fetchJsonResponseWithRetry } from "@/lib/releases/fetch";
+import {
+  fetchJsonResponseWithRetry,
+  fetchWithRetry,
+} from "@/lib/releases/fetch";
 import {
   isCachedTagFallbackRelease,
   resolveEffectiveRepoFilters,
 } from "@/lib/releases/filters";
+import { parseGithubTagsPage } from "@/lib/releases/github-tags-page";
 import {
   notModifiedResult,
   resolvePageCount,
@@ -18,6 +22,70 @@ import type {
 } from "@/lib/releases/types";
 import { log, normalizeEnvToken } from "@/lib/server-action-helpers";
 import type { AppSettings, GithubRelease } from "@/types";
+
+type GithubTagCandidate = {
+  tag: { name: string; commit: { sha: string } };
+  release: GithubRelease;
+};
+
+async function fetchLatestMatchingTagFromGithubPage(args: {
+  owner: string;
+  repo: string;
+  filters: ReturnType<typeof resolveEffectiveRepoFilters>;
+}): Promise<GithubTagCandidate | null> {
+  try {
+    const response = await fetchWithRetry(
+      `https://github.com/${args.owner}/${args.repo}/tags`,
+      {
+        headers: {
+          Accept: "text/html",
+          "User-Agent": "GitHubReleaseMonitorApp",
+        },
+        cache: "no-store",
+      },
+      {
+        description: `GitHub tags page for ${args.owner}/${args.repo}`,
+      },
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const entries = parseGithubTagsPage(await response.text()).slice(
+      0,
+      args.filters.totalReleasesToFetch,
+    );
+    const candidates: GithubTagCandidate[] = entries.map((entry) => ({
+      tag: { name: entry.name, commit: { sha: entry.commitSha } },
+      release: {
+        id: 0,
+        html_url: `https://github.com/${args.owner}/${args.repo}/releases/tag/${encodeURIComponent(entry.name)}`,
+        tag_name: entry.name,
+        name: `Tag: ${entry.name}`,
+        body: "",
+        created_at: entry.updatedAt,
+        published_at: entry.updatedAt,
+        prerelease: false,
+        draft: false,
+      },
+    }));
+
+    return (
+      selectFirstMatchingRelease(
+        candidates,
+        args.filters,
+        `${args.owner}/${args.repo}`,
+      ) ?? null
+    );
+  } catch (error) {
+    log.warn(
+      `Could not use the chronological GitHub tags page for ${args.owner}/${args.repo}; falling back to the REST tags endpoint.`,
+      error,
+    );
+    return null;
+  }
+}
 
 export async function fetchLatestReleaseFromGitHub(
   owner: string,
@@ -156,28 +224,57 @@ export async function fetchLatestReleaseFromGitHub(
       );
       newEtag = null;
 
-      const allTags: { name: string; commit: { sha: string } }[] = [];
-      for (let page = 1; page <= pagesToFetch; page++) {
-        const tagsOnThisPage = resolvePageSize({
-          maxPerPage: MAX_PER_PAGE,
-          totalItemsToFetch: totalReleasesToFetch,
-          alreadyFetched: allTags.length,
-        });
-        if (tagsOnThisPage <= 0) break;
+      let selectedCandidate = await fetchLatestMatchingTagFromGithubPage({
+        owner,
+        repo,
+        filters,
+      });
 
-        const { response: tagsResponse, data: pageTags } =
-          await fetchJsonResponseWithRetry<
-            { name: string; commit: { sha: string } }[]
-          >(
-            `${GITHUB_API_BASE_URL}/tags?per_page=${tagsOnThisPage}&page=${page}`,
-            { headers, cache: "no-store" },
-            { description: `GitHub tags for ${owner}/${repo} page ${page}` },
-          );
+      if (!selectedCandidate) {
+        const allTags: { name: string; commit: { sha: string } }[] = [];
+        for (let page = 1; page <= pagesToFetch; page++) {
+          const tagsOnThisPage = resolvePageSize({
+            maxPerPage: MAX_PER_PAGE,
+            totalItemsToFetch: totalReleasesToFetch,
+            alreadyFetched: allTags.length,
+          });
+          if (tagsOnThisPage <= 0) break;
 
-        if (!tagsResponse.ok) {
-          log.error(
-            `Failed to fetch tags for ${owner}/${repo} after failing to find releases.`,
-          );
+          const { response: tagsResponse, data: pageTags } =
+            await fetchJsonResponseWithRetry<
+              { name: string; commit: { sha: string } }[]
+            >(
+              `${GITHUB_API_BASE_URL}/tags?per_page=${tagsOnThisPage}&page=${page}`,
+              { headers, cache: "no-store" },
+              { description: `GitHub tags for ${owner}/${repo} page ${page}` },
+            );
+
+          if (!tagsResponse.ok) {
+            log.error(
+              `Failed to fetch tags for ${owner}/${repo} after failing to find releases.`,
+            );
+            return {
+              release: null,
+              error: { type: "no_releases_found" },
+              newEtag,
+            };
+          }
+
+          if (!pageTags) {
+            throw new Error(
+              `GitHub API returned an empty body for ${owner}/${repo} tags page ${page}.`,
+            );
+          }
+
+          allTags.push(...pageTags);
+
+          if (pageTags.length < tagsOnThisPage) {
+            break;
+          }
+        }
+
+        if (allTags.length === 0) {
+          log.info(`No tags found for ${owner}/${repo}.`);
           return {
             release: null,
             error: { type: "no_releases_found" },
@@ -185,44 +282,28 @@ export async function fetchLatestReleaseFromGitHub(
           };
         }
 
-        if (!pageTags) {
-          throw new Error(
-            `GitHub API returned an empty body for ${owner}/${repo} tags page ${page}.`,
-          );
-        }
+        const tagCandidates: GithubTagCandidate[] = allTags.map((tag) => ({
+          tag,
+          release: {
+            id: 0,
+            html_url: `https://github.com/${owner}/${repo}/releases/tag/${tag.name}`,
+            tag_name: tag.name,
+            name: `Tag: ${tag.name}`,
+            body: "",
+            created_at: fetchedAtTimestamp,
+            published_at: fetchedAtTimestamp,
+            prerelease: false,
+            draft: false,
+          },
+        }));
 
-        allTags.push(...pageTags);
-
-        if (pageTags.length < tagsOnThisPage) {
-          break;
-        }
+        selectedCandidate =
+          selectFirstMatchingRelease(
+            tagCandidates,
+            filters,
+            `${owner}/${repo}`,
+          ) ?? null;
       }
-
-      if (allTags.length === 0) {
-        log.info(`No tags found for ${owner}/${repo}.`);
-        return { release: null, error: { type: "no_releases_found" }, newEtag };
-      }
-
-      const tagCandidates = allTags.map((tag) => ({
-        tag,
-        release: {
-          id: 0,
-          html_url: `https://github.com/${owner}/${repo}/releases/tag/${tag.name}`,
-          tag_name: tag.name,
-          name: `Tag: ${tag.name}`,
-          body: "",
-          created_at: fetchedAtTimestamp,
-          published_at: fetchedAtTimestamp,
-          prerelease: false,
-          draft: false,
-        } satisfies GithubRelease,
-      }));
-
-      const selectedCandidate = selectFirstMatchingRelease(
-        tagCandidates,
-        filters,
-        `${owner}/${repo}`,
-      );
 
       if (!selectedCandidate) {
         log.info(
@@ -239,7 +320,9 @@ export async function fetchLatestReleaseFromGitHub(
       const t = await getTranslations({ locale, namespace: "Actions" });
 
       let bodyContent = "";
-      let publicationDate = new Date().toISOString();
+      let publicationDate =
+        selectedCandidate.release.published_at ||
+        selectedCandidate.release.created_at;
 
       try {
         const { response: refResponse, data: refData } =

@@ -95,6 +95,9 @@ describe("actions fetcher scenarios", () => {
       }),
     );
     vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
       mockFetchResponse({
         status: 200,
         json: [{ name: "6.5.1", commit: { sha: "sha1" } }],
@@ -201,6 +204,9 @@ describe("actions fetcher scenarios", () => {
       }),
     );
     vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
       mockFetchResponse({
         status: 200,
         json: [{ name: "v1", commit: { sha: "sha1" } }],
@@ -235,6 +241,70 @@ describe("actions fetcher scenarios", () => {
     expect(enriched[0].error).toBeUndefined();
   });
 
+  it("uses GitHub's chronological tags page before its REST tags order", async () => {
+    const actions = await import("@/app/actions");
+
+    const repo: Repository = {
+      id: "github:golang/go",
+      url: "https://github.com/golang/go",
+    };
+    const selectedSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: [] }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        text: `
+          <a href="/golang/go/releases/tag/go1.27rc2">go1.27rc2</a>
+          <relative-time datetime="2026-07-07T19:42:34Z">Jul 7</relative-time>
+          <a href="/golang/go/commit/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">aaaaaaa</a>
+          <a href="/golang/go/releases/tag/go1.26.5">go1.26.5</a>
+          <relative-time datetime="2026-07-07T19:29:04Z">Jul 7</relative-time>
+          <a href="/golang/go/commit/${selectedSha}">bbbbbbb</a>
+          <a href="/golang/go/releases/tag/weekly.2012-03-27">weekly.2012-03-27</a>
+          <relative-time datetime="2012-03-27T00:00:00Z">Mar 27</relative-time>
+          <a href="/golang/go/commit/cccccccccccccccccccccccccccccccccccccccc">ccccccc</a>
+        `,
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: { object: { type: "commit", sha: selectedSha, url: "unused" } },
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: {
+          commit: {
+            message: "go1.26.5",
+            committer: { date: "2026-07-07T19:29:04Z" },
+          },
+        },
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+    const calls = vi.mocked(global.fetch).mock.calls;
+
+    expect(enriched[0].release?.tag_name).toBe("go1.26.5");
+    expect(enriched[0].release?.created_at).toBe("2026-07-07T19:29:04Z");
+    expect(calls[1][0]).toBe("https://github.com/golang/go/tags");
+    expect(
+      headerRecord(fetchCallHeaders(calls[1])).Authorization,
+    ).toBeUndefined();
+    expect(calls[3][0]).toContain(`/commits/${selectedSha}`);
+    expect(calls.some(([url]) => String(url).includes("/tags?"))).toBe(false);
+  });
+
   it("falls back to the first matching stable tag when newer tags are prereleases", async () => {
     const actions = await import("@/app/actions");
 
@@ -249,6 +319,9 @@ describe("actions fetcher scenarios", () => {
         status: 200,
         json: [],
       }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
     );
     vi.mocked(global.fetch).mockResolvedValueOnce(
       mockFetchResponse({
@@ -283,7 +356,7 @@ describe("actions fetcher scenarios", () => {
     );
 
     expect(enriched[0].release?.tag_name).toBe("7.0.1");
-    expect(vi.mocked(global.fetch).mock.calls[3][0]).toContain(
+    expect(vi.mocked(global.fetch).mock.calls[4][0]).toContain(
       "/commits/sha-stable",
     );
   });
