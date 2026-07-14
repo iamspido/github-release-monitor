@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { checkForNewReleases } from "@/lib/releases/checker";
+import { waitForBackgroundTasks } from "@/lib/runtime/background-tasks";
 import type { AppSettings, Repository } from "@/types";
 
 const mem: { repos: Repository[]; settings: AppSettings } = {
@@ -109,5 +110,25 @@ describe("updateSettingsAction clears ETags for all change flags", () => {
     expect(mem.repos[0].etag).toBe("E1");
     expect(mem.repos[1].etag).toBe("E2");
     expect(checkForNewReleases).not.toHaveBeenCalled();
+  });
+
+  it("contains failures from the background refresh after settings updates", async () => {
+    const refreshError = new Error("refresh failed");
+    vi.mocked(checkForNewReleases).mockRejectedValueOnce(refreshError);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { updateSettingsAction } = await import("@/app/settings/actions");
+
+    await expect(
+      updateSettingsAction({ ...mem.settings, includeRegex: "^v" }),
+    ).resolves.toMatchObject({ success: true });
+    await waitForBackgroundTasks();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Repository refresh after settings update failed.",
+      ),
+      refreshError,
+    );
+    errorSpy.mockRestore();
   });
 });

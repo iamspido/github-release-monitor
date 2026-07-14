@@ -10,6 +10,7 @@ import {
   normalizeReleaseSortOrder,
 } from "@/lib/release-sort";
 import { checkForNewReleases } from "@/lib/releases/checker";
+import { trackBackgroundTask } from "@/lib/runtime/background-tasks";
 import { normalizeBackgroundCheckCron } from "@/lib/runtime/repository-schedule";
 import { scheduleTask } from "@/lib/runtime/task-scheduler";
 import {
@@ -240,7 +241,13 @@ async function applySettingsUpdate(
       logger
         .withScope("Settings")
         .info("Filter/API settings changed - triggering repository refresh");
-      checkForNewReleases({ skipCache: true });
+      trackBackgroundTask(
+        checkForNewReleases({ skipCache: true }).catch((error) => {
+          logger
+            .withScope("Settings")
+            .error("Repository refresh after settings update failed.", error);
+        }),
+      );
     }
 
     // Set the locale cookie for next-intl middleware to pick up.
