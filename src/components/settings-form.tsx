@@ -12,7 +12,7 @@ import { useTranslations } from "next-intl";
 import * as React from "react";
 import {
   deleteAllRepositoriesAction,
-  updateSettingsAction,
+  updateSettingsPatchAction,
 } from "@/app/settings/actions";
 import { CronTimeSelect } from "@/components/cron-time-select";
 import {
@@ -172,6 +172,26 @@ function deserializeProviderSortOrder(value: string): ReleaseProviderSortKey[] {
       serializeProviderSortOrder(option) === serializeProviderSortOrder(parts),
   );
   return selected ?? defaultProviderSortOrder;
+}
+
+function getSettingsPatch(
+  base: AppSettings,
+  target: AppSettings,
+): Partial<AppSettings> {
+  const patch: Partial<AppSettings> = {};
+  for (const key of Object.keys(target) as Array<keyof AppSettings>) {
+    const previous = base[key];
+    const next = target[key];
+    const isEqual =
+      Array.isArray(previous) && Array.isArray(next)
+        ? previous.length === next.length &&
+          previous.every((value, index) => value === next[index])
+        : Object.is(previous, next);
+    if (!isEqual) {
+      Object.assign(patch, { [key]: next });
+    }
+  }
+  return patch;
 }
 
 function FloatingSaveIndicator({ status }: { status: SaveStatus }) {
@@ -429,6 +449,7 @@ export function SettingsForm({
 
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
   const isInitialMount = React.useRef(true);
+  const lastSavedSettingsRef = React.useRef(currentSettings);
 
   // Check for saved state after locale change
   React.useEffect(() => {
@@ -670,9 +691,14 @@ export function SettingsForm({
     const handler = setTimeout(async () => {
       setSaveStatus("saving");
       try {
-        const result = await updateSettingsAction(newSettings);
+        const settingsPatch = getSettingsPatch(
+          lastSavedSettingsRef.current,
+          newSettings,
+        );
+        const result = await updateSettingsPatchAction(settingsPatch);
 
         if (result.success) {
+          lastSavedSettingsRef.current = newSettings;
           // On locale change: save flag and redirect immediately
           if (newSettings.locale !== currentSettings.locale) {
             sessionStorage.setItem("settingsSavedAfterLocaleChange", "true");

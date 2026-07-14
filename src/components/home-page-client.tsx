@@ -3,7 +3,7 @@
 import { AlertTriangle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
-import { updateSettingsAction } from "@/app/settings/actions";
+import { updateSettingsPatchAction } from "@/app/settings/actions";
 import { EmptyState } from "@/components/empty-state";
 import { ExportButton } from "@/components/export-button";
 import { RefreshButton } from "@/components/refresh-button";
@@ -114,8 +114,7 @@ export function HomePageClient({
 
     startSortSavingTransition(async () => {
       try {
-        const result = await updateSettingsAction({
-          ...settings,
+        const result = await updateSettingsPatchAction({
           releaseSortOrder: value,
         });
 
@@ -152,8 +151,7 @@ export function HomePageClient({
 
     startRepositoryFormSavingTransition(async () => {
       try {
-        const result = await updateSettingsAction({
-          ...settings,
+        const result = await updateSettingsPatchAction({
           repositoryFormExpanded: nextValue,
         });
 

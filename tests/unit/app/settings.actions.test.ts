@@ -100,6 +100,22 @@ describe("settings actions", () => {
     expect(memRepos.list[1].isNew).toBe(false);
   });
 
+  it("merges settings patches into the latest persisted state", async () => {
+    const { updateSettingsPatchAction } = await import(
+      "@/app/settings/actions"
+    );
+
+    const first = updateSettingsPatchAction({ releaseSortOrder: "repo_az" });
+    const second = updateSettingsPatchAction({
+      repositoryFormExpanded: false,
+    });
+    await Promise.all([first, second]);
+
+    expect(settingsStore.current.releaseSortOrder).toBe("repo_az");
+    expect(settingsStore.current.repositoryFormExpanded).toBe(false);
+    expect(settingsStore.current.refreshInterval).toBe(10);
+  });
+
   it("deleteAllRepositoriesAction clears storage and returns success", async () => {
     memRepos.list = [{ id: "x/y", url: "https://github.com/x/y" }];
     const { deleteAllRepositoriesAction } = await import(
