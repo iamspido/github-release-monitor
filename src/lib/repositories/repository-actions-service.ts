@@ -289,17 +289,24 @@ export async function refreshMultipleRepositoriesAction(
       );
 
       const enrichedMap = new Map(enrichedReleases.map((r) => [r.repoId, r]));
-
-      const updatedRepos = allRepos.map((repo) => {
-        const enriched = enrichedMap.get(repo.id);
-        if (enriched) {
-          applyReleaseFetchResultToRepository(repo, enriched, {
-            initializeLastSeenFromRealRelease: true,
-          });
-        }
-        return repo;
-      });
-      await saveRepositories(updatedRepos);
+      await scheduleTask(
+        `commitRefreshMultipleRepositories: ${jobId}`,
+        async () => {
+          // Re-read after the network phase so concurrent deletes, imports, and
+          // settings changes are preserved. Only release cache fields are
+          // applied to repositories that still exist.
+          const currentRepos = await getRepositories();
+          for (const repo of currentRepos) {
+            const enriched = enrichedMap.get(repo.id);
+            if (enriched) {
+              applyReleaseFetchResultToRepository(repo, enriched, {
+                initializeLastSeenFromRealRelease: true,
+              });
+            }
+          }
+          await saveRepositories(currentRepos);
+        },
+      );
     }
     setJobStatus(jobId, "complete");
     log.info(`Refresh multiple repositories complete: jobId=${jobId}`);
