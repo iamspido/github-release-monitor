@@ -18,8 +18,9 @@ test("repo dialog ESC closes without saving pending changes", async ({
 
   const dialog = page.getByRole("dialog");
   const rppInput = dialog.locator('input[type="number"]').first();
-  const allTextInputs = dialog.locator('input[type="text"]');
-  const includeInput = allTextInputs.first(); // Include regex is the first text input
+  const includeInput = dialog
+    .getByLabel("Include Pattern")
+    .or(dialog.getByLabel("Einschließen-Muster (Include)"));
 
   // Capture current persisted values to compare later
   const beforeRpp = await rppInput.inputValue();

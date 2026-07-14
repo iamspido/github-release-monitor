@@ -16,9 +16,9 @@ test("ESC closes nested Select first, then dialog; focus returns to trigger", as
   await trigger.click();
   await expect(page.getByRole("dialog")).toBeVisible();
 
-  // Open Apprise Format select inside repo dialog
+  // Open a nested Select that does not depend on optional notification config.
   await page
-    .getByLabel(/Global Apprise Format|Globales Apprise-Format/)
+    .getByLabel(/Background check mode|Modus für Hintergrundprüfungen/)
     .click();
   // Press ESC should close the Select, dialog remains open
   await page.keyboard.press("Escape");
