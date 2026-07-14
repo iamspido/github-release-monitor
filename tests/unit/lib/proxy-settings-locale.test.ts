@@ -77,8 +77,17 @@ vi.mock("next/server", () => {
       };
     }
 
-    static next() {
-      return new NextResponse(null, { status: 200 });
+    static next(init?: { request?: { headers?: Headers } }) {
+      const response = new NextResponse(null, { status: 200 });
+      if (init?.request?.headers) {
+        const names: string[] = [];
+        for (const [name, value] of init.request.headers) {
+          names.push(name);
+          response.headers.set(`x-middleware-request-${name}`, value);
+        }
+        response.headers.set("x-middleware-override-headers", names.join(","));
+      }
+      return response;
     }
     static redirect(input: string | URL) {
       const location = input instanceof URL ? input.toString() : String(input);
@@ -325,6 +334,9 @@ describe("proxy", () => {
     expect(parsed?.searchParams.get("next")).toBe("/de/einstellungen");
     expect(response.cookies.get(SETTINGS_LOCALE_COOKIE)?.value).toBe("de");
     expect(response.cookies.get(NEXT_LOCALE_COOKIE)?.value).toBe("de");
+    expect(response.headers.get("Content-Security-Policy")).toContain(
+      "script-src",
+    );
   });
 
   it("redirects logged-in users away from the login page", async () => {
@@ -538,6 +550,18 @@ describe("proxy", () => {
       expect(response.headers.get("Content-Security-Policy")).toContain(
         "upgrade-insecure-requests",
       );
+      const csp = response.headers.get("Content-Security-Policy");
+      expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic'/);
+      expect(csp).not.toContain("'unsafe-eval'");
+      expect(csp).not.toContain("script-src 'self' 'unsafe-inline'");
+      expect(
+        response.headers.get("x-middleware-request-x-nonce"),
+      ).toBeTruthy();
+      expect(
+        response.headers.get(
+          "x-middleware-request-content-security-policy",
+        ),
+      ).toBe(csp);
       expect(response.headers.get("X-Frame-Options")).toBe("DENY");
       expect(response.cookies.get(NEXT_LOCALE_COOKIE)?.value).toBe("de");
     } finally {

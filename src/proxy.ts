@@ -16,6 +16,8 @@ import {
 } from "@/lib/proxy/locale-routing";
 import {
   applySecurityHeaders,
+  createRequestSecurityContext,
+  forwardSecurityContext,
   getBlockedDevOriginResponse,
 } from "@/lib/proxy/security-headers";
 import {
@@ -39,6 +41,17 @@ export async function proxy(request: NextRequest) {
   if (shouldBypassProxy(pathname)) {
     return NextResponse.next();
   }
+  const securityContext = createRequestSecurityContext();
+  const secureResponse = (
+    response: NextResponse,
+    options: { forwardToRenderer?: boolean } = {},
+  ) => {
+    if (options.forwardToRenderer) {
+      forwardSecurityContext(request, response, securityContext);
+    }
+    applySecurityHeaders(response, securityContext);
+    return response;
+  };
 
   const cookieLocale = getLocaleFromCookies(request);
   const settingsLocale = cookieLocale ?? (await fetchSettingsLocale(request));
@@ -50,7 +63,7 @@ export async function proxy(request: NextRequest) {
     if (redirectUrl.pathname !== pathname) {
       const redirectResponse = NextResponse.redirect(redirectUrl);
       attachLocaleCookies(redirectResponse, settingsLocale);
-      return redirectResponse;
+      return secureResponse(redirectResponse);
     }
   } else if (requestedLocale !== settingsLocale) {
     const targetRest = resolveLocalizedRestPath(
@@ -61,7 +74,7 @@ export async function proxy(request: NextRequest) {
     const redirectUrl = buildRedirectUrl(request, settingsLocale, targetRest);
     const redirectResponse = NextResponse.redirect(redirectUrl);
     attachLocaleCookies(redirectResponse, settingsLocale);
-    return redirectResponse;
+    return secureResponse(redirectResponse);
   }
 
   const handleI18nRouting = createIntlMiddleware(routing);
@@ -80,7 +93,9 @@ export async function proxy(request: NextRequest) {
 
   if (authenticationMethod === "External" && (isLoginPage || isRegisterPage)) {
     logAuth.info("External auth mode active, redirecting auth page to home.");
-    return buildLocaleRedirectResponse(request, currentLocale, "/");
+    return secureResponse(
+      buildLocaleRedirectResponse(request, currentLocale, "/"),
+    );
   }
 
   const authGate = evaluateAuthGate({
@@ -94,7 +109,7 @@ export async function proxy(request: NextRequest) {
     logAuth.warn(
       `Unauthenticated request to '${request.nextUrl.pathname}', redirecting to login.`,
     );
-    return buildLoginRedirectResponse(request, currentLocale);
+    return secureResponse(buildLoginRedirectResponse(request, currentLocale));
   }
 
   if (
@@ -103,7 +118,9 @@ export async function proxy(request: NextRequest) {
     (isLoginPage || isRegisterPage)
   ) {
     logAuth.info("Logged-in user on auth page, redirecting to home.");
-    return buildLocaleRedirectResponse(request, currentLocale, "/");
+    return secureResponse(
+      buildLocaleRedirectResponse(request, currentLocale, "/"),
+    );
   }
 
   if (isAuthenticated) {
@@ -121,11 +138,11 @@ export async function proxy(request: NextRequest) {
     logSecurity.warn(
       `Blocked development origin: ${request.headers.get("origin")}`,
     );
-    return blockedOriginResponse;
+    return secureResponse(blockedOriginResponse);
   }
 
   attachLocaleCookies(response, currentLocale);
-  applySecurityHeaders(response);
+  secureResponse(response, { forwardToRenderer: true });
   logSecurity.debug("Applied security headers");
 
   return response;
