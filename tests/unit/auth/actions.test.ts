@@ -239,6 +239,34 @@ describe("auth actions", () => {
     await expect(attempt("correct")).resolves.toEqual({ redirectTo: "/en/" });
   });
 
+  it("login: retains rate limiting when proxy addresses are disabled", async () => {
+    process.env.AUTH_TRUST_PROXY_HEADERS = "false";
+    process.env.AUTH_MAX_LOGIN_ATTEMPTS = "2";
+    process.env.AUTH_LOGIN_WINDOW_SECONDS = "60";
+    process.env.AUTH_LOGIN_LOCKOUT_SECONDS = "60";
+    requestHeaders.current = new Headers({ "user-agent": "first-browser" });
+    signInEmailMock.mockResolvedValue(new Response(null, { status: 401 }));
+    const { login } = await import("@/app/auth/actions");
+
+    async function attempt(password: string) {
+      const data = new FormData();
+      data.set("email", "user@example.com");
+      data.set("password", password);
+      return login(undefined, data);
+    }
+
+    await expect(attempt("wrong")).resolves.toEqual({
+      errorKey: "error_invalid_credentials",
+    });
+    await expect(attempt("wrong-again")).resolves.toEqual({
+      errorKey: "error_too_many_attempts",
+    });
+
+    requestHeaders.current = new Headers({ "user-agent": "second-browser" });
+    signInEmailMock.mockResolvedValue(new Response(null, { status: 200 }));
+    await expect(attempt("correct")).resolves.toEqual({ redirectTo: "/en/" });
+  });
+
   it("login: limits credential spraying across identifiers from one IP", async () => {
     process.env.AUTH_MAX_LOGIN_ATTEMPTS = "2";
     process.env.AUTH_LOGIN_WINDOW_SECONDS = "60";

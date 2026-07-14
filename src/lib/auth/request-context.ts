@@ -50,13 +50,24 @@ export function getLoginRequestContext(
   const identifierHash = createHash("sha256")
     .update(normalizedIdentifier || "unknown")
     .digest("hex");
+  const fallbackClientHash = createHash("sha256")
+    .update(
+      [
+        headerStore.get("user-agent") ?? "",
+        headerStore.get("accept-language") ?? "",
+        headerStore.get("sec-ch-ua") ?? "",
+        headerStore.get("sec-ch-ua-platform") ?? "",
+      ].join("\n") || "unknown-client",
+    )
+    .digest("hex");
+  const clientKey =
+    ip === "unknown" ? `client-fingerprint:${fallbackClientHash}` : `ip:${ip}`;
   const accountRateLimitKey =
-    ip === "unknown" ? null : `ip-identifier:${ip}:${identifierHash}`;
+    ip === "unknown"
+      ? `client-fingerprint-identifier:${fallbackClientHash}:${identifierHash}`
+      : `ip-identifier:${ip}:${identifierHash}`;
   return {
-    rateLimitKey: [
-      ...(ip === "unknown" ? [] : [`ip:${ip}`]),
-      ...(accountRateLimitKey ? [accountRateLimitKey] : []),
-    ],
+    rateLimitKey: [clientKey, accountRateLimitKey],
     accountRateLimitKey,
     clientIp: ip,
   };

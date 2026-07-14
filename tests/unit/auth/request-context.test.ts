@@ -55,15 +55,42 @@ describe("auth request context", () => {
     expect(first.accountRateLimitKey).not.toBe(second.accountRateLimitKey);
   });
 
-  it("does not create a globally shared account lockout without a client IP", () => {
+  it("uses a private client fingerprint when no client IP is available", () => {
     process.env.AUTH_TRUST_PROXY_HEADERS = "false";
 
     const context = getLoginRequestContext(
-      new Headers({ "x-real-ip": "198.51.100.20" }),
+      new Headers({
+        "x-real-ip": "198.51.100.20",
+        "user-agent": "test-browser",
+        "accept-language": "en-US",
+      }),
       "user@example.com",
     );
 
-    expect(context.rateLimitKey).toEqual([]);
-    expect(context.accountRateLimitKey).toBeNull();
+    expect(context.rateLimitKey).toHaveLength(2);
+    expect(context.rateLimitKey[0]).toMatch(
+      /^client-fingerprint:[a-f0-9]{64}$/,
+    );
+    expect(context.accountRateLimitKey).toMatch(
+      /^client-fingerprint-identifier:[a-f0-9]{64}:[a-f0-9]{64}$/,
+    );
+    expect(context.rateLimitKey.join(":")).not.toContain("test-browser");
+    expect(context.rateLimitKey.join(":")).not.toContain("user@example.com");
+  });
+
+  it("separates fallback rate limits for different client fingerprints", () => {
+    process.env.AUTH_TRUST_PROXY_HEADERS = "false";
+
+    const first = getLoginRequestContext(
+      new Headers({ "user-agent": "first-browser" }),
+      "user@example.com",
+    );
+    const second = getLoginRequestContext(
+      new Headers({ "user-agent": "second-browser" }),
+      "user@example.com",
+    );
+
+    expect(first.rateLimitKey[0]).not.toBe(second.rateLimitKey[0]);
+    expect(first.accountRateLimitKey).not.toBe(second.accountRateLimitKey);
   });
 });
