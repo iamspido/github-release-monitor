@@ -79,7 +79,10 @@ function buildSocialProviders(disableImplicitSignUp: boolean) {
   };
 }
 
-const authSocialProviders = buildSocialProviders(!signupEnabled);
+// Normal sign-in must never create an account implicitly. Explicit social
+// registration is routed through the separate setup-capable handler only after
+// the signed registration precheck intent has been issued.
+const authSocialProviders = buildSocialProviders(true);
 const setupSocialProviders = buildSocialProviders(false);
 const hasSocialProviders = Object.keys(authSocialProviders).length > 0;
 const trustedSocialProviders = trustedSocialLinkingEnabled

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureAuthDatabaseReady, precheckSocialLogin } from "@/lib/auth";
+import { isSocialProviderConfigured } from "@/lib/auth";
 import {
   getClientIpFromRequest,
   isSupportedAuthSocialProvider,
@@ -20,7 +20,6 @@ type SocialPrecheckPayload = {
 };
 
 export async function POST(request: Request) {
-  await ensureAuthDatabaseReady();
   const clientIp = getClientIpFromRequest(request);
 
   const jsonResult = await readJsonPayload<SocialPrecheckPayload>(request);
@@ -35,14 +34,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_provider" }, { status: 400 });
   }
 
-  const precheckResult = precheckSocialLogin(identifier, provider);
-  if (precheckResult === "invalid_input") {
+  if (!identifier) {
     log.warn(
       `Rejected social precheck for provider='${provider}' from ip='${clientIp}' due to missing identifier.`,
     );
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
-  if (precheckResult === "provider_not_configured") {
+  if (!isSocialProviderConfigured(provider)) {
     log.warn(
       `Rejected social precheck for provider='${provider}' from ip='${clientIp}' because provider is not configured.`,
     );
@@ -52,13 +50,6 @@ export async function POST(request: Request) {
     );
   }
 
-  if (precheckResult === "unknown_or_unlinked") {
-    log.warn(
-      `Denied social precheck for provider='${provider}' from ip='${clientIp}' (unknown or unlinked account).`,
-    );
-    return NextResponse.json({ canProceed: false }, { status: 200 });
-  }
-
   const intentValue = buildSocialLoginIntentValue(provider);
   const response = NextResponse.json({ canProceed: true }, { status: 200 });
   response.headers.append(
@@ -66,7 +57,7 @@ export async function POST(request: Request) {
     buildSocialLoginIntentSetCookieHeader(intentValue),
   );
   log.info(
-    `Issued social login intent for provider='${provider}' to ip='${clientIp}'.`,
+    `Issued social login intent for provider='${provider}' to ip='${clientIp}' without disclosing account linkage.`,
   );
   return response;
 }

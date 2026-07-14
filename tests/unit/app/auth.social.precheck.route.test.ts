@@ -1,9 +1,7 @@
-const ensureAuthDatabaseReadyMock = vi.fn(async () => undefined);
-const precheckSocialLoginMock = vi.fn(() => "linked");
+const isSocialProviderConfiguredMock = vi.fn(() => true);
 
 vi.mock("@/lib/auth", () => ({
-  ensureAuthDatabaseReady: ensureAuthDatabaseReadyMock,
-  precheckSocialLogin: precheckSocialLoginMock,
+  isSocialProviderConfigured: isSocialProviderConfiguredMock,
 }));
 
 const buildSocialLoginIntentValueMock = vi.fn(() => "intent.value");
@@ -42,7 +40,7 @@ describe("auth social precheck route", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    precheckSocialLoginMock.mockReturnValue("linked");
+    isSocialProviderConfiguredMock.mockReturnValue(true);
   });
 
   it("still requires precheck even when signup is enabled", async () => {
@@ -56,14 +54,12 @@ describe("auth social precheck route", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ canProceed: true });
-    expect(precheckSocialLoginMock).toHaveBeenCalledWith("admin", "github");
     expect(response.headers.get("set-cookie")).toContain(
       "auth_social_login_intent=",
     );
   });
 
   it("returns canProceed=true and sets intent cookie for linked account", async () => {
-    precheckSocialLoginMock.mockReturnValue("linked");
     const { POST } = await import("@/app/api/auth/social/precheck/route");
     const response = await POST(
       precheckRequest({
@@ -74,15 +70,13 @@ describe("auth social precheck route", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ canProceed: true });
-    expect(precheckSocialLoginMock).toHaveBeenCalledWith("admin", "github");
     expect(buildSocialLoginIntentValueMock).toHaveBeenCalledWith("github");
     expect(response.headers.get("set-cookie")).toContain(
       "auth_social_login_intent=",
     );
   });
 
-  it("returns canProceed=false for unknown_or_unlinked account", async () => {
-    precheckSocialLoginMock.mockReturnValue("unknown_or_unlinked");
+  it("does not disclose whether an account is linked", async () => {
     const { POST } = await import("@/app/api/auth/social/precheck/route");
     const response = await POST(
       precheckRequest({
@@ -92,12 +86,13 @@ describe("auth social precheck route", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ canProceed: false });
-    expect(response.headers.get("set-cookie")).toBeNull();
+    await expect(response.json()).resolves.toEqual({ canProceed: true });
+    expect(response.headers.get("set-cookie")).toContain(
+      "auth_social_login_intent=",
+    );
   });
 
   it("rejects missing identifier", async () => {
-    precheckSocialLoginMock.mockReturnValue("invalid_input");
     const { POST } = await import("@/app/api/auth/social/precheck/route");
     const response = await POST(
       precheckRequest({
@@ -108,6 +103,19 @@ describe("auth social precheck route", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: "invalid_input" });
+  });
+
+  it("rejects a provider that is not configured", async () => {
+    isSocialProviderConfiguredMock.mockReturnValue(false);
+    const { POST } = await import("@/app/api/auth/social/precheck/route");
+    const response = await POST(
+      precheckRequest({ identifier: "admin", provider: "github" }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "provider_not_configured",
+    });
   });
 
   it("rejects unsupported provider", async () => {

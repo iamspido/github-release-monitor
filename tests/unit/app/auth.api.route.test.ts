@@ -248,6 +248,40 @@ describe("auth catch-all route setup social cookie handling", () => {
 
     expect(response.status).toBe(302);
     expect(authPostMock).toHaveBeenCalledTimes(1);
+    expect(setupPostMock).not.toHaveBeenCalled();
+  });
+
+  it("routes an explicit social registration intent through the user-creation handler", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    readSocialLoginIntentFromRequestMock.mockReturnValue({
+      provider: "github",
+      purpose: "register",
+      username: "AdminUser",
+      email: "admin@example.com",
+      issuedAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      nonce: "nonce",
+    });
+    setupPostMock.mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { location: "https://github.com/login/oauth/authorize" },
+      }),
+    );
+
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+    const response = await POST(
+      new Request("http://localhost/api/auth/sign-in/social", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: "github" }),
+      }),
+    );
+
+    expect(response.status).toBe(302);
+    expect(setupPostMock).toHaveBeenCalledTimes(1);
+    expect(authPostMock).not.toHaveBeenCalled();
   });
 
   it("blocks social sign-in without valid intent even when signup is enabled", async () => {
@@ -317,6 +351,7 @@ describe("auth catch-all route setup social cookie handling", () => {
 
     expect(response.status).toBe(302);
     expect(authGetMock).toHaveBeenCalledTimes(1);
+    expect(setupGetMock).not.toHaveBeenCalled();
   });
 
   it("marks diagnostic social step-up verified on successful provider callback", async () => {
@@ -351,6 +386,7 @@ describe("auth catch-all route setup social cookie handling", () => {
     );
 
     expect(response.status).toBe(302);
+    expect(authGetMock).toHaveBeenCalledTimes(1);
     expect(response.headers.get("set-cookie")).toContain(
       "diagnostic_secret_reveal_pending=",
     );
@@ -396,6 +432,8 @@ describe("auth catch-all route setup social cookie handling", () => {
     );
 
     expect(response.status).toBe(302);
+    expect(authGetMock).toHaveBeenCalledTimes(1);
+    expect(setupGetMock).not.toHaveBeenCalled();
     expect(response.headers.get("set-cookie")).not.toContain(
       "diagnostic_secret_reveal_verified=",
     );
@@ -435,6 +473,8 @@ describe("auth catch-all route setup social cookie handling", () => {
     );
 
     expect(response.status).toBe(302);
+    expect(authGetMock).toHaveBeenCalledTimes(1);
+    expect(setupGetMock).not.toHaveBeenCalled();
     expect(response.headers.get("set-cookie")).not.toContain(
       "diagnostic_secret_reveal_verified=",
     );
@@ -555,7 +595,7 @@ describe("auth catch-all route setup social cookie handling", () => {
       expiresAt: Date.now() + 60_000,
       nonce: "nonce",
     });
-    authGetMock.mockResolvedValueOnce(
+    setupGetMock.mockResolvedValueOnce(
       new Response(null, {
         status: 302,
         headers: { location: "http://localhost/en" },
@@ -570,6 +610,8 @@ describe("auth catch-all route setup social cookie handling", () => {
     );
 
     expect(response.status).toBe(302);
+    expect(setupGetMock).toHaveBeenCalledTimes(1);
+    expect(authGetMock).not.toHaveBeenCalled();
     expect(getAuthUserIdSnapshotMock).toHaveBeenCalledTimes(1);
     expect(applySocialRegistrationProfileMock).toHaveBeenCalledWith({
       previousUserIds: snapshot,
@@ -593,7 +635,7 @@ describe("auth catch-all route setup social cookie handling", () => {
       expiresAt: Date.now() + 60_000,
       nonce: "nonce",
     });
-    authGetMock.mockResolvedValueOnce(
+    setupGetMock.mockResolvedValueOnce(
       new Response(null, {
         status: 302,
         headers: { location: "http://localhost/en" },
@@ -608,6 +650,8 @@ describe("auth catch-all route setup social cookie handling", () => {
     );
 
     expect(response.status).toBe(302);
+    expect(setupGetMock).toHaveBeenCalledTimes(1);
+    expect(authGetMock).not.toHaveBeenCalled();
     expect(getAuthUserIdSnapshotMock).not.toHaveBeenCalled();
     expect(applySocialRegistrationProfileMock).not.toHaveBeenCalled();
   });

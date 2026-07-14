@@ -429,9 +429,9 @@ function logAuthRouteStart(method: AuthRouteMethod, state: AuthRouteState) {
 async function runAuthHandler(
   method: AuthRouteMethod,
   request: Request,
-  setupFlowAllowed: boolean,
+  allowUserCreation: boolean,
 ) {
-  const activeHandler = setupFlowAllowed ? setupHandler : handler;
+  const activeHandler = allowUserCreation ? setupHandler : handler;
   return method === "GET"
     ? activeHandler.GET(request)
     : activeHandler.POST(request);
@@ -552,7 +552,8 @@ export async function handleAuthRouteRequest(
     const response = await runAuthHandler(
       method,
       request,
-      state.setupFlowAllowed,
+      state.setupFlowAllowed ||
+        (state.socialAction && state.socialIntent?.purpose === "register"),
     );
     const finalResponse = await postProcessAuthResponse({
       response,

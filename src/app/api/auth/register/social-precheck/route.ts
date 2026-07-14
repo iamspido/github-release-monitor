@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth";
 import {
   getClientIpFromRequest,
+  getLoginIdentifierLogLabel,
   isLikelyEmail,
   isSupportedAuthSocialProvider,
   readJsonPayload,
@@ -74,8 +75,12 @@ export async function POST(request: Request) {
 
   const registrationConflict = findRegistrationConflict(username, email);
   if (registrationConflict !== "none") {
+    const usernameLabel = getLoginIdentifierLogLabel(username);
+    const emailLabel = email
+      ? getLoginIdentifierLogLabel(email)
+      : "email_hash='none'";
     log.info(
-      `Denied register social precheck for provider='${provider}' username='${username}' email='${email || "unknown"}' from ip='${clientIp}' due to conflict='${registrationConflict}'.`,
+      `Denied register social precheck for provider='${provider}' ${usernameLabel} ${emailLabel} from ip='${clientIp}' due to conflict='${registrationConflict}'.`,
     );
     return NextResponse.json(
       { canProceed: false, error: registrationConflict },
@@ -84,7 +89,7 @@ export async function POST(request: Request) {
   }
 
   log.info(
-    `Allowed register social precheck for provider='${provider}' username='${username}' email='${email || "unknown"}' from ip='${clientIp}'.`,
+    `Allowed register social precheck for provider='${provider}' ${getLoginIdentifierLogLabel(username)} from ip='${clientIp}'.`,
   );
   const response = NextResponse.json({ canProceed: true }, { status: 200 });
   const intentValue = buildSocialLoginIntentValue(provider, {
