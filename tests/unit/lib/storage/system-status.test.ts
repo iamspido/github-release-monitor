@@ -35,13 +35,11 @@ describe("storage/system-status persistence", () => {
     vi.resetModules();
   });
 
-  it("returns read_error when reading system status fails", async () => {
+  it("fails closed when reading system status fails", async () => {
     fsMock.readFile.mockRejectedValueOnce(new Error("boom"));
     const { getSystemStatus } = await import("@/lib/storage/system-status");
 
-    const status = await getSystemStatus();
-
-    expect(status.lastCheckError).toBe("read_error");
+    await expect(getSystemStatus()).rejects.toThrow("boom");
   });
 
   it("throws a descriptive error when saving fails", async () => {
@@ -69,7 +67,9 @@ describe("storage/system-status persistence", () => {
   });
 
   it("fails when writing initial system status file is impossible", async () => {
-    fsMock.access.mockRejectedValueOnce(new Error("missing"));
+    fsMock.access.mockRejectedValueOnce(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
     fsMock.writeFile.mockRejectedValueOnce(new Error("disk full"));
     const { getSystemStatus } = await import("@/lib/storage/system-status");
 

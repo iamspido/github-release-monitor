@@ -9,7 +9,6 @@ type JsonFileStoreOptions<T> = {
   defaultValue: T;
   scope: string;
   parse: (value: unknown) => T;
-  readFallback?: (error: unknown) => T;
   writeErrorMessage: string | ((error: unknown) => string);
   initDirectoryErrorMessage?: string;
   initFileErrorMessage?: string;
@@ -40,7 +39,10 @@ export class JsonFileStore<T> {
 
     try {
       await fs.access(this.options.filePath);
-    } catch {
+    } catch (error) {
+      if (!isNodeErrorWithCode(error, "ENOENT")) {
+        throw error;
+      }
       try {
         await this.writeRaw(this.options.defaultValue);
         this.log.info(`Created data file at: ${this.options.filePath}`);
@@ -69,9 +71,6 @@ export class JsonFileStore<T> {
       return this.options.parse(JSON.parse(raw));
     } catch (error) {
       this.log.error(`Error reading or parsing ${this.fileName}:`, error);
-      if (this.options.readFallback) {
-        return this.options.readFallback(error);
-      }
       throw error;
     }
   }
@@ -113,4 +112,12 @@ export class JsonFileStore<T> {
   private get fileName(): string {
     return path.basename(this.options.filePath);
   }
+}
+
+function isNodeErrorWithCode(error: unknown, code: string): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === code
+  );
 }

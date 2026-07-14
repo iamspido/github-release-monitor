@@ -24,7 +24,6 @@ const systemStatusStore = new JsonFileStore<SystemStatus>({
   defaultValue: defaultStatus,
   scope: "SystemStatus",
   parse: normalizeSystemStatus,
-  readFallback: () => ({ ...defaultStatus, lastCheckError: "read_error" }),
   writeErrorMessage: "Could not persist system status.",
   initDirectoryErrorMessage:
     "Unable to initialize system status storage directory.",

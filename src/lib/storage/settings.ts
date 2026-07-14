@@ -83,7 +83,6 @@ const settingsStore = new JsonFileStore<AppSettings>({
   defaultValue: defaultSettings,
   scope: "Settings",
   parse: normalizeSettings,
-  readFallback: () => cloneSettings(defaultSettings),
   writeErrorMessage: "Could not save settings data.",
 });
 
@@ -116,10 +115,10 @@ async function ensureCache() {
     if (cachedMtimeMs === null || stat.mtimeMs !== cachedMtimeMs) {
       await refreshCache(stat);
     }
-  } catch {
-    cachedSettings = cloneSettings(defaultSettings);
+  } catch (error) {
+    cachedSettings = null;
     cachedMtimeMs = null;
-    lastMtimeCheck = now;
+    throw error;
   }
 }
 

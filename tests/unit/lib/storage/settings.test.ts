@@ -47,7 +47,9 @@ describe("storage/settings failure scenarios", () => {
   });
 
   it("throws when ensureDataFileExists cannot write settings file", async () => {
-    fsMock.access.mockRejectedValueOnce(new Error("missing"));
+    fsMock.access.mockRejectedValueOnce(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
     const failure = new Error("disk full");
     fsMock.writeFile.mockRejectedValueOnce(failure);
     const { getSettings } = await import("@/lib/storage/settings");
@@ -152,14 +154,11 @@ describe("storage/settings failure scenarios", () => {
     expect(fsMock.readFile).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to default settings and logs when settings JSON is invalid", async () => {
+  it("fails closed and logs when settings JSON is invalid", async () => {
     fsMock.readFile.mockResolvedValue("{");
     const { getSettings } = await import("@/lib/storage/settings");
 
-    await expect(getSettings()).resolves.toMatchObject({
-      locale: "en",
-      releaseChannels: ["stable"],
-    });
+    await expect(getSettings()).rejects.toBeInstanceOf(SyntaxError);
     expect(loggerMock.error).toHaveBeenCalledWith(
       "Error reading or parsing settings.json:",
       expect.any(SyntaxError),

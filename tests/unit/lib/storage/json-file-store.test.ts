@@ -32,27 +32,21 @@ describe("storage/JsonFileStore", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  function createStore(options?: {
-    readFallback?: () => TestValue;
-    defaultValue?: TestValue;
-  }) {
+  function createStore(options?: { defaultValue?: TestValue }) {
     return new JsonFileStore<TestValue>({
       filePath,
       defaultValue: options?.defaultValue ?? { value: "default" },
       scope: "JsonFileStoreTest",
       parse: parseTestValue,
-      readFallback: options?.readFallback,
       writeErrorMessage: "write failed",
     });
   }
 
-  it("returns the configured fallback when the JSON file is corrupt", async () => {
+  it("fails closed when the JSON file is corrupt", async () => {
     await writeFile(filePath, "{", "utf8");
-    const store = createStore({
-      readFallback: () => ({ value: "fallback" }),
-    });
+    const store = createStore();
 
-    await expect(store.read()).resolves.toEqual({ value: "fallback" });
+    await expect(store.read()).rejects.toBeInstanceOf(SyntaxError);
   });
 
   it("creates and replaces the JSON file through a temporary file without leaving temp files behind", async () => {

@@ -27,8 +27,12 @@ const repositoryStore = new JsonFileStore<Repository[]>({
   filePath: dataFilePath,
   defaultValue: [],
   scope: "Repositories",
-  parse: (value) => (Array.isArray(value) ? (value as Repository[]) : []),
-  readFallback: () => [],
+  parse: (value) => {
+    if (!Array.isArray(value)) {
+      throw new Error("Repository data must be an array.");
+    }
+    return value as Repository[];
+  },
   writeErrorMessage: (error) => {
     const message = error instanceof Error ? error.message : String(error);
     const code =
@@ -126,52 +130,39 @@ function migrateRepositoriesIds(repositories: Repository[]): {
 }
 
 export async function getRepositories(): Promise<Repository[]> {
-  await repositoryStore.ensureExists();
-  try {
-    const data = await repositoryStore.read();
+  const data = await repositoryStore.read();
 
-    const hasLegacyIds = Array.isArray(data)
-      ? data.some(
-          (r) => typeof r?.id === "string" && !isPrefixedRepoId(r.id.trim()),
-        )
-      : false;
+  const hasLegacyIds = data.some(
+    (r) => typeof r?.id === "string" && !isPrefixedRepoId(r.id.trim()),
+  );
 
-    if (hasLegacyIds) {
-      if (!migrationInFlight) {
-        const { migrated, changed } = migrateRepositoriesIds(
-          Array.isArray(data) ? data : [],
-        );
+  if (hasLegacyIds) {
+    if (!migrationInFlight) {
+      const { migrated, changed } = migrateRepositoriesIds(data);
 
-        if (changed) {
-          logger
-            .withScope("Repositories")
-            .info("Migrating repository ids to provider-prefixed format.");
-        }
-
-        migrationInFlight = (async () => {
-          if (changed) {
-            await saveRepositories(migrated);
-          }
-        })().finally(() => {
-          migrationInFlight = null;
-        });
-
-        await migrationInFlight;
-        return migrated;
+      if (changed) {
+        logger
+          .withScope("Repositories")
+          .info("Migrating repository ids to provider-prefixed format.");
       }
 
+      migrationInFlight = (async () => {
+        if (changed) {
+          await saveRepositories(migrated);
+        }
+      })().finally(() => {
+        migrationInFlight = null;
+      });
+
       await migrationInFlight;
-      return repositoryStore.read();
+      return migrated;
     }
 
-    return data;
-  } catch (error) {
-    logger
-      .withScope("Repositories")
-      .error("Error reading or parsing repositories.json:", error);
-    // Return an empty array or throw an error, depending on desired behavior for a corrupted file.
-    return [];
+    await migrationInFlight;
+    return repositoryStore.read();
   }
+
+  return data;
 }
 
 export async function saveRepositories(

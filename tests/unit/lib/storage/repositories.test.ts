@@ -50,7 +50,7 @@ describe("storage/repositories", () => {
     ]);
   });
 
-  it("returns empty array on corrupt json and throws detailed write error", async () => {
+  it("fails closed on corrupt json and throws detailed write error", async () => {
     const mod = await import("@/lib/storage/repositories");
     const { getRepositories, saveRepositories } = mod;
 
@@ -64,8 +64,7 @@ describe("storage/repositories", () => {
       "utf8",
     );
 
-    const repos = await getRepositories();
-    expect(repos).toEqual([]);
+    await expect(getRepositories()).rejects.toBeInstanceOf(SyntaxError);
 
     // Mock fs.writeFile to fail
     const writeSpy = vi
