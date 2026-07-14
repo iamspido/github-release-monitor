@@ -6,13 +6,10 @@ import {
   Bell,
   Eye,
   EyeOff,
-  Fingerprint,
-  KeyRound,
   Loader2,
   Mail,
   PackagePlus,
   RefreshCw,
-  ShieldCheck,
   Workflow,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -26,6 +23,7 @@ import {
   revealMailPasswordAction,
   verifySecretRevealTotpAction,
 } from "@/app/actions";
+import { SecretRevealDialog } from "@/components/diagnostics/secret-reveal-dialog";
 import {
   buildSecretRevealCallbackUrl,
   getSecretRevealTargetFromSessionStorage,
@@ -35,7 +33,6 @@ import {
   type SecretRevealTarget,
 } from "@/components/diagnostics/secret-reveal-model";
 import { StatusIndicator } from "@/components/diagnostics/status-indicator";
-import { GoogleBrandIcon } from "@/components/google-brand-icon";
 import {
   CodebergBrandIcon,
   GithubBrandIcon,
@@ -49,14 +46,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDiagnosticsActions } from "@/hooks/use-diagnostics-actions";
@@ -150,9 +139,6 @@ export function TestPageClient({
   const [secretRevealPendingMethod, setSecretRevealPendingMethod] =
     React.useState<string | null>(null);
   const emailInputId = React.useId();
-  const mailPasswordConfirmInputId = React.useId();
-  const appriseUrlConfirmInputId = React.useId();
-  const secretRevealTotpInputId = React.useId();
 
   const rateLimitData = rateLimitResult.data;
   const rateLimitError = rateLimitResult.error;
@@ -512,6 +498,31 @@ export function TestPageClient({
     void loadSecretRevealOptions();
   };
 
+  const handleSecretRevealDialogOpenChange = (
+    target: SecretRevealTarget,
+    open: boolean,
+  ) => {
+    if (target === "mail_password") {
+      setMailPasswordDialogOpen(open);
+      if (!open) {
+        setMailPasswordConfirmValue("");
+        setMailPasswordRevealError("");
+      }
+    } else {
+      setAppriseUrlDialogOpen(open);
+      if (!open) {
+        setAppriseUrlConfirmValue("");
+        setAppriseUrlRevealError("");
+      }
+    }
+
+    if (!open) {
+      setSecretRevealTotpCode("");
+      setSecretRevealStepUpError("");
+      setSecretRevealPendingMethod(null);
+    }
+  };
+
   const revealSecretAfterStepUp = async (target: SecretRevealTarget) => {
     if (target === "mail_password") {
       const result = await revealMailPasswordAction();
@@ -760,111 +771,6 @@ export function TestPageClient({
       }
     });
   }, []);
-
-  const renderSecretRevealStepUpOptions = (target: SecretRevealTarget) => {
-    const isPending = Boolean(secretRevealPendingMethod);
-    const methods = secretRevealMethods;
-    const providerLabel: Record<SecretRevealSocialProvider, string> = {
-      github: "GitHub",
-      google: "Google",
-    };
-
-    return (
-      <div className="space-y-3 border-t pt-4">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <KeyRound className="size-4" />
-          <span>{t("secret_reveal_alternatives_title")}</span>
-        </div>
-        {secretRevealOptionsLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            <span>{t("secret_reveal_options_loading")}</span>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {methods?.totp && (
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  id={secretRevealTotpInputId}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  value={secretRevealTotpCode}
-                  onChange={(event) =>
-                    setSecretRevealTotpCode(event.target.value)
-                  }
-                  placeholder={t("secret_reveal_totp_placeholder")}
-                  disabled={isPending}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleTotpStepUp(target)}
-                  disabled={isPending || !secretRevealTotpCode.trim()}
-                >
-                  {secretRevealPendingMethod === "totp" ? (
-                    <Loader2 className="animate-spin" />
-                  ) : (
-                    <ShieldCheck />
-                  )}
-                  <span>{t("secret_reveal_totp_button")}</span>
-                </Button>
-              </div>
-            )}
-            {methods?.passkey && (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => handlePasskeyStepUp(target)}
-                disabled={isPending}
-              >
-                {secretRevealPendingMethod === "passkey" ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <Fingerprint />
-                )}
-                <span>{t("secret_reveal_passkey_button")}</span>
-              </Button>
-            )}
-            {methods?.socialProviders.map((provider) => (
-              <Button
-                key={provider}
-                type="button"
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => handleSocialStepUp(target, provider)}
-                disabled={isPending}
-              >
-                {secretRevealPendingMethod === provider ? (
-                  <Loader2 className="animate-spin" />
-                ) : provider === "github" ? (
-                  <GithubBrandIcon className="size-4" />
-                ) : (
-                  <GoogleBrandIcon className="size-4" />
-                )}
-                <span>
-                  {t("secret_reveal_social_button", {
-                    provider: providerLabel[provider],
-                  })}
-                </span>
-              </Button>
-            ))}
-            {methods &&
-              !methods.totp &&
-              !methods.passkey &&
-              methods.socialProviders.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  {t("secret_reveal_no_alternatives")}
-                </p>
-              )}
-          </div>
-        )}
-        {secretRevealStepUpError && (
-          <p className="text-sm text-destructive">{secretRevealStepUpError}</p>
-        )}
-      </div>
-    );
-  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1139,75 +1045,27 @@ export function TestPageClient({
               <span>{t("send_test_apprise_button")}</span>
             </Button>
           </div>
-          <Dialog
+          <SecretRevealDialog
+            target="apprise_url"
             open={appriseUrlDialogOpen}
-            onOpenChange={(open) => {
-              setAppriseUrlDialogOpen(open);
-              if (!open) {
-                setAppriseUrlConfirmValue("");
-                setAppriseUrlRevealError("");
-                setSecretRevealTotpCode("");
-                setSecretRevealStepUpError("");
-                setSecretRevealPendingMethod(null);
-              }
-            }}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{t("apprise_url_reveal_title")}</DialogTitle>
-                <DialogDescription>
-                  {t("apprise_url_reveal_description")}
-                </DialogDescription>
-              </DialogHeader>
-              {(secretRevealMethods?.password ?? true) && (
-                <div className="space-y-2">
-                  <Label htmlFor={appriseUrlConfirmInputId}>
-                    {t("mail_password_current_password_label")}
-                  </Label>
-                  <Input
-                    id={appriseUrlConfirmInputId}
-                    type="password"
-                    value={appriseUrlConfirmValue}
-                    onChange={(event) =>
-                      setAppriseUrlConfirmValue(event.target.value)
-                    }
-                    disabled={isRevealingAppriseUrl}
-                    autoComplete="current-password"
-                  />
-                  {appriseUrlRevealError && (
-                    <p className="text-sm text-destructive">
-                      {appriseUrlRevealError}
-                    </p>
-                  )}
-                </div>
-              )}
-              {renderSecretRevealStepUpOptions("apprise_url")}
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setAppriseUrlDialogOpen(false)}
-                  disabled={isRevealingAppriseUrl}
-                >
-                  {t("cancel")}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={handleConfirmAppriseUrlReveal}
-                  disabled={
-                    isRevealingAppriseUrl ||
-                    !appriseUrlConfirmValue ||
-                    secretRevealMethods?.password === false
-                  }
-                >
-                  {isRevealingAppriseUrl && (
-                    <Loader2 className="animate-spin" />
-                  )}
-                  {t("apprise_url_reveal_button")}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            onOpenChange={(open) =>
+              handleSecretRevealDialogOpenChange("apprise_url", open)
+            }
+            methods={secretRevealMethods}
+            optionsLoading={secretRevealOptionsLoading}
+            totpCode={secretRevealTotpCode}
+            onTotpCodeChange={setSecretRevealTotpCode}
+            stepUpError={secretRevealStepUpError}
+            pendingMethod={secretRevealPendingMethod}
+            isRevealing={isRevealingAppriseUrl}
+            confirmValue={appriseUrlConfirmValue}
+            onConfirmValueChange={setAppriseUrlConfirmValue}
+            revealError={appriseUrlRevealError}
+            onConfirm={handleConfirmAppriseUrlReveal}
+            onTotp={() => handleTotpStepUp("apprise_url")}
+            onPasskey={() => handlePasskeyStepUp("apprise_url")}
+            onSocial={(provider) => handleSocialStepUp("apprise_url", provider)}
+          />
         </CardContent>
       </Card>
 
@@ -1312,75 +1170,29 @@ export function TestPageClient({
             </div>
           </div>
 
-          <Dialog
+          <SecretRevealDialog
+            target="mail_password"
             open={mailPasswordDialogOpen}
-            onOpenChange={(open) => {
-              setMailPasswordDialogOpen(open);
-              if (!open) {
-                setMailPasswordConfirmValue("");
-                setMailPasswordRevealError("");
-                setSecretRevealTotpCode("");
-                setSecretRevealStepUpError("");
-                setSecretRevealPendingMethod(null);
-              }
-            }}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{t("mail_password_reveal_title")}</DialogTitle>
-                <DialogDescription>
-                  {t("mail_password_reveal_description")}
-                </DialogDescription>
-              </DialogHeader>
-              {(secretRevealMethods?.password ?? true) && (
-                <div className="space-y-2">
-                  <Label htmlFor={mailPasswordConfirmInputId}>
-                    {t("mail_password_current_password_label")}
-                  </Label>
-                  <Input
-                    id={mailPasswordConfirmInputId}
-                    type="password"
-                    value={mailPasswordConfirmValue}
-                    onChange={(event) =>
-                      setMailPasswordConfirmValue(event.target.value)
-                    }
-                    disabled={isRevealingMailPassword}
-                    autoComplete="current-password"
-                  />
-                  {mailPasswordRevealError && (
-                    <p className="text-sm text-destructive">
-                      {mailPasswordRevealError}
-                    </p>
-                  )}
-                </div>
-              )}
-              {renderSecretRevealStepUpOptions("mail_password")}
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setMailPasswordDialogOpen(false)}
-                  disabled={isRevealingMailPassword}
-                >
-                  {t("cancel")}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={handleConfirmMailPasswordReveal}
-                  disabled={
-                    isRevealingMailPassword ||
-                    !mailPasswordConfirmValue ||
-                    secretRevealMethods?.password === false
-                  }
-                >
-                  {isRevealingMailPassword && (
-                    <Loader2 className="animate-spin" />
-                  )}
-                  {t("mail_password_reveal_button")}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            onOpenChange={(open) =>
+              handleSecretRevealDialogOpenChange("mail_password", open)
+            }
+            methods={secretRevealMethods}
+            optionsLoading={secretRevealOptionsLoading}
+            totpCode={secretRevealTotpCode}
+            onTotpCodeChange={setSecretRevealTotpCode}
+            stepUpError={secretRevealStepUpError}
+            pendingMethod={secretRevealPendingMethod}
+            isRevealing={isRevealingMailPassword}
+            confirmValue={mailPasswordConfirmValue}
+            onConfirmValueChange={setMailPasswordConfirmValue}
+            revealError={mailPasswordRevealError}
+            onConfirm={handleConfirmMailPasswordReveal}
+            onTotp={() => handleTotpStepUp("mail_password")}
+            onPasskey={() => handlePasskeyStepUp("mail_password")}
+            onSocial={(provider) =>
+              handleSocialStepUp("mail_password", provider)
+            }
+          />
 
           <div className="pt-4 space-y-4">
             <div className="space-y-2">
