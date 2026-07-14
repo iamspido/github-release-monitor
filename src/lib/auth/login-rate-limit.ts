@@ -1,5 +1,3 @@
-import { createHmac } from "node:crypto";
-import { getAuthSecret } from "@/lib/auth/config";
 import { getLoginIdentifierLogLabel } from "@/lib/auth/request-context";
 import { logger } from "@/lib/logger";
 
@@ -22,7 +20,7 @@ export type LoginRateLimitKey = string | readonly string[];
 
 declare global {
   var _authLoginAttempts: Map<string, LoginAttemptState> | undefined;
-  var _authLoginOverflowAttempts: Map<number, LoginAttemptState> | undefined;
+  var _authLoginOverflowAttempts: Map<string, LoginAttemptState> | undefined;
 }
 
 global._authLoginAttempts ??= new Map<string, LoginAttemptState>();
@@ -30,9 +28,9 @@ const failedLoginAttempts = global._authLoginAttempts as Map<
   string,
   LoginAttemptState
 >;
-global._authLoginOverflowAttempts ??= new Map<number, LoginAttemptState>();
+global._authLoginOverflowAttempts ??= new Map<string, LoginAttemptState>();
 const overflowLoginAttempts = global._authLoginOverflowAttempts as Map<
-  number,
+  string,
   LoginAttemptState
 >;
 
@@ -41,19 +39,11 @@ const DEFAULT_ATTEMPT_WINDOW_SECONDS = 15 * 60;
 const DEFAULT_LOCKOUT_SECONDS = 15 * 60;
 const LOGIN_STATE_PRUNE_INTERVAL_MS = 60_000;
 export const MAX_LOGIN_RATE_LIMIT_ENTRIES = 10_000;
-const LOGIN_RATE_LIMIT_OVERFLOW_BUCKETS = 1_024;
+export const MAX_LOGIN_RATE_LIMIT_OVERFLOW_ENTRIES = 1_024;
 let lastLoginStatePruneAt: number | null = null;
 
-function getOverflowBucket(key: string): number {
-  const digest = createHmac("sha256", getAuthSecret()).update(key).digest();
-  return digest.readUInt32BE(0) % LOGIN_RATE_LIMIT_OVERFLOW_BUCKETS;
-}
-
 function getFailedLoginState(key: string): LoginAttemptState | undefined {
-  return (
-    failedLoginAttempts.get(key) ??
-    overflowLoginAttempts.get(getOverflowBucket(key))
-  );
+  return failedLoginAttempts.get(key) ?? overflowLoginAttempts.get(key);
 }
 
 function parseBoundedIntegerEnv(
@@ -107,10 +97,10 @@ export function pruneFailedLoginState(now: number): void {
       failedLoginAttempts.delete(key);
     }
   }
-  for (const [bucket, state] of overflowLoginAttempts.entries()) {
+  for (const [key, state] of overflowLoginAttempts.entries()) {
     if (state.lockedUntil > now) continue;
     if (now - state.lastFailedAt > loginAttemptWindowMs) {
-      overflowLoginAttempts.delete(bucket);
+      overflowLoginAttempts.delete(key);
     }
   }
 }
@@ -122,9 +112,9 @@ function setFailedLoginState(key: string, state: LoginAttemptState): void {
     return;
   }
 
-  const overflowBucket = getOverflowBucket(key);
-  if (overflowLoginAttempts.has(overflowBucket)) {
-    overflowLoginAttempts.set(overflowBucket, state);
+  const alreadyTrackedInOverflow = overflowLoginAttempts.delete(key);
+  if (alreadyTrackedInOverflow) {
+    overflowLoginAttempts.set(key, state);
     return;
   }
 
@@ -137,7 +127,13 @@ function setFailedLoginState(key: string, state: LoginAttemptState): void {
     if (evictableKey !== undefined) {
       failedLoginAttempts.delete(evictableKey);
     } else {
-      overflowLoginAttempts.set(overflowBucket, state);
+      if (overflowLoginAttempts.size >= MAX_LOGIN_RATE_LIMIT_OVERFLOW_ENTRIES) {
+        const oldestOverflowKey = overflowLoginAttempts.keys().next().value;
+        if (oldestOverflowKey !== undefined) {
+          overflowLoginAttempts.delete(oldestOverflowKey);
+        }
+      }
+      overflowLoginAttempts.set(key, state);
       return;
     }
   }
@@ -270,9 +266,8 @@ export function registerFailedLoginAttempt(
 
 export function clearFailedLoginAttempts(key: LoginRateLimitKey): void {
   for (const candidate of normalizeKeys(key)) {
-    if (!failedLoginAttempts.delete(candidate)) {
-      overflowLoginAttempts.delete(getOverflowBucket(candidate));
-    }
+    failedLoginAttempts.delete(candidate);
+    overflowLoginAttempts.delete(candidate);
   }
 }
 

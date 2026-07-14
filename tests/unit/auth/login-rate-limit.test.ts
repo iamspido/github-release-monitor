@@ -125,11 +125,41 @@ describe("login rate limit storage", () => {
     registerFailedLoginAttempt("client:overflow", 1);
 
     expect(isLoginRateLimited("client:overflow", 2)).toBe(true);
-    expect(
-      Array.from({ length: 32 }, (_, index) => `client:unseen:${index}`).some(
-        (key) => !isLoginRateLimited(key, 2),
-      ),
-    ).toBe(true);
+    expect(isLoginRateLimited("client:unseen", 2)).toBe(false);
     expect(isLoginRateLimited("client:overflow", 60_001)).toBe(false);
+  });
+
+  it("bounds exact overflow entries without globally blocking new clients", async () => {
+    process.env.AUTH_MAX_LOGIN_ATTEMPTS = "1";
+    process.env.AUTH_LOGIN_LOCKOUT_SECONDS = "60";
+    const {
+      isLoginRateLimited,
+      MAX_LOGIN_RATE_LIMIT_ENTRIES,
+      MAX_LOGIN_RATE_LIMIT_OVERFLOW_ENTRIES,
+      registerFailedLoginAttempt,
+    } = await import("@/lib/auth/login-rate-limit");
+
+    for (let index = 0; index < MAX_LOGIN_RATE_LIMIT_ENTRIES; index += 1) {
+      registerFailedLoginAttempt(`client:primary:${index}`, 0);
+    }
+    for (
+      let index = 0;
+      index < MAX_LOGIN_RATE_LIMIT_OVERFLOW_ENTRIES;
+      index += 1
+    ) {
+      registerFailedLoginAttempt(`client:overflow:${index}`, 1);
+    }
+    registerFailedLoginAttempt("client:overflow:new", 2);
+
+    const overflowStore = (
+      globalThis as typeof globalThis & {
+        _authLoginOverflowAttempts?: Map<string, unknown>;
+      }
+    )._authLoginOverflowAttempts;
+    expect(overflowStore?.size).toBe(MAX_LOGIN_RATE_LIMIT_OVERFLOW_ENTRIES);
+    expect(isLoginRateLimited("client:primary:0", 3)).toBe(true);
+    expect(isLoginRateLimited("client:overflow:0", 3)).toBe(false);
+    expect(isLoginRateLimited("client:overflow:new", 3)).toBe(true);
+    expect(isLoginRateLimited("client:unseen", 3)).toBe(false);
   });
 });
