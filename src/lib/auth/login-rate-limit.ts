@@ -31,6 +31,9 @@ const failedLoginAttempts = global._authLoginAttempts as Map<
 const DEFAULT_LOGIN_ATTEMPTS = 5;
 const DEFAULT_ATTEMPT_WINDOW_SECONDS = 15 * 60;
 const DEFAULT_LOCKOUT_SECONDS = 15 * 60;
+const LOGIN_STATE_PRUNE_INTERVAL_MS = 60_000;
+export const MAX_LOGIN_RATE_LIMIT_ENTRIES = 10_000;
+let lastLoginStatePruneAt: number | null = null;
 
 function parseBoundedIntegerEnv(
   name: string,
@@ -68,12 +71,35 @@ const loginLockoutMs =
   ) * 1_000;
 
 export function pruneFailedLoginState(now: number): void {
+  if (
+    lastLoginStatePruneAt !== null &&
+    now >= lastLoginStatePruneAt &&
+    now - lastLoginStatePruneAt < LOGIN_STATE_PRUNE_INTERVAL_MS
+  ) {
+    return;
+  }
+  lastLoginStatePruneAt = now;
+
   for (const [key, state] of failedLoginAttempts.entries()) {
     if (state.lockedUntil > now) continue;
     if (now - state.lastFailedAt > loginAttemptWindowMs) {
       failedLoginAttempts.delete(key);
     }
   }
+}
+
+function setFailedLoginState(key: string, state: LoginAttemptState): void {
+  const alreadyTracked = failedLoginAttempts.delete(key);
+  if (
+    !alreadyTracked &&
+    failedLoginAttempts.size >= MAX_LOGIN_RATE_LIMIT_ENTRIES
+  ) {
+    const leastRecentlyUsedKey = failedLoginAttempts.keys().next().value;
+    if (leastRecentlyUsedKey !== undefined) {
+      failedLoginAttempts.delete(leastRecentlyUsedKey);
+    }
+  }
+  failedLoginAttempts.set(key, state);
 }
 
 function normalizeKeys(key: LoginRateLimitKey): readonly string[] {
@@ -84,6 +110,7 @@ function isSingleLoginRateLimited(key: string, now: number): boolean {
   const state = failedLoginAttempts.get(key);
   if (!state) return false;
   if (state.lockedUntil > now) {
+    setFailedLoginState(key, state);
     return true;
   }
   if (
@@ -127,18 +154,23 @@ function registerSingleFailedLoginAttempt(
   const existing = failedLoginAttempts.get(key);
   if (!existing || now - existing.firstFailedAt > loginAttemptWindowMs) {
     const failures = 1;
+    const lockedUntil =
+      failures >= loginAttemptLimit ? now + loginLockoutMs : 0;
+    const lockoutTriggered = lockedUntil > now;
     const attemptsRemaining = Math.max(loginAttemptLimit - failures, 0);
-    failedLoginAttempts.set(key, {
+    setFailedLoginState(key, {
       failures,
       firstFailedAt: now,
       lastFailedAt: now,
-      lockedUntil: 0,
+      lockedUntil,
     });
     return {
-      lockoutTriggered: false,
+      lockoutTriggered,
       failures,
       attemptsRemaining,
-      lockoutRemainingSeconds: 0,
+      lockoutRemainingSeconds: lockoutTriggered
+        ? Math.ceil((lockedUntil - now) / 1_000)
+        : 0,
     };
   }
 
@@ -150,7 +182,7 @@ function registerSingleFailedLoginAttempt(
   const lockoutRemainingSeconds = lockoutTriggered
     ? Math.ceil((lockedUntil - now) / 1_000)
     : 0;
-  failedLoginAttempts.set(key, {
+  setFailedLoginState(key, {
     failures,
     firstFailedAt: existing.firstFailedAt,
     lastFailedAt: now,
@@ -222,7 +254,7 @@ export function clearExpiredLoginLockout(
     if (!state || state.lockedUntil <= 0 || state.lockedUntil > now) {
       continue;
     }
-    failedLoginAttempts.set(candidate, { ...state, lockedUntil: 0 });
+    setFailedLoginState(candidate, { ...state, lockedUntil: 0 });
     wasCleared = true;
     failures = Math.max(failures, state.failures);
   }
