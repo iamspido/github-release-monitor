@@ -135,9 +135,9 @@ describe("release checker scheduling", () => {
       },
     ];
 
-    await expect(checkForNewReleases({ skipCache: true })).resolves.toMatchObject(
-      { notificationsSent: 0 },
-    );
+    await expect(
+      checkForNewReleases({ skipCache: true }),
+    ).resolves.toMatchObject({ notificationsSent: 0 });
 
     expect(sendNotificationMock).not.toHaveBeenCalled();
     expect(state.repositories[0].pendingNotifications).toBeUndefined();

@@ -20,10 +20,7 @@ import {
   MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
   NOTIFICATION_DELIVERY_CONCURRENCY,
 } from "@/lib/notifications/pending-deliveries";
-import type {
-  PendingReleaseNotification,
-  Repository,
-} from "@/types";
+import type { PendingReleaseNotification, Repository } from "@/types";
 
 function createPendingNotification(
   id: string,
@@ -75,9 +72,7 @@ describe("notifications/pending-deliveries", () => {
     expect(sendNotificationMock).toHaveBeenCalledTimes(
       MAX_NOTIFICATION_DELIVERIES_PER_RUN,
     );
-    expect(result.notificationsSent).toBe(
-      MAX_NOTIFICATION_DELIVERIES_PER_RUN,
-    );
+    expect(result.notificationsSent).toBe(MAX_NOTIFICATION_DELIVERIES_PER_RUN);
     expect(
       result.repositories.filter(
         (repository) => repository.pendingNotifications?.length,

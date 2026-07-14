@@ -1,8 +1,8 @@
 import {
+  getProviderResolutionBatches,
   getRepositoryDisplayName,
   getRepositoryImportStats,
   getRepositoryProviderName,
-  getProviderResolutionBatches,
   isComposeFileName,
   isHttpUrl,
   isOwnerRepoShorthand,
@@ -44,9 +44,7 @@ describe("repository-form-helpers", () => {
     expect(batches).toHaveLength(2);
     expect(batches[0]).toHaveLength(100);
     expect(batches[1]).toEqual(["owner/repo-100"]);
-    expect(batches.flat()).not.toContain(
-      "https://github.com/owner/direct-url",
-    );
+    expect(batches.flat()).not.toContain("https://github.com/owner/direct-url");
   });
 
   it("parses valid repository import JSON", () => {

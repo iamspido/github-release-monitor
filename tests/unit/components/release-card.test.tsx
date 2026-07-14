@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import React, { act } from "react";
+import type React from "react";
+import { act } from "react";
 import { flushSync } from "react-dom";
 import ReactDOM from "react-dom/client";
 import {
@@ -387,10 +388,9 @@ describe("ReleaseCard component", () => {
       'button[aria-label="Open repository settings"]',
     ) as HTMLButtonElement | null;
     await act(async () => settingsButton?.click());
-    const closeButton = getElementByText(
-      "button",
-      "Close settings",
-    ) as HTMLButtonElement | undefined;
+    const closeButton = getElementByText("button", "Close settings") as
+      | HTMLButtonElement
+      | undefined;
     await act(async () => closeButton?.click());
     await act(async () => vi.advanceTimersByTime(0));
 

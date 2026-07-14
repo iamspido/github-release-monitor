@@ -554,13 +554,9 @@ describe("proxy", () => {
       expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic'/);
       expect(csp).not.toContain("'unsafe-eval'");
       expect(csp).not.toContain("script-src 'self' 'unsafe-inline'");
+      expect(response.headers.get("x-middleware-request-x-nonce")).toBeTruthy();
       expect(
-        response.headers.get("x-middleware-request-x-nonce"),
-      ).toBeTruthy();
-      expect(
-        response.headers.get(
-          "x-middleware-request-content-security-policy",
-        ),
+        response.headers.get("x-middleware-request-content-security-policy"),
       ).toBe(csp);
       expect(response.headers.get("X-Frame-Options")).toBe("DENY");
       expect(response.cookies.get(NEXT_LOCALE_COOKIE)?.value).toBe("de");

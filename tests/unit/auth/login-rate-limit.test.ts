@@ -25,9 +25,11 @@ describe("login rate limit storage", () => {
       registerFailedLoginAttempt(`client:${index}`, index);
     }
 
-    const store = (globalThis as typeof globalThis & {
-      _authLoginAttempts?: Map<string, unknown>;
-    })._authLoginAttempts;
+    const store = (
+      globalThis as typeof globalThis & {
+        _authLoginAttempts?: Map<string, unknown>;
+      }
+    )._authLoginAttempts;
     expect(store?.size).toBe(MAX_LOGIN_RATE_LIMIT_ENTRIES);
     expect(getFailedLoginFailures("client:0")).toBe(0);
     expect(

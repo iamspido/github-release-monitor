@@ -147,10 +147,8 @@ describe("runtime/app-update-notice", () => {
   it("isolates optional update-state read failures for page rendering", async () => {
     const readError = new Error("invalid system status");
     storageMocks.getSystemStatus.mockRejectedValue(readError);
-    const {
-      getUpdateNotificationState,
-      getUpdateNotificationStateOrFallback,
-    } = await import("@/lib/runtime/app-update-notice");
+    const { getUpdateNotificationState, getUpdateNotificationStateOrFallback } =
+      await import("@/lib/runtime/app-update-notice");
 
     await expect(getUpdateNotificationState()).rejects.toBe(readError);
     await expect(getUpdateNotificationStateOrFallback()).resolves.toEqual({

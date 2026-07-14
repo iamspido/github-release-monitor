@@ -87,7 +87,8 @@ describe("importRepositoriesAction idempotency", () => {
     const result = await actions.importRepositoriesAction(imported);
 
     expect(result.success).toBe(true);
-    expect(mem.repos.find((repo) => repo.id === "github:owner2/repo2"))
-      .not.toHaveProperty("pendingNotifications");
+    expect(
+      mem.repos.find((repo) => repo.id === "github:owner2/repo2"),
+    ).not.toHaveProperty("pendingNotifications");
   });
 });

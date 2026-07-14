@@ -88,9 +88,7 @@ describe("auth request context", () => {
     );
 
     expect(context.rateLimitKey).toHaveLength(1);
-    expect(context.accountRateLimitKey).toMatch(
-      /^identifier:[a-f0-9]{64}$/,
-    );
+    expect(context.accountRateLimitKey).toMatch(/^identifier:[a-f0-9]{64}$/);
     expect(context.rateLimitKey.join(":")).not.toContain("test-browser");
     expect(context.rateLimitKey.join(":")).not.toContain("user@example.com");
   });

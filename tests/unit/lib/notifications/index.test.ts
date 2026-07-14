@@ -102,18 +102,22 @@ describe("notifications/index", () => {
     expect(getConfiguredNotificationChannels()).toEqual([]);
   });
 
-  it.each(["invalid", "587suffix", "0", "65536", "-1", "5.5"])(
-    "does not select email when MAIL_PORT is %s",
-    (port) => {
-      process.env.MAIL_HOST = "smtp.example.com";
-      process.env.MAIL_PORT = port;
-      process.env.MAIL_FROM_ADDRESS = "from@example.com";
-      process.env.MAIL_TO_ADDRESS = "to@example.com";
-      delete process.env.APPRISE_URL;
+  it.each([
+    "invalid",
+    "587suffix",
+    "0",
+    "65536",
+    "-1",
+    "5.5",
+  ])("does not select email when MAIL_PORT is %s", (port) => {
+    process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_PORT = port;
+    process.env.MAIL_FROM_ADDRESS = "from@example.com";
+    process.env.MAIL_TO_ADDRESS = "to@example.com";
+    delete process.env.APPRISE_URL;
 
-      expect(getConfiguredNotificationChannels()).toEqual([]);
-    },
-  );
+    expect(getConfiguredNotificationChannels()).toEqual([]);
+  });
 
   it("sendNotification: sends only apprise when only APPRISE_URL is set", async () => {
     process.env.APPRISE_URL = "http://apprise.test";
