@@ -59,4 +59,15 @@ describe("storage/JsonFileStore", () => {
     );
     await expect(readdir(tempDir)).resolves.toEqual(["store.json"]);
   });
+
+  it("validates the serialized value before replacing existing data", async () => {
+    const store = createStore();
+    await store.write({ value: "existing" });
+
+    await expect(
+      store.write({ value: 42 } as unknown as TestValue),
+    ).rejects.toThrow("write failed");
+
+    await expect(store.read()).resolves.toEqual({ value: "existing" });
+  });
 });

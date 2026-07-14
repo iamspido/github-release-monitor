@@ -161,7 +161,7 @@ export async function importRepositoriesAction(
         // Normalize id/url on import so GitHub/Codeberg repos remain stable even if
         // the exported data contained variations (trailing paths, `.git`, etc).
         validImportedRepos.push({
-          ...repo,
+          ...toPublicRepository(repo),
           id: parsed.id,
           url: parsed.canonicalRepoUrl,
         });

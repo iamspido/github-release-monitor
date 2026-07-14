@@ -73,4 +73,21 @@ describe("importRepositoriesAction idempotency", () => {
     expect(mem.repos.find((r) => r.id === "github:owner1/repo1")).toBeTruthy();
     expect(mem.repos.find((r) => r.id === "github:owner2/repo2")).toBeTruthy();
   });
+
+  it("does not import internal notification delivery state", async () => {
+    const actions = await import("@/app/actions");
+    const imported = [
+      {
+        id: "owner2/repo2",
+        url: "https://github.com/owner2/repo2",
+        pendingNotifications: [{ id: "injected-delivery" }],
+      },
+    ] as unknown as Repository[];
+
+    const result = await actions.importRepositoriesAction(imported);
+
+    expect(result.success).toBe(true);
+    expect(mem.repos.find((repo) => repo.id === "github:owner2/repo2"))
+      .not.toHaveProperty("pendingNotifications");
+  });
 });

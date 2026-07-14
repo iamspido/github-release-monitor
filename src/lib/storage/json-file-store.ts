@@ -84,7 +84,15 @@ export class JsonFileStore<T> {
   async write(value: T): Promise<void> {
     await this.ensureExists();
     try {
-      await this.writeRaw(value);
+      // Validate the exact JSON representation before replacing the current
+      // file. This also catches values such as NaN that JSON.stringify would
+      // silently convert to null.
+      const serialized = JSON.stringify(value);
+      if (serialized === undefined) {
+        throw new Error("Value cannot be represented as JSON.");
+      }
+      const validatedValue = this.options.parse(JSON.parse(serialized));
+      await this.writeRaw(validatedValue);
     } catch (error) {
       this.log.error(`Error writing to ${this.fileName}:`, error);
       const message =
