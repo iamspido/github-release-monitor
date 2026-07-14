@@ -8,7 +8,7 @@ import { logger } from "@/lib/logger";
 import { toGithubReleaseFromCache } from "@/lib/releases/filters";
 import { getUpdateNotificationState } from "@/lib/runtime/app-update-notice";
 import { getRepositories } from "@/lib/storage/repositories";
-import { getSettings } from "@/lib/storage/settings";
+import { createDefaultSettings, getSettings } from "@/lib/storage/settings";
 import type {
   AppSettings,
   EnrichedRelease,
@@ -68,19 +68,7 @@ export default async function HomePage({
     logger
       .withScope("WebServer")
       .error("Failed to load repositories or releases:", error);
-    settings = {
-      timeFormat: "24h",
-      locale: "en",
-      refreshInterval: 10,
-      cacheInterval: 5,
-      releaseChannels: ["stable"],
-      releaseSortOrder: "latest_first",
-      providerSortOrder: ["github", "gitlab", "codeberg"],
-      prioritizeNewSecurityReleases: false,
-      showAcknowledge: true,
-      releasesPerPage: 30,
-      parallelRepoFetches: 1,
-    };
+    settings = createDefaultSettings();
     resolvedError = t("load_error");
   }
 

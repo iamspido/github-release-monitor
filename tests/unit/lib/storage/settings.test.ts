@@ -81,6 +81,26 @@ describe("storage/settings failure scenarios", () => {
     expect(settings.prioritizeNewSecurityReleases).toBe(false);
   });
 
+  it("creates independent complete default settings", async () => {
+    const { createDefaultSettings } = await import("@/lib/storage/settings");
+    const first = createDefaultSettings({ GITHUB_ACCESS_TOKEN: "token" });
+    const second = createDefaultSettings({});
+
+    expect(first.parallelRepoFetches).toBe(5);
+    expect(second.parallelRepoFetches).toBe(1);
+    expect(first).toHaveProperty("repositoryFormExpanded", true);
+    expect(first).toHaveProperty("appriseMaxCharacters", 1800);
+
+    first.releaseChannels.push("draft");
+    first.providerSortOrder.reverse();
+    expect(second.releaseChannels).toEqual(["stable"]);
+    expect(second.providerSortOrder).toEqual([
+      "github",
+      "gitlab",
+      "codeberg",
+    ]);
+  });
+
   it("defaults security release settings for old settings files", async () => {
     const { getSettings } = await import("@/lib/storage/settings");
 

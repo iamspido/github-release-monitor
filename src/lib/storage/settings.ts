@@ -15,38 +15,41 @@ import { allPreReleaseTypes, defaultProviderSortOrder } from "@/types";
 
 const dataFilePath = path.join(process.cwd(), "data", "settings.json");
 
-const hasGithubToken = Boolean(process.env.GITHUB_ACCESS_TOKEN?.trim());
-const defaultParallelRepoFetches = hasGithubToken ? 5 : 1;
+export function createDefaultSettings(
+  env: Partial<NodeJS.ProcessEnv> = process.env,
+): AppSettings {
+  return {
+    timeFormat: "24h",
+    locale: "en",
+    refreshInterval: 10,
+    cacheInterval: 5,
+    backgroundCheckCron: undefined,
+    releasesPerPage: 30,
+    parallelRepoFetches: env.GITHUB_ACCESS_TOKEN?.trim() ? 5 : 1,
+    releaseChannels: ["stable"],
+    preReleaseSubChannels: [...allPreReleaseTypes],
+    releaseSortOrder: "latest_first",
+    providerSortOrder: [...defaultProviderSortOrder],
+    prioritizeNewSecurityReleases: false,
+    securityHighlightColorPreset: defaultSecurityHighlightColorPreset,
+    securityHighlightCustomColor: defaultSecurityHighlightCustomColor,
+    confirmSecurityAcknowledge: false,
+    includeDefaultSecurityPatterns: true,
+    customSecurityPatterns: undefined,
+    showAcknowledge: true,
+    showMarkAsNew: true,
+    showProviderPrefixInRepoId: true,
+    showProviderDomainInRepoId: true,
+    repositoryFormExpanded: true,
+    includeRegex: undefined,
+    excludeRegex: undefined,
+    appriseMaxCharacters: 1800,
+    appriseTags: undefined,
+    appriseFormat: "text",
+  };
+}
 
-const defaultSettings: AppSettings = {
-  timeFormat: "24h",
-  locale: "en",
-  refreshInterval: 10, // in minutes
-  cacheInterval: 5, // in minutes
-  backgroundCheckCron: undefined,
-  releasesPerPage: 30, // GitHub API default
-  parallelRepoFetches: defaultParallelRepoFetches,
-  releaseChannels: ["stable"],
-  preReleaseSubChannels: allPreReleaseTypes,
-  releaseSortOrder: "latest_first",
-  providerSortOrder: defaultProviderSortOrder,
-  prioritizeNewSecurityReleases: false,
-  securityHighlightColorPreset: defaultSecurityHighlightColorPreset,
-  securityHighlightCustomColor: defaultSecurityHighlightCustomColor,
-  confirmSecurityAcknowledge: false,
-  includeDefaultSecurityPatterns: true,
-  customSecurityPatterns: undefined,
-  showAcknowledge: true,
-  showMarkAsNew: true,
-  showProviderPrefixInRepoId: true,
-  showProviderDomainInRepoId: true,
-  repositoryFormExpanded: true,
-  includeRegex: undefined,
-  excludeRegex: undefined,
-  appriseMaxCharacters: 1800,
-  appriseTags: undefined,
-  appriseFormat: "text",
-};
+const defaultSettings = createDefaultSettings();
 
 const CACHE_CHECK_INTERVAL_MS = 500;
 
