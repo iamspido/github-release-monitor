@@ -24,6 +24,7 @@ describe("settings actions error paths", () => {
 
   it("updateSettingsAction returns error message when saveSettings throws", async () => {
     vi.doMock("@/lib/storage/settings", () => ({
+      normalizeSettings: (settings: unknown) => settings,
       getSettings: async () => ({
         timeFormat: "24h",
         locale: "en",

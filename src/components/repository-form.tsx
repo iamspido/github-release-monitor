@@ -39,6 +39,7 @@ import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type { Repository } from "@/types";
 import {
+  getProviderResolutionBatches,
   getRepositoryDisplayName,
   getRepositoryImportStats,
   getRepositoryProviderName,
@@ -286,16 +287,27 @@ export function RepositoryForm({
 
   const resolveLinesAndSubmit = React.useCallback(
     async (lines: string[]) => {
-      const shorthandInputs = lines.filter(isOwnerRepoShorthand);
-      const result = await resolveRepoProvidersBatchAction(shorthandInputs);
-      const resolutions = result.resolutions.map((resolution) => ({
-        input: resolution.input,
-        candidates: resolution.candidates.map((candidate) => ({
-          provider: candidate.provider,
-          providerHost: candidate.providerHost,
-          canonicalRepoUrl: candidate.canonicalRepoUrl,
-        })),
-      }));
+      const resolutions: Array<{
+        input: string;
+        candidates: ProviderChoiceCandidate[];
+      }> = [];
+
+      for (const batch of getProviderResolutionBatches(lines)) {
+        const result = await resolveRepoProvidersBatchAction(batch);
+        resolutions.push(
+          ...result.resolutions.map((resolution) => ({
+            input: resolution.input,
+            candidates: resolution.candidates.map((candidate) => ({
+              provider: candidate.provider,
+              providerHost: candidate.providerHost,
+              canonicalRepoUrl: candidate.canonicalRepoUrl,
+            })),
+          })),
+        );
+
+        if (!result.success) break;
+      }
+
       processResolvedLines(lines, resolutions);
     },
     [processResolvedLines],

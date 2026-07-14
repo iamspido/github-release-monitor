@@ -26,6 +26,7 @@ vi.mock("@/lib/storage/repositories", () => ({
 }));
 
 vi.mock("@/lib/storage/settings", () => ({
+  normalizeSettings: (settings: AppSettings) => settings,
   getSettings: async () => ({
     timeFormat: "24h",
     locale: "en",

@@ -35,6 +35,7 @@ vi.mock("@/lib/storage/repositories", () => ({
 }));
 vi.mock("@/lib/storage/settings", () => ({
   getSettings: async () => mem.settings,
+  normalizeSettings: (settings: AppSettings) => settings,
   saveSettings: async (s: AppSettings) => {
     mem.settings = JSON.parse(JSON.stringify(s));
   },

@@ -81,6 +81,7 @@ describe("actions Codeberg fetcher scenarios", () => {
 
   it("falls back to tags when no releases", async () => {
     const actions = await import("@/app/actions");
+    const commitDate = "2020-02-03T04:05:06.000Z";
 
     const repo: Repository = {
       id: "codeberg:o/r",
@@ -107,7 +108,7 @@ describe("actions Codeberg fetcher scenarios", () => {
         statusText: "OK",
         json: {
           message: "msg",
-          author: { date: new Date().toISOString() },
+          author: { date: commitDate },
         },
       }),
     );
@@ -120,6 +121,9 @@ describe("actions Codeberg fetcher scenarios", () => {
     );
     expect(enriched[0].release?.id).toBe(0);
     expect(enriched[0].release?.tag_name).toBe("v1");
+    expect(enriched[0].release?.created_at).toBe(commitDate);
+    expect(enriched[0].release?.published_at).toBe(commitDate);
+    expect(enriched[0].release?.published_at_unknown).toBe(false);
     expect(enriched[0].error).toBeUndefined();
   });
 

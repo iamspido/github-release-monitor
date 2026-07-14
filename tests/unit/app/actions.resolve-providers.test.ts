@@ -106,6 +106,34 @@ describe("resolveRepoProvidersAction", () => {
     expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(6);
   });
 
+  it("rejects oversized provider resolution batches before any lookup", async () => {
+    const { MAX_PROVIDER_RESOLUTION_BATCH_SIZE } = await import(
+      "@/lib/repositories/provider-resolution"
+    );
+    const actions = await import("@/app/actions");
+    const inputs = Array.from(
+      { length: MAX_PROVIDER_RESOLUTION_BATCH_SIZE + 1 },
+      (_, index) => `owner/repo-${index}`,
+    );
+
+    await expect(
+      actions.resolveRepoProvidersBatchAction(inputs),
+    ).resolves.toEqual({ success: false, resolutions: [] });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed batch entries before any lookup", async () => {
+    const actions = await import("@/app/actions");
+
+    await expect(
+      actions.resolveRepoProvidersBatchAction([
+        "owner/repo",
+        123 as unknown as string,
+      ]),
+    ).resolves.toEqual({ success: false, resolutions: [] });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it("returns candidates for multiple allowed GitLab hosts", async () => {
     process.env.GITLAB_ADDITIONAL_HOSTS = "gitlab.self.test";
     process.env.GITLAB_ACCESS_TOKENS =

@@ -1,3 +1,4 @@
+import { MAX_PROVIDER_RESOLUTION_BATCH_SIZE } from "@/lib/repositories/provider-resolution-limits";
 import type { Repository } from "@/types";
 
 export type ProviderChoiceCandidate = {
@@ -29,6 +30,26 @@ export const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim());
 
 export const isOwnerRepoShorthand = (value: string) =>
   /^[a-z0-9-._]+\/[a-z0-9-._]+$/i.test(value.trim());
+
+export function getProviderResolutionBatches(lines: string[]): string[][] {
+  const shorthandInputs = [...new Set(lines.filter(isOwnerRepoShorthand))];
+  const batches: string[][] = [];
+
+  for (
+    let offset = 0;
+    offset < shorthandInputs.length;
+    offset += MAX_PROVIDER_RESOLUTION_BATCH_SIZE
+  ) {
+    batches.push(
+      shorthandInputs.slice(
+        offset,
+        offset + MAX_PROVIDER_RESOLUTION_BATCH_SIZE,
+      ),
+    );
+  }
+
+  return batches;
+}
 
 export const isComposeFileName = (value: string) => /\.(ya?ml)$/i.test(value);
 

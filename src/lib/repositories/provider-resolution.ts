@@ -6,6 +6,7 @@ import {
   fetchResponseWithRetryAuthChain,
   fetchWithRetry,
 } from "@/lib/releases/fetch";
+import { MAX_PROVIDER_RESOLUTION_BATCH_SIZE } from "@/lib/repositories/provider-resolution-limits";
 import {
   getAllowedGitlabHosts,
   getGitlabAuthForHost,
@@ -30,6 +31,16 @@ export type RepoProviderResolution = {
 };
 
 const PROVIDER_RESOLUTION_CONCURRENCY = 4;
+const MAX_PROVIDER_RESOLUTION_INPUT_LENGTH = 256;
+
+export { MAX_PROVIDER_RESOLUTION_BATCH_SIZE } from "@/lib/repositories/provider-resolution-limits";
+
+function isValidProviderResolutionInput(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= MAX_PROVIDER_RESOLUTION_INPUT_LENGTH
+  );
+}
 
 function parseOwnerRepoShorthand(
   input: string,
@@ -212,6 +223,10 @@ export async function resolveRepoProvidersAction(input: string): Promise<{
     return { success: false, candidates: [] };
   }
 
+  if (!isValidProviderResolutionInput(input)) {
+    return { success: false, candidates: [] };
+  }
+
   return { success: true, candidates: await resolveRepoProviders(input) };
 }
 
@@ -225,11 +240,21 @@ export async function resolveRepoProvidersBatchAction(
     return { success: false, resolutions: [] };
   }
 
+  if (!Array.isArray(inputs) || !inputs.every(isValidProviderResolutionInput)) {
+    return { success: false, resolutions: [] };
+  }
+
   const uniqueInputs = [
     ...new Set(
       inputs.map((input) => input.trim()).filter((input) => input.length > 0),
     ),
   ];
+  if (uniqueInputs.length > MAX_PROVIDER_RESOLUTION_BATCH_SIZE) {
+    log.warn(
+      `Rejected provider resolution batch with ${uniqueInputs.length} unique inputs; maximum is ${MAX_PROVIDER_RESOLUTION_BATCH_SIZE}.`,
+    );
+    return { success: false, resolutions: [] };
+  }
   const resolutions: RepoProviderResolution[] = [];
 
   for (

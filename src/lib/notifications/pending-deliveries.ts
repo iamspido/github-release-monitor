@@ -16,6 +16,8 @@ const MAX_RETRY_DELAY_MS = 6 * 60 * 60_000;
 export const MAX_NOTIFICATION_DELIVERY_ATTEMPTS = 10;
 export const MAX_NOTIFICATION_DELIVERIES_PER_RUN = 20;
 export const NOTIFICATION_DELIVERY_CONCURRENCY = 4;
+export const ABANDONED_NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60_000;
+export const MAX_ABANDONED_NOTIFICATIONS_PER_REPOSITORY = 50;
 
 type NotificationDeliveryOutcome = {
   repositoryId: string;
@@ -99,6 +101,51 @@ function isDueForDelivery(
     ? Date.parse(notification.nextAttemptAt)
     : Number.NEGATIVE_INFINITY;
   return !Number.isFinite(nextAttemptMs) || nextAttemptMs <= nowMs;
+}
+
+export function pruneAbandonedNotifications(
+  repositories: Repository[],
+  now = new Date(),
+): { repositories: Repository[]; changed: boolean } {
+  const nowMs = now.getTime();
+  let changed = false;
+
+  const updatedRepositories = repositories.map((repository) => {
+    const pendingNotifications = repository.pendingNotifications;
+    if (!pendingNotifications?.length) return repository;
+
+    const retainedAbandoned = new Set(
+      pendingNotifications
+        .filter((notification) => {
+          if (!notification.abandonedAt) return false;
+          const abandonedAtMs = Date.parse(notification.abandonedAt);
+          return (
+            Number.isFinite(abandonedAtMs) &&
+            abandonedAtMs <= nowMs &&
+            nowMs - abandonedAtMs <= ABANDONED_NOTIFICATION_RETENTION_MS
+          );
+        })
+        .sort(
+          (a, b) =>
+            Date.parse(b.abandonedAt ?? "") - Date.parse(a.abandonedAt ?? ""),
+        )
+        .slice(0, MAX_ABANDONED_NOTIFICATIONS_PER_REPOSITORY),
+    );
+
+    const retained = pendingNotifications.filter(
+      (notification) =>
+        !notification.abandonedAt || retainedAbandoned.has(notification),
+    );
+    if (retained.length === pendingNotifications.length) return repository;
+
+    changed = true;
+    return {
+      ...repository,
+      pendingNotifications: retained.length > 0 ? retained : undefined,
+    };
+  });
+
+  return { repositories: updatedRepositories, changed };
 }
 
 export async function attemptPendingNotifications(
@@ -274,13 +321,20 @@ export async function deliverPendingNotifications(
   changed: boolean;
   notificationsSent: number;
 }> {
-  const delivery = await attemptPendingNotifications(repositories, now);
+  const initiallyPruned = pruneAbandonedNotifications(repositories, now);
+  const delivery = await attemptPendingNotifications(
+    initiallyPruned.repositories,
+    now,
+  );
   const applied = applyPendingNotificationDeliveryOutcomes(
-    repositories,
+    initiallyPruned.repositories,
     delivery.outcomes,
   );
+  const finallyPruned = pruneAbandonedNotifications(applied.repositories, now);
   return {
-    ...applied,
+    repositories: finallyPruned.repositories,
+    changed:
+      initiallyPruned.changed || applied.changed || finallyPruned.changed,
     notificationsSent: delivery.notificationsSent,
   };
 }

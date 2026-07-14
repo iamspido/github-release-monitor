@@ -13,7 +13,9 @@ vi.mock("@/lib/notifications", async (orig) => {
 });
 
 import {
+  ABANDONED_NOTIFICATION_RETENTION_MS,
   deliverPendingNotifications,
+  MAX_ABANDONED_NOTIFICATIONS_PER_REPOSITORY,
   MAX_NOTIFICATION_DELIVERIES_PER_RUN,
   MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
   NOTIFICATION_DELIVERY_CONCURRENCY,
@@ -128,5 +130,68 @@ describe("notifications/pending-deliveries", () => {
 
     await deliverPendingNotifications(failed.repositories, now);
     expect(sendNotificationMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes abandoned deliveries after the retention period", async () => {
+    const now = new Date("2026-07-14T12:00:00.000Z");
+    const notification = createPendingNotification(
+      "expired",
+      MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
+    );
+    notification.abandonedAt = new Date(
+      now.getTime() - ABANDONED_NOTIFICATION_RETENTION_MS - 1,
+    ).toISOString();
+
+    const result = await deliverPendingNotifications(
+      [
+        {
+          id: "owner/repo",
+          url: "https://github.com/owner/repo",
+          pendingNotifications: [notification],
+        },
+      ],
+      now,
+    );
+
+    expect(result.changed).toBe(true);
+    expect(result.repositories[0].pendingNotifications).toBeUndefined();
+    expect(sendNotificationMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps only the newest bounded set of abandoned deliveries", async () => {
+    const now = new Date("2026-07-14T12:00:00.000Z");
+    const pendingNotifications = Array.from(
+      { length: MAX_ABANDONED_NOTIFICATIONS_PER_REPOSITORY + 2 },
+      (_, index) => {
+        const notification = createPendingNotification(
+          `abandoned-${index}`,
+          MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
+        );
+        notification.abandonedAt = new Date(
+          now.getTime() - index * 1_000,
+        ).toISOString();
+        return notification;
+      },
+    );
+
+    const result = await deliverPendingNotifications(
+      [
+        {
+          id: "owner/repo",
+          url: "https://github.com/owner/repo",
+          pendingNotifications,
+        },
+      ],
+      now,
+    );
+
+    expect(result.repositories[0].pendingNotifications).toHaveLength(
+      MAX_ABANDONED_NOTIFICATIONS_PER_REPOSITORY,
+    );
+    expect(
+      result.repositories[0].pendingNotifications?.map(({ id }) => id),
+    ).not.toContain(
+      `abandoned-${MAX_ABANDONED_NOTIFICATIONS_PER_REPOSITORY + 1}`,
+    );
   });
 });

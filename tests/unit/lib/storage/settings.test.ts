@@ -191,8 +191,36 @@ describe("storage/settings failure scenarios", () => {
     const { getSettings } = await import("@/lib/storage/settings");
 
     await expect(getSettings()).rejects.toThrow(
-      "refreshInterval must be a finite number",
+      "refreshInterval must be an integer between 1 and 5256000",
     );
+  });
+
+  it.each([
+    [{ releasesPerPage: 0 }, "releasesPerPage"],
+    [{ releasesPerPage: 1001 }, "releasesPerPage"],
+    [{ parallelRepoFetches: 51 }, "parallelRepoFetches"],
+    [{ appriseMaxCharacters: -1 }, "appriseMaxCharacters"],
+  ])(
+    "rejects semantically invalid persisted settings %j",
+    async (value, key) => {
+      fsMock.readFile.mockResolvedValue(JSON.stringify(value));
+      const { getSettings } = await import("@/lib/storage/settings");
+
+      await expect(getSettings()).rejects.toThrow(String(key));
+    },
+  );
+
+  it("rejects semantically invalid settings before writing", async () => {
+    const { getSettings, saveSettings } = await import(
+      "@/lib/storage/settings"
+    );
+    const current = await getSettings();
+    fsMock.writeFile.mockClear();
+
+    await expect(
+      saveSettings({ ...current, releasesPerPage: -1 }),
+    ).rejects.toThrow("Could not save settings data.");
+    expect(fsMock.writeFile).not.toHaveBeenCalled();
   });
 
   it("returns the configured locale only when it is supported", async () => {

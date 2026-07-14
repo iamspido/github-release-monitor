@@ -78,21 +78,49 @@ function cloneSettings(settings: AppSettings): AppSettings {
   };
 }
 
-function normalizeSettings(value: unknown): AppSettings {
+const isSupportedLocale = isOneOf(locales);
+const isIntegerInRange = (min: number, max: number) => (value: unknown) =>
+  isFiniteNumber(value) &&
+  Number.isInteger(value) &&
+  value >= min &&
+  value <= max;
+
+export function normalizeSettings(value: unknown): AppSettings {
   const persisted = assertJsonObject(value, "Settings data");
   const isReleaseChannel = isOneOf(["stable", "prerelease", "draft"]);
   const isPreReleaseChannel = isOneOf(allPreReleaseTypes);
   const isAppriseFormat = isOneOf(["text", "markdown", "html"]);
 
-  for (const key of [
+  assertOptionalField(
+    persisted,
     "refreshInterval",
+    isIntegerInRange(1, 5_256_000),
+    "an integer between 1 and 5256000",
+  );
+  assertOptionalField(
+    persisted,
     "cacheInterval",
+    isIntegerInRange(0, 5_256_000),
+    "an integer between 0 and 5256000",
+  );
+  assertOptionalField(
+    persisted,
     "releasesPerPage",
+    isIntegerInRange(1, 1000),
+    "an integer between 1 and 1000",
+  );
+  assertOptionalField(
+    persisted,
     "parallelRepoFetches",
+    isIntegerInRange(1, 50),
+    "an integer between 1 and 50",
+  );
+  assertOptionalField(
+    persisted,
     "appriseMaxCharacters",
-  ] as const) {
-    assertOptionalField(persisted, key, isFiniteNumber, "a finite number");
-  }
+    isIntegerInRange(0, Number.MAX_SAFE_INTEGER),
+    "a non-negative integer",
+  );
   for (const key of [
     "prioritizeNewSecurityReleases",
     "confirmSecurityAcknowledge",
@@ -106,7 +134,6 @@ function normalizeSettings(value: unknown): AppSettings {
     assertOptionalField(persisted, key, isBoolean, "a boolean");
   }
   for (const key of [
-    "locale",
     "backgroundCheckCron",
     "releaseSortOrder",
     "securityHighlightCustomColor",
@@ -117,6 +144,7 @@ function normalizeSettings(value: unknown): AppSettings {
   ] as const) {
     assertOptionalField(persisted, key, isString, "a string");
   }
+  assertOptionalField(persisted, "locale", isString, "a string");
   assertOptionalField(
     persisted,
     "timeFormat",
@@ -154,10 +182,18 @@ function normalizeSettings(value: unknown): AppSettings {
     "text, markdown, or html",
   );
 
+  const definedPersisted = Object.fromEntries(
+    Object.entries(persisted).filter(
+      ([, fieldValue]) => fieldValue !== undefined,
+    ),
+  );
   const merged = {
     ...defaultSettings,
-    ...(persisted as Partial<AppSettings>),
+    ...(definedPersisted as Partial<AppSettings>),
   };
+  merged.locale = isSupportedLocale(merged.locale)
+    ? merged.locale
+    : defaultLocale;
   merged.releaseSortOrder = normalizeReleaseSortOrder(merged.releaseSortOrder);
   merged.providerSortOrder = normalizeProviderSortOrder(
     merged.providerSortOrder,

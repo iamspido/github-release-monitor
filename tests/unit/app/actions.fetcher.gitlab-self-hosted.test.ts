@@ -234,6 +234,51 @@ describe("actions GitLab self-hosted fetcher", () => {
     ).toBe(true);
   });
 
+  it("uses commit metadata when an API tag has no publication date", async () => {
+    process.env.GITLAB_ADDITIONAL_HOSTS = "gitlab.self.test";
+    process.env.GITLAB_ACCESS_TOKENS = "gitlab.self.test=glpat-self";
+    const actions = await import("@/app/actions");
+    const commitDate = "2020-02-03T04:05:06.000Z";
+    const repo: Repository = {
+      id: "gitlab:gitlab.self.test/group/repo",
+      url: "https://gitlab.self.test/group/repo",
+    };
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(mockFetchResponse({ json: [] }))
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: [
+            {
+              name: "v1.2.3",
+              message: "tag message",
+              commit: { id: "abc123" },
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: {
+            message: "commit message",
+            committed_date: commitDate,
+          },
+        }),
+      );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.created_at).toBe(commitDate);
+    expect(enriched[0].release?.published_at).toBe(commitDate);
+    expect(enriched[0].release?.published_at_unknown).toBe(false);
+    expect(enriched[0].release?.body).toContain("tag message");
+  });
+
   it("selects an older matching tag when the newest tag is filtered out", async () => {
     process.env.GITLAB_ADDITIONAL_HOSTS = "gitlab.self.test";
     const actions = await import("@/app/actions");

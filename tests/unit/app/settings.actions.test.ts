@@ -43,6 +43,7 @@ vi.mock("@/lib/storage/repositories", () => ({
 
 vi.mock("@/lib/storage/settings", () => ({
   getSettings: async () => settingsStore.current,
+  normalizeSettings: (settings: AppSettings) => settings,
   saveSettings: async (s: AppSettings) => {
     settingsStore.current = JSON.parse(JSON.stringify(s));
   },
@@ -133,6 +134,28 @@ describe("settings actions", () => {
       },
     });
     expect(settingsStore.current).toEqual(previousSettings);
+  });
+
+  it("does not mutate repositories when settings validation fails", async () => {
+    memRepos.list = [
+      {
+        id: "o/a",
+        url: "https://github.com/o/a",
+        etag: "E1",
+        isNew: true,
+      },
+    ];
+    const previousRepositories = structuredClone(memRepos.list);
+    const { updateSettingsAction } = await import("@/app/settings/actions");
+
+    const result = await updateSettingsAction({
+      ...settingsStore.current,
+      includeRegex: "([",
+      showAcknowledge: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(memRepos.list).toEqual(previousRepositories);
   });
 
   it("deleteAllRepositoriesAction clears storage and returns success", async () => {

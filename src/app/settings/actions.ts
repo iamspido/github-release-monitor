@@ -35,7 +35,11 @@ import {
   settingsLocaleCookieOptions,
 } from "@/lib/settings-locale-cookie";
 import { getRepositories, saveRepositories } from "@/lib/storage/repositories";
-import { getSettings, saveSettings } from "@/lib/storage/settings";
+import {
+  getSettings,
+  normalizeSettings,
+  saveSettings,
+} from "@/lib/storage/settings";
 import type { AppSettings } from "@/types";
 
 async function applySettingsUpdate(
@@ -57,28 +61,12 @@ async function applySettingsUpdate(
 
   try {
     const currentSettings = await getSettings();
-    const newSettings: AppSettings = mergeWithCurrent
-      ? { ...currentSettings, ...incomingSettings }
-      : (incomingSettings as AppSettings);
+    const newSettings = normalizeSettings(
+      mergeWithCurrent
+        ? { ...currentSettings, ...incomingSettings }
+        : incomingSettings,
+    );
     responseLocale = newSettings.locale;
-
-    // If the "mark as seen" feature is being disabled, reset all isNew flags.
-    if (
-      currentSettings.showAcknowledge &&
-      newSettings.showAcknowledge === false
-    ) {
-      logger
-        .withScope("Settings")
-        .info(
-          "Disabling 'Mark as seen' feature. Resetting all 'isNew' flags to false.",
-        );
-      const allRepos = await getRepositories();
-      const updatedRepos = allRepos.map((repo) => ({
-        ...repo,
-        isNew: false,
-      }));
-      await saveRepositories(updatedRepos);
-    }
 
     const releaseCacheInvalidation = getGlobalReleaseCacheInvalidationChanges(
       currentSettings,
@@ -155,13 +143,27 @@ async function applySettingsUpdate(
 
     const settingsToSave = {
       ...newSettings,
-      refreshInterval: Math.max(1, newSettings.refreshInterval),
-      cacheInterval: Math.max(0, newSettings.cacheInterval),
+      refreshInterval: Math.min(
+        Math.max(1, Math.round(newSettings.refreshInterval)),
+        5_256_000,
+      ),
+      cacheInterval: Math.min(
+        Math.max(0, Math.round(newSettings.cacheInterval)),
+        5_256_000,
+      ),
       backgroundCheckCron: sanitizedBackgroundCheckCron,
+      releasesPerPage: Math.min(
+        Math.max(1, Math.round(newSettings.releasesPerPage)),
+        1000,
+      ),
       parallelRepoFetches: sanitizedParallelRepoFetches,
       includeRegex: newSettings.includeRegex?.trim() || undefined,
       excludeRegex: newSettings.excludeRegex?.trim() || undefined,
       appriseTags: newSettings.appriseTags?.trim() || undefined,
+      appriseMaxCharacters: Math.max(
+        0,
+        Math.round(newSettings.appriseMaxCharacters ?? 1800),
+      ),
       releaseSortOrder: normalizeReleaseSortOrder(newSettings.releaseSortOrder),
       providerSortOrder: normalizeProviderSortOrder(
         newSettings.providerSortOrder,
@@ -185,14 +187,34 @@ async function applySettingsUpdate(
       settingsToSave,
     );
 
-    // If regex changed globally, clear ETags so next fetch doesn't short-circuit on 304
-    if (shouldInvalidateReleaseCache(releaseCacheInvalidation)) {
+    const shouldResetNewFlags =
+      currentSettings.showAcknowledge &&
+      settingsToSave.showAcknowledge === false;
+    const shouldClearEtags = shouldInvalidateReleaseCache(
+      releaseCacheInvalidation,
+    );
+
+    // All validation is complete before any persistent side effects begin.
+    if (shouldResetNewFlags || shouldClearEtags) {
       const allRepos = await getRepositories();
-      const cleared = allRepos.map((repository) => ({
+      const updatedRepos = allRepos.map((repository) => ({
         ...repository,
-        etag: undefined,
+        isNew: shouldResetNewFlags ? false : repository.isNew,
+        etag: shouldClearEtags ? undefined : repository.etag,
       }));
-      await saveRepositories(cleared);
+      await saveRepositories(updatedRepos);
+    }
+
+    if (shouldResetNewFlags) {
+      logger
+        .withScope("Settings")
+        .info(
+          "Disabling 'Mark as seen' feature. Resetting all 'isNew' flags to false.",
+        );
+    }
+
+    // If regex changed globally, clear ETags so next fetch doesn't short-circuit on 304
+    if (shouldClearEtags) {
       const reasons = getReleaseCacheInvalidationReasons(
         releaseCacheInvalidation,
         { filtersReason: "regexChanged" },
@@ -214,7 +236,7 @@ async function applySettingsUpdate(
     }
 
     // Only trigger refresh if filter/pagination settings changed (not UI or Apprise settings)
-    if (shouldInvalidateReleaseCache(releaseCacheInvalidation)) {
+    if (shouldClearEtags) {
       logger
         .withScope("Settings")
         .info("Filter/API settings changed - triggering repository refresh");

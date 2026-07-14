@@ -2,6 +2,7 @@ import {
   getRepositoryDisplayName,
   getRepositoryImportStats,
   getRepositoryProviderName,
+  getProviderResolutionBatches,
   isComposeFileName,
   isHttpUrl,
   isOwnerRepoShorthand,
@@ -28,6 +29,24 @@ describe("repository-form-helpers", () => {
     expect(isOwnerRepoShorthand("owner/repo/extra")).toBe(false);
     expect(isComposeFileName("compose.yaml")).toBe(true);
     expect(isComposeFileName("repositories.json")).toBe(false);
+  });
+
+  it("splits large provider resolution requests into bounded batches", () => {
+    const inputs = Array.from(
+      { length: 101 },
+      (_, index) => `owner/repo-${index}`,
+    );
+    inputs.push("owner/repo-0");
+    inputs.push("https://github.com/owner/direct-url");
+
+    const batches = getProviderResolutionBatches(inputs);
+
+    expect(batches).toHaveLength(2);
+    expect(batches[0]).toHaveLength(100);
+    expect(batches[1]).toEqual(["owner/repo-100"]);
+    expect(batches.flat()).not.toContain(
+      "https://github.com/owner/direct-url",
+    );
   });
 
   it("parses valid repository import JSON", () => {

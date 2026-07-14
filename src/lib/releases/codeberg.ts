@@ -113,7 +113,7 @@ async function tryFetchCodebergCommitMessage(
               ? data.commit.committer.date
               : undefined;
 
-      if (message) return { message, date };
+      if (message || date) return { message, date };
     } catch {
       // best-effort only
     }
@@ -385,6 +385,7 @@ export async function fetchLatestReleaseFromCodeberg(
               : "",
           created_at: fetchedAtTimestamp,
           published_at: fetchedAtTimestamp,
+          published_at_unknown: true,
           prerelease: false,
           draft: false,
         };
@@ -405,19 +406,33 @@ export async function fetchLatestReleaseFromCodeberg(
       };
     }
 
-    if (!latestRelease.body || latestRelease.body.trim() === "") {
+    if (
+      latestRelease.published_at_unknown ||
+      !latestRelease.body ||
+      latestRelease.body.trim() === ""
+    ) {
       const commit = await tryFetchCodebergCommitMessage(
         CODEBERG_API_BASE_URL,
         headersWithoutAuth,
         codebergToken,
         commitRefsByTag.get(latestRelease.tag_name) ?? latestRelease.tag_name,
       );
-      if (commit?.message) {
+      if (
+        commit?.message &&
+        (!latestRelease.body || latestRelease.body.trim() === "")
+      ) {
         const t = await getTranslations({ locale, namespace: "Actions" });
         latestRelease.body = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commit.message}`;
       }
       if (commit?.date) {
-        latestRelease.published_at = latestRelease.published_at ?? commit.date;
+        if (latestRelease.published_at_unknown) {
+          latestRelease.created_at = commit.date;
+          latestRelease.published_at = commit.date;
+          latestRelease.published_at_unknown = false;
+        } else {
+          latestRelease.published_at =
+            latestRelease.published_at ?? commit.date;
+        }
       }
     }
 
