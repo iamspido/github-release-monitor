@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { getAuthSmtpConfig } from "@/lib/auth/config";
-import { readSecretEnvValue } from "@/lib/secret-env";
+import {
+  normalizeAccessTokenEnvValue,
+  readSecretEnvValue,
+} from "@/lib/secret-env";
 
 describe("secret environment values", () => {
   it("preserves meaningful whitespace exactly", () => {
@@ -24,5 +27,16 @@ describe("secret environment values", () => {
     });
 
     expect(config.password).toBe(" password ");
+  });
+
+  it.each([
+    ["  github-token  ", "github-token"],
+    [' "github-token" ', "github-token"],
+    [" 'github-token' ", "github-token"],
+    [' "ghp_\n abc" ', "ghp_abc"],
+    ["   ", null],
+    [' " " ', null],
+  ])("normalizes provider access token %j", (input, expected) => {
+    expect(normalizeAccessTokenEnvValue(input)).toBe(expected);
   });
 });

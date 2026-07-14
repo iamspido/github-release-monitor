@@ -2,12 +2,12 @@ import { updateTag } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { canPerformRestrictedAction } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
-import { readSecretEnvValue } from "@/lib/secret-env";
+import { normalizeAccessTokenEnvValue } from "@/lib/secret-env";
 
 export const log = logger.withScope("WebServer");
 
 export function normalizeEnvToken(value?: string): string | null {
-  return readSecretEnvValue(value);
+  return normalizeAccessTokenEnvValue(value);
 }
 
 export function updateReleaseCacheTags(): void {
