@@ -81,6 +81,31 @@ describe("resolveRepoProvidersAction", () => {
     ]);
   });
 
+  it("resolves multiple shorthand inputs in one action call", async () => {
+    const actions = await import("@/app/actions");
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200 }),
+    );
+
+    const result = await actions.resolveRepoProvidersBatchAction([
+      "owner/one",
+      "owner/two",
+      "owner/one",
+    ]);
+
+    expect(result.success).toBe(true);
+    expect(result.resolutions.map((resolution) => resolution.input)).toEqual([
+      "owner/one",
+      "owner/two",
+    ]);
+    expect(
+      result.resolutions.every(
+        (resolution) => resolution.candidates.length === 3,
+      ),
+    ).toBe(true);
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(6);
+  });
+
   it("returns candidates for multiple allowed GitLab hosts", async () => {
     process.env.GITLAB_ADDITIONAL_HOSTS = "gitlab.self.test";
     process.env.GITLAB_ACCESS_TOKENS =

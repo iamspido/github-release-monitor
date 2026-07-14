@@ -17,7 +17,10 @@ import {
 import { previewComposeImportAction as previewComposeImportActionImpl } from "@/lib/import/compose-ghcr";
 import { getLatestReleasesForRepos as getLatestReleasesForReposImpl } from "@/lib/releases";
 import { checkForNewReleases as checkForNewReleasesImpl } from "@/lib/releases/checker";
-import { resolveRepoProvidersAction as resolveRepoProvidersActionImpl } from "@/lib/repositories/provider-resolution";
+import {
+  resolveRepoProvidersAction as resolveRepoProvidersActionImpl,
+  resolveRepoProvidersBatchAction as resolveRepoProvidersBatchActionImpl,
+} from "@/lib/repositories/provider-resolution";
 import {
   acknowledgeNewReleaseAction as acknowledgeNewReleaseActionImpl,
   addRepositoriesAction as addRepositoriesActionImpl,
@@ -104,6 +107,12 @@ export async function resolveRepoProvidersAction(
   ...args: Parameters<typeof resolveRepoProvidersActionImpl>
 ) {
   return resolveRepoProvidersActionImpl(...args);
+}
+
+export async function resolveRepoProvidersBatchAction(
+  ...args: Parameters<typeof resolveRepoProvidersBatchActionImpl>
+) {
+  return resolveRepoProvidersBatchActionImpl(...args);
 }
 
 export async function getLatestReleasesForRepos(

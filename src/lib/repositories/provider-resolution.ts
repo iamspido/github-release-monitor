@@ -24,6 +24,13 @@ type RepoProviderResolutionCandidate = Pick<
   "provider" | "providerHost" | "id" | "canonicalRepoUrl"
 >;
 
+export type RepoProviderResolution = {
+  input: string;
+  candidates: RepoProviderResolutionCandidate[];
+};
+
+const PROVIDER_RESOLUTION_CONCURRENCY = 4;
+
 function parseOwnerRepoShorthand(
   input: string,
 ): { owner: string; repo: string } | null {
@@ -154,20 +161,15 @@ async function lookupGitlabCandidate(
   }
 }
 
-export async function resolveRepoProvidersAction(input: string): Promise<{
-  success: boolean;
-  candidates: RepoProviderResolutionCandidate[];
-}> {
-  if (!(await isRestrictedActionAllowed())) {
-    return { success: false, candidates: [] };
-  }
-
+async function resolveRepoProviders(
+  input: string,
+): Promise<RepoProviderResolutionCandidate[]> {
   const parsed = parseOwnerRepoShorthand(input);
   if (!parsed) {
     log.debug(
       `Repo provider resolution skipped (not shorthand input): ${input.trim()}`,
     );
-    return { success: true, candidates: [] };
+    return [];
   }
 
   const { owner, repo } = parsed;
@@ -199,5 +201,54 @@ export async function resolveRepoProvidersAction(input: string): Promise<{
   log.debug(
     `Repo provider resolution for ${owner}/${repo}: candidates=${candidates.map((c) => c.provider).join(",") || "none"}`,
   );
-  return { success: true, candidates };
+  return candidates;
+}
+
+export async function resolveRepoProvidersAction(input: string): Promise<{
+  success: boolean;
+  candidates: RepoProviderResolutionCandidate[];
+}> {
+  if (!(await isRestrictedActionAllowed())) {
+    return { success: false, candidates: [] };
+  }
+
+  return { success: true, candidates: await resolveRepoProviders(input) };
+}
+
+export async function resolveRepoProvidersBatchAction(
+  inputs: string[],
+): Promise<{
+  success: boolean;
+  resolutions: RepoProviderResolution[];
+}> {
+  if (!(await isRestrictedActionAllowed())) {
+    return { success: false, resolutions: [] };
+  }
+
+  const uniqueInputs = [
+    ...new Set(
+      inputs.map((input) => input.trim()).filter((input) => input.length > 0),
+    ),
+  ];
+  const resolutions: RepoProviderResolution[] = [];
+
+  for (
+    let offset = 0;
+    offset < uniqueInputs.length;
+    offset += PROVIDER_RESOLUTION_CONCURRENCY
+  ) {
+    const batch = uniqueInputs.slice(
+      offset,
+      offset + PROVIDER_RESOLUTION_CONCURRENCY,
+    );
+    const batchResolutions = await Promise.all(
+      batch.map(async (input) => ({
+        input,
+        candidates: await resolveRepoProviders(input),
+      })),
+    );
+    resolutions.push(...batchResolutions);
+  }
+
+  return { success: true, resolutions };
 }

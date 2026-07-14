@@ -10,7 +10,7 @@ import {
   addRepositoriesAction,
   importRepositoriesAction,
   previewComposeImportAction,
-  resolveRepoProvidersAction,
+  resolveRepoProvidersBatchAction,
 } from "@/app/actions";
 import {
   AlertDialog,
@@ -117,6 +117,10 @@ export function RepositoryForm({
       lines: string[];
       nextIndex: number;
       resolvedLines: string[];
+      resolutions: Array<{
+        input: string;
+        candidates: ProviderChoiceCandidate[];
+      }>;
     } | null>(null);
 
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -222,9 +226,20 @@ export function RepositoryForm({
     [formAction],
   );
 
-  const resolveLinesAndSubmit = React.useCallback(
-    async (lines: string[], startIndex = 0, seedResolved: string[] = []) => {
+  const processResolvedLines = React.useCallback(
+    (
+      lines: string[],
+      resolutions: Array<{
+        input: string;
+        candidates: ProviderChoiceCandidate[];
+      }>,
+      startIndex = 0,
+      seedResolved: string[] = [],
+    ) => {
       const resolved: string[] = [...seedResolved];
+      const resolutionsByInput = new Map(
+        resolutions.map((resolution) => [resolution.input, resolution]),
+      );
 
       for (let i = startIndex; i < lines.length; i += 1) {
         const raw = lines[i]?.trim() ?? "";
@@ -240,12 +255,7 @@ export function RepositoryForm({
           continue;
         }
 
-        const result = await resolveRepoProvidersAction(raw);
-        const candidates = result.candidates.map((c) => ({
-          provider: c.provider,
-          providerHost: c.providerHost,
-          canonicalRepoUrl: c.canonicalRepoUrl,
-        }));
+        const candidates = resolutionsByInput.get(raw)?.candidates ?? [];
 
         if (candidates.length === 1) {
           resolved.push(candidates[0].canonicalRepoUrl);
@@ -259,6 +269,7 @@ export function RepositoryForm({
             lines,
             nextIndex: i + 1,
             resolvedLines: resolved,
+            resolutions,
           });
           setProviderDialogOpen(true);
           return;
@@ -273,6 +284,23 @@ export function RepositoryForm({
     [submitResolvedLines],
   );
 
+  const resolveLinesAndSubmit = React.useCallback(
+    async (lines: string[]) => {
+      const shorthandInputs = lines.filter(isOwnerRepoShorthand);
+      const result = await resolveRepoProvidersBatchAction(shorthandInputs);
+      const resolutions = result.resolutions.map((resolution) => ({
+        input: resolution.input,
+        candidates: resolution.candidates.map((candidate) => ({
+          provider: candidate.provider,
+          providerHost: candidate.providerHost,
+          canonicalRepoUrl: candidate.canonicalRepoUrl,
+        })),
+      }));
+      processResolvedLines(lines, resolutions);
+    },
+    [processResolvedLines],
+  );
+
   const handleChooseProvider = (candidateUrl: string) => {
     const pending = providerDialogPendingState;
     if (!pending) return;
@@ -283,11 +311,13 @@ export function RepositoryForm({
     setProviderDialogPendingState(null);
 
     hasProcessedResult.current = false;
-    startProviderResolveTransition(async () => {
-      await resolveLinesAndSubmit(pending.lines, pending.nextIndex, [
-        ...pending.resolvedLines,
-        candidateUrl,
-      ]);
+    startProviderResolveTransition(() => {
+      processResolvedLines(
+        pending.lines,
+        pending.resolutions,
+        pending.nextIndex,
+        [...pending.resolvedLines, candidateUrl],
+      );
     });
   };
 
