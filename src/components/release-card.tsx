@@ -221,11 +221,16 @@ export function ReleaseCard({
   React.useEffect(() => {
     // When the settings dialog transitions from open -> closed, return focus to the trigger button.
     // Use a micro-delay to ensure the overlay has unmounted before focusing.
+    let focusTimeout: ReturnType<typeof setTimeout> | undefined;
     if (prevIsSettingsOpenRef.current && !isSettingsOpen) {
       const btn = settingsButtonRef.current;
-      setTimeout(() => btn?.focus(), 0);
+      focusTimeout = setTimeout(() => btn?.focus(), 0);
     }
     prevIsSettingsOpenRef.current = isSettingsOpen;
+
+    return () => {
+      if (focusTimeout) clearTimeout(focusTimeout);
+    };
   }, [isSettingsOpen]);
   const handleRemove = () => {
     startRemoveTransition(async () => {
@@ -334,6 +339,7 @@ export function ReleaseCard({
                 {repoHasCustomSettings && <CustomSettingsBadge />}
                 {canMutate && (
                   <RepoSettingsTrigger
+                    buttonRef={settingsButtonRef}
                     className="size-8 shrink-0 text-red-400/80 hover:bg-red-400/10 hover:text-red-400"
                     onOpen={() => setIsSettingsOpen(true)}
                   />

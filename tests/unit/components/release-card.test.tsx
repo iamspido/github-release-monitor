@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type React from "react";
+import React, { act } from "react";
 import { flushSync } from "react-dom";
 import ReactDOM from "react-dom/client";
 import {
@@ -12,6 +12,10 @@ import {
   vi,
 } from "vitest";
 import type { AppSettings, EnrichedRelease } from "@/types";
+
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 type RichValues = Record<
   string,
@@ -179,8 +183,20 @@ vi.mock("@/components/ui/alert-dialog", () => ({
 }));
 
 vi.mock("@/components/repo-settings-dialog", () => ({
-  RepoSettingsDialog: ({ isOpen }: { isOpen: boolean }) => (
-    <div data-testid="repo-settings-dialog" data-open={isOpen} />
+  RepoSettingsDialog: ({
+    isOpen,
+    setIsOpen,
+  }: {
+    isOpen: boolean;
+    setIsOpen: (open: boolean) => void;
+  }) => (
+    <div data-testid="repo-settings-dialog" data-open={isOpen}>
+      {isOpen ? (
+        <button type="button" onClick={() => setIsOpen(false)}>
+          Close settings
+        </button>
+      ) : null}
+    </div>
   ),
 }));
 
@@ -349,6 +365,36 @@ describe("ReleaseCard component", () => {
       'button[aria-label="Open repository settings"]',
     );
     expect(settingsButton).toBeTruthy();
+  });
+
+  it("returns focus to the settings trigger after closing from an error card", async () => {
+    vi.useFakeTimers();
+    const enrichedRelease: EnrichedRelease = {
+      repoId: "owner/repo",
+      repoUrl: "https://github.com/owner/repo",
+      error: { type: "repo_not_found" },
+      repoSettings: {},
+    };
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={baseSettings}
+      />,
+    );
+
+    const settingsButton = container?.querySelector(
+      'button[aria-label="Open repository settings"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => settingsButton?.click());
+    const closeButton = getElementByText(
+      "button",
+      "Close settings",
+    ) as HTMLButtonElement | undefined;
+    await act(async () => closeButton?.click());
+    await act(async () => vi.advanceTimersByTime(0));
+
+    expect(document.activeElement).toBe(settingsButton);
   });
 
   it("disables key actions when offline", async () => {
