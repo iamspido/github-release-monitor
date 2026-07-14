@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import { consumeResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
 import { buildGitlabAuthChain } from "@/lib/releases/auth-chains";
 import { fetchJsonResponseWithRetryAuthChain } from "@/lib/releases/fetch";
 import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
@@ -318,7 +319,11 @@ export async function fetchLatestReleaseFromGitLab(
       if (!hadSuccessfulTagResponse) {
         let bodyText: string | undefined;
         try {
-          bodyText = tagsResponse ? await tagsResponse.text() : undefined;
+          bodyText = tagsResponse
+            ? await consumeResponseWithTimeout(tagsResponse, (response) =>
+                response.text(),
+              )
+            : undefined;
         } catch {
           bodyText = undefined;
         }

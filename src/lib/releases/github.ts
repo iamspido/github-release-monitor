@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import { consumeResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
 import { getComprehensiveMarkdownBody } from "@/lib/notifications/test-release-payloads";
 import {
   fetchJsonResponseWithRetry,
@@ -52,7 +53,10 @@ async function fetchLatestMatchingTagFromGithubPage(args: {
       return null;
     }
 
-    const entries = parseGithubTagsPage(await response.text()).slice(
+    const body = await consumeResponseWithTimeout(response, (result) =>
+      result.text(),
+    );
+    const entries = parseGithubTagsPage(body).slice(
       0,
       args.filters.totalReleasesToFetch,
     );

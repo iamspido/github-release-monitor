@@ -1,5 +1,9 @@
 import { getTranslations } from "next-intl/server";
-import { fetchWithTimeout } from "@/lib/http/fetch-with-timeout";
+import {
+  consumeResponseWithTimeout,
+  fetchWithTimeout,
+  releaseResponseTimeout,
+} from "@/lib/http/fetch-with-timeout";
 import { logger } from "@/lib/logger";
 import {
   escapeMarkdownLinkDestination,
@@ -182,7 +186,9 @@ export async function sendAppriseNotification(
     });
 
     if (!response.ok) {
-      const errorBody = await response.text();
+      const errorBody = await consumeResponseWithTimeout(response, (result) =>
+        result.text(),
+      );
       logger
         .withScope("Notifications")
         .error(
@@ -195,6 +201,7 @@ export async function sendAppriseNotification(
         }),
       );
     }
+    releaseResponseTimeout(response);
 
     logger
       .withScope("Notifications")

@@ -1,5 +1,6 @@
 import { inflateSync } from "node:zlib";
 
+import { consumeResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
 import { fetchResponseWithRetryAuthChain } from "@/lib/releases/fetch";
 import type { GitlabDeployToken } from "@/lib/repositories/providers";
 import { log } from "@/lib/server-action-helpers";
@@ -388,7 +389,11 @@ export async function tryFetchGitlabCommitMetadataViaGitTransport(
       continue;
     }
 
-    const uploadPackResponse = new Uint8Array(await response.arrayBuffer());
+    const uploadPackResponse = new Uint8Array(
+      await consumeResponseWithTimeout(response, (result) =>
+        result.arrayBuffer(),
+      ),
+    );
     const packPayload =
       extractPackPayloadFromUploadPackResponse(uploadPackResponse);
     if (!packPayload) {
@@ -449,7 +454,9 @@ export async function fetchGitlabTagsViaGitTransport(
   if (!response.ok) {
     let bodyText: string | undefined;
     try {
-      bodyText = await response.text();
+      bodyText = await consumeResponseWithTimeout(response, (result) =>
+        result.text(),
+      );
     } catch {
       bodyText = undefined;
     }
@@ -460,7 +467,11 @@ export async function fetchGitlabTagsViaGitTransport(
     return null;
   }
 
-  const payload = new Uint8Array(await response.arrayBuffer());
+  const payload = new Uint8Array(
+    await consumeResponseWithTimeout(response, (result) =>
+      result.arrayBuffer(),
+    ),
+  );
   const refs = parseGitSmartHttpTagRefs(payload);
   if (refs.length === 0) {
     return [];

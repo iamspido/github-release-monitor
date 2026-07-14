@@ -1,3 +1,4 @@
+import { consumeResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
 import {
   fetchJsonResponseWithRetry,
   fetchWithRetry,
@@ -121,7 +122,9 @@ export async function getGitlabTokenCheck(): Promise<GitlabTokenCheckResult> {
       if (!response.ok) {
         let bodyText: string | undefined;
         try {
-          bodyText = await response.text();
+          bodyText = await consumeResponseWithTimeout(response, (result) =>
+            result.text(),
+          );
         } catch {
           bodyText = undefined;
         }
@@ -135,7 +138,10 @@ export async function getGitlabTokenCheck(): Promise<GitlabTokenCheckResult> {
 
       let data: GitlabUserApi | undefined;
       try {
-        data = (await response.json()) as GitlabUserApi;
+        data = await consumeResponseWithTimeout(
+          response,
+          async (result) => (await result.json()) as GitlabUserApi,
+        );
       } catch {
         return {
           status: "valid",
@@ -188,7 +194,9 @@ export async function getGitlabTokenCheck(): Promise<GitlabTokenCheckResult> {
 
         let bodyText: string | undefined;
         try {
-          bodyText = await response.text();
+          bodyText = await consumeResponseWithTimeout(response, (result) =>
+            result.text(),
+          );
         } catch {
           bodyText = undefined;
         }
@@ -202,7 +210,10 @@ export async function getGitlabTokenCheck(): Promise<GitlabTokenCheckResult> {
 
       let data: GitlabUserApi | undefined;
       try {
-        data = (await response.json()) as GitlabUserApi;
+        data = await consumeResponseWithTimeout(
+          response,
+          async (result) => (await result.json()) as GitlabUserApi,
+        );
       } catch (error) {
         log.error(
           `GitLab token check returned invalid JSON (${attempt.scheme}).`,
@@ -262,7 +273,9 @@ export async function getCodebergTokenCheck(): Promise<CodebergTokenCheckResult>
       if (!response.ok) {
         let bodyText: string | undefined;
         try {
-          bodyText = await response.text();
+          bodyText = await consumeResponseWithTimeout(response, (result) =>
+            result.text(),
+          );
         } catch {
           bodyText = undefined;
         }
@@ -294,7 +307,10 @@ export async function getCodebergTokenCheck(): Promise<CodebergTokenCheckResult>
 
       let data: CodebergUserApi | undefined;
       try {
-        data = (await response.json()) as CodebergUserApi;
+        data = await consumeResponseWithTimeout(
+          response,
+          async (result) => (await result.json()) as CodebergUserApi,
+        );
       } catch (error) {
         log.error(
           `Codeberg token check returned invalid JSON (${attempt.scheme}).`,

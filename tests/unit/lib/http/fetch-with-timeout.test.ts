@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  consumeResponseWithTimeout,
   fetchWithTimeout,
   OutboundRequestTimeoutError,
 } from "@/lib/http/fetch-with-timeout";
@@ -60,5 +61,39 @@ describe("fetchWithTimeout", () => {
     caller.abort(reason);
 
     await expect(request).rejects.toBe(reason);
+  });
+
+  it("keeps the deadline active while the response body is read", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, options?: RequestInit) => {
+        const body = new ReadableStream({
+          start(controller) {
+            options?.signal?.addEventListener(
+              "abort",
+              () => controller.error(options.signal?.reason),
+              { once: true },
+            );
+          },
+        });
+        return Promise.resolve(new Response(body));
+      }),
+    );
+
+    const response = await fetchWithTimeout(
+      "https://example.test/slow-body",
+      {},
+      25,
+    );
+    const body = consumeResponseWithTimeout(response, (result) =>
+      result.text(),
+    );
+    const rejection = expect(body).rejects.toBeInstanceOf(
+      OutboundRequestTimeoutError,
+    );
+
+    await vi.advanceTimersByTimeAsync(25);
+    await rejection;
   });
 });

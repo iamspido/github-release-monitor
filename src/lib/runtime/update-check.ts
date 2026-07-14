@@ -1,4 +1,8 @@
-import { fetchWithTimeout } from "@/lib/http/fetch-with-timeout";
+import {
+  consumeResponseWithTimeout,
+  fetchWithTimeout,
+  releaseResponseTimeout,
+} from "@/lib/http/fetch-with-timeout";
 import { logger } from "@/lib/logger";
 import { getSystemStatus, saveSystemStatus } from "@/lib/storage/system-status";
 import type { SystemStatus } from "@/types";
@@ -39,6 +43,7 @@ export async function runApplicationUpdateCheck(
     });
 
     if (response.status === 304) {
+      releaseResponseTimeout(response);
       const updated: SystemStatus = {
         ...previousStatus,
         lastCheckedAt: nowIso,
@@ -50,6 +55,7 @@ export async function runApplicationUpdateCheck(
     }
 
     if (!response.ok) {
+      releaseResponseTimeout(response);
       const message = `${response.status} ${response.statusText}`;
       const updated: SystemStatus = {
         ...previousStatus,
@@ -61,7 +67,10 @@ export async function runApplicationUpdateCheck(
       return updated;
     }
 
-    const payload = (await response.json()) as GithubLatestReleaseResponse;
+    const payload = await consumeResponseWithTimeout(
+      response,
+      async (result) => (await result.json()) as GithubLatestReleaseResponse,
+    );
     const latestVersion = payload.tag_name || payload.name || null;
     const etag = response.headers.get("etag");
 

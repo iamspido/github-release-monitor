@@ -1,5 +1,6 @@
 import { getLocale, getTranslations } from "next-intl/server";
 import { parse as parseYaml } from "yaml";
+import { consumeResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
 import {
   fetchJsonResponseWithRetry,
   fetchWithRetry,
@@ -196,7 +197,10 @@ async function fetchGhcrJson<T>(
   if (!response.ok) return null;
 
   try {
-    return (await response.json()) as T;
+    return await consumeResponseWithTimeout(
+      response,
+      async (result) => (await result.json()) as T,
+    );
   } catch (error) {
     log.warn(`Failed to parse GHCR ${resource} JSON for ${repository}.`, error);
     return null;
