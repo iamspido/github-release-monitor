@@ -56,11 +56,9 @@ import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import {
   areSettingsSnapshotsEqual,
-  type CronValidationError,
   hasRefreshSensitiveRepoSettingChanges,
   isCacheIntervalInvalid,
   type RangeValidationError,
-  type RegexValidationError,
   validateCronInput,
   validateFilledInterval,
   validateOptionalIntegerInput,
@@ -100,8 +98,6 @@ type SaveStatus =
   | "paused";
 type ReleasesPerPageError = RangeValidationError;
 type IntervalValidationError = RangeValidationError;
-type RegexError = RegexValidationError;
-type CronError = CronValidationError;
 type AutomationMode = "global" | "interval" | "cron";
 
 function getAutomationMode(
@@ -291,17 +287,6 @@ export function RepoSettingsDialog({
   const [appriseFormat, setAppriseFormat] = React.useState<AppriseFormat | "">(
     currentRepoSettings?.appriseFormat ?? "",
   );
-
-  const [releasesPerPageError, setReleasesPerPageError] =
-    React.useState<ReleasesPerPageError>(null);
-  const [intervalError, setIntervalError] =
-    React.useState<IntervalValidationError>(null);
-  const [isCacheInvalid, setIsCacheInvalid] = React.useState(false);
-  const [cronError, setCronError] = React.useState<CronError>(null);
-  const [includeRegexError, setIncludeRegexError] =
-    React.useState<RegexError>(null);
-  const [excludeRegexError, setExcludeRegexError] =
-    React.useState<RegexError>(null);
 
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
   const { isOnline } = useNetworkStatus();
@@ -503,25 +488,24 @@ export function RepoSettingsDialog({
 
   const prevSettingsRef = React.useRef(newSettings);
 
-  React.useEffect(() => {
-    setReleasesPerPageError(
-      validateOptionalIntegerInput(releasesPerPage, 1, 1000),
-    );
-
-    if (automationMode === "interval") {
-      const fieldsFilled =
-        intervalDays !== "" && intervalHours !== "" && intervalMinutes !== "";
-      setIntervalError(
-        validateFilledInterval(
-          newSettings.refreshInterval ?? 0,
-          fieldsFilled,
-          MAX_INTERVAL_MINUTES,
-        ),
-      );
-    } else {
-      setIntervalError(null);
-    }
-
+  const {
+    releasesPerPageError,
+    intervalError,
+    isCacheInvalid,
+    cronError,
+    includeRegexError,
+    excludeRegexError,
+  } = React.useMemo(() => {
+    const intervalFieldsFilled =
+      intervalDays !== "" && intervalHours !== "" && intervalMinutes !== "";
+    const nextIntervalError: IntervalValidationError =
+      automationMode === "interval"
+        ? validateFilledInterval(
+            newSettings.refreshInterval ?? 0,
+            intervalFieldsFilled,
+            MAX_INTERVAL_MINUTES,
+          )
+        : null;
     const cacheFieldsFilled =
       cacheDays !== "" && cacheHours !== "" && cacheMinutes !== "";
     const effectiveAutomationUsesInterval =
@@ -531,23 +515,27 @@ export function RepoSettingsDialog({
       automationMode === "interval"
         ? (newSettings.refreshInterval ?? 0)
         : globalSettings.refreshInterval;
-    setIsCacheInvalid(
-      isCacheIntervalInvalid({
+
+    return {
+      releasesPerPageError: validateOptionalIntegerInput(
+        releasesPerPage,
+        1,
+        1000,
+      ) as ReleasesPerPageError,
+      intervalError: nextIntervalError,
+      isCacheInvalid: isCacheIntervalInvalid({
         enabled: effectiveAutomationUsesInterval && useCustomCache,
         fieldsFilled: cacheFieldsFilled,
         cacheInterval: newSettings.cacheInterval ?? 0,
         refreshInterval: effectiveRefreshInterval,
       }),
-    );
-    setCronError(
-      validateCronInput(
+      cronError: validateCronInput(
         newSettings.backgroundCheckCron,
         automationMode === "cron",
       ),
-    );
-
-    setIncludeRegexError(validateRegexInput(includeRegex));
-    setExcludeRegexError(validateRegexInput(excludeRegex));
+      includeRegexError: validateRegexInput(includeRegex),
+      excludeRegexError: validateRegexInput(excludeRegex),
+    };
   }, [
     releasesPerPage,
     automationMode,

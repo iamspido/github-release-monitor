@@ -58,10 +58,8 @@ import {
 } from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import {
-  type CronValidationError,
   isCacheIntervalInvalid,
   type RangeValidationError,
-  type RegexValidationError,
   validateCronInput,
   validateFilledInterval,
   validateOptionalIntegerInput,
@@ -111,7 +109,6 @@ type SaveStatus =
 type IntervalValidationError = RangeValidationError;
 type ReleasesPerPageError = RangeValidationError;
 type ParallelRepoFetchError = RangeValidationError;
-type RegexError = RegexValidationError;
 type HexColorError = "invalid" | null;
 type SecurityPatternsError = "invalid" | null;
 
@@ -428,25 +425,6 @@ export function SettingsForm({
     String(minutesToDhms(currentSettings.cacheInterval).m),
   );
 
-  const [intervalError, setIntervalError] =
-    React.useState<IntervalValidationError>(null);
-  const [releasesPerPageError, setReleasesPerPageError] =
-    React.useState<ReleasesPerPageError>(null);
-  const [parallelRepoFetchesError, setParallelRepoFetchesError] =
-    React.useState<ParallelRepoFetchError>(null);
-  const [isCacheInvalid, setIsCacheInvalid] = React.useState(false);
-  const [includeRegexError, setIncludeRegexError] =
-    React.useState<RegexError>(null);
-  const [excludeRegexError, setExcludeRegexError] =
-    React.useState<RegexError>(null);
-  const [cronError, setCronError] = React.useState<CronValidationError>(null);
-  const [
-    securityHighlightCustomColorError,
-    setSecurityHighlightCustomColorError,
-  ] = React.useState<HexColorError>(null);
-  const [customSecurityPatternsError, setCustomSecurityPatternsError] =
-    React.useState<SecurityPatternsError>(null);
-
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
   const isInitialMount = React.useRef(true);
   const lastSavedSettingsRef = React.useRef(currentSettings);
@@ -555,67 +533,67 @@ export function SettingsForm({
     currentSettings.parallelRepoFetches,
   ]);
 
-  // Validation Effect
-  React.useEffect(() => {
+  const {
+    intervalError,
+    releasesPerPageError,
+    parallelRepoFetchesError,
+    isCacheInvalid,
+    includeRegexError,
+    excludeRegexError,
+    cronError,
+    securityHighlightCustomColorError,
+    customSecurityPatternsError,
+  } = React.useMemo(() => {
     const refreshFieldsFilled = days !== "" && hours !== "" && minutes !== "";
     const cacheFieldsFilled =
       cacheDays !== "" && cacheHours !== "" && cacheMinutes !== "";
     const releasesPerPageFilled = releasesPerPage !== "";
     const parallelRepoFetchesFilled = parallelRepoFetches !== "";
-
-    setIntervalError(
+    const nextIntervalError: IntervalValidationError =
       automationMode === "interval"
         ? validateFilledInterval(
             newSettings.refreshInterval,
             refreshFieldsFilled,
             MAX_INTERVAL_MINUTES,
           )
-        : null,
+        : null;
+    const nextCronError = validateCronInput(
+      newSettings.backgroundCheckCron,
+      automationMode === "cron",
     );
-    setCronError(
-      validateCronInput(
-        newSettings.backgroundCheckCron,
-        automationMode === "cron",
-      ),
-    );
-    setReleasesPerPageError(
-      releasesPerPageFilled
-        ? validateOptionalIntegerInput(releasesPerPage, 1, 1000)
-        : null,
-    );
-    setParallelRepoFetchesError(
+    const nextReleasesPerPageError: ReleasesPerPageError = releasesPerPageFilled
+      ? validateOptionalIntegerInput(releasesPerPage, 1, 1000)
+      : null;
+    const nextParallelRepoFetchesError: ParallelRepoFetchError =
       parallelRepoFetchesFilled
         ? validateOptionalIntegerInput(parallelRepoFetches, 1, 50)
-        : null,
-    );
-
-    setIncludeRegexError(validateRegexInput(includeRegex));
-    setExcludeRegexError(validateRegexInput(excludeRegex));
-
-    if (
+        : null;
+    const nextSecurityColorError: HexColorError =
       securityHighlightColorPreset === "custom" &&
       !isValidSecurityHighlightCustomColor(securityHighlightCustomColor)
-    ) {
-      setSecurityHighlightCustomColorError("invalid");
-    } else {
-      setSecurityHighlightCustomColorError(null);
-    }
-
-    setCustomSecurityPatternsError(
+        ? "invalid"
+        : null;
+    const nextSecurityPatternsError: SecurityPatternsError =
       getInvalidCustomSecurityPattern(customSecurityPatterns)
         ? "invalid"
-        : null,
-    );
+        : null;
 
-    // Cache Validation
-    setIsCacheInvalid(
-      isCacheIntervalInvalid({
+    return {
+      intervalError: nextIntervalError,
+      releasesPerPageError: nextReleasesPerPageError,
+      parallelRepoFetchesError: nextParallelRepoFetchesError,
+      includeRegexError: validateRegexInput(includeRegex),
+      excludeRegexError: validateRegexInput(excludeRegex),
+      cronError: nextCronError,
+      securityHighlightCustomColorError: nextSecurityColorError,
+      customSecurityPatternsError: nextSecurityPatternsError,
+      isCacheInvalid: isCacheIntervalInvalid({
         enabled: automationMode === "interval" && refreshFieldsFilled,
         fieldsFilled: cacheFieldsFilled,
         cacheInterval: newSettings.cacheInterval,
         refreshInterval: newSettings.refreshInterval,
       }),
-    );
+    };
   }, [
     days,
     hours,
