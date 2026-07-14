@@ -12,7 +12,12 @@ import {
   isOneOf,
   isString,
 } from "@/lib/storage/runtime-validation";
-import type { CachedRelease, Repository } from "@/types";
+import type {
+  CachedRelease,
+  GithubRelease,
+  PendingReleaseNotification,
+  Repository,
+} from "@/types";
 import { allPreReleaseTypes } from "@/types";
 
 // Resolve the path to the data file.
@@ -27,6 +32,8 @@ const isReleaseChannel = isOneOf(["stable", "prerelease", "draft"]);
 const isPreReleaseChannel = isOneOf(allPreReleaseTypes);
 const isAppriseFormat = isOneOf(["text", "markdown", "html"]);
 const isReleaseSource = isOneOf(["release", "tag"]);
+const isNotificationChannel = isOneOf(["email", "apprise"]);
+const isTimeFormat = isOneOf(["12h", "24h"]);
 
 function parseCachedRelease(value: unknown, path: string): CachedRelease {
   const release = assertJsonObject(value, path);
@@ -57,6 +64,91 @@ function parseCachedRelease(value: unknown, path: string): CachedRelease {
   assertOptionalField(release, "fetched_at", isString, "a string");
   assertOptionalField(release, "source", isReleaseSource, "release or tag");
   return release as CachedRelease;
+}
+
+function parsePendingRelease(value: unknown, path: string): GithubRelease {
+  const release = assertJsonObject(value, path);
+  if (!isFiniteNumber(release.id)) {
+    throw new Error(`${path}.id must be a finite number.`);
+  }
+  for (const key of ["html_url", "tag_name", "created_at"] as const) {
+    if (!isString(release[key])) {
+      throw new Error(`${path}.${key} must be a string.`);
+    }
+  }
+  for (const key of ["name", "body", "published_at"] as const) {
+    if (!isNullable(isString)(release[key])) {
+      throw new Error(`${path}.${key} must be a string or null.`);
+    }
+  }
+  for (const key of ["prerelease", "draft"] as const) {
+    if (!isBoolean(release[key])) {
+      throw new Error(`${path}.${key} must be a boolean.`);
+    }
+  }
+  assertOptionalField(release, "published_at_unknown", isBoolean, "a boolean");
+  assertOptionalField(release, "fetched_at", isString, "a string");
+  return release as GithubRelease;
+}
+
+function parsePendingNotification(
+  value: unknown,
+  path: string,
+): PendingReleaseNotification {
+  const notification = assertJsonObject(value, path);
+  for (const key of ["id", "locale", "createdAt"] as const) {
+    if (!isNonEmptyString(notification[key])) {
+      throw new Error(`${path}.${key} must be a non-empty string.`);
+    }
+  }
+  if (!isFiniteNumber(notification.attempts) || notification.attempts < 0) {
+    throw new Error(`${path}.attempts must be a non-negative number.`);
+  }
+  assertOptionalField(notification, "nextAttemptAt", isString, "a string");
+  if (
+    !Array.isArray(notification.channels) ||
+    notification.channels.length === 0 ||
+    !notification.channels.every(isNotificationChannel)
+  ) {
+    throw new Error(`${path}.channels must contain notification channels.`);
+  }
+
+  const repository = assertJsonObject(
+    notification.repository,
+    `${path}.repository`,
+  );
+  for (const key of ["id", "url"] as const) {
+    if (!isNonEmptyString(repository[key])) {
+      throw new Error(`${path}.repository.${key} must be a non-empty string.`);
+    }
+  }
+  assertOptionalField(repository, "appriseTags", isString, "a string");
+  assertOptionalField(
+    repository,
+    "appriseFormat",
+    isAppriseFormat,
+    "text, markdown, or html",
+  );
+
+  parsePendingRelease(notification.release, `${path}.release`);
+  const settings = assertJsonObject(notification.settings, `${path}.settings`);
+  if (!isTimeFormat(settings.timeFormat)) {
+    throw new Error(`${path}.settings.timeFormat must be 12h or 24h.`);
+  }
+  assertOptionalField(
+    settings,
+    "appriseMaxCharacters",
+    isFiniteNumber,
+    "a finite number",
+  );
+  assertOptionalField(settings, "appriseTags", isString, "a string");
+  assertOptionalField(
+    settings,
+    "appriseFormat",
+    isAppriseFormat,
+    "text, markdown, or html",
+  );
+  return notification as PendingReleaseNotification;
 }
 
 function parseRepository(value: unknown, index: number): Repository {
@@ -119,6 +211,17 @@ function parseRepository(value: unknown, index: number): Repository {
     isAppriseFormat,
     "text, markdown, or html",
   );
+  if (repository.pendingNotifications !== undefined) {
+    if (!Array.isArray(repository.pendingNotifications)) {
+      throw new Error(`${path}.pendingNotifications must be an array.`);
+    }
+    repository.pendingNotifications.forEach((notification, index) => {
+      parsePendingNotification(
+        notification,
+        `${path}.pendingNotifications[${index}]`,
+      );
+    });
+  }
   return repository as Repository;
 }
 
@@ -199,6 +302,10 @@ function mergeRepositoriesPreferFirst(
     excludeRegex: preferDefined(base.excludeRegex, incoming.excludeRegex),
     appriseTags: preferDefined(base.appriseTags, incoming.appriseTags),
     appriseFormat: preferDefined(base.appriseFormat, incoming.appriseFormat),
+    pendingNotifications: preferDefined(
+      base.pendingNotifications,
+      incoming.pendingNotifications,
+    ),
   };
 }
 

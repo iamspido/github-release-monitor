@@ -1,4 +1,8 @@
-import { sendNotification } from "@/lib/notifications";
+import { getConfiguredNotificationChannels } from "@/lib/notifications";
+import {
+  deliverPendingNotifications,
+  enqueuePendingNotification,
+} from "@/lib/notifications/pending-deliveries";
 import { getLatestReleasesForRepos } from "@/lib/releases";
 import { resolveParallelRepoFetches } from "@/lib/releases/filters";
 import { hasAnyGitlabTokenForAllowedHosts } from "@/lib/repositories/providers";
@@ -17,6 +21,7 @@ async function applyReleaseCheckResults({
   effectiveLocale,
   backgroundCheckStartedAtIso,
   markDueChecks,
+  notificationChannels,
 }: {
   originalRepos: Repository[];
   enrichedReleases: EnrichedRelease[];
@@ -24,13 +29,21 @@ async function applyReleaseCheckResults({
   effectiveLocale: string;
   backgroundCheckStartedAtIso: string;
   markDueChecks: boolean;
+  notificationChannels: ReturnType<typeof getConfiguredNotificationChannels>;
 }) {
-  const updatedRepos = [...originalRepos];
+  const updatedRepos = originalRepos.map((repository) => ({
+    ...repository,
+    pendingNotifications: repository.pendingNotifications?.map(
+      (notification) => ({
+        ...notification,
+        channels: [...notification.channels],
+      }),
+    ),
+  }));
   const repoIndexById = new Map(
     updatedRepos.map((repo, index) => [repo.id, index]),
   );
   let changed = false;
-  let notificationsSent = 0;
 
   for (const enrichedRelease of enrichedReleases) {
     const repoIndex = repoIndexById.get(enrichedRelease.repoId);
@@ -69,22 +82,13 @@ async function applyReleaseCheckResults({
         repo.isNew = shouldHighlight;
         repoWasUpdated = true;
 
-        try {
-          await sendNotification(
-            repo,
-            enrichedRelease.release,
-            effectiveLocale,
-            settings,
-          );
-          notificationsSent++;
-        } catch (error: unknown) {
-          const message =
-            error instanceof Error ? error.message : String(error ?? "unknown");
-          log.error(
-            `Failed to send notification for ${repo.id}. The release tag HAS been updated to prevent repeated failures for the same release. Error: ${message}`,
-            error instanceof Error ? error : undefined,
-          );
-        }
+        enqueuePendingNotification(
+          repo,
+          enrichedRelease.release,
+          effectiveLocale,
+          settings,
+          notificationChannels,
+        );
       } else if (!repo.lastSeenReleaseTag && !isVirtual) {
         log.info(
           `First fetch for ${repo.id}, setting initial release tag to ${newTag}. No notification will be sent.`,
@@ -99,7 +103,7 @@ async function applyReleaseCheckResults({
     }
   }
 
-  return { updatedRepos, changed, notificationsSent };
+  return { updatedRepos, changed };
 }
 
 async function _checkForNewReleasesUnscheduled(options?: {
@@ -120,10 +124,18 @@ async function _checkForNewReleasesUnscheduled(options?: {
     `Parallel fetch batch size set to ${parallelLimit} (GitHub token=${tokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}, GitLab token=${gitlabTokenConfigured ? "yes" : "no"}).`,
   );
 
-  const originalRepos = await getRepositories();
+  let originalRepos = await getRepositories();
+  let notificationsSent = 0;
+  const retriedNotifications = await deliverPendingNotifications(originalRepos);
+  if (retriedNotifications.changed) {
+    originalRepos = retriedNotifications.repositories;
+    await saveRepositories(originalRepos);
+  }
+  notificationsSent += retriedNotifications.notificationsSent;
+
   if (originalRepos.length === 0) {
     log.info(`No repositories to check.`);
-    return { notificationsSent: 0, checked: 0 };
+    return { notificationsSent, checked: 0 };
   }
 
   const reposToCheck = options?.onlyDue
@@ -136,7 +148,7 @@ async function _checkForNewReleasesUnscheduled(options?: {
 
   if (reposToCheck.length === 0) {
     log.info(`No repositories are due for background check.`);
-    return { notificationsSent: 0, checked: 0 };
+    return { notificationsSent, checked: 0 };
   }
 
   const enrichedReleases = await getLatestReleasesForRepos(
@@ -146,21 +158,29 @@ async function _checkForNewReleasesUnscheduled(options?: {
     { skipCache: options?.skipCache },
   );
 
-  const { updatedRepos, changed, notificationsSent } =
-    await applyReleaseCheckResults({
-      originalRepos,
-      enrichedReleases,
-      settings,
-      effectiveLocale,
-      backgroundCheckStartedAtIso,
-      markDueChecks: options?.onlyDue === true,
-    });
+  const notificationChannels = getConfiguredNotificationChannels();
+  const { updatedRepos, changed } = await applyReleaseCheckResults({
+    originalRepos,
+    enrichedReleases,
+    settings,
+    effectiveLocale,
+    backgroundCheckStartedAtIso,
+    markDueChecks: options?.onlyDue === true,
+    notificationChannels,
+  });
 
   if (changed) {
     log.info(`Found changes, updating repository data file.`);
     await saveRepositories(updatedRepos);
   } else {
     log.info(`No new releases found.`);
+  }
+
+  const newNotificationDeliveries =
+    await deliverPendingNotifications(updatedRepos);
+  notificationsSent += newNotificationDeliveries.notificationsSent;
+  if (newNotificationDeliveries.changed) {
+    await saveRepositories(newNotificationDeliveries.repositories);
   }
   log.info(
     `Summary: notificationsSent=${notificationsSent} checked=${reposToCheck.length}`,

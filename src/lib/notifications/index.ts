@@ -5,32 +5,68 @@ import {
 } from "@/lib/notifications/apprise";
 import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
 import { sendNewReleaseEmail } from "@/lib/notifications/email";
-import type { AppSettings, GithubRelease, Repository } from "@/types";
+import type {
+  GithubRelease,
+  NotificationChannel,
+  NotificationSettings,
+  Repository,
+} from "@/types";
 
 export { sendTestAppriseNotification };
+
+export class NotificationDeliveryError extends Error {
+  constructor(
+    readonly failedChannels: NotificationChannel[],
+    options?: ErrorOptions,
+  ) {
+    super("One or more notification services failed to send.", options);
+    this.name = "NotificationDeliveryError";
+  }
+}
+
+export function getConfiguredNotificationChannels(): NotificationChannel[] {
+  const { hasMailHost, isAppriseConfigured } = getNotificationRuntimeConfig();
+  const channels: NotificationChannel[] = [];
+  if (hasMailHost) channels.push("email");
+  if (isAppriseConfigured) channels.push("apprise");
+  return channels;
+}
 
 export async function sendNotification(
   repository: Repository,
   release: GithubRelease,
   locale: string,
-  settings: AppSettings,
+  settings: NotificationSettings,
+  requestedChannels = getConfiguredNotificationChannels(),
 ) {
-  const { hasMailHost, isAppriseConfigured } = getNotificationRuntimeConfig();
-  const notificationPromises: Array<Promise<void>> = [];
+  const { isAppriseConfigured } = getNotificationRuntimeConfig();
+  const notifications: Array<{
+    channel: NotificationChannel;
+    promise: Promise<void>;
+  }> = [];
 
-  if (hasMailHost) {
-    notificationPromises.push(
-      sendNewReleaseEmail(repository, release, locale, settings.timeFormat),
-    );
+  if (requestedChannels.includes("email")) {
+    notifications.push({
+      channel: "email",
+      promise: sendNewReleaseEmail(
+        repository,
+        release,
+        locale,
+        settings.timeFormat,
+      ),
+    });
   }
 
-  if (isAppriseConfigured) {
-    notificationPromises.push(
-      sendAppriseNotification(repository, release, locale, settings),
-    );
+  if (requestedChannels.includes("apprise")) {
+    notifications.push({
+      channel: "apprise",
+      promise: isAppriseConfigured
+        ? sendAppriseNotification(repository, release, locale, settings)
+        : Promise.reject(new Error("Apprise is no longer configured.")),
+    });
   }
 
-  if (notificationPromises.length === 0) {
+  if (notifications.length === 0) {
     logger
       .withScope("Notifications")
       .warn(
@@ -39,9 +75,19 @@ export async function sendNotification(
     return;
   }
 
-  const results = await Promise.allSettled(notificationPromises);
-  const failed = results.find((result) => result.status === "rejected");
-  if (failed) {
-    throw new Error("One or more notification services failed to send.");
+  const results = await Promise.allSettled(
+    notifications.map(({ promise }) => promise),
+  );
+  const failedChannels = results.flatMap((result, index) =>
+    result.status === "rejected" ? [notifications[index].channel] : [],
+  );
+  if (failedChannels.length > 0) {
+    throw new NotificationDeliveryError(failedChannels, {
+      cause: new AggregateError(
+        results.flatMap((result) =>
+          result.status === "rejected" ? [result.reason] : [],
+        ),
+      ),
+    });
   }
 }

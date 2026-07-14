@@ -7,6 +7,7 @@ import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
 import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
 import { toGithubReleaseFromCache } from "@/lib/releases/filters";
+import { toPublicRepository } from "@/lib/repositories/public-repository";
 import { getUpdateNotificationState } from "@/lib/runtime/app-update-notice";
 import { getRepositories } from "@/lib/storage/repositories";
 import { createDefaultSettings, getSettings } from "@/lib/storage/settings";
@@ -65,6 +66,7 @@ export default async function HomePage({
           newEtag: repo.etag,
         };
       });
+      repositories = repositories.map(toPublicRepository);
     }
   } catch (error: unknown) {
     logger

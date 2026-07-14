@@ -12,8 +12,8 @@ import {
 } from "@/lib/notifications/email";
 import type {
   AppriseFormat,
-  AppSettings,
   GithubRelease,
+  NotificationSettings,
   Repository,
 } from "@/types";
 
@@ -21,7 +21,7 @@ async function generateMarkdownReleaseBody(
   release: GithubRelease,
   repository: Repository,
   locale: string,
-  settings: AppSettings,
+  settings: NotificationSettings,
   maxChars: number,
 ): Promise<string> {
   const t = await getTranslations({ locale, namespace: "Email" });
@@ -84,7 +84,7 @@ async function generateAppriseBody(
   repository: Repository,
   format: AppriseFormat,
   locale: string,
-  settings: AppSettings,
+  settings: NotificationSettings,
 ): Promise<string> {
   const maxChars = settings.appriseMaxCharacters ?? 0;
   const tApprise = await getTranslations({ locale, namespace: "Apprise" });
@@ -130,7 +130,7 @@ export async function sendAppriseNotification(
   repository: Repository,
   release: GithubRelease,
   locale: string,
-  settings: AppSettings,
+  settings: NotificationSettings,
 ) {
   const { APPRISE_URL } = process.env;
   if (!APPRISE_URL) return;
@@ -218,7 +218,7 @@ export async function sendTestAppriseNotification(
   repository: Repository,
   release: GithubRelease,
   locale: string,
-  settings: AppSettings,
+  settings: NotificationSettings,
 ) {
   const t = await getTranslations({ locale, namespace: "Apprise" });
   const { APPRISE_URL } = process.env;

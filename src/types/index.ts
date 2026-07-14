@@ -21,6 +21,26 @@ export type Repository = {
   excludeRegex?: string;
   appriseTags?: string;
   appriseFormat?: AppriseFormat;
+  pendingNotifications?: PendingReleaseNotification[];
+};
+
+export type NotificationChannel = "email" | "apprise";
+
+export type PendingReleaseNotification = {
+  id: string;
+  repository: {
+    id: string;
+    url: string;
+    appriseTags?: string;
+    appriseFormat?: AppriseFormat;
+  };
+  release: GithubRelease;
+  locale: string;
+  settings: NotificationSettings;
+  channels: NotificationChannel[];
+  createdAt: string;
+  attempts: number;
+  nextAttemptAt?: string;
 };
 
 export type GithubRelease = {
@@ -248,6 +268,11 @@ export type AppSettings = {
   appriseTags?: string;
   appriseFormat?: AppriseFormat;
 };
+
+export type NotificationSettings = Pick<
+  AppSettings,
+  "timeFormat" | "appriseMaxCharacters" | "appriseTags" | "appriseFormat"
+>;
 
 export type SystemStatus = {
   latestKnownVersion: string | null;

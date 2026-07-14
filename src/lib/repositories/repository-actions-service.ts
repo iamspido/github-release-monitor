@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { getLatestReleasesForRepos } from "@/lib/releases";
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
+import { toPublicRepository } from "@/lib/repositories/public-repository";
 import { applyReleaseFetchResultToRepository } from "@/lib/repositories/release-cache-update";
 import { isValidRepoId } from "@/lib/repositories/validation";
 import { trackBackgroundTask } from "@/lib/runtime/background-tasks";
@@ -407,7 +408,7 @@ export async function getRepositoriesForExport(): Promise<{
 }> {
   try {
     const repos = await getRepositories();
-    return { success: true, data: repos };
+    return { success: true, data: repos.map(toPublicRepository) };
   } catch (error: unknown) {
     log.error("Failed to get repositories for export:", error);
     return { success: false, error: "Failed to read repository data." };

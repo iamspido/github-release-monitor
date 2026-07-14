@@ -106,7 +106,10 @@ describe("notifications/index", () => {
     );
     await expect(
       sendNotification(repo, release, "en", baseSettings),
-    ).rejects.toThrow(/failed to send/i);
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/failed to send/i),
+      failedChannels: ["apprise"],
+    });
     // email still attempted
     expect(sendNewReleaseEmailMock).toHaveBeenCalled();
   });

@@ -41,6 +41,7 @@ vi.mock("@/lib/notifications", async (orig) => {
   const actual = await orig<typeof import("@/lib/notifications")>();
   return {
     ...actual,
+    getConfiguredNotificationChannels: () => ["apprise"],
     sendNotification: (...args: unknown[]) => sendNotificationMock(...args),
   };
 });
