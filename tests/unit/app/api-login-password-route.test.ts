@@ -37,6 +37,8 @@ describe("api/login/password route", () => {
     vi.resetModules();
     (globalThis as Record<string, unknown>)._failedLoginAttempts = undefined;
     (globalThis as Record<string, unknown>)._authLoginAttempts = undefined;
+    (globalThis as Record<string, unknown>)._authLoginOverflowAttempts =
+      undefined;
     signInEmailMock.mockClear();
     signInUsernameMock.mockClear();
     ensureAuthDatabaseReadyMock.mockClear();

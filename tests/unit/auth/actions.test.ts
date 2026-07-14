@@ -57,6 +57,8 @@ describe("auth actions", () => {
     (globalThis as Record<string, unknown>).__redirectCalls = [];
     (globalThis as Record<string, unknown>)._failedLoginAttempts = undefined;
     (globalThis as Record<string, unknown>)._authLoginAttempts = undefined;
+    (globalThis as Record<string, unknown>)._authLoginOverflowAttempts =
+      undefined;
     signInEmailMock.mockReset();
     signInUsernameMock.mockReset();
     signUpEmailMock.mockReset();

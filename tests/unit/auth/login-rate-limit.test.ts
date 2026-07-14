@@ -6,6 +6,8 @@ describe("login rate limit storage", () => {
   beforeEach(() => {
     vi.resetModules();
     (globalThis as Record<string, unknown>)._authLoginAttempts = undefined;
+    (globalThis as Record<string, unknown>)._authLoginOverflowAttempts =
+      undefined;
   });
 
   afterEach(() => {
@@ -106,7 +108,7 @@ describe("login rate limit storage", () => {
     expect(getFailedLoginFailures("client:new")).toBe(1);
   });
 
-  it("fails closed when every bounded entry has an active lockout", async () => {
+  it("scopes overflow lockouts when every primary entry is active", async () => {
     process.env.AUTH_MAX_LOGIN_ATTEMPTS = "1";
     process.env.AUTH_LOGIN_LOCKOUT_SECONDS = "60";
     const {
@@ -120,7 +122,12 @@ describe("login rate limit storage", () => {
     }
     registerFailedLoginAttempt("client:overflow", 1);
 
-    expect(isLoginRateLimited("client:unseen", 2)).toBe(true);
-    expect(isLoginRateLimited("client:unseen", 60_001)).toBe(false);
+    expect(isLoginRateLimited("client:overflow", 2)).toBe(true);
+    expect(
+      Array.from({ length: 32 }, (_, index) => `client:unseen:${index}`).some(
+        (key) => !isLoginRateLimited(key, 2),
+      ),
+    ).toBe(true);
+    expect(isLoginRateLimited("client:overflow", 60_001)).toBe(false);
   });
 });

@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+import { getAuthSecret } from "@/lib/auth/config";
 import { getLoginIdentifierLogLabel } from "@/lib/auth/request-context";
 import { logger } from "@/lib/logger";
 
@@ -20,11 +22,17 @@ export type LoginRateLimitKey = string | readonly string[];
 
 declare global {
   var _authLoginAttempts: Map<string, LoginAttemptState> | undefined;
+  var _authLoginOverflowAttempts: Map<number, LoginAttemptState> | undefined;
 }
 
 global._authLoginAttempts ??= new Map<string, LoginAttemptState>();
 const failedLoginAttempts = global._authLoginAttempts as Map<
   string,
+  LoginAttemptState
+>;
+global._authLoginOverflowAttempts ??= new Map<number, LoginAttemptState>();
+const overflowLoginAttempts = global._authLoginOverflowAttempts as Map<
+  number,
   LoginAttemptState
 >;
 
@@ -33,8 +41,20 @@ const DEFAULT_ATTEMPT_WINDOW_SECONDS = 15 * 60;
 const DEFAULT_LOCKOUT_SECONDS = 15 * 60;
 const LOGIN_STATE_PRUNE_INTERVAL_MS = 60_000;
 export const MAX_LOGIN_RATE_LIMIT_ENTRIES = 10_000;
+const LOGIN_RATE_LIMIT_OVERFLOW_BUCKETS = 1_024;
 let lastLoginStatePruneAt: number | null = null;
-let capacityLockoutUntil = 0;
+
+function getOverflowBucket(key: string): number {
+  const digest = createHmac("sha256", getAuthSecret()).update(key).digest();
+  return digest.readUInt32BE(0) % LOGIN_RATE_LIMIT_OVERFLOW_BUCKETS;
+}
+
+function getFailedLoginState(key: string): LoginAttemptState | undefined {
+  return (
+    failedLoginAttempts.get(key) ??
+    overflowLoginAttempts.get(getOverflowBucket(key))
+  );
+}
 
 function parseBoundedIntegerEnv(
   name: string,
@@ -87,17 +107,28 @@ export function pruneFailedLoginState(now: number): void {
       failedLoginAttempts.delete(key);
     }
   }
-  if (failedLoginAttempts.size < MAX_LOGIN_RATE_LIMIT_ENTRIES) {
-    capacityLockoutUntil = 0;
+  for (const [bucket, state] of overflowLoginAttempts.entries()) {
+    if (state.lockedUntil > now) continue;
+    if (now - state.lastFailedAt > loginAttemptWindowMs) {
+      overflowLoginAttempts.delete(bucket);
+    }
   }
 }
 
 function setFailedLoginState(key: string, state: LoginAttemptState): void {
   const alreadyTracked = failedLoginAttempts.delete(key);
-  if (
-    !alreadyTracked &&
-    failedLoginAttempts.size >= MAX_LOGIN_RATE_LIMIT_ENTRIES
-  ) {
+  if (alreadyTracked) {
+    failedLoginAttempts.set(key, state);
+    return;
+  }
+
+  const overflowBucket = getOverflowBucket(key);
+  if (overflowLoginAttempts.has(overflowBucket)) {
+    overflowLoginAttempts.set(overflowBucket, state);
+    return;
+  }
+
+  if (failedLoginAttempts.size >= MAX_LOGIN_RATE_LIMIT_ENTRIES) {
     const evictableKey = failedLoginAttempts
       .entries()
       .find(
@@ -106,13 +137,7 @@ function setFailedLoginState(key: string, state: LoginAttemptState): void {
     if (evictableKey !== undefined) {
       failedLoginAttempts.delete(evictableKey);
     } else {
-      capacityLockoutUntil = Math.min(
-        ...Array.from(failedLoginAttempts.values(), (candidate) =>
-          candidate.lockedUntil > state.lastFailedAt
-            ? candidate.lockedUntil
-            : Number.POSITIVE_INFINITY,
-        ),
-      );
+      overflowLoginAttempts.set(overflowBucket, state);
       return;
     }
   }
@@ -124,7 +149,7 @@ function normalizeKeys(key: LoginRateLimitKey): readonly string[] {
 }
 
 function isSingleLoginRateLimited(key: string, now: number): boolean {
-  const state = failedLoginAttempts.get(key);
+  const state = getFailedLoginState(key);
   if (!state) return false;
   if (state.lockedUntil > now) {
     setFailedLoginState(key, state);
@@ -134,7 +159,7 @@ function isSingleLoginRateLimited(key: string, now: number): boolean {
     state.lockedUntil <= now &&
     now - state.lastFailedAt > loginAttemptWindowMs
   ) {
-    failedLoginAttempts.delete(key);
+    clearFailedLoginAttempts(key);
   }
   return false;
 }
@@ -143,8 +168,6 @@ export function isLoginRateLimited(
   key: LoginRateLimitKey,
   now: number,
 ): boolean {
-  if (capacityLockoutUntil > now) return true;
-  if (capacityLockoutUntil > 0) capacityLockoutUntil = 0;
   return normalizeKeys(key).some((candidate) =>
     isSingleLoginRateLimited(candidate, now),
   );
@@ -154,17 +177,12 @@ export function getLoginLockoutRemainingSeconds(
   key: LoginRateLimitKey,
   now: number,
 ): number {
-  const capacityRemainingSeconds =
-    capacityLockoutUntil > now
-      ? Math.ceil((capacityLockoutUntil - now) / 1_000)
-      : 0;
   const keys = normalizeKeys(key);
   return keys.length === 0
-    ? capacityRemainingSeconds
+    ? 0
     : Math.max(
-        capacityRemainingSeconds,
         ...keys.map((candidate) => {
-          const state = failedLoginAttempts.get(candidate);
+          const state = getFailedLoginState(candidate);
           if (!state || state.lockedUntil <= now) return 0;
           return Math.ceil((state.lockedUntil - now) / 1_000);
         }),
@@ -175,7 +193,7 @@ function registerSingleFailedLoginAttempt(
   key: string,
   now: number,
 ): FailedLoginAttemptResult {
-  const existing = failedLoginAttempts.get(key);
+  const existing = getFailedLoginState(key);
   if (!existing || now - existing.firstFailedAt > loginAttemptWindowMs) {
     const failures = 1;
     const lockedUntil =
@@ -252,10 +270,9 @@ export function registerFailedLoginAttempt(
 
 export function clearFailedLoginAttempts(key: LoginRateLimitKey): void {
   for (const candidate of normalizeKeys(key)) {
-    failedLoginAttempts.delete(candidate);
-  }
-  if (failedLoginAttempts.size < MAX_LOGIN_RATE_LIMIT_ENTRIES) {
-    capacityLockoutUntil = 0;
+    if (!failedLoginAttempts.delete(candidate)) {
+      overflowLoginAttempts.delete(getOverflowBucket(candidate));
+    }
   }
 }
 
@@ -265,7 +282,7 @@ export function getFailedLoginFailures(key: LoginRateLimitKey): number {
     ? 0
     : Math.max(
         ...keys.map(
-          (candidate) => failedLoginAttempts.get(candidate)?.failures ?? 0,
+          (candidate) => getFailedLoginState(candidate)?.failures ?? 0,
         ),
       );
 }
@@ -277,7 +294,7 @@ export function clearExpiredLoginLockout(
   let wasCleared = false;
   let failures = 0;
   for (const candidate of normalizeKeys(key)) {
-    const state = failedLoginAttempts.get(candidate);
+    const state = getFailedLoginState(candidate);
     if (!state || state.lockedUntil <= 0 || state.lockedUntil > now) {
       continue;
     }
