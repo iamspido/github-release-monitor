@@ -34,7 +34,7 @@ describe("setupTestRepositoryAction", () => {
     const { setupTestRepositoryAction } = await import("@/app/actions");
     const res = await setupTestRepositoryAction();
     expect(res.success).toBe(true);
-    const testRepo = mem.repos.find((r) => r.id === "test/test");
+    const testRepo = mem.repos.find((r) => r.id === "github:test/test");
     expect(testRepo).toBeTruthy();
     expect(testRepo?.latestRelease).toBeTruthy();
   });
@@ -63,10 +63,31 @@ describe("setupTestRepositoryAction", () => {
     const { setupTestRepositoryAction } = await import("@/app/actions");
     const res = await setupTestRepositoryAction();
     expect(res.success).toBe(true);
-    const repo = mem.repos.find((r) => r.id === "test/test");
+    const repo = mem.repos.find((r) => r.id === "github:test/test");
     expect(repo?.lastSeenReleaseTag).toBe("v0.9.0-reset");
     expect(repo?.isNew).toBe(false);
     expect(repo?.latestRelease).toBeTruthy();
     expect(repo?.latestRelease?.tag_name).toBe("v0.9.0-reset");
+  });
+
+  it("resets an existing canonical test repo without creating a duplicate", async () => {
+    mem.repos = [
+      {
+        id: "github:test/test",
+        url: "https://github.com/test/test",
+        lastSeenReleaseTag: "old",
+      },
+    ];
+    const { setupTestRepositoryAction } = await import("@/app/actions");
+
+    const res = await setupTestRepositoryAction();
+
+    expect(res.success).toBe(true);
+    expect(mem.repos).toHaveLength(1);
+    expect(mem.repos[0]).toMatchObject({
+      id: "github:test/test",
+      lastSeenReleaseTag: "v0.9.0-reset",
+      isNew: false,
+    });
   });
 });

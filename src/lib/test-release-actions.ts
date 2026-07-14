@@ -19,7 +19,9 @@ import { getRepositories, saveRepositories } from "@/lib/storage/repositories";
 import { getSettings } from "@/lib/storage/settings";
 import type { AppriseStatus, GithubRelease, Repository } from "@/types";
 
-const TEST_REPO_ID = "test/test";
+const TEST_REPO_ID = "github:test/test";
+const LEGACY_TEST_REPO_ID = "test/test";
+const TEST_REPO_URL = "https://github.com/test/test";
 
 export async function setupTestRepositoryAction(): Promise<{
   success: boolean;
@@ -38,15 +40,17 @@ export async function setupTestRepositoryAction(): Promise<{
     try {
       const currentRepos = await getRepositories();
       const testRepoIndex = currentRepos.findIndex(
-        (r) => r.id === TEST_REPO_ID,
+        (r) => r.id === TEST_REPO_ID || r.id === LEGACY_TEST_REPO_ID,
       );
 
       if (testRepoIndex > -1) {
+        currentRepos[testRepoIndex].id = TEST_REPO_ID;
+        currentRepos[testRepoIndex].url = TEST_REPO_URL;
         currentRepos[testRepoIndex].lastSeenReleaseTag = "v0.9.0-reset";
         currentRepos[testRepoIndex].isNew = false;
         // Ensure a cached release exists so the UI shows a proper card immediately
         currentRepos[testRepoIndex].latestRelease = {
-          html_url: `https://github.com/${TEST_REPO_ID}/releases/tag/v0.9.0-reset`,
+          html_url: `${TEST_REPO_URL}/releases/tag/v0.9.0-reset`,
           tag_name: "v0.9.0-reset",
           name: title,
           body: body,
@@ -57,11 +61,11 @@ export async function setupTestRepositoryAction(): Promise<{
       } else {
         currentRepos.push({
           id: TEST_REPO_ID,
-          url: `https://github.com/${TEST_REPO_ID}`,
+          url: TEST_REPO_URL,
           lastSeenReleaseTag: "v0.9.0-initial",
           isNew: false,
           latestRelease: {
-            html_url: `https://github.com/${TEST_REPO_ID}/releases/tag/v0.9.0-initial`,
+            html_url: `${TEST_REPO_URL}/releases/tag/v0.9.0-initial`,
             tag_name: "v0.9.0-initial",
             name: title,
             body: body,
