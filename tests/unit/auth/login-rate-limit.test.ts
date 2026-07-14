@@ -80,4 +80,47 @@ describe("login rate limit storage", () => {
 
     expect(isLoginRateLimited("client:locked", 2)).toBe(true);
   });
+
+  it("never evicts an active lockout to admit a new client", async () => {
+    process.env.AUTH_MAX_LOGIN_ATTEMPTS = "2";
+    const {
+      getFailedLoginFailures,
+      isLoginRateLimited,
+      MAX_LOGIN_RATE_LIMIT_ENTRIES,
+      registerFailedLoginAttempt,
+    } = await import("@/lib/auth/login-rate-limit");
+
+    registerFailedLoginAttempt("client:locked", 0);
+    registerFailedLoginAttempt("client:locked", 1);
+    for (let index = 0; index < MAX_LOGIN_RATE_LIMIT_ENTRIES - 1; index += 1) {
+      registerFailedLoginAttempt(`client:${index}`, index + 2);
+    }
+
+    registerFailedLoginAttempt("client:new", MAX_LOGIN_RATE_LIMIT_ENTRIES + 2);
+
+    expect(
+      isLoginRateLimited("client:locked", MAX_LOGIN_RATE_LIMIT_ENTRIES + 3),
+    ).toBe(true);
+    expect(getFailedLoginFailures("client:locked")).toBe(2);
+    expect(getFailedLoginFailures("client:0")).toBe(0);
+    expect(getFailedLoginFailures("client:new")).toBe(1);
+  });
+
+  it("fails closed when every bounded entry has an active lockout", async () => {
+    process.env.AUTH_MAX_LOGIN_ATTEMPTS = "1";
+    process.env.AUTH_LOGIN_LOCKOUT_SECONDS = "60";
+    const {
+      isLoginRateLimited,
+      MAX_LOGIN_RATE_LIMIT_ENTRIES,
+      registerFailedLoginAttempt,
+    } = await import("@/lib/auth/login-rate-limit");
+
+    for (let index = 0; index < MAX_LOGIN_RATE_LIMIT_ENTRIES; index += 1) {
+      registerFailedLoginAttempt(`client:${index}`, 0);
+    }
+    registerFailedLoginAttempt("client:overflow", 1);
+
+    expect(isLoginRateLimited("client:unseen", 2)).toBe(true);
+    expect(isLoginRateLimited("client:unseen", 60_001)).toBe(false);
+  });
 });

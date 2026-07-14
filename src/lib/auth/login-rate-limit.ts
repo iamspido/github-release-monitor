@@ -34,6 +34,7 @@ const DEFAULT_LOCKOUT_SECONDS = 15 * 60;
 const LOGIN_STATE_PRUNE_INTERVAL_MS = 60_000;
 export const MAX_LOGIN_RATE_LIMIT_ENTRIES = 10_000;
 let lastLoginStatePruneAt: number | null = null;
+let capacityLockoutUntil = 0;
 
 function parseBoundedIntegerEnv(
   name: string,
@@ -86,6 +87,9 @@ export function pruneFailedLoginState(now: number): void {
       failedLoginAttempts.delete(key);
     }
   }
+  if (failedLoginAttempts.size < MAX_LOGIN_RATE_LIMIT_ENTRIES) {
+    capacityLockoutUntil = 0;
+  }
 }
 
 function setFailedLoginState(key: string, state: LoginAttemptState): void {
@@ -94,9 +98,22 @@ function setFailedLoginState(key: string, state: LoginAttemptState): void {
     !alreadyTracked &&
     failedLoginAttempts.size >= MAX_LOGIN_RATE_LIMIT_ENTRIES
   ) {
-    const leastRecentlyUsedKey = failedLoginAttempts.keys().next().value;
-    if (leastRecentlyUsedKey !== undefined) {
-      failedLoginAttempts.delete(leastRecentlyUsedKey);
+    const evictableKey = failedLoginAttempts
+      .entries()
+      .find(
+        ([, candidate]) => candidate.lockedUntil <= state.lastFailedAt,
+      )?.[0];
+    if (evictableKey !== undefined) {
+      failedLoginAttempts.delete(evictableKey);
+    } else {
+      capacityLockoutUntil = Math.min(
+        ...Array.from(failedLoginAttempts.values(), (candidate) =>
+          candidate.lockedUntil > state.lastFailedAt
+            ? candidate.lockedUntil
+            : Number.POSITIVE_INFINITY,
+        ),
+      );
+      return;
     }
   }
   failedLoginAttempts.set(key, state);
@@ -126,6 +143,8 @@ export function isLoginRateLimited(
   key: LoginRateLimitKey,
   now: number,
 ): boolean {
+  if (capacityLockoutUntil > now) return true;
+  if (capacityLockoutUntil > 0) capacityLockoutUntil = 0;
   return normalizeKeys(key).some((candidate) =>
     isSingleLoginRateLimited(candidate, now),
   );
@@ -135,10 +154,15 @@ export function getLoginLockoutRemainingSeconds(
   key: LoginRateLimitKey,
   now: number,
 ): number {
+  const capacityRemainingSeconds =
+    capacityLockoutUntil > now
+      ? Math.ceil((capacityLockoutUntil - now) / 1_000)
+      : 0;
   const keys = normalizeKeys(key);
   return keys.length === 0
-    ? 0
+    ? capacityRemainingSeconds
     : Math.max(
+        capacityRemainingSeconds,
         ...keys.map((candidate) => {
           const state = failedLoginAttempts.get(candidate);
           if (!state || state.lockedUntil <= now) return 0;
@@ -229,6 +253,9 @@ export function registerFailedLoginAttempt(
 export function clearFailedLoginAttempts(key: LoginRateLimitKey): void {
   for (const candidate of normalizeKeys(key)) {
     failedLoginAttempts.delete(candidate);
+  }
+  if (failedLoginAttempts.size < MAX_LOGIN_RATE_LIMIT_ENTRIES) {
+    capacityLockoutUntil = 0;
   }
 }
 
