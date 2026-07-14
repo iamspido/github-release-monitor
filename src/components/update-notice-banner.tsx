@@ -38,10 +38,12 @@ export function UpdateNoticeBanner({
     : "https://github.com/iamspido/github-release-monitor/releases";
 
   const handleDismiss = () => {
-    setIsVisible(false);
     runAction(
       async () => {
-        await dismissUpdateNotificationAction();
+        const result = await dismissUpdateNotificationAction();
+        if (result.success) {
+          setIsVisible(false);
+        }
       },
       (error) => {
         // eslint-disable-next-line no-console

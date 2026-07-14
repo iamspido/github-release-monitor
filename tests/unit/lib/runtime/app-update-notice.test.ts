@@ -114,6 +114,36 @@ describe("runtime/app-update-notice", () => {
     });
   });
 
+  it("compares numeric prerelease identifiers according to SemVer", async () => {
+    const { getUpdateNotificationState } = await import(
+      "@/lib/runtime/app-update-notice"
+    );
+
+    process.env.NEXT_PUBLIC_APP_VERSION = "1.2.3-beta.2";
+    storageMocks.getSystemStatus.mockResolvedValueOnce(
+      status({ latestKnownVersion: "1.2.3-beta.10" }),
+    );
+
+    await expect(getUpdateNotificationState()).resolves.toMatchObject({
+      hasUpdate: true,
+      shouldNotify: true,
+    });
+  });
+
+  it("does not advertise malformed versions as updates", async () => {
+    const { getUpdateNotificationState } = await import(
+      "@/lib/runtime/app-update-notice"
+    );
+    storageMocks.getSystemStatus.mockResolvedValueOnce(
+      status({ latestKnownVersion: "not-a-version" }),
+    );
+
+    await expect(getUpdateNotificationState()).resolves.toMatchObject({
+      hasUpdate: false,
+      shouldNotify: false,
+    });
+  });
+
   it("marks matching dismissed versions as dismissed and suppresses notifications", async () => {
     storageMocks.getSystemStatus.mockResolvedValue(
       status({
