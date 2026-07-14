@@ -223,13 +223,52 @@ describe("actions GitLab self-hosted fetcher", () => {
     expect(
       urls.some((u) =>
         String(u).includes(
-          "/repository/tags?per_page=1&order_by=updated&sort=desc",
+          "/repository/tags?per_page=30&page=1&order_by=updated&sort=desc",
         ),
       ),
     ).toBe(true);
     expect(
-      urls.some((u) => String(u).includes("/repository/tags?per_page=1")),
+      urls.some((u) =>
+        String(u).includes("/repository/tags?per_page=30&page=1"),
+      ),
     ).toBe(true);
+  });
+
+  it("selects an older matching tag when the newest tag is filtered out", async () => {
+    process.env.GITLAB_ADDITIONAL_HOSTS = "gitlab.self.test";
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "gitlab:gitlab.self.test/group/repo",
+      url: "https://gitlab.self.test/group/repo",
+    };
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(mockFetchResponse({ json: [] }))
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: [
+            {
+              name: "v2.0.0-beta",
+              message: "beta",
+              commit: { committed_date: "2026-01-02T00:00:00.000Z" },
+            },
+            {
+              name: "v1.9.0",
+              message: "stable",
+              commit: { committed_date: "2026-01-01T00:00:00.000Z" },
+            },
+          ],
+        }),
+      );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      { ...baseSettings, releaseChannels: ["stable"] },
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("v1.9.0");
   });
 
   it("returns api_error when tag fallback endpoint fails", async () => {

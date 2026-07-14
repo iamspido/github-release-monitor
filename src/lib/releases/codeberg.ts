@@ -171,6 +171,7 @@ export async function fetchLatestReleaseFromCodeberg(
   let allReleases: GithubRelease[] = [];
   let newEtag: string | undefined;
   let tagFallbackReason: string | undefined;
+  const commitRefsByTag = new Map<string, string>();
 
   const headersWithoutAuth: Record<string, string> = {
     Accept: "application/json",
@@ -307,41 +308,54 @@ export async function fetchLatestReleaseFromCodeberg(
         `Codeberg releases unavailable for codeberg:${owner}/${repo} (reason=${reason}). Falling back to tags.`,
       );
 
-      const tagUrls = [
-        `${CODEBERG_API_BASE_URL}/tags?limit=1&page=1`,
-        `${CODEBERG_API_BASE_URL}/tags?per_page=1&page=1`,
-        `${CODEBERG_API_BASE_URL}/tags`,
-      ];
-
       let tagsResponse: Response | null = null;
-      let tags: CodebergTagApi[] | undefined;
+      const tags: CodebergTagApi[] = [];
+      const tagPagesToFetch = resolvePageCount(
+        totalReleasesToFetch,
+        MAX_PER_PAGE,
+      );
 
-      for (const tagUrl of tagUrls) {
-        try {
-          const tagChain = buildCodebergAuthChain(
-            headersWithoutAuth,
-            codebergToken,
-          );
+      for (let page = 1; page <= tagPagesToFetch; page += 1) {
+        const tagsOnThisPage = resolvePageSize({
+          maxPerPage: MAX_PER_PAGE,
+          totalItemsToFetch: totalReleasesToFetch,
+          alreadyFetched: tags.length,
+        });
+        const tagUrls = [
+          `${CODEBERG_API_BASE_URL}/tags?limit=${tagsOnThisPage}&page=${page}`,
+          `${CODEBERG_API_BASE_URL}/tags?per_page=${tagsOnThisPage}&page=${page}`,
+          ...(page === 1 ? [`${CODEBERG_API_BASE_URL}/tags`] : []),
+        ];
+        let pageTags: CodebergTagApi[] | null = null;
 
-          const result = await fetchJsonResponseWithRetryAuthChain<
-            CodebergTagApi[]
-          >(tagUrl, tagChain, {
-            description: `Codeberg tags for ${owner}/${repo}`,
-          });
+        for (const tagUrl of tagUrls) {
+          try {
+            const tagChain = buildCodebergAuthChain(
+              headersWithoutAuth,
+              codebergToken,
+            );
 
-          tagsResponse = result.response;
-          if (!tagsResponse.ok) {
-            continue;
-          }
+            const result = await fetchJsonResponseWithRetryAuthChain<
+              CodebergTagApi[]
+            >(tagUrl, tagChain, {
+              description: `Codeberg tags for ${owner}/${repo} page ${page}`,
+            });
 
-          const received = result.data ?? [];
-          if (received.length > 0) {
-            tags = received;
+            tagsResponse = result.response;
+            if (!tagsResponse.ok) {
+              continue;
+            }
+
+            pageTags = result.data ?? [];
             break;
+          } catch {
+            // Try the next candidate URL
           }
-        } catch {
-          // Try the next candidate URL
         }
+
+        if (!pageTags) break;
+        tags.push(...pageTags);
+        if (pageTags.length < tagsOnThisPage) break;
       }
 
       if (!tagsResponse?.ok) {
@@ -351,49 +365,30 @@ export async function fetchLatestReleaseFromCodeberg(
         return { release: null, error: { type: "no_releases_found" }, newEtag };
       }
 
-      if (!tags || tags.length === 0) {
+      if (tags.length === 0) {
         log.info(`No tags found for codeberg:${owner}/${repo}.`);
         return { release: null, error: { type: "no_releases_found" }, newEtag };
       }
 
-      const latestTag = tags[0];
       const t = await getTranslations({ locale, namespace: "Actions" });
-
-      let bodyContent = "";
-      let publicationDate = new Date().toISOString();
-
-      const sha = extractCodebergTagCommitSha(latestTag);
-      if (sha) {
-        const commit = await tryFetchCodebergCommitMessage(
-          CODEBERG_API_BASE_URL,
-          headersWithoutAuth,
-          codebergToken,
-          sha,
-        );
-        if (commit?.message) {
-          bodyContent = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commit.message}`;
-        }
-        if (commit?.date) {
-          publicationDate = commit.date;
-        }
-      }
-
-      if (!bodyContent && typeof latestTag.message === "string") {
-        bodyContent = `### ${t("tag_message_fallback_title")}\n\n---\n\n${latestTag.message}`;
-      }
-
-      const virtualRelease: GithubRelease = {
-        id: 0,
-        html_url: `https://codeberg.org/${owner}/${repo}/src/tag/${latestTag.name}`,
-        tag_name: latestTag.name,
-        name: `Tag: ${latestTag.name}`,
-        body: bodyContent,
-        created_at: publicationDate,
-        published_at: publicationDate,
-        prerelease: false,
-        draft: false,
-      };
-      allReleases = [virtualRelease];
+      allReleases = tags.map((tag) => {
+        const commitRef = extractCodebergTagCommitSha(tag);
+        if (commitRef) commitRefsByTag.set(tag.name, commitRef);
+        return {
+          id: 0,
+          html_url: `https://codeberg.org/${owner}/${repo}/src/tag/${tag.name}`,
+          tag_name: tag.name,
+          name: `Tag: ${tag.name}`,
+          body:
+            typeof tag.message === "string"
+              ? `### ${t("tag_message_fallback_title")}\n\n---\n\n${tag.message}`
+              : "",
+          created_at: fetchedAtTimestamp,
+          published_at: fetchedAtTimestamp,
+          prerelease: false,
+          draft: false,
+        };
+      });
     }
 
     const latestRelease = selectLatestMatchingRelease({
@@ -410,15 +405,12 @@ export async function fetchLatestReleaseFromCodeberg(
       };
     }
 
-    if (
-      latestRelease.id !== 0 &&
-      (!latestRelease.body || latestRelease.body.trim() === "")
-    ) {
+    if (!latestRelease.body || latestRelease.body.trim() === "") {
       const commit = await tryFetchCodebergCommitMessage(
         CODEBERG_API_BASE_URL,
         headersWithoutAuth,
         codebergToken,
-        latestRelease.tag_name,
+        commitRefsByTag.get(latestRelease.tag_name) ?? latestRelease.tag_name,
       );
       if (commit?.message) {
         const t = await getTranslations({ locale, namespace: "Actions" });

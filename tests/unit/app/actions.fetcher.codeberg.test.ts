@@ -123,6 +123,34 @@ describe("actions Codeberg fetcher scenarios", () => {
     expect(enriched[0].error).toBeUndefined();
   });
 
+  it("selects an older matching tag when the newest tag is filtered out", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "codeberg:o/r",
+      url: "https://codeberg.org/o/r",
+    };
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(mockFetchResponse({ json: [] }))
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: [
+            { name: "v2.0.0-beta", message: "beta" },
+            { name: "v1.9.0", message: "stable" },
+          ],
+        }),
+      );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      { ...baseSettings, releaseChannels: ["stable"] },
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("v1.9.0");
+  });
+
   it("falls back to tags when releases endpoint returns 404 but repo exists", async () => {
     const actions = await import("@/app/actions");
 

@@ -126,6 +126,7 @@ export async function fetchLatestReleaseFromGitLab(
   let newEtag: string | undefined;
   let fellBackToTagsAfterReleases404 = false;
   const gitTransportCommitShasByTag = new Map<string, string>();
+  const apiCommitRefsByTag = new Map<string, string>();
 
   const headersWithoutAuth: Record<string, string> = {
     Accept: "application/json",
@@ -266,37 +267,52 @@ export async function fetchLatestReleaseFromGitLab(
           `No formal releases found for ${projectPath}. Falling back to tags.`,
         );
       }
-      const tagUrls = [
-        `${GITLAB_API_BASE_URL}/repository/tags?per_page=1&order_by=updated&sort=desc`,
-        `${GITLAB_API_BASE_URL}/repository/tags?per_page=1`,
-        `${GITLAB_API_BASE_URL}/repository/tags`,
-      ];
-
       let tagsResponse: Response | null = null;
-      let tags: GitlabTagApi[] | undefined;
+      const tags: GitlabTagApi[] = [];
       let hadSuccessfulTagResponse = false;
 
-      for (const tagUrl of tagUrls) {
-        const tagChain = buildGitlabAuthChain(headersWithoutAuth, gitlabAuth);
-        const result = await fetchJsonResponseWithRetryAuthChain<
-          GitlabTagApi[]
-        >(tagUrl, tagChain, { description: `GitLab tags for ${projectPath}` });
-        tagsResponse = result.response;
+      const tagPagesToFetch = resolvePageCount(
+        totalReleasesToFetch,
+        MAX_PER_PAGE,
+      );
+      for (let page = 1; page <= tagPagesToFetch; page += 1) {
+        const tagsOnThisPage = resolvePageSize({
+          maxPerPage: MAX_PER_PAGE,
+          totalItemsToFetch: totalReleasesToFetch,
+          alreadyFetched: tags.length,
+        });
+        const tagUrls = [
+          `${GITLAB_API_BASE_URL}/repository/tags?per_page=${tagsOnThisPage}&page=${page}&order_by=updated&sort=desc`,
+          `${GITLAB_API_BASE_URL}/repository/tags?per_page=${tagsOnThisPage}&page=${page}`,
+          ...(page === 1 ? [`${GITLAB_API_BASE_URL}/repository/tags`] : []),
+        ];
 
-        if (!tagsResponse.ok) {
-          // Some GitLab versions don't support order_by/sort on tags. Retry with a simpler endpoint.
-          if (tagsResponse.status === 400) {
-            continue;
+        let pageTags: GitlabTagApi[] | null = null;
+        for (const tagUrl of tagUrls) {
+          const tagChain = buildGitlabAuthChain(headersWithoutAuth, gitlabAuth);
+          const result = await fetchJsonResponseWithRetryAuthChain<
+            GitlabTagApi[]
+          >(tagUrl, tagChain, {
+            description: `GitLab tags for ${projectPath} page ${page}`,
+          });
+          tagsResponse = result.response;
+
+          if (!tagsResponse.ok) {
+            // Some GitLab versions don't support order_by/sort on tags. Retry with a simpler endpoint.
+            if (tagsResponse.status === 400) {
+              continue;
+            }
+            break;
           }
+
+          hadSuccessfulTagResponse = true;
+          pageTags = result.data ?? [];
           break;
         }
 
-        hadSuccessfulTagResponse = true;
-        const receivedTags = result.data ?? [];
-        if (receivedTags.length > 0) {
-          tags = receivedTags;
-          break;
-        }
+        if (!pageTags) break;
+        tags.push(...pageTags);
+        if (pageTags.length < tagsOnThisPage) break;
       }
 
       if (!hadSuccessfulTagResponse) {
@@ -407,7 +423,7 @@ export async function fetchLatestReleaseFromGitLab(
       }
 
       if (allReleases.length === 0) {
-        if (!tags || tags.length === 0) {
+        if (tags.length === 0) {
           log.info(`No tags found for ${projectPath}.`);
           return {
             release: null,
@@ -416,57 +432,41 @@ export async function fetchLatestReleaseFromGitLab(
           };
         }
 
-        const latestTag = tags[0];
         const t = await getTranslations({ locale, namespace: "Actions" });
-        let bodyContent = "";
-        let publicationDate =
-          extractGitlabCommitDate(latestTag.commit) || new Date().toISOString();
-
-        const tagMessage =
-          typeof latestTag.message === "string" ? latestTag.message : null;
-        const releaseDescription =
-          typeof latestTag.release?.description === "string"
-            ? latestTag.release.description
-            : null;
-
-        if (tagMessage) {
-          bodyContent = `### ${t("tag_message_fallback_title")}\n\n---\n\n${tagMessage}`;
-        } else if (releaseDescription) {
-          bodyContent = `### ${t("tag_message_fallback_title")}\n\n---\n\n${releaseDescription}`;
-        }
-
-        if (!bodyContent && typeof latestTag.commit?.message === "string") {
-          bodyContent = `### ${t("commit_message_fallback_title")}\n\n---\n\n${latestTag.commit.message}`;
-        }
-
-        if (!bodyContent) {
-          const ref = latestTag.commit?.id ?? latestTag.name;
-          const commit = await tryFetchGitlabCommitMessage(
-            GITLAB_API_BASE_URL,
-            headersWithoutAuth,
-            gitlabAuth,
-            ref,
-          );
-          if (commit?.message) {
-            bodyContent = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commit.message}`;
+        allReleases = tags.map((tag) => {
+          if (typeof tag.commit?.id === "string") {
+            apiCommitRefsByTag.set(tag.name, tag.commit.id);
           }
-          if (commit?.date) {
-            publicationDate = commit.date;
-          }
-        }
+          const tagMessage =
+            typeof tag.message === "string" ? tag.message : null;
+          const releaseDescription =
+            typeof tag.release?.description === "string"
+              ? tag.release.description
+              : null;
+          const commitMessage =
+            typeof tag.commit?.message === "string" ? tag.commit.message : null;
+          const bodyContent = tagMessage
+            ? `### ${t("tag_message_fallback_title")}\n\n---\n\n${tagMessage}`
+            : releaseDescription
+              ? `### ${t("tag_message_fallback_title")}\n\n---\n\n${releaseDescription}`
+              : commitMessage
+                ? `### ${t("commit_message_fallback_title")}\n\n---\n\n${commitMessage}`
+                : "";
+          const publicationDate =
+            extractGitlabCommitDate(tag.commit) || fetchedAtTimestamp;
 
-        const virtualRelease: GithubRelease = {
-          id: 0,
-          html_url: `https://${gitlabHost}/${projectPath}/-/tags/${encodeURIComponent(latestTag.name)}`,
-          tag_name: latestTag.name,
-          name: `Tag: ${latestTag.name}`,
-          body: bodyContent,
-          created_at: publicationDate,
-          published_at: publicationDate,
-          prerelease: false,
-          draft: false,
-        };
-        allReleases = [virtualRelease];
+          return {
+            id: 0,
+            html_url: `https://${gitlabHost}/${projectPath}/-/tags/${encodeURIComponent(tag.name)}`,
+            tag_name: tag.name,
+            name: `Tag: ${tag.name}`,
+            body: bodyContent,
+            created_at: publicationDate,
+            published_at: publicationDate,
+            prerelease: false,
+            draft: false,
+          };
+        });
       }
     }
 
@@ -509,15 +509,13 @@ export async function fetchLatestReleaseFromGitLab(
       }
     }
 
-    if (
-      latestRelease.id !== 0 &&
-      (!latestRelease.body || latestRelease.body.trim() === "")
-    ) {
+    if (!latestRelease.body || latestRelease.body.trim() === "") {
       const commit = await tryFetchGitlabCommitMessage(
         GITLAB_API_BASE_URL,
         headersWithoutAuth,
         gitlabAuth,
-        latestRelease.tag_name,
+        apiCommitRefsByTag.get(latestRelease.tag_name) ??
+          latestRelease.tag_name,
       );
       if (commit?.message) {
         const t = await getTranslations({ locale, namespace: "Actions" });
