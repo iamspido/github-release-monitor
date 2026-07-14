@@ -204,6 +204,28 @@ describe("auth actions", () => {
     expect(lockedResult).toEqual({ errorKey: "error_too_many_attempts" });
   });
 
+  it("login: limits credential spraying across identifiers from one IP", async () => {
+    process.env.AUTH_MAX_LOGIN_ATTEMPTS = "2";
+    process.env.AUTH_LOGIN_WINDOW_SECONDS = "60";
+    process.env.AUTH_LOGIN_LOCKOUT_SECONDS = "60";
+    signInEmailMock.mockResolvedValue(new Response(null, { status: 401 }));
+    const { login } = await import("@/app/auth/actions");
+
+    const firstAttempt = new FormData();
+    firstAttempt.set("email", "first@example.com");
+    firstAttempt.set("password", "wrong");
+    await expect(login(undefined, firstAttempt)).resolves.toEqual({
+      errorKey: "error_invalid_credentials",
+    });
+
+    const secondAttempt = new FormData();
+    secondAttempt.set("email", "second@example.com");
+    secondAttempt.set("password", "wrong");
+    await expect(login(undefined, secondAttempt)).resolves.toEqual({
+      errorKey: "error_too_many_attempts",
+    });
+  });
+
   it("register: blocks duplicate username before signup API call", async () => {
     process.env.AUTH_ENABLE_SIGNUP = "true";
     findRegistrationConflictMock.mockReturnValue("username_in_use");

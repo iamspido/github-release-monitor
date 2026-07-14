@@ -11,19 +11,10 @@ import {
 } from "@/lib/auth";
 import { normalizeLocalizedRedirectPath } from "@/lib/auth/client-flow-utils";
 import { isAuthSignupEnabled } from "@/lib/auth/config";
-import {
-  clearExpiredLoginLockout,
-  clearFailedLoginAttempts,
-  getFailedLoginFailures,
-  getLoginLockoutRemainingSeconds,
-  isLoginRateLimited,
-  logFailedLoginAttempt,
-  pruneFailedLoginState,
-  registerFailedLoginAttempt,
-} from "@/lib/auth/login-rate-limit";
+import { authenticatePassword } from "@/lib/auth/password-login";
 import {
   getClientIpFromHeaders,
-  getLoginRequestContext,
+  getLoginIdentifierLogLabel,
   isLikelyEmail,
 } from "@/lib/auth/request-context";
 import { logger } from "@/lib/logger";
@@ -92,27 +83,6 @@ function mapRegisterErrorToSetupError(errorCode: string): string {
   return registerErrorMap[errorCode] ?? "error_setup_failed";
 }
 
-async function hasTwoFactorRedirectFlag(payload: unknown): Promise<boolean> {
-  if (!payload || typeof payload !== "object") return false;
-
-  const direct = (payload as { twoFactorRedirect?: unknown }).twoFactorRedirect;
-  if (typeof direct === "boolean") {
-    return direct;
-  }
-
-  if (typeof (payload as { clone?: unknown }).clone !== "function") {
-    return false;
-  }
-
-  try {
-    const cloned = (payload as { clone: () => Response }).clone();
-    const data = (await cloned.json()) as { twoFactorRedirect?: unknown };
-    return data.twoFactorRedirect === true;
-  } catch {
-    return false;
-  }
-}
-
 export async function login(
   _previousState: LoginActionState | undefined,
   formData: FormData,
@@ -122,137 +92,25 @@ export async function login(
   const next = formData.get("next");
   const identifierValue = typeof email === "string" ? email.trim() : "";
   const headerStore = await headers();
-  const { rateLimitKey, clientIp } = getLoginRequestContext(
-    headerStore,
-    identifierValue,
-  );
-  const now = Date.now();
-  const methodLabel = isLikelyEmail(identifierValue) ? "email" : "username";
-
-  logger
-    .withScope("Auth")
-    .info(
-      `Login attempt started for identifier='${identifierValue || "unknown"}' from ip='${clientIp}' using ${methodLabel}.`,
-    );
-
-  const expiredLockout = clearExpiredLoginLockout(rateLimitKey, now);
-  if (expiredLockout.wasCleared) {
-    logger
-      .withScope("Auth")
-      .info(
-        `Lockout expired for identifier='${identifierValue || "unknown"}' from ip='${clientIp}'. Access unblocked after ${expiredLockout.failures} failed attempt(s).`,
-      );
-  }
-
-  pruneFailedLoginState(now);
-
-  if (isLoginRateLimited(rateLimitKey, now)) {
-    const remainingSeconds = getLoginLockoutRemainingSeconds(rateLimitKey, now);
-    logger
-      .withScope("Auth")
-      .warn(
-        `Blocked login attempt for identifier='${identifierValue || "unknown"}' from ip='${clientIp}' due to active lockout (${remainingSeconds}s remaining).`,
-      );
-    return { errorKey: "error_too_many_attempts" };
-  }
-
-  if (
-    typeof email !== "string" ||
-    !identifierValue ||
-    typeof password !== "string" ||
-    !password
-  ) {
-    const failedAttempt = registerFailedLoginAttempt(rateLimitKey, now);
-    logFailedLoginAttempt({
-      identifier: typeof email === "string" ? identifierValue : "unknown",
-      clientIp,
-      reason: "invalid_input",
-      result: failedAttempt,
-    });
-    return { errorKey: "error_invalid_credentials" };
-  }
-
-  await ensureAuthDatabaseReady();
-  const signInResponse =
-    methodLabel === "email"
-      ? await auth.api.signInEmail({
-          headers: headerStore,
-          body: { email: identifierValue.toLowerCase(), password },
-          asResponse: true,
-        })
-      : await auth.api.signInUsername({
-          headers: headerStore,
-          body: { username: identifierValue, password },
-          asResponse: true,
-        });
-
-  logger
-    .withScope("Auth")
-    .info(
-      `Primary auth API response for identifier='${identifierValue}' from ip='${clientIp}' returned status=${signInResponse.status}.`,
-    );
-
-  if (signInResponse.ok) {
-    const twoFactorRequired = await hasTwoFactorRedirectFlag(signInResponse);
-
-    const previousFailures = getFailedLoginFailures(rateLimitKey);
-    clearFailedLoginAttempts(rateLimitKey);
-    if (twoFactorRequired) {
-      logger
-        .withScope("Auth")
-        .info(
-          `Primary auth factor valid for identifier='${identifierValue}' from ip='${clientIp}'. Awaiting OTP verification.`,
-        );
-      return { requiresTwoFactor: true };
-    }
-
-    logger
-      .withScope("Auth")
-      .info(
-        `Successful login for identifier='${identifierValue}' from ip='${clientIp}'`,
-      );
-    if (previousFailures > 0) {
-      logger
-        .withScope("Auth")
-        .info(
-          `Cleared ${previousFailures} failed login attempt(s) for identifier='${identifierValue}' from ip='${clientIp}' after successful authentication.`,
-        );
-    }
-
-    revalidatePath("/", "layout");
-    const locale = await getLocale();
-    const finalPath = normalizeLocalizedRedirectPath(
-      typeof next === "string" ? next : undefined,
-      locale,
-    );
-
-    logger
-      .withScope("Auth")
-      .info(
-        `Login completed; client will navigate to '${finalPath}' (locale=${locale}).`,
-      );
-    return { redirectTo: `/${locale}${finalPath}` };
-  }
-
-  logger
-    .withScope("Auth")
-    .warn(
-      `Login rejected for identifier='${identifierValue || "unknown"}' from ip='${clientIp}' with status=${signInResponse.status}.`,
-    );
-
-  const failedAttempt = registerFailedLoginAttempt(rateLimitKey, now);
-  logFailedLoginAttempt({
-    identifier: identifierValue || "unknown",
-    clientIp,
-    reason: "invalid_credentials",
-    result: failedAttempt,
+  const result = await authenticatePassword({
+    headers: headerStore,
+    identifier: identifierValue,
+    password: typeof password === "string" ? password : "",
   });
 
-  return {
-    errorKey: failedAttempt.lockoutTriggered
-      ? "error_too_many_attempts"
-      : "error_invalid_credentials",
-  };
+  if (!result.ok) return { errorKey: result.errorKey };
+  if (result.requiresTwoFactor) return { requiresTwoFactor: true };
+
+  revalidatePath("/", "layout");
+  const locale = await getLocale();
+  const finalPath = normalizeLocalizedRedirectPath(
+    typeof next === "string" ? next : undefined,
+    locale,
+  );
+  logger
+    .withScope("Auth")
+    .info(`Password login completed; redirecting to a localized path.`);
+  return { redirectTo: `/${locale}${finalPath}` };
 }
 
 export async function register(
@@ -276,11 +134,12 @@ export async function register(
 
   const headerStore = await headers();
   const clientIp = getClientIpFromHeaders(headerStore);
+  const registrationLabel = getLoginIdentifierLogLabel(email || username);
 
   logger
     .withScope("Auth")
     .info(
-      `Registration attempt started for username='${username || "unknown"}' email='${email || "unknown"}' from ip='${clientIp}'.`,
+      `Registration attempt started for ${registrationLabel} from ip='${clientIp}'.`,
     );
 
   if (!isValidUsername(username)) {
@@ -300,7 +159,7 @@ export async function register(
     logger
       .withScope("Auth")
       .warn(
-        `Registration blocked for username='${username}' from ip='${clientIp}' because username is already in use.`,
+        `Registration blocked for ${registrationLabel} from ip='${clientIp}' because username is already in use.`,
       );
     return { errorKey: "error_setup_username_in_use" };
   }
@@ -308,7 +167,7 @@ export async function register(
     logger
       .withScope("Auth")
       .warn(
-        `Registration blocked for email='${email}' from ip='${clientIp}' because email is already in use.`,
+        `Registration blocked for ${registrationLabel} from ip='${clientIp}' because email is already in use.`,
       );
     return { errorKey: "error_setup_email_in_use" };
   }
@@ -332,7 +191,7 @@ export async function register(
     logger
       .withScope("Auth")
       .warn(
-        `Registration failed for username='${username || "unknown"}' email='${email || "unknown"}' from ip='${clientIp}' with status=${signUpResponse.status}${errorCode ? ` (error='${errorCode}')` : ""}.`,
+        `Registration failed for ${registrationLabel} from ip='${clientIp}' with status=${signUpResponse.status}${errorCode ? ` (error='${errorCode}')` : ""}.`,
       );
     return { errorKey: mappedKey };
   }
@@ -340,7 +199,7 @@ export async function register(
   logger
     .withScope("Auth")
     .info(
-      `Registration successful for username='${username}' email='${email}' from ip='${clientIp}'. Redirecting to login.`,
+      `Registration successful for ${registrationLabel} from ip='${clientIp}'. Redirecting to login.`,
     );
   const locale = await getLocale();
   const loginPath = pathnames["/login"][locale as "en" | "de"];

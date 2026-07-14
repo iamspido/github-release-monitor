@@ -1,3 +1,4 @@
+import { getLoginIdentifierLogLabel } from "@/lib/auth/request-context";
 import { logger } from "@/lib/logger";
 
 type LoginAttemptState = {
@@ -15,6 +16,7 @@ export type FailedLoginAttemptResult = {
 };
 
 export type FailedLoginAttemptReason = "invalid_input" | "invalid_credentials";
+export type LoginRateLimitKey = string | readonly string[];
 
 declare global {
   var _authLoginAttempts: Map<string, LoginAttemptState> | undefined;
@@ -74,7 +76,11 @@ export function pruneFailedLoginState(now: number): void {
   }
 }
 
-export function isLoginRateLimited(key: string, now: number): boolean {
+function normalizeKeys(key: LoginRateLimitKey): readonly string[] {
+  return typeof key === "string" ? [key] : key;
+}
+
+function isSingleLoginRateLimited(key: string, now: number): boolean {
   const state = failedLoginAttempts.get(key);
   if (!state) return false;
   if (state.lockedUntil > now) {
@@ -89,16 +95,29 @@ export function isLoginRateLimited(key: string, now: number): boolean {
   return false;
 }
 
-export function getLoginLockoutRemainingSeconds(
-  key: string,
+export function isLoginRateLimited(
+  key: LoginRateLimitKey,
   now: number,
-): number {
-  const state = failedLoginAttempts.get(key);
-  if (!state || state.lockedUntil <= now) return 0;
-  return Math.ceil((state.lockedUntil - now) / 1_000);
+): boolean {
+  return normalizeKeys(key).some((candidate) =>
+    isSingleLoginRateLimited(candidate, now),
+  );
 }
 
-export function registerFailedLoginAttempt(
+export function getLoginLockoutRemainingSeconds(
+  key: LoginRateLimitKey,
+  now: number,
+): number {
+  return Math.max(
+    ...normalizeKeys(key).map((candidate) => {
+      const state = failedLoginAttempts.get(candidate);
+      if (!state || state.lockedUntil <= now) return 0;
+      return Math.ceil((state.lockedUntil - now) / 1_000);
+    }),
+  );
+}
+
+function registerSingleFailedLoginAttempt(
   key: string,
   now: number,
 ): FailedLoginAttemptResult {
@@ -142,29 +161,58 @@ export function registerFailedLoginAttempt(
   };
 }
 
-export function clearFailedLoginAttempts(key: string): void {
-  failedLoginAttempts.delete(key);
+export function registerFailedLoginAttempt(
+  key: LoginRateLimitKey,
+  now: number,
+): FailedLoginAttemptResult {
+  const results = normalizeKeys(key).map((candidate) =>
+    registerSingleFailedLoginAttempt(candidate, now),
+  );
+  return results.reduce((mostRestrictive, result) => ({
+    lockoutTriggered:
+      mostRestrictive.lockoutTriggered || result.lockoutTriggered,
+    failures: Math.max(mostRestrictive.failures, result.failures),
+    attemptsRemaining: Math.min(
+      mostRestrictive.attemptsRemaining,
+      result.attemptsRemaining,
+    ),
+    lockoutRemainingSeconds: Math.max(
+      mostRestrictive.lockoutRemainingSeconds,
+      result.lockoutRemainingSeconds,
+    ),
+  }));
 }
 
-export function getFailedLoginFailures(key: string): number {
-  return failedLoginAttempts.get(key)?.failures ?? 0;
+export function clearFailedLoginAttempts(key: LoginRateLimitKey): void {
+  for (const candidate of normalizeKeys(key)) {
+    failedLoginAttempts.delete(candidate);
+  }
+}
+
+export function getFailedLoginFailures(key: LoginRateLimitKey): number {
+  return Math.max(
+    ...normalizeKeys(key).map(
+      (candidate) => failedLoginAttempts.get(candidate)?.failures ?? 0,
+    ),
+  );
 }
 
 export function clearExpiredLoginLockout(
-  key: string,
+  key: LoginRateLimitKey,
   now: number,
 ): { wasCleared: boolean; failures: number } {
-  const state = failedLoginAttempts.get(key);
-  if (!state) return { wasCleared: false, failures: 0 };
-  if (state.lockedUntil <= 0 || state.lockedUntil > now) {
-    return { wasCleared: false, failures: 0 };
+  let wasCleared = false;
+  let failures = 0;
+  for (const candidate of normalizeKeys(key)) {
+    const state = failedLoginAttempts.get(candidate);
+    if (!state || state.lockedUntil <= 0 || state.lockedUntil > now) {
+      continue;
+    }
+    failedLoginAttempts.set(candidate, { ...state, lockedUntil: 0 });
+    wasCleared = true;
+    failures = Math.max(failures, state.failures);
   }
-
-  failedLoginAttempts.set(key, {
-    ...state,
-    lockedUntil: 0,
-  });
-  return { wasCleared: true, failures: state.failures };
+  return { wasCleared, failures };
 }
 
 export function logFailedLoginAttempt(args: {
@@ -177,12 +225,13 @@ export function logFailedLoginAttempt(args: {
   const reasonLabel =
     args.reason === "invalid_input" ? "invalid input" : "invalid credentials";
   const prefix = args.prefix ? `${args.prefix} ` : "";
+  const identifierLabel = getLoginIdentifierLogLabel(args.identifier);
 
   if (args.result.lockoutTriggered) {
     logger
       .withScope("Auth")
       .warn(
-        `Failed ${prefix}login attempt for identifier='${args.identifier}' from ip='${args.clientIp}' (${reasonLabel}); lockout activated for ${args.result.lockoutRemainingSeconds}s after ${args.result.failures}/${loginAttemptLimit} failed attempts.`,
+        `Failed ${prefix}login attempt for ${identifierLabel} from ip='${args.clientIp}' (${reasonLabel}); lockout activated for ${args.result.lockoutRemainingSeconds}s after ${args.result.failures}/${loginAttemptLimit} failed attempts.`,
       );
     return;
   }
@@ -190,6 +239,6 @@ export function logFailedLoginAttempt(args: {
   logger
     .withScope("Auth")
     .warn(
-      `Failed ${prefix}login attempt for identifier='${args.identifier}' from ip='${args.clientIp}' (${reasonLabel}); attempts=${args.result.failures}/${loginAttemptLimit}, remaining_before_lockout=${args.result.attemptsRemaining}.`,
+      `Failed ${prefix}login attempt for ${identifierLabel} from ip='${args.clientIp}' (${reasonLabel}); attempts=${args.result.failures}/${loginAttemptLimit}, remaining_before_lockout=${args.result.attemptsRemaining}.`,
     );
 }

@@ -1,10 +1,36 @@
+import { createHash } from "node:crypto";
+import { isIP } from "node:net";
 import type { AuthSocialProvider } from "@/lib/auth/config";
 
+function normalizeIpCandidate(value: string | undefined): string | null {
+  const candidate = value?.trim();
+  if (!candidate) return null;
+  if (isIP(candidate)) return candidate;
+
+  const ipv4WithPort = candidate.match(/^(.+):(\d+)$/)?.[1];
+  return ipv4WithPort && isIP(ipv4WithPort) ? ipv4WithPort : null;
+}
+
+function getTrustedProxyHops(): number {
+  const parsed = Number.parseInt(
+    process.env.AUTH_TRUSTED_PROXY_HOPS ?? "1",
+    10,
+  );
+  return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 10) : 1;
+}
+
 export function getClientIpFromHeaders(headerStore: Headers): string {
-  const forwardedFor = headerStore.get("x-forwarded-for");
-  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
-  const realIp = headerStore.get("x-real-ip")?.trim();
-  return (firstForwardedIp || realIp || "unknown").slice(0, 128);
+  if (process.env.AUTH_TRUST_PROXY_HEADERS === "false") return "unknown";
+
+  const forwardedIps = (headerStore.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((value) => normalizeIpCandidate(value))
+    .filter((value): value is string => value !== null);
+  const forwardedIp = forwardedIps.at(-getTrustedProxyHops());
+  const realIp = normalizeIpCandidate(
+    headerStore.get("x-real-ip") ?? undefined,
+  );
+  return forwardedIp || realIp || "unknown";
 }
 
 export function getClientIpFromRequest(request: Request | undefined): string {
@@ -15,15 +41,30 @@ export function getLoginRequestContext(
   headerStore: Headers,
   identifier: string,
 ): {
-  rateLimitKey: string;
+  rateLimitKey: readonly string[];
   clientIp: string;
 } {
   const ip = getClientIpFromHeaders(headerStore);
   const normalizedIdentifier = identifier.trim().toLowerCase().slice(0, 128);
+  const identifierHash = createHash("sha256")
+    .update(normalizedIdentifier || "unknown")
+    .digest("hex");
   return {
-    rateLimitKey: `${ip}:${normalizedIdentifier || "unknown"}`,
+    rateLimitKey: [
+      ...(ip === "unknown" ? [] : [`ip:${ip}`]),
+      `identifier:${identifierHash}`,
+    ],
     clientIp: ip,
   };
+}
+
+export function getLoginIdentifierLogLabel(identifier: string): string {
+  const normalized = identifier.trim().toLowerCase() || "unknown";
+  const hash = createHash("sha256")
+    .update(normalized)
+    .digest("hex")
+    .slice(0, 12);
+  return `identifier_hash='${hash}'`;
 }
 
 export function isLikelyEmail(value: string): boolean {
