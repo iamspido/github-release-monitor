@@ -91,4 +91,28 @@ describe("updateRepositorySettingsAction", () => {
     expect(res.success).toBe(true);
     expect(mem.repos[0].etag).toBe('W/"keep"');
   });
+
+  it("rejects invalid release regexes before persisting repository settings", async () => {
+    mem.repos = [
+      {
+        id: "o/r",
+        url: "https://github.com/o/r",
+        includeRegex: "valid",
+      },
+    ];
+
+    const { updateRepositorySettingsAction } = await import("@/app/actions");
+    const result = await updateRepositorySettingsAction("o/r", {
+      includeRegex: "([",
+      excludeRegex: undefined,
+      releaseChannels: ["stable"],
+      preReleaseSubChannels: undefined,
+      releasesPerPage: 30,
+      appriseTags: undefined,
+      appriseFormat: undefined,
+    });
+
+    expect(result).toEqual({ success: false, error: "regex_error_invalid" });
+    expect(mem.repos[0].includeRegex).toBe("valid");
+  });
 });

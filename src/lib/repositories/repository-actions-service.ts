@@ -25,6 +25,7 @@ import {
   getRepositoryReleaseCacheInvalidationChanges,
   shouldInvalidateReleaseCache,
 } from "@/lib/settings/change-detection";
+import { validateRegexInput } from "@/lib/settings/form-model";
 import { getJobStatus, type JobStatus, setJobStatus } from "@/lib/storage/jobs";
 import { getRepositories, saveRepositories } from "@/lib/storage/repositories";
 import { getSettings } from "@/lib/storage/settings";
@@ -458,6 +459,12 @@ export async function updateRepositorySettingsAction(
 
       const newInclude = (settings.includeRegex ?? "").trim() || undefined;
       const newExclude = (settings.excludeRegex ?? "").trim() || undefined;
+      if (
+        (newInclude && validateRegexInput(newInclude)) ||
+        (newExclude && validateRegexInput(newExclude))
+      ) {
+        return { success: false, error: t("regex_error_invalid") };
+      }
       const cronInput = (settings.backgroundCheckCron ?? "").trim();
       const newBackgroundCheckCron = cronInput
         ? normalizeBackgroundCheckCron(cronInput)

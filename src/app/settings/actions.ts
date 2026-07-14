@@ -27,6 +27,7 @@ import {
   getReleaseCacheInvalidationReasons,
   shouldInvalidateReleaseCache,
 } from "@/lib/settings/change-detection";
+import { validateRegexInput } from "@/lib/settings/form-model";
 import {
   NEXT_LOCALE_COOKIE,
   nextLocaleCookieOptions,
@@ -98,6 +99,27 @@ async function applySettingsUpdate(
         message: {
           title: t("toast_error_title"),
           description: t("cron_error_invalid"),
+        },
+      };
+    }
+
+    const hasInvalidReleaseRegex = [
+      newSettings.includeRegex,
+      newSettings.excludeRegex,
+    ].some(
+      (value) =>
+        typeof value === "string" && validateRegexInput(value) !== null,
+    );
+    if (hasInvalidReleaseRegex) {
+      const t = await getTranslations({
+        locale: newSettings.locale,
+        namespace: "SettingsForm",
+      });
+      return {
+        success: false,
+        message: {
+          title: t("toast_error_title"),
+          description: t("regex_error_invalid"),
         },
       };
     }

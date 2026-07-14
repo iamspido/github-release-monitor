@@ -116,6 +116,25 @@ describe("settings actions", () => {
     expect(settingsStore.current.refreshInterval).toBe(10);
   });
 
+  it("rejects invalid release regexes before persisting settings", async () => {
+    const { updateSettingsAction } = await import("@/app/settings/actions");
+    const previousSettings = structuredClone(settingsStore.current);
+
+    const result = await updateSettingsAction({
+      ...settingsStore.current,
+      includeRegex: "([",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      message: {
+        title: "toast_error_title",
+        description: "regex_error_invalid",
+      },
+    });
+    expect(settingsStore.current).toEqual(previousSettings);
+  });
+
   it("deleteAllRepositoriesAction clears storage and returns success", async () => {
     memRepos.list = [{ id: "x/y", url: "https://github.com/x/y" }];
     const { deleteAllRepositoriesAction } = await import(
