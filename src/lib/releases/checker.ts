@@ -1,6 +1,7 @@
 import { getConfiguredNotificationChannels } from "@/lib/notifications";
 import {
-  deliverPendingNotifications,
+  applyPendingNotificationDeliveryOutcomes,
+  attemptPendingNotifications,
   enqueuePendingNotification,
 } from "@/lib/notifications/pending-deliveries";
 import { getLatestReleasesForRepos } from "@/lib/releases";
@@ -124,18 +125,11 @@ async function _checkForNewReleasesUnscheduled(options?: {
     `Parallel fetch batch size set to ${parallelLimit} (GitHub token=${tokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}, GitLab token=${gitlabTokenConfigured ? "yes" : "no"}).`,
   );
 
-  let originalRepos = await getRepositories();
-  let notificationsSent = 0;
-  const retriedNotifications = await deliverPendingNotifications(originalRepos);
-  if (retriedNotifications.changed) {
-    originalRepos = retriedNotifications.repositories;
-    await saveRepositories(originalRepos);
-  }
-  notificationsSent += retriedNotifications.notificationsSent;
+  const originalRepos = await getRepositories();
 
   if (originalRepos.length === 0) {
     log.info(`No repositories to check.`);
-    return { notificationsSent, checked: 0 };
+    return { checked: 0 };
   }
 
   const reposToCheck = options?.onlyDue
@@ -148,7 +142,7 @@ async function _checkForNewReleasesUnscheduled(options?: {
 
   if (reposToCheck.length === 0) {
     log.info(`No repositories are due for background check.`);
-    return { notificationsSent, checked: 0 };
+    return { checked: 0 };
   }
 
   const enrichedReleases = await getLatestReleasesForRepos(
@@ -176,16 +170,36 @@ async function _checkForNewReleasesUnscheduled(options?: {
     log.info(`No new releases found.`);
   }
 
-  const newNotificationDeliveries =
-    await deliverPendingNotifications(updatedRepos);
-  notificationsSent += newNotificationDeliveries.notificationsSent;
-  if (newNotificationDeliveries.changed) {
-    await saveRepositories(newNotificationDeliveries.repositories);
-  }
-  log.info(
-    `Summary: notificationsSent=${notificationsSent} checked=${reposToCheck.length}`,
+  return { checked: reposToCheck.length };
+}
+
+let currentNotificationDeliveryPromise: Promise<void> = Promise.resolve();
+
+function processPendingNotifications(): Promise<number> {
+  const deliveryPromise = currentNotificationDeliveryPromise.then(async () => {
+    // Network delivery deliberately happens outside the shared state scheduler.
+    // Only the short merge/write phase is serialized with other state changes.
+    const snapshot = await getRepositories();
+    const delivery = await attemptPendingNotifications(snapshot);
+    if (delivery.outcomes.length > 0) {
+      await scheduleTask("persistNotificationDeliveryResults", async () => {
+        const currentRepositories = await getRepositories();
+        const applied = applyPendingNotificationDeliveryOutcomes(
+          currentRepositories,
+          delivery.outcomes,
+        );
+        if (applied.changed) {
+          await saveRepositories(applied.repositories);
+        }
+      });
+    }
+    return delivery.notificationsSent;
+  });
+  currentNotificationDeliveryPromise = deliveryPromise.then(
+    () => undefined,
+    () => undefined,
   );
-  return { notificationsSent, checked: reposToCheck.length };
+  return deliveryPromise;
 }
 
 export async function checkForNewReleases(options?: {
@@ -193,7 +207,12 @@ export async function checkForNewReleases(options?: {
   skipCache?: boolean;
   onlyDue?: boolean;
 }) {
-  return scheduleTask("checkForNewReleases", () =>
+  const result = await scheduleTask("checkForNewReleases", () =>
     _checkForNewReleasesUnscheduled(options),
   );
+  const notificationsSent = await processPendingNotifications();
+  log.info(
+    `Summary: notificationsSent=${notificationsSent} checked=${result.checked}`,
+  );
+  return { ...result, notificationsSent };
 }

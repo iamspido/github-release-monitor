@@ -105,6 +105,7 @@ function parsePendingNotification(
     throw new Error(`${path}.attempts must be a non-negative number.`);
   }
   assertOptionalField(notification, "nextAttemptAt", isString, "a string");
+  assertOptionalField(notification, "abandonedAt", isString, "a string");
   if (
     !Array.isArray(notification.channels) ||
     notification.channels.length === 0 ||

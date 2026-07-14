@@ -41,6 +41,7 @@ export type PendingReleaseNotification = {
   createdAt: string;
   attempts: number;
   nextAttemptAt?: string;
+  abandonedAt?: string;
 };
 
 export type GithubRelease = {
