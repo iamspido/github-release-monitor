@@ -23,6 +23,19 @@ vi.mock("next-intl", () => ({
       password_placeholder: "Password",
       login_button: "Login",
       checking_setup: "Checking setup...",
+      setup_title: "Initial setup",
+      setup_description: "Create the first account.",
+      setup_token_label: "Setup token",
+      setup_token_placeholder: "Setup token",
+      display_name_label: "Display name",
+      display_name_placeholder: "Display name",
+      setup_username_label: "Username",
+      setup_username_placeholder: "Username",
+      username_requirements: "Username requirements",
+      setup_email_label_optional: "Email",
+      email_placeholder: "Email",
+      setup_password_requirements: "Password requirements",
+      setup_button: "Create account",
       show_password: "Show password",
       hide_password: "Hide password",
     };
@@ -119,5 +132,24 @@ describe("LoginForm password visibility toggle", () => {
       hideButton?.click();
     });
     expect(passwordInput?.type).toBe("password");
+  });
+
+  it("keeps password visibility behavior in the extracted setup form", async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
+    await renderForm();
+
+    const passwordInput = container.querySelector(
+      'input[name="password"]',
+    ) as HTMLInputElement | null;
+    expect(passwordInput?.autocomplete).toBe("new-password");
+    expect(passwordInput?.type).toBe("password");
+
+    const showButton = container.querySelector(
+      'button[aria-label="Show password"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      showButton?.click();
+    });
+    expect(passwordInput?.type).toBe("text");
   });
 });
