@@ -30,6 +30,7 @@ vi.mock("@/lib/notifications/email", async (orig) => {
 });
 
 import {
+  getConfiguredNotificationChannels,
   sendNotification,
   sendTestAppriseNotification,
 } from "@/lib/notifications";
@@ -81,11 +82,24 @@ describe("notifications/index", () => {
     global.fetch = fetchBackup;
   });
 
-  it("sendNotification: sends only email when only MAIL_HOST is set", async () => {
+  it("sendNotification: sends email when SMTP is fully configured", async () => {
     process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_PORT = "587";
+    process.env.MAIL_FROM_ADDRESS = "from@example.com";
+    process.env.MAIL_TO_ADDRESS = "to@example.com";
     await sendNotification(repo, release, "en", baseSettings);
     expect(sendNewReleaseEmailMock).toHaveBeenCalledTimes(1);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not select email when the SMTP configuration is incomplete", () => {
+    process.env.MAIL_HOST = "smtp.example.com";
+    delete process.env.MAIL_PORT;
+    delete process.env.MAIL_FROM_ADDRESS;
+    delete process.env.MAIL_TO_ADDRESS;
+    delete process.env.APPRISE_URL;
+
+    expect(getConfiguredNotificationChannels()).toEqual([]);
   });
 
   it("sendNotification: sends only apprise when only APPRISE_URL is set", async () => {
@@ -100,6 +114,9 @@ describe("notifications/index", () => {
 
   it("sendNotification: both configured, failure of one rejects", async () => {
     process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_PORT = "587";
+    process.env.MAIL_FROM_ADDRESS = "from@example.com";
+    process.env.MAIL_TO_ADDRESS = "to@example.com";
     process.env.APPRISE_URL = "http://apprise.test";
     vi.mocked(global.fetch).mockResolvedValue(
       mockFetchResponse({ status: 500, text: "err" }),

@@ -25,9 +25,10 @@ export class NotificationDeliveryError extends Error {
 }
 
 export function getConfiguredNotificationChannels(): NotificationChannel[] {
-  const { hasMailHost, isAppriseConfigured } = getNotificationRuntimeConfig();
+  const { isSmtpConfigured, isAppriseConfigured } =
+    getNotificationRuntimeConfig();
   const channels: NotificationChannel[] = [];
-  if (hasMailHost) channels.push("email");
+  if (isSmtpConfigured) channels.push("email");
   if (isAppriseConfigured) channels.push("apprise");
   return channels;
 }
