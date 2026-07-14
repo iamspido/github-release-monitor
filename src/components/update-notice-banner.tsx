@@ -69,11 +69,11 @@ export function UpdateNoticeBanner({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <a href={releaseUrl} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" variant="secondary">
+          <Button asChild size="sm" variant="secondary">
+            <a href={releaseUrl} target="_blank" rel="noopener noreferrer">
               {t("cta_label")}
-            </Button>
-          </a>
+            </a>
+          </Button>
           {canDismiss && (
             <Button
               size="sm"

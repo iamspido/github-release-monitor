@@ -89,37 +89,34 @@ export function Header({
 
           <div className="hidden items-center gap-2 md:flex">
             {navLinks.map((link) => (
-              <Link key={link.href} href={link.href} passHref>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={link.label}
-                  className={cn(isActive(link.href) && "bg-secondary")}
-                >
+              <Button
+                key={link.href}
+                asChild
+                variant="ghost"
+                size="icon"
+                className={cn(isActive(link.href) && "bg-secondary")}
+              >
+                <Link href={link.href} aria-label={link.label}>
                   <link.icon className="size-5" />
-                </Button>
-              </Link>
-            ))}
-            <a
-              href="https://github.com/iamspido/github-release-monitor"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={t("github_aria")}
-            >
-              <Button variant="ghost" size="icon">
-                <GithubBrandIcon className="size-5" />
+                </Link>
               </Button>
-            </a>
+            ))}
+            <Button asChild variant="ghost" size="icon">
+              <a
+                href="https://github.com/iamspido/github-release-monitor"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={t("github_aria")}
+              >
+                <GithubBrandIcon className="size-5" />
+              </a>
+            </Button>
             {authAccess.showLogin && (
-              <Link href="/login" passHref>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t("login_aria")}
-                >
+              <Button asChild variant="ghost" size="icon">
+                <Link href="/login" aria-label={t("login_aria")}>
                   <LogIn className="size-5" />
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             )}
             {authAccess.showLogout && (
               <Button

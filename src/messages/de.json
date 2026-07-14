@@ -1,4 +1,7 @@
 {
+  "Common": {
+    "close": "Schließen"
+  },
   "Metadata": {
     "title": "GitHub Release Monitor",
     "description": "Überwachen Sie GitHub-Releases mit Leichtigkeit."
