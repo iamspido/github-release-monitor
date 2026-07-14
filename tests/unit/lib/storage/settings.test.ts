@@ -185,6 +185,17 @@ describe("storage/settings failure scenarios", () => {
     );
   });
 
+  it("rejects structurally invalid settings JSON", async () => {
+    fsMock.readFile.mockResolvedValue(
+      JSON.stringify({ refreshInterval: "ten" }),
+    );
+    const { getSettings } = await import("@/lib/storage/settings");
+
+    await expect(getSettings()).rejects.toThrow(
+      "refreshInterval must be a finite number",
+    );
+  });
+
   it("returns the configured locale only when it is supported", async () => {
     fsMock.readFile.mockResolvedValueOnce(JSON.stringify({ locale: "de" }));
     const firstModule = await import("@/lib/storage/settings");

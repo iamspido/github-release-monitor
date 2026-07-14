@@ -42,6 +42,17 @@ describe("storage/system-status persistence", () => {
     await expect(getSystemStatus()).rejects.toThrow("boom");
   });
 
+  it("rejects structurally invalid system status data", async () => {
+    fsMock.readFile.mockResolvedValueOnce(
+      JSON.stringify({ latestKnownVersion: 42 }),
+    );
+    const { getSystemStatus } = await import("@/lib/storage/system-status");
+
+    await expect(getSystemStatus()).rejects.toThrow(
+      "latestKnownVersion must be a string or null",
+    );
+  });
+
   it("throws a descriptive error when saving fails", async () => {
     fsMock.writeFile.mockRejectedValueOnce(new Error("disk full"));
     const { saveSystemStatus } = await import("@/lib/storage/system-status");

@@ -82,6 +82,27 @@ describe("storage/repositories", () => {
     writeSpy.mockRestore();
   });
 
+  it("rejects structurally invalid repository data", async () => {
+    const dataDir = path.join(tmpDir, "data");
+    await fs.mkdir(dataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(dataDir, "repositories.json"),
+      JSON.stringify([
+        {
+          id: "github:owner/repo",
+          url: "https://github.com/owner/repo",
+          releaseChannels: ["stable", "unexpected"],
+        },
+      ]),
+      "utf8",
+    );
+    const { getRepositories } = await import("@/lib/storage/repositories");
+
+    await expect(getRepositories()).rejects.toThrow(
+      "releaseChannels must be an array of release channels",
+    );
+  });
+
   it("preserves null repository overrides while merging duplicate migrated ids", async () => {
     const { getRepositories } = await import("@/lib/storage/repositories");
     const dataDir = path.join(tmpDir, "data");

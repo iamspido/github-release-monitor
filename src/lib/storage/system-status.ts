@@ -1,5 +1,11 @@
 import path from "node:path";
 import { JsonFileStore } from "@/lib/storage/json-file-store";
+import {
+  assertJsonObject,
+  assertOptionalField,
+  isNullable,
+  isString,
+} from "@/lib/storage/runtime-validation";
 import type { SystemStatus } from "@/types";
 
 const dataFilePath = path.join(process.cwd(), "data", "system-status.json");
@@ -13,9 +19,18 @@ const defaultStatus: SystemStatus = {
 };
 
 function normalizeSystemStatus(value: unknown): SystemStatus {
+  const persisted = assertJsonObject(value, "System status data");
+  for (const key of Object.keys(defaultStatus)) {
+    assertOptionalField(
+      persisted,
+      key,
+      isNullable(isString),
+      "a string or null",
+    );
+  }
   return {
     ...defaultStatus,
-    ...(value as Partial<SystemStatus>),
+    ...(persisted as Partial<SystemStatus>),
   };
 }
 

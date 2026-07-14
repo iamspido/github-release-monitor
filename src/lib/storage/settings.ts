@@ -10,6 +10,15 @@ import {
   defaultSecurityHighlightCustomColor,
 } from "@/lib/security-release";
 import { JsonFileStore } from "@/lib/storage/json-file-store";
+import {
+  assertJsonObject,
+  assertOptionalField,
+  isArrayOf,
+  isBoolean,
+  isFiniteNumber,
+  isOneOf,
+  isString,
+} from "@/lib/storage/runtime-validation";
 import type { AppSettings, Locale } from "@/types";
 import { allPreReleaseTypes, defaultProviderSortOrder } from "@/types";
 
@@ -70,9 +79,84 @@ function cloneSettings(settings: AppSettings): AppSettings {
 }
 
 function normalizeSettings(value: unknown): AppSettings {
+  const persisted = assertJsonObject(value, "Settings data");
+  const isReleaseChannel = isOneOf(["stable", "prerelease", "draft"]);
+  const isPreReleaseChannel = isOneOf(allPreReleaseTypes);
+  const isAppriseFormat = isOneOf(["text", "markdown", "html"]);
+
+  for (const key of [
+    "refreshInterval",
+    "cacheInterval",
+    "releasesPerPage",
+    "parallelRepoFetches",
+    "appriseMaxCharacters",
+  ] as const) {
+    assertOptionalField(persisted, key, isFiniteNumber, "a finite number");
+  }
+  for (const key of [
+    "prioritizeNewSecurityReleases",
+    "confirmSecurityAcknowledge",
+    "includeDefaultSecurityPatterns",
+    "showAcknowledge",
+    "showMarkAsNew",
+    "showProviderPrefixInRepoId",
+    "showProviderDomainInRepoId",
+    "repositoryFormExpanded",
+  ] as const) {
+    assertOptionalField(persisted, key, isBoolean, "a boolean");
+  }
+  for (const key of [
+    "locale",
+    "backgroundCheckCron",
+    "releaseSortOrder",
+    "securityHighlightCustomColor",
+    "customSecurityPatterns",
+    "includeRegex",
+    "excludeRegex",
+    "appriseTags",
+  ] as const) {
+    assertOptionalField(persisted, key, isString, "a string");
+  }
+  assertOptionalField(
+    persisted,
+    "timeFormat",
+    isOneOf(["12h", "24h"]),
+    "12h or 24h",
+  );
+  assertOptionalField(
+    persisted,
+    "releaseChannels",
+    isArrayOf(isReleaseChannel),
+    "an array of release channels",
+  );
+  assertOptionalField(
+    persisted,
+    "preReleaseSubChannels",
+    isArrayOf(isPreReleaseChannel),
+    "an array of prerelease channels",
+  );
+  assertOptionalField(
+    persisted,
+    "providerSortOrder",
+    isArrayOf(isString),
+    "an array of provider names",
+  );
+  assertOptionalField(
+    persisted,
+    "securityHighlightColorPreset",
+    isOneOf(["yellow", "red", "orange", "blue", "purple", "custom"]),
+    "a supported color preset",
+  );
+  assertOptionalField(
+    persisted,
+    "appriseFormat",
+    isAppriseFormat,
+    "text, markdown, or html",
+  );
+
   const merged = {
     ...defaultSettings,
-    ...(value as Partial<AppSettings>),
+    ...(persisted as Partial<AppSettings>),
   };
   merged.releaseSortOrder = normalizeReleaseSortOrder(merged.releaseSortOrder);
   merged.providerSortOrder = normalizeProviderSortOrder(
