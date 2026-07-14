@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { getLatestReleasesForRepos } from "@/lib/releases";
+import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
 import { toPublicRepository } from "@/lib/repositories/public-repository";
 import { applyReleaseFetchResultToRepository } from "@/lib/repositories/release-cache-update";
@@ -29,7 +30,25 @@ import { validateRegexInput } from "@/lib/settings/form-model";
 import { getJobStatus, type JobStatus, setJobStatus } from "@/lib/storage/jobs";
 import { getRepositories, saveRepositories } from "@/lib/storage/repositories";
 import { getSettings } from "@/lib/storage/settings";
-import type { Repository } from "@/types";
+import type { AppSettings, Repository } from "@/types";
+
+function createReleaseFetchFingerprint(
+  repository: Repository,
+  settings: AppSettings,
+): string {
+  const filters = resolveEffectiveRepoFilters(repository, settings);
+  return JSON.stringify({
+    url: repository.url,
+    locale: settings.locale,
+    releaseChannels: [...filters.effectiveReleaseChannels].sort(),
+    preReleaseSubChannels: [...filters.effectivePreReleaseSubChannels].sort(),
+    releasesPerPage: filters.totalReleasesToFetch,
+    includeRegex: filters.effectiveIncludeRegex,
+    excludeRegex: filters.effectiveExcludeRegex,
+    etag: repository.etag,
+    latestRelease: repository.latestRelease,
+  });
+}
 
 export async function addRepositoriesAction(
   _prevState: unknown,
@@ -283,6 +302,12 @@ export async function refreshMultipleRepositoriesAction(
     const reposToRefresh = allRepos.filter((r) => repoIds.includes(r.id));
 
     if (reposToRefresh.length > 0) {
+      const fetchFingerprints = new Map(
+        reposToRefresh.map((repository) => [
+          repository.id,
+          createReleaseFetchFingerprint(repository, settings),
+        ]),
+      );
       const enrichedReleases = await getLatestReleasesForRepos(
         reposToRefresh,
         settings,
@@ -295,15 +320,25 @@ export async function refreshMultipleRepositoriesAction(
         `commitRefreshMultipleRepositories: ${jobId}`,
         async () => {
           // Re-read after the network phase so concurrent deletes, imports, and
-          // settings changes are preserved. Only release cache fields are
-          // applied to repositories that still exist.
+          // unrelated settings changes are preserved. Results whose effective
+          // fetch inputs changed are left for the next refresh.
           const currentRepos = await getRepositories();
+          const currentSettings = await getSettings();
           for (const repo of currentRepos) {
             const enriched = enrichedMap.get(repo.id);
-            if (enriched) {
+            const fetchFingerprint = fetchFingerprints.get(repo.id);
+            if (
+              enriched &&
+              fetchFingerprint ===
+                createReleaseFetchFingerprint(repo, currentSettings)
+            ) {
               applyReleaseFetchResultToRepository(repo, enriched, {
                 initializeLastSeenFromRealRelease: true,
               });
+            } else if (enriched && fetchFingerprint) {
+              log.info(
+                `Skipped stale background refresh result for ${repo.id} because its effective fetch inputs changed.`,
+              );
             }
           }
           await saveRepositories(currentRepos);

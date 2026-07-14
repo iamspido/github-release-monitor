@@ -4,6 +4,7 @@ import type { EnrichedRelease, Repository } from "@/types";
 const mocks = vi.hoisted(() => ({
   getLatestReleasesForRepos: vi.fn(),
   getRepositories: vi.fn(),
+  getSettings: vi.fn(),
   saveRepositories: vi.fn(),
   setJobStatus: vi.fn(),
 }));
@@ -21,12 +22,7 @@ vi.mock("@/lib/storage/repositories", () => ({
   saveRepositories: mocks.saveRepositories,
 }));
 vi.mock("@/lib/storage/settings", () => ({
-  getSettings: async () => ({
-    locale: "en",
-    releasesPerPage: 30,
-    parallelRepoFetches: 1,
-    releaseChannels: ["stable"],
-  }),
+  getSettings: mocks.getSettings,
 }));
 vi.mock("@/lib/storage/jobs", () => ({
   getJobStatus: vi.fn(),
@@ -48,6 +44,7 @@ vi.mock("@/lib/server-action-helpers", () => ({
 describe("repository-actions-service background refresh commit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getSettings.mockResolvedValue(createSettings());
   });
 
   it("merges fetched release data into a fresh repository snapshot", async () => {
@@ -59,7 +56,7 @@ describe("repository-actions-service background refresh commit", () => {
       {
         id: "github:kept/repo",
         url: "https://github.com/kept/repo",
-        includeRegex: "preserve-this-setting",
+        appriseTags: "preserve-this-setting",
       },
     ];
     mocks.getRepositories
@@ -82,14 +79,76 @@ describe("repository-actions-service background refresh commit", () => {
     expect(mocks.saveRepositories.mock.calls[0][0]).toEqual([
       expect.objectContaining({
         id: "github:kept/repo",
-        includeRegex: "preserve-this-setting",
+        appriseTags: "preserve-this-setting",
         lastSeenReleaseTag: "v3",
         latestRelease: expect.objectContaining({ tag_name: "v3" }),
       }),
     ]);
     expect(mocks.setJobStatus).toHaveBeenLastCalledWith("job-1", "complete");
   });
+
+  it("does not apply a result fetched with stale repository filters", async () => {
+    const staleRepo: Repository = {
+      id: "github:owner/repo",
+      url: "https://github.com/owner/repo",
+    };
+    const currentRepo: Repository = {
+      ...staleRepo,
+      includeRegex: "^v2$",
+    };
+    mocks.getRepositories
+      .mockResolvedValueOnce(structuredClone([staleRepo]))
+      .mockResolvedValueOnce(structuredClone([currentRepo]));
+    mocks.getLatestReleasesForRepos.mockResolvedValue([
+      releaseResult(staleRepo.id, "v1"),
+    ]);
+    const { refreshMultipleRepositoriesAction } = await import(
+      "@/lib/repositories/repository-actions-service"
+    );
+
+    await refreshMultipleRepositoriesAction([staleRepo.id], "job-2");
+
+    expect(mocks.saveRepositories).toHaveBeenCalledWith([currentRepo]);
+    expect(mocks.setJobStatus).toHaveBeenLastCalledWith("job-2", "complete");
+  });
+
+  it("does not apply a result fetched with stale global settings", async () => {
+    const repository: Repository = {
+      id: "github:owner/repo",
+      url: "https://github.com/owner/repo",
+    };
+    mocks.getSettings
+      .mockResolvedValueOnce(createSettings())
+      .mockResolvedValueOnce(createSettings({ releasesPerPage: 50 }));
+    mocks.getRepositories
+      .mockResolvedValueOnce(structuredClone([repository]))
+      .mockResolvedValueOnce(structuredClone([repository]));
+    mocks.getLatestReleasesForRepos.mockResolvedValue([
+      releaseResult(repository.id, "v1"),
+    ]);
+    const { refreshMultipleRepositoriesAction } = await import(
+      "@/lib/repositories/repository-actions-service"
+    );
+
+    await refreshMultipleRepositoriesAction([repository.id], "job-3");
+
+    expect(mocks.saveRepositories).toHaveBeenCalledWith([repository]);
+    expect(mocks.setJobStatus).toHaveBeenLastCalledWith("job-3", "complete");
+  });
 });
+
+function createSettings(overrides: Record<string, unknown> = {}) {
+  return {
+    timeFormat: "24h",
+    locale: "en",
+    refreshInterval: 10,
+    cacheInterval: 0,
+    releasesPerPage: 30,
+    parallelRepoFetches: 1,
+    releaseChannels: ["stable"],
+    ...overrides,
+  };
+}
 
 function releaseResult(repoId: string, tag: string): EnrichedRelease {
   return {
