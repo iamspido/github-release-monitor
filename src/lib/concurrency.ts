@@ -10,9 +10,12 @@ export async function mapWithConcurrency<T, R>(
 ): Promise<R[]> {
   if (values.length === 0) return [];
 
+  const normalizedConcurrency = Number.isFinite(concurrency)
+    ? Math.floor(concurrency)
+    : 1;
   const workerCount = Math.min(
     values.length,
-    Math.max(1, Math.floor(concurrency)),
+    Math.max(1, normalizedConcurrency),
   );
   const results = new Array<R>(values.length);
   let nextIndex = 0;

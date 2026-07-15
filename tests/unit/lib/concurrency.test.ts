@@ -30,5 +30,8 @@ describe("mapWithConcurrency", () => {
     await expect(
       mapWithConcurrency([1, 2], 0, async (value) => value),
     ).resolves.toEqual([1, 2]);
+    await expect(
+      mapWithConcurrency([1, 2], Number.NaN, async (value) => value),
+    ).resolves.toEqual([1, 2]);
   });
 });
