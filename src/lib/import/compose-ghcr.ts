@@ -149,9 +149,18 @@ async function fetchGhcrResponse(
     firstResponse.headers.get("www-authenticate"),
   );
   if (!challenge) return firstResponse;
-  await discardResponseWithTimeout(firstResponse);
 
-  const tokenUrl = new URL(challenge.realm);
+  let tokenUrl: URL;
+  try {
+    tokenUrl = new URL(challenge.realm);
+  } catch {
+    return firstResponse;
+  }
+  if (tokenUrl.protocol !== "https:" || tokenUrl.hostname !== "ghcr.io") {
+    return firstResponse;
+  }
+
+  await discardResponseWithTimeout(firstResponse);
   if (challenge.service)
     tokenUrl.searchParams.set("service", challenge.service);
   if (challenge.scope) tokenUrl.searchParams.set("scope", challenge.scope);

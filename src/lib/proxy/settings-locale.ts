@@ -13,6 +13,7 @@ export type ProxyLocale = (typeof locales)[number];
 const localeSet = new Set<string>(locales as readonly string[]);
 const logSettings = logger.withScope("Settings");
 const SETTINGS_LOCALE_API_PATH = "/api/settings-locale";
+const SETTINGS_LOCALE_FETCH_TIMEOUT_MS = 2000;
 
 export async function fetchSettingsLocale(
   request: NextRequest,
@@ -27,6 +28,7 @@ export async function fetchSettingsLocale(
     try {
       const response = await fetchImpl(apiUrl, {
         cache: "no-store",
+        signal: AbortSignal.timeout(SETTINGS_LOCALE_FETCH_TIMEOUT_MS),
         headers: {
           "cache-control": "no-store",
           "x-from-middleware": "1",
