@@ -44,4 +44,37 @@ describe("runtime/task-scheduler", () => {
     await expect(taskB).resolves.toBe("B");
     expect(order).toEqual(["start-A", "start-B"]);
   });
+
+  it("shares its queue across separately loaded module instances", async () => {
+    const firstScheduler = await import("@/lib/runtime/task-scheduler");
+    vi.resetModules();
+    const secondScheduler = await import("@/lib/runtime/task-scheduler");
+    const order: string[] = [];
+    let finishFirst: (() => void) | undefined;
+
+    const firstTask = firstScheduler.scheduleTask(
+      "first module instance",
+      async () => {
+        order.push("start-first");
+        await new Promise<void>((resolve) => {
+          finishFirst = resolve;
+        });
+        order.push("end-first");
+      },
+    );
+    await vi.waitFor(() => expect(finishFirst).toBeTypeOf("function"));
+
+    const secondTask = secondScheduler.scheduleTask(
+      "second module instance",
+      async () => {
+        order.push("start-second");
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(order).toEqual(["start-first"]);
+    finishFirst?.();
+    await Promise.all([firstTask, secondTask]);
+    expect(order).toEqual(["start-first", "end-first", "start-second"]);
+  });
 });

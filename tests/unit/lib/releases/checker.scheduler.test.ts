@@ -142,4 +142,66 @@ describe("release checker scheduling", () => {
     expect(sendNotificationMock).not.toHaveBeenCalled();
     expect(state.repositories[0].pendingNotifications).toBeUndefined();
   });
+
+  it("deduplicates pending delivery across separately loaded checker modules", async () => {
+    state.repositories = [
+      {
+        id: "github:owner/repo",
+        url: "https://github.com/owner/repo",
+        lastSeenReleaseTag: "v2",
+        pendingNotifications: [
+          {
+            id: "github%3Aowner%2Frepo:v2",
+            repository: {
+              id: "github:owner/repo",
+              url: "https://github.com/owner/repo",
+            },
+            release: {
+              id: 2,
+              html_url: "https://github.com/owner/repo/releases/tag/v2",
+              tag_name: "v2",
+              name: "v2",
+              body: null,
+              created_at: "2026-07-14T00:00:00.000Z",
+              published_at: "2026-07-14T00:00:00.000Z",
+              prerelease: false,
+              draft: false,
+            },
+            locale: "en",
+            settings: { timeFormat: "24h" },
+            channels: ["apprise"],
+            createdAt: "2026-07-14T00:00:00.000Z",
+            attempts: 0,
+          },
+        ],
+      },
+    ];
+    let finishDelivery: (() => void) | undefined;
+    sendNotificationMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishDelivery = resolve;
+        }),
+    );
+
+    const firstChecker = await import("@/lib/releases/checker");
+    vi.resetModules();
+    const secondChecker = await import("@/lib/releases/checker");
+
+    const firstCheck = firstChecker.checkForNewReleases({ skipCache: true });
+    await vi.waitFor(() => expect(sendNotificationMock).toHaveBeenCalledOnce());
+
+    const secondCheck = secondChecker.checkForNewReleases({ skipCache: true });
+    await scheduleTask("wait for second release check", async () => undefined);
+    expect(sendNotificationMock).toHaveBeenCalledOnce();
+
+    finishDelivery?.();
+    const results = await Promise.all([firstCheck, secondCheck]);
+
+    expect(sendNotificationMock).toHaveBeenCalledOnce();
+    expect(
+      results.map(({ notificationsSent }) => notificationsSent).sort(),
+    ).toEqual([0, 1]);
+    expect(state.repositories[0].pendingNotifications).toBeUndefined();
+  });
 });

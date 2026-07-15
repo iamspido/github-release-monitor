@@ -9,6 +9,7 @@ import { getLatestReleasesForRepos } from "@/lib/releases";
 import { resolveParallelRepoFetches } from "@/lib/releases/filters";
 import { hasAnyGitlabTokenForAllowedHosts } from "@/lib/repositories/providers";
 import { applyReleaseFetchResultToRepository } from "@/lib/repositories/release-cache-update";
+import { scheduleProcessTask } from "@/lib/runtime/process-task-queue";
 import { filterRepositoriesDueForBackgroundCheck } from "@/lib/runtime/repository-schedule";
 import { scheduleTask } from "@/lib/runtime/task-scheduler";
 import { log } from "@/lib/server-action-helpers";
@@ -174,10 +175,10 @@ async function _checkForNewReleasesUnscheduled(options?: {
   return { checked: reposToCheck.length };
 }
 
-let currentNotificationDeliveryPromise: Promise<void> = Promise.resolve();
+const NOTIFICATION_DELIVERY_QUEUE = "notification-delivery";
 
 function processPendingNotifications(): Promise<number> {
-  const deliveryPromise = currentNotificationDeliveryPromise.then(async () => {
+  return scheduleProcessTask(NOTIFICATION_DELIVERY_QUEUE, async () => {
     // Network delivery deliberately happens outside the shared state scheduler.
     // Only the short merge/write phase is serialized with other state changes.
     const now = new Date();
@@ -202,11 +203,6 @@ function processPendingNotifications(): Promise<number> {
     }
     return delivery.notificationsSent;
   });
-  currentNotificationDeliveryPromise = deliveryPromise.then(
-    () => undefined,
-    () => undefined,
-  );
-  return deliveryPromise;
 }
 
 export async function checkForNewReleases(options?: {
