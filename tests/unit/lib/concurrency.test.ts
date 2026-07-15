@@ -20,7 +20,9 @@ describe("mapWithConcurrency", () => {
     await vi.waitFor(() => expect(releases).toHaveLength(2));
     releases.shift()?.();
     await vi.waitFor(() => expect(releases).toHaveLength(2));
-    releases.splice(0).forEach((release) => release());
+    releases.splice(0).forEach((release) => {
+      release();
+    });
 
     await expect(resultPromise).resolves.toEqual([30, 10, 20, 0]);
     expect(maximumActive).toBe(2);

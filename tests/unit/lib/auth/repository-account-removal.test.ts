@@ -46,9 +46,7 @@ describe("auth account removal safeguards", () => {
     });
     const { canUnlinkAccountForUser } = await import("@/lib/auth/repository");
 
-    expect(
-      canUnlinkAccountForUser("user-1", "github", "github-2"),
-    ).toBe(true);
+    expect(canUnlinkAccountForUser("user-1", "github", "github-2")).toBe(true);
   });
 
   it("allows removing a credential account when another account remains", async () => {

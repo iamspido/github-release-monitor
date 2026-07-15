@@ -9,17 +9,17 @@ describe("secret reveal nonce store", () => {
       "@/lib/diagnostics/secret-reveal-nonce-store"
     );
 
-    expect(
-      firstStore.consumeSecretRevealStepUpNonce(nonce, expiresAt),
-    ).toBe(true);
+    expect(firstStore.consumeSecretRevealStepUpNonce(nonce, expiresAt)).toBe(
+      true,
+    );
 
     vi.resetModules();
     const reloadedStore = await import(
       "@/lib/diagnostics/secret-reveal-nonce-store"
     );
-    expect(
-      reloadedStore.consumeSecretRevealStepUpNonce(nonce, expiresAt),
-    ).toBe(false);
+    expect(reloadedStore.consumeSecretRevealStepUpNonce(nonce, expiresAt)).toBe(
+      false,
+    );
   });
 
   it("rejects already expired nonces without persisting them", async () => {
@@ -27,8 +27,8 @@ describe("secret reveal nonce store", () => {
       "@/lib/diagnostics/secret-reveal-nonce-store"
     );
 
-    expect(
-      consumeSecretRevealStepUpNonce(randomUUID(), Date.now() - 1),
-    ).toBe(false);
+    expect(consumeSecretRevealStepUpNonce(randomUUID(), Date.now() - 1)).toBe(
+      false,
+    );
   });
 });

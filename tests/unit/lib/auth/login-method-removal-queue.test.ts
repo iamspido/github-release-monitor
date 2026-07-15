@@ -25,10 +25,12 @@ describe("login method removal queue", () => {
 
   it("does not block removals for another user", async () => {
     let finishFirstRemoval: (() => void) | undefined;
-    const firstRemoval = scheduleLoginMethodRemoval("user-1", () =>
-      new Promise<void>((resolve) => {
-        finishFirstRemoval = resolve;
-      }),
+    const firstRemoval = scheduleLoginMethodRemoval(
+      "user-1",
+      () =>
+        new Promise<void>((resolve) => {
+          finishFirstRemoval = resolve;
+        }),
     );
     const otherUserRemoval = vi.fn(async () => undefined);
 
