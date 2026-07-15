@@ -58,6 +58,7 @@ import {
 } from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import {
+  areSettingsSnapshotsEqual,
   isCacheIntervalInvalid,
   type RangeValidationError,
   validateCronInput,
@@ -428,6 +429,7 @@ export function SettingsForm({
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
   const isInitialMount = React.useRef(true);
   const lastSavedSettingsRef = React.useRef(currentSettings);
+  const saveRevisionRef = React.useRef(0);
 
   // Check for saved state after locale change
   React.useEffect(() => {
@@ -623,9 +625,16 @@ export function SettingsForm({
     }
 
     if (!isOnline) {
+      saveRevisionRef.current += 1;
       setSaveStatus("paused");
       return;
     }
+
+    if (areSettingsSnapshotsEqual(lastSavedSettingsRef.current, newSettings)) {
+      return;
+    }
+
+    const saveRevision = ++saveRevisionRef.current;
 
     const hasEmptyIntervalFields =
       automationMode === "interval" &&
@@ -667,6 +676,7 @@ export function SettingsForm({
     setSaveStatus("waiting");
 
     const handler = setTimeout(async () => {
+      if (saveRevision !== saveRevisionRef.current) return;
       setSaveStatus("saving");
       try {
         const settingsPatch = getSettingsPatch(
@@ -674,6 +684,8 @@ export function SettingsForm({
           newSettings,
         );
         const result = await updateSettingsPatchAction(settingsPatch);
+
+        if (saveRevision !== saveRevisionRef.current) return;
 
         if (result.success) {
           lastSavedSettingsRef.current = newSettings;
@@ -686,7 +698,11 @@ export function SettingsForm({
 
           // Normal save: show success status and auto-hide after 3 seconds
           setSaveStatus("success");
-          setTimeout(() => setSaveStatus("idle"), 3000);
+          setTimeout(() => {
+            if (saveRevision === saveRevisionRef.current) {
+              setSaveStatus("idle");
+            }
+          }, 3000);
         } else {
           setSaveStatus("error");
           // Toast only on error
@@ -697,6 +713,7 @@ export function SettingsForm({
           });
         }
       } catch (error: unknown) {
+        if (saveRevision !== saveRevisionRef.current) return;
         if (reloadIfServerActionStale(error)) {
           return;
         }

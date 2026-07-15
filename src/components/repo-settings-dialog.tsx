@@ -289,6 +289,7 @@ export function RepoSettingsDialog({
   );
 
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
+  const saveRevisionRef = React.useRef(0);
   const { isOnline } = useNetworkStatus();
 
   const savedThisSessionRef = React.useRef(false);
@@ -559,6 +560,7 @@ export function RepoSettingsDialog({
     if (!isOpen) return;
 
     if (!isOnline) {
+      saveRevisionRef.current += 1;
       setSaveStatus("paused");
       return;
     }
@@ -566,6 +568,8 @@ export function RepoSettingsDialog({
     if (areSettingsSnapshotsEqual(newSettings, prevSettingsRef.current)) {
       return;
     }
+
+    const saveRevision = ++saveRevisionRef.current;
 
     if (
       releasesPerPageError ||
@@ -582,6 +586,7 @@ export function RepoSettingsDialog({
     setSaveStatus("waiting");
 
     const handler = setTimeout(async () => {
+      if (saveRevision !== saveRevisionRef.current) return;
       if (mountedRef.current) setSaveStatus("saving");
 
       try {
@@ -589,6 +594,25 @@ export function RepoSettingsDialog({
           repoId,
           newSettings,
         );
+
+        if (saveRevision !== saveRevisionRef.current) {
+          // The UI state has moved on, but the serialized server action still
+          // persisted this snapshot. If the dialog closed meanwhile, perform
+          // the same cache refresh the successful save would normally trigger.
+          if (
+            result.success &&
+            !isOpenRef.current &&
+            hasRefreshSensitiveRepoSettingChanges(
+              prevSettingsRef.current,
+              newSettings,
+            )
+          ) {
+            refreshSingleRepositoryAction(repoId).catch((error: unknown) => {
+              reloadIfServerActionStale(error);
+            });
+          }
+          return;
+        }
 
         if (result.success) {
           if (mountedRef.current) {
@@ -620,6 +644,7 @@ export function RepoSettingsDialog({
           }
         }
       } catch (error: unknown) {
+        if (saveRevision !== saveRevisionRef.current) return;
         if (reloadIfServerActionStale(error)) {
           return;
         }
