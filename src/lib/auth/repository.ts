@@ -1,3 +1,7 @@
+import {
+  getEnabledSocialProviders,
+  isAuthPasskeyEnabled,
+} from "@/lib/auth/config";
 import { getAuthDb } from "@/lib/auth/db";
 import type { SocialLoginProvider } from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
@@ -497,6 +501,17 @@ function getAuthAccountsForUser(userId: string): AuthAccountRow[] | null {
   return null;
 }
 
+function isUsableAuthAccount(
+  account: AuthAccountRow,
+  enabledSocialProviders: ReadonlySet<string>,
+) {
+  return (
+    account.providerId === "credential" ||
+    (typeof account.providerId === "string" &&
+      enabledSocialProviders.has(account.providerId))
+  );
+}
+
 export function canUnlinkAccountForUser(
   userId: string,
   providerId: string,
@@ -515,7 +530,17 @@ export function canUnlinkAccountForUser(
   );
   if (!targetAccount) return false;
 
-  return accounts.length > 1 || hasPasskeyForUser(normalizedUserId);
+  const enabledSocialProviders = new Set(getEnabledSocialProviders());
+  const hasUsableRemainingAccount = accounts.some(
+    (account) =>
+      account !== targetAccount &&
+      isUsableAuthAccount(account, enabledSocialProviders),
+  );
+
+  return (
+    hasUsableRemainingAccount ||
+    (isAuthPasskeyEnabled() && hasPasskeyForUser(normalizedUserId))
+  );
 }
 
 export function canUnlinkSocialProviderForUser(
@@ -528,7 +553,9 @@ export function canUnlinkSocialProviderForUser(
 export function canDeletePasskeyForUser(userId: string, passkeyId: string) {
   const normalizedUserId = userId.trim();
   const normalizedPasskeyId = passkeyId.trim();
-  if (!normalizedUserId || !normalizedPasskeyId) return false;
+  if (!normalizedUserId || !normalizedPasskeyId || !isAuthPasskeyEnabled()) {
+    return false;
+  }
 
   const queries = [
     "SELECT id FROM passkey WHERE userId = ?",
@@ -545,10 +572,15 @@ export function canDeletePasskeyForUser(userId: string, passkeyId: string) {
         .filter(Boolean);
       if (!passkeyIds.includes(normalizedPasskeyId)) return false;
 
+      const enabledSocialProviders = new Set(getEnabledSocialProviders());
+      const hasUsableSocialAccount = getLinkedSocialProvidersForUser(
+        normalizedUserId,
+      ).some((provider) => enabledSocialProviders.has(provider));
+
       return (
         passkeyIds.some((candidate) => candidate !== normalizedPasskeyId) ||
         hasCredentialPasswordAccount(normalizedUserId) ||
-        getLinkedSocialProvidersForUser(normalizedUserId).length > 0
+        hasUsableSocialAccount
       );
     } catch (error) {
       if (
