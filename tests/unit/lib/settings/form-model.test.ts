@@ -1,6 +1,8 @@
 import {
   areSettingsSnapshotsEqual,
+  getSettingsReconciliationPatch,
   hasRefreshSensitiveRepoSettingChanges,
+  hasSettingsSnapshotDrift,
   type RefreshSensitiveRepoSettings,
   validateRegexInput,
 } from "@/lib/settings/form-model";
@@ -15,6 +17,34 @@ describe("settings/form-model", () => {
   it("compares persisted settings snapshots", () => {
     expect(areSettingsSnapshotsEqual({ a: 1 }, { a: 1 })).toBe(true);
     expect(areSettingsSnapshotsEqual({ a: 1 }, { a: 2 })).toBe(false);
+  });
+
+  it("detects a revert that must reconcile an in-flight snapshot", () => {
+    type SettingsSnapshot = {
+      releasesPerPage: number;
+      includeRegex?: string;
+    };
+    const persisted: SettingsSnapshot = {
+      releasesPerPage: 30,
+      includeRegex: undefined,
+    };
+    const submitted: SettingsSnapshot = {
+      releasesPerPage: 50,
+      includeRegex: "stable",
+    };
+
+    expect(hasSettingsSnapshotDrift(persisted, submitted, persisted)).toBe(
+      true,
+    );
+    expect(hasSettingsSnapshotDrift(persisted, persisted, persisted)).toBe(
+      false,
+    );
+    expect(
+      getSettingsReconciliationPatch(persisted, submitted, persisted),
+    ).toEqual({
+      releasesPerPage: 30,
+      includeRegex: undefined,
+    });
   });
 
   it("detects only refresh-sensitive repository setting changes", () => {

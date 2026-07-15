@@ -80,6 +80,34 @@ export function areSettingsSnapshotsEqual<T>(previous: T, next: T) {
   return JSON.stringify(previous) === JSON.stringify(next);
 }
 
+export function hasSettingsSnapshotDrift<T>(
+  persisted: T,
+  submitted: T,
+  next: T,
+) {
+  return (
+    !areSettingsSnapshotsEqual(persisted, next) ||
+    !areSettingsSnapshotsEqual(submitted, next)
+  );
+}
+
+export function getSettingsReconciliationPatch<T extends object>(
+  persisted: T,
+  submitted: T,
+  next: T,
+): Partial<T> {
+  const patch: Partial<T> = {};
+  for (const key of Object.keys(next) as Array<keyof T>) {
+    if (
+      !areSettingsSnapshotsEqual(persisted[key], next[key]) ||
+      !areSettingsSnapshotsEqual(submitted[key], next[key])
+    ) {
+      patch[key] = next[key];
+    }
+  }
+  return patch;
+}
+
 export type RefreshSensitiveRepoSettings = Pick<
   Repository,
   | "releaseChannels"

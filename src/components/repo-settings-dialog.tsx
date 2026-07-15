@@ -55,8 +55,8 @@ import { useToast } from "@/hooks/use-toast";
 import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import {
-  areSettingsSnapshotsEqual,
   hasRefreshSensitiveRepoSettingChanges,
+  hasSettingsSnapshotDrift,
   isCacheIntervalInvalid,
   type RangeValidationError,
   validateCronInput,
@@ -378,6 +378,7 @@ export function RepoSettingsDialog({
         ...initialSettings,
         releasesPerPage: initialSettings.releasesPerPage,
       };
+      lastSubmittedSettingsRef.current = prevSettingsRef.current;
     }
 
     prevIsOpenRef.current = isOpen;
@@ -488,6 +489,7 @@ export function RepoSettingsDialog({
   ]);
 
   const prevSettingsRef = React.useRef(newSettings);
+  const lastSubmittedSettingsRef = React.useRef(newSettings);
 
   const {
     releasesPerPageError,
@@ -565,7 +567,13 @@ export function RepoSettingsDialog({
       return;
     }
 
-    if (areSettingsSnapshotsEqual(newSettings, prevSettingsRef.current)) {
+    if (
+      !hasSettingsSnapshotDrift(
+        prevSettingsRef.current,
+        lastSubmittedSettingsRef.current,
+        newSettings,
+      )
+    ) {
       return;
     }
 
@@ -590,6 +598,7 @@ export function RepoSettingsDialog({
       if (mountedRef.current) setSaveStatus("saving");
 
       try {
+        lastSubmittedSettingsRef.current = newSettings;
         const result = await updateRepositorySettingsAction(
           repoId,
           newSettings,
@@ -628,6 +637,7 @@ export function RepoSettingsDialog({
             }
 
             prevSettingsRef.current = newSettings;
+            lastSubmittedSettingsRef.current = newSettings;
             savedThisSessionRef.current = true;
             if (!isOpenRef.current) refreshAfterClosedSave();
           } else {
