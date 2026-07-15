@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { getClientIpFromHeaders } from "@/lib/auth/request-context";
+import { consumeSecretRevealStepUpNonce } from "@/lib/diagnostics/secret-reveal-nonce-store";
 import {
   createSecretRevealStepUpPayload,
   readSecretRevealStepUpCookie,
@@ -14,18 +15,6 @@ import {
 import { logger } from "@/lib/logger";
 
 const log = logger.withScope("Diagnostics");
-
-const consumedStepUpNonces = new Map<string, number>();
-
-function consumeStepUpNonce(nonce: string, expiresAt: number) {
-  const now = Date.now();
-  for (const [candidate, candidateExpiresAt] of consumedStepUpNonces) {
-    if (candidateExpiresAt <= now) consumedStepUpNonces.delete(candidate);
-  }
-  if (consumedStepUpNonces.has(nonce)) return false;
-  consumedStepUpNonces.set(nonce, expiresAt);
-  return true;
-}
 
 type SecretRevealMethodAvailability = {
   password: boolean;
@@ -115,7 +104,10 @@ async function verifyDiagnosticRevealAccess(
     if (
       verifiedStepUp?.userId === userId &&
       verifiedStepUp.target === expectedTarget &&
-      consumeStepUpNonce(verifiedStepUp.nonce, verifiedStepUp.expiresAt)
+      consumeSecretRevealStepUpNonce(
+        verifiedStepUp.nonce,
+        verifiedStepUp.expiresAt,
+      )
     ) {
       await setSecretRevealStepUpCookie(SECRET_REVEAL_VERIFIED_COOKIE, null);
       return { success: true, clientIp, userId };
