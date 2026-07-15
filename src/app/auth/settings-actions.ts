@@ -4,10 +4,9 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import {
   auth,
+  canUnlinkSocialProviderForUser,
   ensureAuthDatabaseReady,
-  getLinkedSocialProvidersForUser,
   hasCredentialPasswordAccount,
-  hasPasskeyForUser,
   isAuthEmailVerificationEnabled,
 } from "@/lib/auth";
 import { normalizeSafeRelativePath } from "@/lib/auth/client-flow-utils";
@@ -287,19 +286,7 @@ export async function unlinkSocialAccountAction(
   }
 
   return scheduleTask(`unlinkSocialAccountAction: ${userId}`, async () => {
-    const linkedSocialProviders = getLinkedSocialProvidersForUser(userId);
-    const remainingSocialProviders = linkedSocialProviders.filter(
-      (candidate) => candidate !== provider,
-    );
-    const hasAlternativeLoginMethod =
-      hasCredentialPasswordAccount(userId) ||
-      hasPasskeyForUser(userId) ||
-      remainingSocialProviders.length > 0;
-
-    if (
-      !linkedSocialProviders.includes(provider) ||
-      !hasAlternativeLoginMethod
-    ) {
+    if (!canUnlinkSocialProviderForUser(userId, provider)) {
       logger
         .withScope("Auth")
         .warn(

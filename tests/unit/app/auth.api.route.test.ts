@@ -5,8 +5,15 @@ const ensureInitialAuthUserProfileMock = vi.fn(() => null);
 const getAuthUserIdSnapshotMock = vi.fn(() => new Set(["existing-user"]));
 const applySocialRegistrationProfileMock = vi.fn(() => "applied");
 const isSignupEnabledMock = vi.fn(() => false);
+const canUnlinkSocialProviderForUserMock = vi.fn<
+  (_userId: string, _provider: "github" | "google") => boolean
+>(() => false);
+const getSessionMock = vi.fn(async () => ({
+  user: { id: "user-1" },
+  session: { id: "session-1" },
+}));
 
-const authInstance = { kind: "auth" };
+const authInstance = { kind: "auth", api: { getSession: getSessionMock } };
 const setupAuthInstance = { kind: "setup-auth" };
 const authGetMock = vi.fn(async () => new Response(null, { status: 200 }));
 const authPostMock = vi.fn(async () => new Response(null, { status: 200 }));
@@ -40,6 +47,7 @@ vi.mock("@/lib/auth", () => ({
   getAuthUserIdSnapshot: getAuthUserIdSnapshotMock,
   applySocialRegistrationProfile: applySocialRegistrationProfileMock,
   isSignupEnabled: isSignupEnabledMock,
+  canUnlinkSocialProviderForUser: canUnlinkSocialProviderForUserMock,
 }));
 
 type SetupSocialContext = {
@@ -135,6 +143,11 @@ describe("auth catch-all route setup social cookie handling", () => {
     getAuthUserIdSnapshotMock.mockReturnValue(new Set(["existing-user"]));
     applySocialRegistrationProfileMock.mockReturnValue("applied");
     isSignupEnabledMock.mockReturnValue(false);
+    canUnlinkSocialProviderForUserMock.mockReturnValue(false);
+    getSessionMock.mockResolvedValue({
+      user: { id: "user-1" },
+      session: { id: "session-1" },
+    });
     isAuthSetupLockedMock.mockResolvedValue(false);
     releaseAuthSetupBootstrapLockMock.mockResolvedValue(undefined);
     acquireAuthSetupBootstrapLockMock.mockResolvedValue({
@@ -151,6 +164,41 @@ describe("auth catch-all route setup social cookie handling", () => {
 
   afterEach(() => {
     process.env = { ...env };
+  });
+
+  it("rejects unlinking the last login method through the direct auth route", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    hasValidAuthSessionForRequestMock.mockReturnValue(true);
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+    const response = await POST(
+      new Request("http://localhost/api/auth/unlink-account", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ providerId: "github" }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(authPostMock).not.toHaveBeenCalled();
+  });
+
+  it("allows a direct unlink when another login method remains", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    hasValidAuthSessionForRequestMock.mockReturnValue(true);
+    canUnlinkSocialProviderForUserMock.mockReturnValue(true);
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+    const response = await POST(
+      new Request("http://localhost/api/auth/unlink-account", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ providerId: "github" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(authPostMock).toHaveBeenCalledOnce();
   });
 
   it("does not clear setup context cookie on sign-in/social request", async () => {

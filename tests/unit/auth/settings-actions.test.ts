@@ -3,6 +3,9 @@ const ensureAuthDatabaseReadyMock = vi.fn(async () => undefined);
 const hasCredentialPasswordAccountMock = vi.fn(() => false);
 const getLinkedSocialProvidersForUserMock = vi.fn(() => ["github"]);
 const hasPasskeyForUserMock = vi.fn(() => false);
+const canUnlinkSocialProviderForUserMock = vi.fn<
+  (_userId: string, _provider: "github" | "google") => boolean
+>(() => false);
 const isAuthEmailVerificationEnabledMock = vi.fn(() => false);
 type AuthSession = {
   user: { id: string; email: string | null };
@@ -29,6 +32,7 @@ vi.mock("next/headers", () => ({
 }));
 
 vi.mock("@/lib/auth", () => ({
+  canUnlinkSocialProviderForUser: canUnlinkSocialProviderForUserMock,
   ensureAuthDatabaseReady: ensureAuthDatabaseReadyMock,
   getLinkedSocialProvidersForUser: getLinkedSocialProvidersForUserMock,
   hasCredentialPasswordAccount: hasCredentialPasswordAccountMock,
@@ -65,6 +69,7 @@ describe("auth settings actions", () => {
     hasCredentialPasswordAccountMock.mockReturnValue(false);
     getLinkedSocialProvidersForUserMock.mockReturnValue(["github"]);
     hasPasskeyForUserMock.mockReturnValue(false);
+    canUnlinkSocialProviderForUserMock.mockReturnValue(false);
     isAuthEmailVerificationEnabledMock.mockReturnValue(false);
     getSessionMock.mockResolvedValue({
       user: { id: "user-1", email: null },
@@ -330,7 +335,7 @@ describe("auth settings actions", () => {
   });
 
   it("unlinks a social account when another login method remains", async () => {
-    hasCredentialPasswordAccountMock.mockReturnValue(true);
+    canUnlinkSocialProviderForUserMock.mockReturnValue(true);
     const { unlinkSocialAccountAction } = await import(
       "@/app/auth/settings-actions"
     );
@@ -352,6 +357,10 @@ describe("auth settings actions", () => {
     getLinkedSocialProvidersForUserMock.mockImplementation(() => [
       ...linkedProviders,
     ]);
+    canUnlinkSocialProviderForUserMock.mockImplementation(
+      (_userId, provider) =>
+        linkedProviders.includes(provider) && linkedProviders.length > 1,
+    );
     unlinkAccountMock.mockImplementationOnce(
       ({ body }: UnlinkAccountInput) =>
         new Promise((resolve) => {
@@ -383,5 +392,17 @@ describe("auth settings actions", () => {
     });
     expect(unlinkAccountMock).toHaveBeenCalledOnce();
     expect(linkedProviders).toHaveLength(1);
+  });
+
+  it("allows unlinking the final social account when a passkey remains", async () => {
+    canUnlinkSocialProviderForUserMock.mockReturnValue(true);
+    const { unlinkSocialAccountAction } = await import(
+      "@/app/auth/settings-actions"
+    );
+
+    await expect(unlinkSocialAccountAction("github")).resolves.toEqual({
+      ok: true,
+    });
+    expect(unlinkAccountMock).toHaveBeenCalledOnce();
   });
 });

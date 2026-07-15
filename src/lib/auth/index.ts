@@ -21,6 +21,7 @@ import { readSecretEnvValue } from "@/lib/secret-env";
 export {
   type AuthUserExistence,
   applySocialRegistrationProfile,
+  canUnlinkSocialProviderForUser,
   ensureInitialAuthUserProfile,
   findRegistrationConflict,
   getAuthUserIdSnapshot,
@@ -180,6 +181,10 @@ function buildAuthBaseConfig() {
         // Required for explicit account linking when provider email differs
         // (e.g. GitHub noreply/private email vs local email/password account).
         allowDifferentEmails: true,
+        // App and direct API unlink requests are serialized and enforce that
+        // another login method remains. Better Auth otherwise ignores passkeys
+        // when deciding whether its final account row may be removed.
+        allowUnlinkingAll: true,
         ...(trustedSocialProviders.length > 0
           ? { trustedProviders: trustedSocialProviders }
           : {}),

@@ -461,6 +461,20 @@ export function getLinkedSocialProvidersForUser(userId: string) {
   );
 }
 
+export function canUnlinkSocialProviderForUser(
+  userId: string,
+  provider: SocialLoginProvider,
+) {
+  const linkedSocialProviders = getLinkedSocialProvidersForUser(userId);
+  if (!linkedSocialProviders.includes(provider)) return false;
+
+  return (
+    hasCredentialPasswordAccount(userId) ||
+    hasPasskeyForUser(userId) ||
+    linkedSocialProviders.some((candidate) => candidate !== provider)
+  );
+}
+
 export function hasVerifiedTotpForUser(userId: string) {
   const normalizedUserId = userId.trim();
   if (!normalizedUserId) return false;

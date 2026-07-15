@@ -2,6 +2,7 @@ import { toNextJsHandler } from "better-auth/next-js";
 import {
   applySocialRegistrationProfile,
   auth,
+  canUnlinkSocialProviderForUser,
   ensureAuthDatabaseReady,
   ensureInitialAuthUserProfile,
   getAuthUserIdSnapshot,
@@ -33,6 +34,7 @@ import {
   readSecretRevealPendingFromRequest,
 } from "@/lib/diagnostics/secret-reveal-step-up";
 import { logger } from "@/lib/logger";
+import { scheduleTask } from "@/lib/runtime/task-scheduler";
 
 const handler = toNextJsHandler(auth);
 const setupHandler = toNextJsHandler(setupAuth);
@@ -117,6 +119,19 @@ async function getSocialProviderFromSignInRequest(request: Request) {
   }
 
   return null;
+}
+
+async function getSocialProviderFromUnlinkRequest(request: Request) {
+  try {
+    const data = (await request.clone().json()) as { providerId?: unknown };
+    const provider =
+      typeof data.providerId === "string"
+        ? data.providerId.trim().toLowerCase()
+        : "";
+    return isSupportedAuthSocialProvider(provider) ? provider : null;
+  } catch {
+    return null;
+  }
 }
 
 function setupStateUnknownResponse(clearSetupContext = false) {
@@ -438,6 +453,42 @@ async function runAuthHandler(
     : activeHandler.POST(request);
 }
 
+async function runGuardedAuthHandler(
+  method: AuthRouteMethod,
+  request: Request,
+  state: AuthRouteState,
+) {
+  if (method !== "POST" || state.action !== "unlink-account") {
+    return runAuthHandler(method, request, state.setupFlowAllowed);
+  }
+
+  return scheduleTask("unlinkSocialAccountRoute", async () => {
+    const provider = await getSocialProviderFromUnlinkRequest(request);
+    const session = await auth.api.getSession({ headers: request.headers });
+    const userId =
+      typeof session?.user?.id === "string" ? session.user.id.trim() : "";
+
+    if (
+      !provider ||
+      !userId ||
+      !canUnlinkSocialProviderForUser(userId, provider)
+    ) {
+      log.warn(
+        `Rejected direct social account unlink from ip='${state.clientIp}' because it would remove the last login method or the provider is invalid.`,
+      );
+      return new Response(
+        JSON.stringify({ error: "social_accounts_unlink_error" }),
+        {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
+    return runAuthHandler(method, request, false);
+  });
+}
+
 function applySocialRegistrationProfileForCallback(state: AuthRouteState) {
   if (
     !state.socialRegistrationSnapshot ||
@@ -550,12 +601,10 @@ export async function handleAuthRouteRequest(
   }
 
   try {
-    const response = await runAuthHandler(
-      method,
-      request,
-      state.setupFlowAllowed ||
-        (state.socialAction && state.socialIntent?.purpose === "register"),
-    );
+    const response =
+      state.socialAction && state.socialIntent?.purpose === "register"
+        ? await runAuthHandler(method, request, true)
+        : await runGuardedAuthHandler(method, request, state);
     const finalResponse = await postProcessAuthResponse({
       response,
       request,
