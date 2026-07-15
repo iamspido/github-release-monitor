@@ -8,8 +8,8 @@ const isSignupEnabledMock = vi.fn(() => false);
 const canDeletePasskeyForUserMock = vi.fn<
   (_userId: string, _passkeyId: string) => boolean
 >(() => false);
-const canUnlinkSocialProviderForUserMock = vi.fn<
-  (_userId: string, _provider: "github" | "google") => boolean
+const canUnlinkAccountForUserMock = vi.fn<
+  (_userId: string, _providerId: string, _accountId?: string) => boolean
 >(() => false);
 const getSessionMock = vi.fn(async () => ({
   user: { id: "user-1" },
@@ -51,7 +51,7 @@ vi.mock("@/lib/auth", () => ({
   applySocialRegistrationProfile: applySocialRegistrationProfileMock,
   isSignupEnabled: isSignupEnabledMock,
   canDeletePasskeyForUser: canDeletePasskeyForUserMock,
-  canUnlinkSocialProviderForUser: canUnlinkSocialProviderForUserMock,
+  canUnlinkAccountForUser: canUnlinkAccountForUserMock,
 }));
 
 type SetupSocialContext = {
@@ -148,7 +148,7 @@ describe("auth catch-all route setup social cookie handling", () => {
     applySocialRegistrationProfileMock.mockReturnValue("applied");
     isSignupEnabledMock.mockReturnValue(false);
     canDeletePasskeyForUserMock.mockReturnValue(false);
-    canUnlinkSocialProviderForUserMock.mockReturnValue(false);
+    canUnlinkAccountForUserMock.mockReturnValue(false);
     getSessionMock.mockResolvedValue({
       user: { id: "user-1" },
       session: { id: "session-1" },
@@ -192,7 +192,7 @@ describe("auth catch-all route setup social cookie handling", () => {
     readSetupSocialContextFromRequestMock.mockReturnValue(null);
     hasAnyAuthUserMock.mockReturnValue("has_user");
     hasValidAuthSessionForRequestMock.mockReturnValue(true);
-    canUnlinkSocialProviderForUserMock.mockReturnValue(true);
+    canUnlinkAccountForUserMock.mockReturnValue(true);
     const { POST } = await import("@/app/api/auth/[...all]/route");
     const response = await POST(
       new Request("http://localhost/api/auth/unlink-account", {
@@ -203,6 +203,37 @@ describe("auth catch-all route setup social cookie handling", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(canUnlinkAccountForUserMock).toHaveBeenCalledWith(
+      "user-1",
+      "github",
+      undefined,
+    );
+    expect(authPostMock).toHaveBeenCalledOnce();
+  });
+
+  it("preserves provider and account selection for direct unlink requests", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    hasValidAuthSessionForRequestMock.mockReturnValue(true);
+    canUnlinkAccountForUserMock.mockReturnValue(true);
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+    const response = await POST(
+      new Request("http://localhost/api/auth/unlink-account", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          providerId: "credential",
+          accountId: "account-1",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(canUnlinkAccountForUserMock).toHaveBeenCalledWith(
+      "user-1",
+      "credential",
+      "account-1",
+    );
     expect(authPostMock).toHaveBeenCalledOnce();
   });
 

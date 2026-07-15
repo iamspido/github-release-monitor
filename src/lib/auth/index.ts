@@ -23,6 +23,7 @@ export {
   type AuthUserExistence,
   applySocialRegistrationProfile,
   canDeletePasskeyForUser,
+  canUnlinkAccountForUser,
   canUnlinkSocialProviderForUser,
   ensureInitialAuthUserProfile,
   findRegistrationConflict,

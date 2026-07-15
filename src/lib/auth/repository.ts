@@ -461,18 +461,68 @@ export function getLinkedSocialProvidersForUser(userId: string) {
   );
 }
 
+type AuthAccountRow = {
+  id?: string | null;
+  accountId?: string | null;
+  providerId?: string | null;
+};
+
+function getAuthAccountsForUser(userId: string): AuthAccountRow[] | null {
+  const queries = [
+    "SELECT id, accountId, providerId FROM account WHERE userId = ?",
+    "SELECT id, account_id AS accountId, providerId FROM account WHERE userId = ?",
+    "SELECT id, accountId, provider AS providerId FROM account WHERE userId = ?",
+    "SELECT id, account_id AS accountId, provider AS providerId FROM account WHERE userId = ?",
+    "SELECT id, accountId, providerId FROM account WHERE user_id = ?",
+    "SELECT id, account_id AS accountId, providerId FROM account WHERE user_id = ?",
+    "SELECT id, accountId, provider AS providerId FROM account WHERE user_id = ?",
+    "SELECT id, account_id AS accountId, provider AS providerId FROM account WHERE user_id = ?",
+  ] as const;
+
+  for (const query of queries) {
+    try {
+      return getAuthDb().prepare(query).all(userId) as AuthAccountRow[];
+    } catch (error) {
+      if (
+        isSqliteMissingColumnError(error) ||
+        isSqliteMissingTableError(error)
+      ) {
+        continue;
+      }
+      log.error(`Failed to load linked accounts for user='${userId}'.`, error);
+      return null;
+    }
+  }
+
+  return null;
+}
+
+export function canUnlinkAccountForUser(
+  userId: string,
+  providerId: string,
+  accountId?: string,
+) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId || !providerId) return false;
+
+  const accounts = getAuthAccountsForUser(normalizedUserId);
+  if (!accounts) return false;
+
+  const targetAccount = accounts.find(
+    (account) =>
+      account.providerId === providerId &&
+      (accountId === undefined || account.accountId === accountId),
+  );
+  if (!targetAccount) return false;
+
+  return accounts.length > 1 || hasPasskeyForUser(normalizedUserId);
+}
+
 export function canUnlinkSocialProviderForUser(
   userId: string,
   provider: SocialLoginProvider,
 ) {
-  const linkedSocialProviders = getLinkedSocialProvidersForUser(userId);
-  if (!linkedSocialProviders.includes(provider)) return false;
-
-  return (
-    hasCredentialPasswordAccount(userId) ||
-    hasPasskeyForUser(userId) ||
-    linkedSocialProviders.some((candidate) => candidate !== provider)
-  );
+  return canUnlinkAccountForUser(userId, provider);
 }
 
 export function canDeletePasskeyForUser(userId: string, passkeyId: string) {

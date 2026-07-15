@@ -3,7 +3,7 @@ import {
   applySocialRegistrationProfile,
   auth,
   canDeletePasskeyForUser,
-  canUnlinkSocialProviderForUser,
+  canUnlinkAccountForUser,
   ensureAuthDatabaseReady,
   ensureInitialAuthUserProfile,
   getAuthUserIdSnapshot,
@@ -122,14 +122,27 @@ async function getSocialProviderFromSignInRequest(request: Request) {
   return null;
 }
 
-async function getSocialProviderFromUnlinkRequest(request: Request) {
+type UnlinkAccountSelection = {
+  providerId: string;
+  accountId?: string;
+};
+
+async function getAccountSelectionFromUnlinkRequest(
+  request: Request,
+): Promise<UnlinkAccountSelection | null> {
   try {
-    const data = (await request.clone().json()) as { providerId?: unknown };
-    const provider =
-      typeof data.providerId === "string"
-        ? data.providerId.trim().toLowerCase()
-        : "";
-    return isSupportedAuthSocialProvider(provider) ? provider : null;
+    const data = (await request.clone().json()) as {
+      providerId?: unknown;
+      accountId?: unknown;
+    };
+    if (typeof data.providerId !== "string" || !data.providerId) return null;
+    if (data.accountId !== undefined && typeof data.accountId !== "string") {
+      return null;
+    }
+    return {
+      providerId: data.providerId,
+      ...(data.accountId !== undefined ? { accountId: data.accountId } : {}),
+    };
   } catch {
     return null;
   }
@@ -474,18 +487,18 @@ async function runGuardedAuthHandler(
 
   if (state.action === "unlink-account") {
     return scheduleTask("unlinkSocialAccountRoute", async () => {
-      const provider = await getSocialProviderFromUnlinkRequest(request);
+      const account = await getAccountSelectionFromUnlinkRequest(request);
       const session = await auth.api.getSession({ headers: request.headers });
       const userId =
         typeof session?.user?.id === "string" ? session.user.id.trim() : "";
 
       if (
-        !provider ||
+        !account ||
         !userId ||
-        !canUnlinkSocialProviderForUser(userId, provider)
+        !canUnlinkAccountForUser(userId, account.providerId, account.accountId)
       ) {
         log.warn(
-          `Rejected direct social account unlink from ip='${state.clientIp}' because it would remove the last login method or the provider is invalid.`,
+          `Rejected direct account unlink from ip='${state.clientIp}' because it would remove the last login method or the account is invalid.`,
         );
         return new Response(
           JSON.stringify({ error: "social_accounts_unlink_error" }),
