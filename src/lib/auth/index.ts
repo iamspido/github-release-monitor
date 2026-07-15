@@ -156,7 +156,7 @@ function buildAuthBaseConfig() {
               _request?: Request,
             ) => {
               const newEmail = payload.user?.email || "";
-              void sendNewEmailVerificationEmail({
+              await sendNewEmailVerificationEmail({
                 newEmail,
                 verificationUrl: payload.url,
               });

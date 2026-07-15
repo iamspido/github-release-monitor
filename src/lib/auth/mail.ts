@@ -15,6 +15,12 @@ export const authEmailVerificationEnabled = smtpConfig.emailVerificationEnabled;
 
 let authEmailTransporter: nodemailer.Transporter | null = null;
 
+function maskEmailForLog(value: string) {
+  const [localPart = "", domain = ""] = value.split("@", 2);
+  if (!domain) return "<invalid-email>";
+  return `${localPart.slice(0, 1) || "*"}***@${domain}`;
+}
+
 function isValidEmailTarget(value: string | null | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -73,6 +79,7 @@ async function sendAuthEmail(options: {
     return;
   }
 
+  const recipientLabel = maskEmailForLog(options.to);
   try {
     await transporter.sendMail({
       from: `"${smtpFromName}" <${smtpFromAddress}>`,
@@ -82,13 +89,14 @@ async function sendAuthEmail(options: {
       html: options.html,
     });
     log.info(
-      `Auth email sent to '${options.to}' with subject='${options.subject}'.`,
+      `Auth email sent to '${recipientLabel}' with subject='${options.subject}'.`,
     );
   } catch (error) {
     log.error(
-      `Failed to send auth email to '${options.to}' with subject='${options.subject}'.`,
+      `Failed to send auth email to '${recipientLabel}' with subject='${options.subject}'.`,
       error,
     );
+    throw error;
   }
 }
 
