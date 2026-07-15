@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from "@/lib/concurrency";
 import { discardResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
 import {
   buildCodebergAuthChain,
@@ -259,25 +260,14 @@ export async function resolveRepoProvidersBatchAction(
     );
     return { success: false, resolutions: [] };
   }
-  const resolutions: RepoProviderResolution[] = [];
-
-  for (
-    let offset = 0;
-    offset < uniqueInputs.length;
-    offset += PROVIDER_RESOLUTION_CONCURRENCY
-  ) {
-    const batch = uniqueInputs.slice(
-      offset,
-      offset + PROVIDER_RESOLUTION_CONCURRENCY,
-    );
-    const batchResolutions = await Promise.all(
-      batch.map(async (input) => ({
-        input,
-        candidates: await resolveRepoProviders(input),
-      })),
-    );
-    resolutions.push(...batchResolutions);
-  }
+  const resolutions = await mapWithConcurrency(
+    uniqueInputs,
+    PROVIDER_RESOLUTION_CONCURRENCY,
+    async (input): Promise<RepoProviderResolution> => ({
+      input,
+      candidates: await resolveRepoProviders(input),
+    }),
+  );
 
   return { success: true, resolutions };
 }

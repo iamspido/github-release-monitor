@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from "@/lib/concurrency";
 import { fetchLatestReleaseWithCache } from "@/lib/releases/cache";
 import {
   resolveParallelRepoFetches,
@@ -122,21 +123,9 @@ export async function getLatestReleasesForRepos(
     };
   };
 
-  const results: EnrichedRelease[] = new Array(repositories.length);
-
-  for (
-    let start = 0;
-    start < repositories.length;
-    start += effectiveBatchSize
-  ) {
-    const batch = repositories.slice(start, start + effectiveBatchSize);
-    await Promise.all(
-      batch.map(async (repo, offset) => {
-        const result = await buildEnrichedRelease(repo);
-        results[start + offset] = result;
-      }),
-    );
-  }
-
-  return results;
+  return mapWithConcurrency(
+    repositories,
+    effectiveBatchSize,
+    buildEnrichedRelease,
+  );
 }
