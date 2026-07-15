@@ -2,6 +2,7 @@ import { toNextJsHandler } from "better-auth/next-js";
 import {
   applySocialRegistrationProfile,
   auth,
+  canDeletePasskeyForUser,
   canUnlinkSocialProviderForUser,
   ensureAuthDatabaseReady,
   ensureInitialAuthUserProfile,
@@ -131,6 +132,15 @@ async function getSocialProviderFromUnlinkRequest(request: Request) {
     return isSupportedAuthSocialProvider(provider) ? provider : null;
   } catch {
     return null;
+  }
+}
+
+async function getPasskeyIdFromDeleteRequest(request: Request) {
+  try {
+    const data = (await request.clone().json()) as { id?: unknown };
+    return typeof data.id === "string" ? data.id.trim() : "";
+  } catch {
+    return "";
   }
 }
 
@@ -458,35 +468,67 @@ async function runGuardedAuthHandler(
   request: Request,
   state: AuthRouteState,
 ) {
-  if (method !== "POST" || state.action !== "unlink-account") {
+  if (method !== "POST") {
     return runAuthHandler(method, request, state.setupFlowAllowed);
   }
 
-  return scheduleTask("unlinkSocialAccountRoute", async () => {
-    const provider = await getSocialProviderFromUnlinkRequest(request);
-    const session = await auth.api.getSession({ headers: request.headers });
-    const userId =
-      typeof session?.user?.id === "string" ? session.user.id.trim() : "";
+  if (state.action === "unlink-account") {
+    return scheduleTask("unlinkSocialAccountRoute", async () => {
+      const provider = await getSocialProviderFromUnlinkRequest(request);
+      const session = await auth.api.getSession({ headers: request.headers });
+      const userId =
+        typeof session?.user?.id === "string" ? session.user.id.trim() : "";
 
-    if (
-      !provider ||
-      !userId ||
-      !canUnlinkSocialProviderForUser(userId, provider)
-    ) {
-      log.warn(
-        `Rejected direct social account unlink from ip='${state.clientIp}' because it would remove the last login method or the provider is invalid.`,
-      );
-      return new Response(
-        JSON.stringify({ error: "social_accounts_unlink_error" }),
-        {
-          status: 400,
-          headers: { "content-type": "application/json" },
-        },
-      );
-    }
+      if (
+        !provider ||
+        !userId ||
+        !canUnlinkSocialProviderForUser(userId, provider)
+      ) {
+        log.warn(
+          `Rejected direct social account unlink from ip='${state.clientIp}' because it would remove the last login method or the provider is invalid.`,
+        );
+        return new Response(
+          JSON.stringify({ error: "social_accounts_unlink_error" }),
+          {
+            status: 400,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
 
-    return runAuthHandler(method, request, false);
-  });
+      return runAuthHandler(method, request, false);
+    });
+  }
+
+  if (state.action === "passkey/delete-passkey") {
+    return scheduleTask("deletePasskeyRoute", async () => {
+      const passkeyId = await getPasskeyIdFromDeleteRequest(request);
+      const session = await auth.api.getSession({ headers: request.headers });
+      const userId =
+        typeof session?.user?.id === "string" ? session.user.id.trim() : "";
+
+      if (
+        !passkeyId ||
+        !userId ||
+        !canDeletePasskeyForUser(userId, passkeyId)
+      ) {
+        log.warn(
+          `Rejected direct passkey deletion from ip='${state.clientIp}' because it would remove the last login method or the passkey is invalid.`,
+        );
+        return new Response(
+          JSON.stringify({ error: "passkeys_error_delete" }),
+          {
+            status: 400,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
+
+      return runAuthHandler(method, request, false);
+    });
+  }
+
+  return runAuthHandler(method, request, state.setupFlowAllowed);
 }
 
 function applySocialRegistrationProfileForCallback(state: AuthRouteState) {

@@ -5,6 +5,9 @@ const ensureInitialAuthUserProfileMock = vi.fn(() => null);
 const getAuthUserIdSnapshotMock = vi.fn(() => new Set(["existing-user"]));
 const applySocialRegistrationProfileMock = vi.fn(() => "applied");
 const isSignupEnabledMock = vi.fn(() => false);
+const canDeletePasskeyForUserMock = vi.fn<
+  (_userId: string, _passkeyId: string) => boolean
+>(() => false);
 const canUnlinkSocialProviderForUserMock = vi.fn<
   (_userId: string, _provider: "github" | "google") => boolean
 >(() => false);
@@ -47,6 +50,7 @@ vi.mock("@/lib/auth", () => ({
   getAuthUserIdSnapshot: getAuthUserIdSnapshotMock,
   applySocialRegistrationProfile: applySocialRegistrationProfileMock,
   isSignupEnabled: isSignupEnabledMock,
+  canDeletePasskeyForUser: canDeletePasskeyForUserMock,
   canUnlinkSocialProviderForUser: canUnlinkSocialProviderForUserMock,
 }));
 
@@ -143,6 +147,7 @@ describe("auth catch-all route setup social cookie handling", () => {
     getAuthUserIdSnapshotMock.mockReturnValue(new Set(["existing-user"]));
     applySocialRegistrationProfileMock.mockReturnValue("applied");
     isSignupEnabledMock.mockReturnValue(false);
+    canDeletePasskeyForUserMock.mockReturnValue(false);
     canUnlinkSocialProviderForUserMock.mockReturnValue(false);
     getSessionMock.mockResolvedValue({
       user: { id: "user-1" },
@@ -194,6 +199,45 @@ describe("auth catch-all route setup social cookie handling", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ providerId: "github" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(authPostMock).toHaveBeenCalledOnce();
+  });
+
+  it("rejects deleting the final passkey through the direct auth route", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    hasValidAuthSessionForRequestMock.mockReturnValue(true);
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+    const response = await POST(
+      new Request("http://localhost/api/auth/passkey/delete-passkey", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: "passkey-1" }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(canDeletePasskeyForUserMock).toHaveBeenCalledWith(
+      "user-1",
+      "passkey-1",
+    );
+    expect(authPostMock).not.toHaveBeenCalled();
+  });
+
+  it("allows deleting a passkey when another login method remains", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    hasValidAuthSessionForRequestMock.mockReturnValue(true);
+    canDeletePasskeyForUserMock.mockReturnValue(true);
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+    const response = await POST(
+      new Request("http://localhost/api/auth/passkey/delete-passkey", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: "passkey-1" }),
       }),
     );
 

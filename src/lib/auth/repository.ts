@@ -475,6 +475,49 @@ export function canUnlinkSocialProviderForUser(
   );
 }
 
+export function canDeletePasskeyForUser(userId: string, passkeyId: string) {
+  const normalizedUserId = userId.trim();
+  const normalizedPasskeyId = passkeyId.trim();
+  if (!normalizedUserId || !normalizedPasskeyId) return false;
+
+  const queries = [
+    "SELECT id FROM passkey WHERE userId = ?",
+    "SELECT id FROM passkey WHERE user_id = ?",
+  ] as const;
+
+  for (const query of queries) {
+    try {
+      const rows = getAuthDb().prepare(query).all(normalizedUserId) as Array<{
+        id?: string | null;
+      }>;
+      const passkeyIds = rows
+        .map((row) => (typeof row.id === "string" ? row.id.trim() : ""))
+        .filter(Boolean);
+      if (!passkeyIds.includes(normalizedPasskeyId)) return false;
+
+      return (
+        passkeyIds.some((candidate) => candidate !== normalizedPasskeyId) ||
+        hasCredentialPasswordAccount(normalizedUserId) ||
+        getLinkedSocialProvidersForUser(normalizedUserId).length > 0
+      );
+    } catch (error) {
+      if (
+        isSqliteMissingColumnError(error) ||
+        isSqliteMissingTableError(error)
+      ) {
+        continue;
+      }
+      log.error(
+        `Failed passkey deletion safety check for user='${normalizedUserId}' passkey='${normalizedPasskeyId}'.`,
+        error,
+      );
+      return false;
+    }
+  }
+
+  return false;
+}
+
 export function hasVerifiedTotpForUser(userId: string) {
   const normalizedUserId = userId.trim();
   if (!normalizedUserId) return false;

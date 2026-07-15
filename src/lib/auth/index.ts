@@ -21,6 +21,7 @@ import { readSecretEnvValue } from "@/lib/secret-env";
 export {
   type AuthUserExistence,
   applySocialRegistrationProfile,
+  canDeletePasskeyForUser,
   canUnlinkSocialProviderForUser,
   ensureInitialAuthUserProfile,
   findRegistrationConflict,
