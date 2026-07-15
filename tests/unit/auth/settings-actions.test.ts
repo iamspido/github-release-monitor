@@ -7,6 +7,10 @@ const canUnlinkSocialProviderForUserMock = vi.fn<
   (_userId: string, _provider: "github" | "google") => boolean
 >(() => false);
 const isAuthEmailVerificationEnabledMock = vi.fn(() => false);
+const beginAuthEmailDeliveryTrackingMock = vi.fn(() => "delivery-1");
+const consumeAuthEmailDeliveryStatusMock = vi.fn<
+  (_trackingId: string) => "pending" | "sent" | "failed" | null
+>(() => "pending");
 type AuthSession = {
   user: { id: string; email: string | null };
   session: { id: string };
@@ -29,6 +33,12 @@ vi.mock("next/cache", () => ({
 
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-forwarded-for": "198.51.100.99" }),
+}));
+
+vi.mock("@/lib/auth/email-delivery-status", () => ({
+  AUTH_EMAIL_DELIVERY_TRACKING_HEADER: "x-grm-auth-email-delivery-id",
+  beginAuthEmailDeliveryTracking: beginAuthEmailDeliveryTrackingMock,
+  consumeAuthEmailDeliveryStatus: consumeAuthEmailDeliveryStatusMock,
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -71,6 +81,8 @@ describe("auth settings actions", () => {
     hasPasskeyForUserMock.mockReturnValue(false);
     canUnlinkSocialProviderForUserMock.mockReturnValue(false);
     isAuthEmailVerificationEnabledMock.mockReturnValue(false);
+    beginAuthEmailDeliveryTrackingMock.mockReturnValue("delivery-1");
+    consumeAuthEmailDeliveryStatusMock.mockReturnValue("pending");
     getSessionMock.mockResolvedValue({
       user: { id: "user-1", email: null },
       session: { id: "session-1" },
@@ -295,6 +307,39 @@ describe("auth settings actions", () => {
     });
 
     expect(result).toEqual({ ok: true, mode: "verification_sent" });
+    expect(changeEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          get: expect.any(Function),
+        }),
+      }),
+    );
+    const trackedHeaders = changeEmailMock.mock.calls[0]?.[0]
+      .headers as Headers;
+    expect(trackedHeaders.get("x-grm-auth-email-delivery-id")).toBe(
+      "delivery-1",
+    );
+    expect(consumeAuthEmailDeliveryStatusMock).toHaveBeenCalledWith(
+      "delivery-1",
+    );
+  });
+
+  it("reports verification email delivery failures returned through the callback tracker", async () => {
+    isAuthEmailVerificationEnabledMock.mockReturnValueOnce(true);
+    consumeAuthEmailDeliveryStatusMock.mockReturnValueOnce("failed");
+    const { updateAccountEmailAction } = await import(
+      "@/app/auth/settings-actions"
+    );
+
+    const result = await updateAccountEmailAction({
+      newEmail: "new@example.com",
+      callbackURL: "/settings",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      errorKey: "account_email_update_failed",
+    });
   });
 
   it("does not use direct fallback when verification flow is enabled and changeEmail fails", async () => {

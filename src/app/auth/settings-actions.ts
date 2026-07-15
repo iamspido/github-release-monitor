@@ -11,6 +11,11 @@ import {
 } from "@/lib/auth";
 import { normalizeSafeRelativePath } from "@/lib/auth/client-flow-utils";
 import {
+  AUTH_EMAIL_DELIVERY_TRACKING_HEADER,
+  beginAuthEmailDeliveryTracking,
+  consumeAuthEmailDeliveryStatus,
+} from "@/lib/auth/email-delivery-status";
+import {
   getClientIpFromHeaders,
   isLikelyEmail,
 } from "@/lib/auth/request-context";
@@ -147,14 +152,30 @@ export async function updateAccountEmailAction(
     return { ok: true, mode: "updated" };
   }
 
-  const response = await auth.api.changeEmail({
-    headers: headerStore,
-    body: {
-      newEmail: normalizedEmail,
-      callbackURL,
-    },
-    asResponse: true,
-  });
+  const deliveryTrackingId = emailVerificationEnabled
+    ? beginAuthEmailDeliveryTracking()
+    : null;
+  const authHeaders = new Headers(headerStore);
+  if (deliveryTrackingId) {
+    authHeaders.set(AUTH_EMAIL_DELIVERY_TRACKING_HEADER, deliveryTrackingId);
+  }
+
+  let response: Response;
+  let deliveryStatus: ReturnType<typeof consumeAuthEmailDeliveryStatus> = null;
+  try {
+    response = await auth.api.changeEmail({
+      headers: authHeaders,
+      body: {
+        newEmail: normalizedEmail,
+        callbackURL,
+      },
+      asResponse: true,
+    });
+  } finally {
+    deliveryStatus = deliveryTrackingId
+      ? consumeAuthEmailDeliveryStatus(deliveryTrackingId)
+      : null;
+  }
 
   if (!response.ok) {
     const errorText = await readErrorCodeFromResponse(response);
@@ -181,6 +202,15 @@ export async function updateAccountEmailAction(
       .withScope("Auth")
       .warn(
         `Email update failed for user='${userId}' from ip='${clientIp}' with status=${response.status} (detail='${errorText || "n/a"}').`,
+      );
+    return { ok: false, errorKey: "account_email_update_failed" };
+  }
+
+  if (deliveryStatus === "failed") {
+    logger
+      .withScope("Auth")
+      .warn(
+        `Email update failed for user='${userId}' from ip='${clientIp}' because the verification email could not be delivered.`,
       );
     return { ok: false, errorKey: "account_email_update_failed" };
   }

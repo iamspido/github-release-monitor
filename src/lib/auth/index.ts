@@ -5,6 +5,7 @@ import { nextCookies } from "better-auth/next-js";
 import { twoFactor, username } from "better-auth/plugins";
 import { getAuthFeatureConfig, getAuthSecret } from "@/lib/auth/config";
 import { authDbPath, getAuthDb } from "@/lib/auth/db";
+import { runTrackedAuthEmailDelivery } from "@/lib/auth/email-delivery-status";
 import {
   authEmailVerificationEnabled,
   sendChangeEmailConfirmationToCurrentEmail,
@@ -137,11 +138,13 @@ function buildAuthBaseConfig() {
                 },
                 _request?: Request,
               ) =>
-                sendChangeEmailConfirmationToCurrentEmail({
-                  currentEmail: payload.user?.email,
-                  newEmail: payload.newEmail,
-                  confirmationUrl: payload.url,
-                }),
+                runTrackedAuthEmailDelivery(_request, () =>
+                  sendChangeEmailConfirmationToCurrentEmail({
+                    currentEmail: payload.user?.email,
+                    newEmail: payload.newEmail,
+                    confirmationUrl: payload.url,
+                  }),
+                ),
             }
           : {}),
       },
@@ -158,10 +161,12 @@ function buildAuthBaseConfig() {
               _request?: Request,
             ) => {
               const newEmail = payload.user?.email || "";
-              await sendNewEmailVerificationEmail({
-                newEmail,
-                verificationUrl: payload.url,
-              });
+              await runTrackedAuthEmailDelivery(_request, () =>
+                sendNewEmailVerificationEmail({
+                  newEmail,
+                  verificationUrl: payload.url,
+                }),
+              );
             },
           },
         }
