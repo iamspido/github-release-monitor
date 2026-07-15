@@ -14,12 +14,13 @@ vi.mock("@/lib/logger", () => ({
 
 vi.mock("@/lib/storage/system-status", () => ({
   getSystemStatus: vi.fn(),
-  saveSystemStatus: vi.fn(),
+  updateSystemStatus: vi.fn(),
 }));
 
 describe("runtime/update-check", () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
     scopedLogger.info.mockClear();
@@ -38,11 +39,11 @@ describe("runtime/update-check", () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 304 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const { getSystemStatus, saveSystemStatus } = await import(
+    const { getSystemStatus, updateSystemStatus } = await import(
       "@/lib/storage/system-status"
     );
     const getSystemStatusMock = vi.mocked(getSystemStatus);
-    const saveSystemStatusMock = vi.mocked(saveSystemStatus);
+    const updateSystemStatusMock = vi.mocked(updateSystemStatus);
 
     const previousStatus = {
       latestKnownVersion: "1.0.0",
@@ -52,7 +53,9 @@ describe("runtime/update-check", () => {
       lastCheckError: "old_error",
     };
     getSystemStatusMock.mockResolvedValue(previousStatus);
-    saveSystemStatusMock.mockResolvedValue();
+    updateSystemStatusMock.mockImplementation(async (updater) =>
+      updater(previousStatus),
+    );
 
     const { runApplicationUpdateCheck } = await import(
       "@/lib/runtime/update-check"
@@ -69,7 +72,8 @@ describe("runtime/update-check", () => {
       }),
     );
 
-    expect(saveSystemStatusMock).toHaveBeenCalledWith({
+    expect(updateSystemStatusMock).toHaveBeenCalledWith(expect.any(Function));
+    expect(updateSystemStatusMock.mock.calls[0][0](previousStatus)).toEqual({
       ...previousStatus,
       lastCheckedAt: new Date("2024-01-01T00:00:00.000Z").toISOString(),
       lastCheckError: null,
@@ -91,11 +95,11 @@ describe("runtime/update-check", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const { getSystemStatus, saveSystemStatus } = await import(
+    const { getSystemStatus, updateSystemStatus } = await import(
       "@/lib/storage/system-status"
     );
     const getSystemStatusMock = vi.mocked(getSystemStatus);
-    const saveSystemStatusMock = vi.mocked(saveSystemStatus);
+    const updateSystemStatusMock = vi.mocked(updateSystemStatus);
 
     const previousStatus = {
       latestKnownVersion: "v1.0.0",
@@ -105,14 +109,17 @@ describe("runtime/update-check", () => {
       lastCheckError: null,
     };
     getSystemStatusMock.mockResolvedValue(previousStatus);
-    saveSystemStatusMock.mockResolvedValue();
+    updateSystemStatusMock.mockImplementation(async (updater) =>
+      updater(previousStatus),
+    );
 
     const { runApplicationUpdateCheck } = await import(
       "@/lib/runtime/update-check"
     );
     const result = await runApplicationUpdateCheck("1.5.0");
 
-    expect(saveSystemStatusMock).toHaveBeenCalledWith({
+    expect(updateSystemStatusMock).toHaveBeenCalledWith(expect.any(Function));
+    expect(updateSystemStatusMock.mock.calls[0][0](previousStatus)).toEqual({
       latestKnownVersion: "v2.0.0",
       lastCheckedAt: new Date("2024-01-01T00:00:00.000Z").toISOString(),
       latestEtag: '"etag-new"',
@@ -136,11 +143,11 @@ describe("runtime/update-check", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const { getSystemStatus, saveSystemStatus } = await import(
+    const { getSystemStatus, updateSystemStatus } = await import(
       "@/lib/storage/system-status"
     );
     const getSystemStatusMock = vi.mocked(getSystemStatus);
-    const saveSystemStatusMock = vi.mocked(saveSystemStatus);
+    const updateSystemStatusMock = vi.mocked(updateSystemStatus);
 
     const previousStatus = {
       latestKnownVersion: null,
@@ -150,14 +157,17 @@ describe("runtime/update-check", () => {
       lastCheckError: null,
     };
     getSystemStatusMock.mockResolvedValue(previousStatus);
-    saveSystemStatusMock.mockResolvedValue();
+    updateSystemStatusMock.mockImplementation(async (updater) =>
+      updater(previousStatus),
+    );
 
     const { runApplicationUpdateCheck } = await import(
       "@/lib/runtime/update-check"
     );
     const result = await runApplicationUpdateCheck("1.0.0");
 
-    expect(saveSystemStatusMock).toHaveBeenCalledWith({
+    expect(updateSystemStatusMock).toHaveBeenCalledWith(expect.any(Function));
+    expect(updateSystemStatusMock.mock.calls[0][0](previousStatus)).toEqual({
       ...previousStatus,
       lastCheckedAt: new Date("2024-01-01T00:00:00.000Z").toISOString(),
       lastCheckError: "503 Service Unavailable",
@@ -174,11 +184,11 @@ describe("runtime/update-check", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { getSystemStatus, saveSystemStatus } = await import(
+    const { getSystemStatus, updateSystemStatus } = await import(
       "@/lib/storage/system-status"
     );
     const getSystemStatusMock = vi.mocked(getSystemStatus);
-    const saveSystemStatusMock = vi.mocked(saveSystemStatus);
+    const updateSystemStatusMock = vi.mocked(updateSystemStatus);
 
     const previousStatus = {
       latestKnownVersion: "v1.0.0",
@@ -188,14 +198,17 @@ describe("runtime/update-check", () => {
       lastCheckError: null,
     };
     getSystemStatusMock.mockResolvedValue(previousStatus);
-    saveSystemStatusMock.mockResolvedValue();
+    updateSystemStatusMock.mockImplementation(async (updater) =>
+      updater(previousStatus),
+    );
 
     const { runApplicationUpdateCheck } = await import(
       "@/lib/runtime/update-check"
     );
     const result = await runApplicationUpdateCheck("1.0.0");
 
-    expect(saveSystemStatusMock).toHaveBeenCalledWith({
+    expect(updateSystemStatusMock).toHaveBeenCalledWith(expect.any(Function));
+    expect(updateSystemStatusMock.mock.calls[0][0](previousStatus)).toEqual({
       ...previousStatus,
       lastCheckedAt: new Date("2024-01-01T00:00:00.000Z").toISOString(),
       lastCheckError: "boom",

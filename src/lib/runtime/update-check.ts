@@ -4,7 +4,10 @@ import {
   fetchWithTimeout,
 } from "@/lib/http/fetch-with-timeout";
 import { logger } from "@/lib/logger";
-import { getSystemStatus, saveSystemStatus } from "@/lib/storage/system-status";
+import {
+  getSystemStatus,
+  updateSystemStatus,
+} from "@/lib/storage/system-status";
 import type { SystemStatus } from "@/types";
 
 const log = logger.withScope("UpdateCheck");
@@ -44,12 +47,11 @@ export async function runApplicationUpdateCheck(
 
     if (response.status === 304) {
       await discardResponseWithTimeout(response);
-      const updated: SystemStatus = {
-        ...previousStatus,
+      const updated = await updateSystemStatus((current) => ({
+        ...current,
         lastCheckedAt: nowIso,
         lastCheckError: null,
-      };
-      await saveSystemStatus(updated);
+      }));
       log.debug("Update check: release information unchanged (304).");
       return updated;
     }
@@ -57,12 +59,11 @@ export async function runApplicationUpdateCheck(
     if (!response.ok) {
       await discardResponseWithTimeout(response);
       const message = `${response.status} ${response.statusText}`;
-      const updated: SystemStatus = {
-        ...previousStatus,
+      const updated = await updateSystemStatus((current) => ({
+        ...current,
         lastCheckedAt: nowIso,
         lastCheckError: message,
-      };
-      await saveSystemStatus(updated);
+      }));
       log.warn(`Update check failed with HTTP error: ${message}`);
       return updated;
     }
@@ -74,24 +75,19 @@ export async function runApplicationUpdateCheck(
     const latestVersion = payload.tag_name || payload.name || null;
     const etag = response.headers.get("etag");
 
-    let dismissedVersion = previousStatus.dismissedVersion;
-    if (
-      latestVersion &&
-      dismissedVersion &&
-      dismissedVersion !== latestVersion
-    ) {
-      dismissedVersion = null;
-    }
-
-    const updated: SystemStatus = {
+    const updated = await updateSystemStatus((current) => ({
+      ...current,
       latestKnownVersion: latestVersion,
       lastCheckedAt: nowIso,
       latestEtag: etag,
-      dismissedVersion,
+      dismissedVersion:
+        latestVersion &&
+        current.dismissedVersion &&
+        current.dismissedVersion !== latestVersion
+          ? null
+          : current.dismissedVersion,
       lastCheckError: null,
-    };
-
-    await saveSystemStatus(updated);
+    }));
 
     if (!latestVersion) {
       log.warn("Update check succeeded but no version tag was returned.");
@@ -111,12 +107,11 @@ export async function runApplicationUpdateCheck(
         : typeof error === "string"
           ? error
           : "unexpected_error";
-    const updated: SystemStatus = {
-      ...previousStatus,
+    const updated = await updateSystemStatus((current) => ({
+      ...current,
       lastCheckedAt: nowIso,
       lastCheckError: message,
-    };
-    await saveSystemStatus(updated);
+    }));
     log.error("Update check failed with exception:", error);
     return updated;
   }

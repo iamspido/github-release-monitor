@@ -45,6 +45,8 @@ const systemStatusStore = new JsonFileStore<SystemStatus>({
   initFileErrorMessage: "Unable to initialize system status data file.",
 });
 
+let currentStatusUpdate: Promise<void> = Promise.resolve();
+
 export async function getSystemStatus(): Promise<SystemStatus> {
   return systemStatusStore.read();
 }
@@ -56,8 +58,15 @@ export async function saveSystemStatus(status: SystemStatus): Promise<void> {
 export async function updateSystemStatus(
   updater: (current: SystemStatus) => SystemStatus | Promise<SystemStatus>,
 ): Promise<SystemStatus> {
-  const current = await getSystemStatus();
-  const updated = await updater(current);
-  await saveSystemStatus(updated);
-  return updated;
+  const updatePromise = currentStatusUpdate.then(async () => {
+    const current = await getSystemStatus();
+    const updated = await updater(current);
+    await saveSystemStatus(updated);
+    return updated;
+  });
+  currentStatusUpdate = updatePromise.then(
+    () => undefined,
+    () => undefined,
+  );
+  return updatePromise;
 }
