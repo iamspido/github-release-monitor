@@ -15,6 +15,7 @@ import {
   beginAuthEmailDeliveryTracking,
   consumeAuthEmailDeliveryStatus,
 } from "@/lib/auth/email-delivery-status";
+import { scheduleLoginMethodRemoval } from "@/lib/auth/login-method-removal-queue";
 import {
   getClientIpFromHeaders,
   isLikelyEmail,
@@ -22,7 +23,6 @@ import {
 import type { SocialLoginProvider } from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
 import { isPasswordPolicyValid } from "@/lib/password-policy";
-import { scheduleTask } from "@/lib/runtime/task-scheduler";
 
 type UpdateEmailInput = {
   newEmail: string;
@@ -315,7 +315,7 @@ export async function unlinkSocialAccountAction(
     return { ok: false, errorKey: "social_accounts_unlink_error" };
   }
 
-  return scheduleTask(`unlinkSocialAccountAction: ${userId}`, async () => {
+  return scheduleLoginMethodRemoval(userId, async () => {
     if (!canUnlinkSocialProviderForUser(userId, provider)) {
       logger
         .withScope("Auth")

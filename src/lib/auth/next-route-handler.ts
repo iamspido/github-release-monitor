@@ -11,6 +11,7 @@ import {
   hasValidAuthSessionForRequest,
   setupAuth,
 } from "@/lib/auth";
+import { scheduleLoginMethodRemoval } from "@/lib/auth/login-method-removal-queue";
 import {
   getClientIpFromRequest,
   isSupportedAuthSocialProvider,
@@ -35,7 +36,6 @@ import {
   readSecretRevealPendingFromRequest,
 } from "@/lib/diagnostics/secret-reveal-step-up";
 import { logger } from "@/lib/logger";
-import { scheduleTask } from "@/lib/runtime/task-scheduler";
 
 const handler = toNextJsHandler(auth);
 const setupHandler = toNextJsHandler(setupAuth);
@@ -486,15 +486,26 @@ async function runGuardedAuthHandler(
   }
 
   if (state.action === "unlink-account") {
-    return scheduleTask("unlinkSocialAccountRoute", async () => {
-      const account = await getAccountSelectionFromUnlinkRequest(request);
-      const session = await auth.api.getSession({ headers: request.headers });
-      const userId =
-        typeof session?.user?.id === "string" ? session.user.id.trim() : "";
+    const account = await getAccountSelectionFromUnlinkRequest(request);
+    const session = await auth.api.getSession({ headers: request.headers });
+    const userId =
+      typeof session?.user?.id === "string" ? session.user.id.trim() : "";
 
+    if (!account || !userId) {
+      log.warn(
+        `Rejected direct account unlink from ip='${state.clientIp}' because the account or session is invalid.`,
+      );
+      return new Response(
+        JSON.stringify({ error: "social_accounts_unlink_error" }),
+        {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
+    return scheduleLoginMethodRemoval(userId, async () => {
       if (
-        !account ||
-        !userId ||
         !canUnlinkAccountForUser(userId, account.providerId, account.accountId)
       ) {
         log.warn(
@@ -514,17 +525,26 @@ async function runGuardedAuthHandler(
   }
 
   if (state.action === "passkey/delete-passkey") {
-    return scheduleTask("deletePasskeyRoute", async () => {
-      const passkeyId = await getPasskeyIdFromDeleteRequest(request);
-      const session = await auth.api.getSession({ headers: request.headers });
-      const userId =
-        typeof session?.user?.id === "string" ? session.user.id.trim() : "";
+    const passkeyId = await getPasskeyIdFromDeleteRequest(request);
+    const session = await auth.api.getSession({ headers: request.headers });
+    const userId =
+      typeof session?.user?.id === "string" ? session.user.id.trim() : "";
 
-      if (
-        !passkeyId ||
-        !userId ||
-        !canDeletePasskeyForUser(userId, passkeyId)
-      ) {
+    if (!passkeyId || !userId) {
+      log.warn(
+        `Rejected direct passkey deletion from ip='${state.clientIp}' because the passkey or session is invalid.`,
+      );
+      return new Response(
+        JSON.stringify({ error: "account_passkey_delete_error" }),
+        {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
+    return scheduleLoginMethodRemoval(userId, async () => {
+      if (!canDeletePasskeyForUser(userId, passkeyId)) {
         log.warn(
           `Rejected direct passkey deletion from ip='${state.clientIp}' because it would remove the last login method or the passkey is invalid.`,
         );
