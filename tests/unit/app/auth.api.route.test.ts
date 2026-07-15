@@ -251,10 +251,34 @@ describe("auth catch-all route setup social cookie handling", () => {
     );
 
     expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "passkeys_error_delete",
+    });
     expect(canDeletePasskeyForUserMock).toHaveBeenCalledWith(
       "user-1",
       "passkey-1",
     );
+    expect(authPostMock).not.toHaveBeenCalled();
+  });
+
+  it("returns the passkey deletion error contract for an invalid direct request", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    hasValidAuthSessionForRequestMock.mockReturnValue(true);
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+    const response = await POST(
+      new Request("http://localhost/api/auth/passkey/delete-passkey", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "passkeys_error_delete",
+    });
+    expect(canDeletePasskeyForUserMock).not.toHaveBeenCalled();
     expect(authPostMock).not.toHaveBeenCalled();
   });
 

@@ -534,13 +534,10 @@ async function runGuardedAuthHandler(
       log.warn(
         `Rejected direct passkey deletion from ip='${state.clientIp}' because the passkey or session is invalid.`,
       );
-      return new Response(
-        JSON.stringify({ error: "account_passkey_delete_error" }),
-        {
-          status: 400,
-          headers: { "content-type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: "passkeys_error_delete" }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      });
     }
 
     return scheduleLoginMethodRemoval(userId, async () => {
