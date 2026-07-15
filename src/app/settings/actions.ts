@@ -194,16 +194,38 @@ async function applySettingsUpdate(
     const shouldClearEtags = shouldInvalidateReleaseCache(
       releaseCacheInvalidation,
     );
+    let repositoriesBeforeSettingsUpdate: Awaited<
+      ReturnType<typeof getRepositories>
+    > | null = null;
 
     // All validation is complete before any persistent side effects begin.
     if (shouldResetNewFlags || shouldClearEtags) {
       const allRepos = await getRepositories();
+      repositoriesBeforeSettingsUpdate = allRepos;
       const updatedRepos = allRepos.map((repository) => ({
         ...repository,
         isNew: shouldResetNewFlags ? false : repository.isNew,
         etag: shouldClearEtags ? undefined : repository.etag,
       }));
       await saveRepositories(updatedRepos);
+    }
+
+    try {
+      await saveSettings(settingsToSave);
+    } catch (settingsError) {
+      if (repositoriesBeforeSettingsUpdate) {
+        try {
+          await saveRepositories(repositoriesBeforeSettingsUpdate);
+        } catch (rollbackError) {
+          logger
+            .withScope("Settings")
+            .error(
+              "Failed to roll back repository changes after settings persistence failed.",
+              rollbackError,
+            );
+        }
+      }
+      throw settingsError;
     }
 
     if (shouldResetNewFlags) {
@@ -226,8 +248,6 @@ async function applySettingsUpdate(
           `Cleared ETags for all repositories due to: ${reasons.join(", ")}`,
         );
     }
-
-    await saveSettings(settingsToSave);
     if (changes.length > 0) {
       logger
         .withScope("Settings")
