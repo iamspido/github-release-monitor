@@ -18,6 +18,11 @@ export default defineConfig({
       '.git',
       'tests/e2e',
     ],
+    sequence: {
+      // Global teardown waits for tracked background work before individual
+      // test files restore process-wide mocks such as global.fetch.
+      hooks: 'list',
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],

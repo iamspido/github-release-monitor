@@ -13,6 +13,10 @@ vi.mock("next-intl/server", () => ({
   getLocale: async () => "en",
 }));
 
+vi.mock("@/lib/releases", () => ({
+  getLatestReleasesForRepos: async () => [],
+}));
+
 const mem: { repos: Repository[] } = { repos: [] };
 vi.mock("@/lib/storage/repositories", () => ({
   getRepositories: async () => mem.repos,

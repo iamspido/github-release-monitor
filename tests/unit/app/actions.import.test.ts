@@ -36,12 +36,9 @@ vi.mock("@/lib/storage/settings", () => ({
   }),
 }));
 
-// Stub background refresh to avoid side effects
-vi.mock("@/app/actions", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/app/actions")>("@/app/actions");
-  return { ...actual, refreshMultipleRepositoriesAction: async () => {} };
-});
+vi.mock("@/lib/releases", () => ({
+  getLatestReleasesForRepos: async () => [],
+}));
 
 describe("importRepositoriesAction idempotency", () => {
   beforeEach(() => {
