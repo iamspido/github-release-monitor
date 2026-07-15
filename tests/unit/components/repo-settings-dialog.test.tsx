@@ -108,8 +108,6 @@ vi.mock("@/hooks/use-toast", () => ({
   toast: vi.fn(),
 }));
 
-let fakeSetTimeout: typeof globalThis.setTimeout;
-
 vi.mock("@/components/ui/dialog", () => {
   const passthrough = ({ children, ...rest }: PassthroughProps) => (
     <div {...rest}>{children}</div>
@@ -194,18 +192,6 @@ describe("RepoSettingsDialog autosave behaviour", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    fakeSetTimeout = globalThis.setTimeout;
-    globalThis.setTimeout = ((cb: TimerHandler, delay?: number) =>
-      fakeSetTimeout(async () => {
-        if (typeof cb !== "function") {
-          throw new TypeError(
-            "String timer handlers are not supported in tests",
-          );
-        }
-        await act(async () => {
-          await cb();
-        });
-      }, delay)) as unknown as typeof globalThis.setTimeout;
     networkState = { isOnline: true };
     toastSpy.mockClear();
     updateSettingsMock.mockReset();
@@ -217,13 +203,12 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     root = ReactDOM.createRoot(container);
   });
 
-  afterEach(() => {
-    globalThis.setTimeout = fakeSetTimeout;
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
-    act(() => {
+  afterEach(async () => {
+    await act(async () => {
       root.unmount();
+      await vi.runOnlyPendingTimersAsync();
     });
+    vi.useRealTimers();
     container.remove();
   });
 
@@ -275,7 +260,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
 
   async function advanceAutosaveDelay(delay = 1500) {
     await act(async () => {
-      vi.advanceTimersByTime(delay);
+      await vi.advanceTimersByTimeAsync(delay);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -379,7 +364,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     await flushEffects();
 
     await act(async () => {
-      vi.advanceTimersByTime(1500);
+      await vi.advanceTimersByTimeAsync(1500);
       await Promise.resolve();
     });
     expect(updateSettingsMock).toHaveBeenCalledOnce();
@@ -414,7 +399,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     });
     await flushEffects();
     await act(async () => {
-      vi.advanceTimersByTime(1500);
+      await vi.advanceTimersByTimeAsync(1500);
       await Promise.resolve();
     });
     expect(updateSettingsMock).toHaveBeenCalledOnce();
