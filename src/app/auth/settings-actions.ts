@@ -18,6 +18,7 @@ import {
 import type { SocialLoginProvider } from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
 import { isPasswordPolicyValid } from "@/lib/password-policy";
+import { scheduleTask } from "@/lib/runtime/task-scheduler";
 
 type UpdateEmailInput = {
   newEmail: string;
@@ -285,38 +286,43 @@ export async function unlinkSocialAccountAction(
     return { ok: false, errorKey: "social_accounts_unlink_error" };
   }
 
-  const linkedSocialProviders = getLinkedSocialProvidersForUser(userId);
-  const remainingSocialProviders = linkedSocialProviders.filter(
-    (candidate) => candidate !== provider,
-  );
-  const hasAlternativeLoginMethod =
-    hasCredentialPasswordAccount(userId) ||
-    hasPasskeyForUser(userId) ||
-    remainingSocialProviders.length > 0;
+  return scheduleTask(`unlinkSocialAccountAction: ${userId}`, async () => {
+    const linkedSocialProviders = getLinkedSocialProvidersForUser(userId);
+    const remainingSocialProviders = linkedSocialProviders.filter(
+      (candidate) => candidate !== provider,
+    );
+    const hasAlternativeLoginMethod =
+      hasCredentialPasswordAccount(userId) ||
+      hasPasskeyForUser(userId) ||
+      remainingSocialProviders.length > 0;
 
-  if (!linkedSocialProviders.includes(provider) || !hasAlternativeLoginMethod) {
-    logger
-      .withScope("Auth")
-      .warn(
-        `Rejected social account unlink for user='${userId}' because it would remove the last login method or the provider is not linked.`,
-      );
-    return { ok: false, errorKey: "social_accounts_unlink_error" };
-  }
-
-  try {
-    const response = await auth.api.unlinkAccount({
-      headers: headerStore,
-      body: { providerId: provider },
-      asResponse: true,
-    });
-    if (!response.ok) {
+    if (
+      !linkedSocialProviders.includes(provider) ||
+      !hasAlternativeLoginMethod
+    ) {
+      logger
+        .withScope("Auth")
+        .warn(
+          `Rejected social account unlink for user='${userId}' because it would remove the last login method or the provider is not linked.`,
+        );
       return { ok: false, errorKey: "social_accounts_unlink_error" };
     }
-    return { ok: true };
-  } catch (error) {
-    logger
-      .withScope("Auth")
-      .error(`Failed to unlink social account for user='${userId}'.`, error);
-    return { ok: false, errorKey: "social_accounts_unlink_error" };
-  }
+
+    try {
+      const response = await auth.api.unlinkAccount({
+        headers: headerStore,
+        body: { providerId: provider },
+        asResponse: true,
+      });
+      if (!response.ok) {
+        return { ok: false, errorKey: "social_accounts_unlink_error" };
+      }
+      return { ok: true };
+    } catch (error) {
+      logger
+        .withScope("Auth")
+        .error(`Failed to unlink social account for user='${userId}'.`, error);
+      return { ok: false, errorKey: "social_accounts_unlink_error" };
+    }
+  });
 }

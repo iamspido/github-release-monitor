@@ -15,7 +15,10 @@ const getSessionMock = vi.fn<() => Promise<AuthSession>>(async () => ({
 const setPasswordMock = vi.fn(async () => ({ ok: true, status: 200 }));
 const changePasswordMock = vi.fn(async () => ({ ok: true, status: 200 }));
 const changeEmailMock = vi.fn(async () => ({ ok: true, status: 200 }));
-const unlinkAccountMock = vi.fn(async () => ({ ok: true, status: 200 }));
+type UnlinkAccountInput = { body: { providerId: string } };
+const unlinkAccountMock = vi.fn<
+  (input: UnlinkAccountInput) => Promise<{ ok: boolean; status: number }>
+>(async () => ({ ok: true, status: 200 }));
 
 vi.mock("next/cache", () => ({
   revalidatePath: (...args: unknown[]) => revalidatePathMock(...args),
@@ -341,5 +344,44 @@ describe("auth settings actions", () => {
         asResponse: true,
       }),
     );
+  });
+
+  it("serializes concurrent unlinks so one login method remains", async () => {
+    let linkedProviders = ["github", "google"];
+    let finishFirstUnlink: (() => void) | undefined;
+    getLinkedSocialProvidersForUserMock.mockImplementation(() => [
+      ...linkedProviders,
+    ]);
+    unlinkAccountMock.mockImplementationOnce(
+      ({ body }: UnlinkAccountInput) =>
+        new Promise((resolve) => {
+          finishFirstUnlink = () => {
+            linkedProviders = linkedProviders.filter(
+              (provider) => provider !== body.providerId,
+            );
+            resolve({ ok: true, status: 200 });
+          };
+        }),
+    );
+
+    const { unlinkSocialAccountAction } = await import(
+      "@/app/auth/settings-actions"
+    );
+    const githubUnlink = unlinkSocialAccountAction("github");
+    const googleUnlink = unlinkSocialAccountAction("google");
+
+    await vi.waitFor(() => {
+      expect(unlinkAccountMock).toHaveBeenCalledOnce();
+    });
+    finishFirstUnlink?.();
+
+    const results = await Promise.all([githubUnlink, googleUnlink]);
+    expect(results).toContainEqual({ ok: true });
+    expect(results).toContainEqual({
+      ok: false,
+      errorKey: "social_accounts_unlink_error",
+    });
+    expect(unlinkAccountMock).toHaveBeenCalledOnce();
+    expect(linkedProviders).toHaveLength(1);
   });
 });
