@@ -18,11 +18,13 @@ export type SecretRevealStepUpMethod =
   | "passkey"
   | "social";
 export type SecretRevealSocialProvider = "github" | "google";
+export type SecretRevealTarget = "mail_password" | "apprise_url";
 
 export type SecretRevealStepUpCookiePayload = {
   userId: string;
   method: SecretRevealStepUpMethod;
   provider?: SecretRevealSocialProvider;
+  target: SecretRevealTarget;
   issuedAt: number;
   expiresAt: number;
   nonce: string;
@@ -36,12 +38,14 @@ export function createSecretRevealStepUpPayload(args: {
   userId: string;
   method: SecretRevealStepUpMethod;
   provider?: SecretRevealSocialProvider;
+  target?: SecretRevealTarget;
 }): SecretRevealStepUpCookiePayload {
   const now = Date.now();
   return {
     userId: args.userId,
     method: args.method,
     ...(args.provider ? { provider: args.provider } : {}),
+    target: args.target ?? "mail_password",
     issuedAt: now,
     expiresAt: now + SECRET_REVEAL_STEP_UP_TTL_SECONDS * 1_000,
     nonce: randomUUID(),
@@ -90,7 +94,19 @@ export function decodeSecretRevealStepUpCookieValue(
     ) {
       return null;
     }
-    return parsed as SecretRevealStepUpCookiePayload;
+    if (
+      parsed.target !== undefined &&
+      parsed.target !== "mail_password" &&
+      parsed.target !== "apprise_url"
+    ) {
+      return null;
+    }
+    return {
+      ...(parsed as Omit<SecretRevealStepUpCookiePayload, "target">),
+      // Accept cookies issued by the previous v2 implementation until their
+      // five-minute TTL expires.
+      target: parsed.target ?? "mail_password",
+    };
   } catch {
     return null;
   }

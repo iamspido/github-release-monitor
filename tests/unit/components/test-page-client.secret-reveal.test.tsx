@@ -397,6 +397,7 @@ describe("TestPageClient mail password reveal", () => {
 
       expect(verifySecretRevealTotpActionMock).toHaveBeenCalledWith({
         code: "123456",
+        target: "mail_password",
       });
       expect(revealMailPasswordActionMock).toHaveBeenCalledWith();
     } finally {
@@ -434,6 +435,7 @@ describe("TestPageClient mail password reveal", () => {
       expect(beginSecretRevealStepUpActionMock).toHaveBeenCalledWith({
         method: "social",
         provider: "github",
+        target: "mail_password",
       });
       expect(socialSignInMock).toHaveBeenCalledWith({
         provider: "github",

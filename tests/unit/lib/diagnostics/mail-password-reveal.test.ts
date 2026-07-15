@@ -306,6 +306,70 @@ describe("revealMailPasswordActionImpl", () => {
     });
   });
 
+  it("does not use a proof issued for one secret to reveal another", async () => {
+    mocks.access.mockResolvedValue({
+      authenticationMethod: "Basic",
+      canAccessRestrictedPages: true,
+    });
+    mocks.getSession.mockResolvedValue({
+      user: { id: "user-1", email: "user@example.com" },
+    });
+    const {
+      createSecretRevealStepUpPayload,
+      encodeSecretRevealStepUpCookieValue,
+    } = await import("@/lib/diagnostics/secret-reveal-step-up");
+    const verifiedCookieValue = encodeSecretRevealStepUpCookieValue(
+      createSecretRevealStepUpPayload({
+        userId: "user-1",
+        method: "totp",
+        target: "mail_password",
+      }),
+    );
+    mocks.cookieGet.mockReturnValue({ value: verifiedCookieValue });
+    const { revealAppriseUrlActionImpl } = await import(
+      "@/lib/diagnostics/notification-config"
+    );
+
+    await expect(revealAppriseUrlActionImpl()).resolves.toEqual({
+      success: false,
+      errorKey: "error_step_up_required",
+    });
+  });
+
+  it("accepts each verified proof only once", async () => {
+    mocks.access.mockResolvedValue({
+      authenticationMethod: "Basic",
+      canAccessRestrictedPages: true,
+    });
+    mocks.getSession.mockResolvedValue({
+      user: { id: "user-1", email: "user@example.com" },
+    });
+    const {
+      createSecretRevealStepUpPayload,
+      encodeSecretRevealStepUpCookieValue,
+    } = await import("@/lib/diagnostics/secret-reveal-step-up");
+    const verifiedCookieValue = encodeSecretRevealStepUpCookieValue(
+      createSecretRevealStepUpPayload({
+        userId: "user-1",
+        method: "totp",
+        target: "mail_password",
+      }),
+    );
+    mocks.cookieGet.mockReturnValue({ value: verifiedCookieValue });
+    const { revealMailPasswordActionImpl } = await import(
+      "@/lib/diagnostics/notification-config"
+    );
+
+    await expect(revealMailPasswordActionImpl()).resolves.toEqual({
+      success: true,
+      value: "mail-secret",
+    });
+    await expect(revealMailPasswordActionImpl()).resolves.toEqual({
+      success: false,
+      errorKey: "error_step_up_required",
+    });
+  });
+
   it("returns an error when MAIL_PASSWORD is not configured", async () => {
     delete process.env.MAIL_PASSWORD;
     mocks.access.mockResolvedValue({

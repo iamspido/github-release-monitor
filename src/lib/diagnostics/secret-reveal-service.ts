@@ -8,11 +8,24 @@ import {
   SECRET_REVEAL_VERIFIED_COOKIE,
   type SecretRevealSocialProvider,
   type SecretRevealStepUpMethod,
+  type SecretRevealTarget,
   setSecretRevealStepUpCookie,
 } from "@/lib/diagnostics/secret-reveal-step-up";
 import { logger } from "@/lib/logger";
 
 const log = logger.withScope("Diagnostics");
+
+const consumedStepUpNonces = new Map<string, number>();
+
+function consumeStepUpNonce(nonce: string, expiresAt: number) {
+  const now = Date.now();
+  for (const [candidate, candidateExpiresAt] of consumedStepUpNonces) {
+    if (candidateExpiresAt <= now) consumedStepUpNonces.delete(candidate);
+  }
+  if (consumedStepUpNonces.has(nonce)) return false;
+  consumedStepUpNonces.set(nonce, expiresAt);
+  return true;
+}
 
 type SecretRevealMethodAvailability = {
   password: boolean;
@@ -97,7 +110,14 @@ async function verifyDiagnosticRevealAccess(
     const verifiedStepUp = await readSecretRevealStepUpCookie(
       SECRET_REVEAL_VERIFIED_COOKIE,
     );
-    if (verifiedStepUp?.userId === userId) {
+    const expectedTarget: SecretRevealTarget =
+      envKey === "MAIL_PASSWORD" ? "mail_password" : "apprise_url";
+    if (
+      verifiedStepUp?.userId === userId &&
+      verifiedStepUp.target === expectedTarget &&
+      consumeStepUpNonce(verifiedStepUp.nonce, verifiedStepUp.expiresAt)
+    ) {
+      await setSecretRevealStepUpCookie(SECRET_REVEAL_VERIFIED_COOKIE, null);
       return { success: true, clientIp, userId };
     }
   }
@@ -230,6 +250,7 @@ export async function getSecretRevealOptionsActionImpl(): Promise<SecretRevealOp
 export async function beginSecretRevealStepUpActionImpl(input: {
   method: SecretRevealStepUpMethod;
   provider?: SecretRevealSocialProvider;
+  target?: SecretRevealTarget;
 }): Promise<SecretRevealStepUpResult> {
   const context = await getInternalRevealContext();
   if (!context.success) {
@@ -249,6 +270,7 @@ export async function beginSecretRevealStepUpActionImpl(input: {
       userId: context.user.userId,
       method: input.method,
       provider: input.provider,
+      target: input.target,
     }),
   );
   if (input.method === "social" && input.provider) {
@@ -261,7 +283,9 @@ export async function beginSecretRevealStepUpActionImpl(input: {
   return { success: true };
 }
 
-export async function completeSecretRevealStepUpActionImpl(): Promise<SecretRevealStepUpResult> {
+export async function completeSecretRevealStepUpActionImpl(input?: {
+  target?: SecretRevealTarget;
+}): Promise<SecretRevealStepUpResult> {
   const context = await getInternalRevealContext();
   if (!context.success) {
     return { success: false, errorKey: context.errorKey };
@@ -270,7 +294,11 @@ export async function completeSecretRevealStepUpActionImpl(): Promise<SecretReve
   const verifiedStepUp = await readSecretRevealStepUpCookie(
     SECRET_REVEAL_VERIFIED_COOKIE,
   );
-  if (!verifiedStepUp || verifiedStepUp.userId !== context.user.userId) {
+  if (
+    !verifiedStepUp ||
+    verifiedStepUp.userId !== context.user.userId ||
+    verifiedStepUp.target !== (input?.target ?? "mail_password")
+  ) {
     log.warn(
       `Rejected secret reveal step-up completion for user='${context.user.userId}' from ip='${context.clientIp}' because verified proof is missing or mismatched.`,
     );
@@ -285,6 +313,7 @@ export async function completeSecretRevealStepUpActionImpl(): Promise<SecretReve
 
 export async function verifySecretRevealTotpActionImpl(input: {
   code?: string;
+  target?: SecretRevealTarget;
 }): Promise<SecretRevealStepUpResult> {
   const context = await getInternalRevealContext();
   if (!context.success) {
@@ -324,6 +353,7 @@ export async function verifySecretRevealTotpActionImpl(input: {
     createSecretRevealStepUpPayload({
       userId: context.user.userId,
       method: "totp",
+      target: input.target,
     }),
   );
   log.warn(

@@ -261,6 +261,7 @@ function markSecretRevealSocialStepUpVerified(args: {
         userId: pendingStepUp.userId,
         method: "social",
         provider: pendingStepUp.provider,
+        target: pendingStepUp.target,
       }),
     ),
   );

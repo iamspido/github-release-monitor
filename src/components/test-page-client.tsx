@@ -546,6 +546,7 @@ export function TestPageClient({
       try {
         const result = await verifySecretRevealTotpAction({
           code: secretRevealTotpCode,
+          target,
         });
         if (!result.success) {
           const message = t(result.errorKey);
@@ -578,6 +579,7 @@ export function TestPageClient({
       try {
         const beginResult = await beginSecretRevealStepUpAction({
           method: "passkey",
+          target,
         });
         if (!beginResult.success) {
           const message = t(beginResult.errorKey);
@@ -592,7 +594,9 @@ export function TestPageClient({
           setTargetRevealError(target, message);
           return;
         }
-        const completeResult = await completeSecretRevealStepUpAction();
+        const completeResult = await completeSecretRevealStepUpAction({
+          target,
+        });
         if (!completeResult.success) {
           const message = t(completeResult.errorKey);
           setSecretRevealStepUpError(message);
@@ -628,6 +632,7 @@ export function TestPageClient({
         const beginResult = await beginSecretRevealStepUpAction({
           method: "social",
           provider,
+          target,
         });
         if (!beginResult.success) {
           const message = t(beginResult.errorKey);
@@ -741,7 +746,9 @@ export function TestPageClient({
     startTransition(async () => {
       setSecretRevealPendingMethod("social");
       try {
-        const completeResult = await completeSecretRevealStepUpAction();
+        const completeResult = await completeSecretRevealStepUpAction({
+          target,
+        });
         if (!completeResult.success) {
           const message = t(completeResult.errorKey);
           setSecretRevealStepUpError(message);
