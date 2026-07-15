@@ -18,7 +18,7 @@ test("import confirmation dialog closes via ESC and does not import", async ({
   await login(page);
   await page.goto("/en");
 
-  const fileInput = page.locator('input[type="file"][accept=".json"]');
+  const fileInput = page.locator('input[type="file"][accept*=".json"]');
   const jsonPath = path.resolve(__dirname, "fixtures", "repos.json");
   await fileInput.setInputFiles(jsonPath);
 

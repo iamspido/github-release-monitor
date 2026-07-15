@@ -20,7 +20,7 @@ test("export then import shows 0 new and updates existing without duplicates", a
   expect(fs.existsSync(path)).toBeTruthy();
 
   // Import the exported file
-  const fileInput = page.locator('input[type="file"][accept=".json"]');
+  const fileInput = page.locator('input[type="file"][accept*=".json"]');
   await fileInput.setInputFiles(path);
 
   const dialog = page.getByRole("alertdialog");

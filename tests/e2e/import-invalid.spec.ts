@@ -15,7 +15,7 @@ async function login(page) {
 test("import invalid-format JSON shows error toast", async ({ page }) => {
   await login(page);
   await page.goto("/en");
-  const fileInput = page.locator('input[type="file"][accept=".json"]');
+  const fileInput = page.locator('input[type="file"][accept*=".json"]');
   const invalidPath = path.resolve(
     __dirname,
     "fixtures",

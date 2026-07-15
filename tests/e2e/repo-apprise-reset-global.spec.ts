@@ -9,7 +9,7 @@ test("repo apprise format/tags reset-to-global buttons restore global hints", as
   await ensureTestRepo(page);
   await page.goto("/en");
 
-  const fileInput = page.locator('input[type="file"][accept=".json"]');
+  const fileInput = page.locator('input[type="file"][accept*=".json"]');
   await fileInput.setInputFiles({
     name: "repo-apprise-settings.json",
     mimeType: "application/json",
