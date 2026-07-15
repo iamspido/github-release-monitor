@@ -134,7 +134,7 @@ export function RepositoryForm({
   );
   const [importStats, setImportStats] =
     React.useState<RepositoryImportStats | null>(null);
-  const [fileInputKey, setFileInputKey] = React.useState(Date.now());
+  const [fileInputKey, setFileInputKey] = React.useState(0);
   const currentRepositoryIds = React.useMemo(
     () => new Set(currentRepositories.map((repo) => repo.id)),
     [currentRepositories],
@@ -421,7 +421,7 @@ export function RepositoryForm({
         variant: "destructive",
       });
     } finally {
-      setFileInputKey(Date.now());
+      setFileInputKey((currentKey) => currentKey + 1);
     }
   };
 
@@ -477,13 +477,6 @@ export function RepositoryForm({
                 ref={fileInputRef}
                 onChange={handleFileChange}
                 accept=".json,.yml,.yaml"
-                className="hidden"
-              />
-              <input
-                key={`json-${fileInputKey}`}
-                type="file"
-                onChange={handleFileChange}
-                accept=".json"
                 className="hidden"
               />
               {!isExpanded && (

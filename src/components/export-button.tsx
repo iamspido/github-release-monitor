@@ -21,6 +21,8 @@ export function ExportButton() {
         const result = await getRepositoriesForExport();
 
         if (result.success && result.data) {
+          let url: string | null = null;
+          let anchor: HTMLAnchorElement | null = null;
           try {
             // Create a blob from the JSON data
             const blob = new Blob([JSON.stringify(result.data, null, 2)], {
@@ -28,18 +30,14 @@ export function ExportButton() {
             });
 
             // Create a temporary URL for the blob
-            const url = window.URL.createObjectURL(blob);
+            url = window.URL.createObjectURL(blob);
 
             // Create a temporary anchor element and trigger the download
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "repositories.json";
-            document.body.appendChild(a);
-            a.click();
-
-            // Clean up the temporary elements
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
+            anchor = document.createElement("a");
+            anchor.href = url;
+            anchor.download = "repositories.json";
+            document.body.appendChild(anchor);
+            anchor.click();
 
             toast({
               title: t("toast_export_success_title"),
@@ -49,9 +47,12 @@ export function ExportButton() {
             console.error("Client-side export failed:", error);
             toast({
               title: t("toast_export_error_title"),
-              description: String(error) || t("toast_export_error_description"),
+              description: t("toast_export_error_description"),
               variant: "destructive",
             });
+          } finally {
+            anchor?.remove();
+            if (url) window.URL.revokeObjectURL(url);
           }
         } else {
           toast({

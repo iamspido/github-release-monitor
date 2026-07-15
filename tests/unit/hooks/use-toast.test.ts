@@ -129,7 +129,7 @@ describe("toast reducer", () => {
     ).not.toThrow();
     expect(() => instance.dismiss()).not.toThrow();
     expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
-    expect(setTimeoutSpy.mock.calls[0][1]).toBe(1_000_000);
+    expect(setTimeoutSpy.mock.calls[0][1]).toBe(5_000);
     setTimeoutSpy.mockRestore();
   });
 });
