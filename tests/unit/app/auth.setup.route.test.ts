@@ -251,6 +251,27 @@ describe("auth setup route", () => {
     expect(signUpEmailMock).not.toHaveBeenCalled();
   });
 
+  it.each([
+    " SuperSecurePass123 ",
+    "Super SecurePass123",
+  ])("POST: rejects password whitespace without normalizing it: %j", async (password) => {
+    const { POST } = await import("@/app/api/auth/setup/route");
+    const response = await POST(
+      setupRequest({
+        token: process.env.AUTH_SETUP_TOKEN,
+        email: "admin@example.com",
+        password,
+        username: "admin",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "invalid_password_policy",
+    });
+    expect(signUpEmailMock).not.toHaveBeenCalled();
+  });
+
   it("POST: maps Better Auth duplicate email errors to email_already_exists", async () => {
     signUpEmailMock.mockResolvedValue(
       new Response(

@@ -203,8 +203,6 @@ export async function updateAccountPasswordAction(
   await ensureAuthDatabaseReady();
   const headerStore = await headers();
   const clientIp = getClientIpFromHeaders(headerStore);
-  // Passwords are opaque credentials. Do not silently rewrite meaningful
-  // leading or trailing whitespace before validating or storing them.
   const newPassword = input.newPassword;
   const currentPassword =
     typeof input.currentPassword === "string" ? input.currentPassword : "";

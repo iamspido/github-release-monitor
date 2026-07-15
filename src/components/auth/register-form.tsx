@@ -33,6 +33,7 @@ import {
 } from "@/lib/auth/client-flow-utils";
 import {
   isPasswordPolicyValid,
+  keepPasswordInputWhitespaceFree,
   PASSWORD_MIN_LENGTH,
 } from "@/lib/password-policy";
 
@@ -244,7 +245,14 @@ export function RegisterForm({
                 name="password"
                 type={showPassword ? "text" : "password"}
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) =>
+                  setPassword((currentValue) =>
+                    keepPasswordInputWhitespaceFree(
+                      currentValue,
+                      event.target.value,
+                    ),
+                  )
+                }
                 placeholder={t("password_placeholder")}
                 autoComplete="new-password"
                 minLength={PASSWORD_MIN_LENGTH}

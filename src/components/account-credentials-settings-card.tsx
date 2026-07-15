@@ -31,6 +31,7 @@ import { authClient } from "@/lib/auth/client";
 import { hasCredentialProvider } from "@/lib/auth/client-accounts";
 import {
   isPasswordPolicyValid,
+  keepPasswordInputWhitespaceFree,
   PASSWORD_MIN_LENGTH,
 } from "@/lib/password-policy";
 
@@ -373,7 +374,14 @@ export function AccountCredentialsSettingsCard() {
                 id={newPasswordId}
                 type={passwordInputType}
                 value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
+                onChange={(event) =>
+                  setNewPassword((currentValue) =>
+                    keepPasswordInputWhitespaceFree(
+                      currentValue,
+                      event.target.value,
+                    ),
+                  )
+                }
                 placeholder={t("account_password_new_placeholder")}
                 autoComplete="new-password"
                 minLength={PASSWORD_MIN_LENGTH}
@@ -408,7 +416,14 @@ export function AccountCredentialsSettingsCard() {
                 id={confirmPasswordId}
                 type={passwordInputType}
                 value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
+                onChange={(event) =>
+                  setConfirmPassword((currentValue) =>
+                    keepPasswordInputWhitespaceFree(
+                      currentValue,
+                      event.target.value,
+                    ),
+                  )
+                }
                 placeholder={t("account_password_confirm_placeholder")}
                 autoComplete="new-password"
                 minLength={PASSWORD_MIN_LENGTH}

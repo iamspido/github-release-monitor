@@ -256,7 +256,9 @@ export async function POST(request: Request) {
 
   const token = toSafeString(payload.token);
   const email = toSafeString(payload.email).toLowerCase();
-  const password = toSafeString(payload.password);
+  const rawPassword =
+    typeof payload.password === "string" ? payload.password : "";
+  const password = rawPassword.trim();
   const name = toSafeString(payload.name);
   const username = toSafeString(payload.username);
 
@@ -269,6 +271,7 @@ export async function POST(request: Request) {
 
   if (
     !isLikelyEmail(email) ||
+    password !== rawPassword ||
     !isPasswordPolicyValid(password) ||
     !isValidUsername(username)
   ) {

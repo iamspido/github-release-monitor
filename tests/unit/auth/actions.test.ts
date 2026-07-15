@@ -345,6 +345,25 @@ describe("auth actions", () => {
     expect(signUpEmailMock).not.toHaveBeenCalled();
   });
 
+  it.each([
+    " VeryStrongPass123 ",
+    "Very StrongPass123",
+  ])("register: rejects password whitespace without normalizing it: %j", async (password) => {
+    process.env.AUTH_ENABLE_SIGNUP = "true";
+    const { register } = await import("@/app/auth/actions");
+    const fd = new FormData();
+    fd.set("username", "admin");
+    fd.set("email", "admin@example.com");
+    fd.set("password", password);
+
+    const res = await register(undefined, fd);
+
+    expect(res).toEqual({
+      errorKey: "error_setup_invalid_password_policy",
+    });
+    expect(signUpEmailMock).not.toHaveBeenCalled();
+  });
+
   it("register: blocks duplicate email before signup API call", async () => {
     process.env.AUTH_ENABLE_SIGNUP = "true";
     findRegistrationConflictMock.mockReturnValue("email_in_use");
