@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let networkState = { isOnline: true };
 const linkSocialMock = vi.fn();
-const unlinkAccountMock = vi.fn();
+const unlinkSocialAccountActionMock = vi.fn();
 const listAccountsMock = vi.fn();
 // Required for React act() in this test environment
 (
@@ -37,9 +37,13 @@ vi.mock("@/hooks/use-network", () => ({
 vi.mock("@/lib/auth/client", () => ({
   authClient: {
     linkSocial: (...args: unknown[]) => linkSocialMock(...args),
-    unlinkAccount: (...args: unknown[]) => unlinkAccountMock(...args),
     listAccounts: (...args: unknown[]) => listAccountsMock(...args),
   },
+}));
+
+vi.mock("@/app/auth/settings-actions", () => ({
+  unlinkSocialAccountAction: (...args: unknown[]) =>
+    unlinkSocialAccountActionMock(...args),
 }));
 
 describe("SocialAccountsSettingsCard", () => {
@@ -52,10 +56,10 @@ describe("SocialAccountsSettingsCard", () => {
     root = ReactDOM.createRoot(container);
     networkState = { isOnline: true };
     linkSocialMock.mockReset();
-    unlinkAccountMock.mockReset();
+    unlinkSocialAccountActionMock.mockReset();
     listAccountsMock.mockReset();
     linkSocialMock.mockResolvedValue({});
-    unlinkAccountMock.mockResolvedValue({});
+    unlinkSocialAccountActionMock.mockResolvedValue({ ok: true });
     listAccountsMock.mockResolvedValue({ data: [] });
     window.history.pushState({}, "", "/de/settings");
   });
@@ -159,16 +163,17 @@ describe("SocialAccountsSettingsCard", () => {
       await Promise.resolve();
     });
 
-    expect(unlinkAccountMock).toHaveBeenCalledWith({
-      providerId: "github",
-    });
+    expect(unlinkSocialAccountActionMock).toHaveBeenCalledWith("github");
   });
 
   it("shows error message when unlinkAccount returns error", async () => {
     listAccountsMock.mockResolvedValueOnce({
       data: [{ providerId: "google" }],
     });
-    unlinkAccountMock.mockResolvedValueOnce({ error: { code: "bad" } });
+    unlinkSocialAccountActionMock.mockResolvedValueOnce({
+      ok: false,
+      errorKey: "social_accounts_unlink_error",
+    });
     await renderCard(["google"]);
     const button = Array.from(container.querySelectorAll("button")).find((el) =>
       el.textContent?.includes("Unlink account"),

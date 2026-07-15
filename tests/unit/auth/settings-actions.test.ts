@@ -1,6 +1,8 @@
 const revalidatePathMock = vi.fn();
 const ensureAuthDatabaseReadyMock = vi.fn(async () => undefined);
 const hasCredentialPasswordAccountMock = vi.fn(() => false);
+const getLinkedSocialProvidersForUserMock = vi.fn(() => ["github"]);
+const hasPasskeyForUserMock = vi.fn(() => false);
 const isAuthEmailVerificationEnabledMock = vi.fn(() => false);
 type AuthSession = {
   user: { id: string; email: string | null };
@@ -13,6 +15,7 @@ const getSessionMock = vi.fn<() => Promise<AuthSession>>(async () => ({
 const setPasswordMock = vi.fn(async () => ({ ok: true, status: 200 }));
 const changePasswordMock = vi.fn(async () => ({ ok: true, status: 200 }));
 const changeEmailMock = vi.fn(async () => ({ ok: true, status: 200 }));
+const unlinkAccountMock = vi.fn(async () => ({ ok: true, status: 200 }));
 
 vi.mock("next/cache", () => ({
   revalidatePath: (...args: unknown[]) => revalidatePathMock(...args),
@@ -24,7 +27,9 @@ vi.mock("next/headers", () => ({
 
 vi.mock("@/lib/auth", () => ({
   ensureAuthDatabaseReady: ensureAuthDatabaseReadyMock,
+  getLinkedSocialProvidersForUser: getLinkedSocialProvidersForUserMock,
   hasCredentialPasswordAccount: hasCredentialPasswordAccountMock,
+  hasPasskeyForUser: hasPasskeyForUserMock,
   isAuthEmailVerificationEnabled: isAuthEmailVerificationEnabledMock,
   auth: {
     api: {
@@ -32,6 +37,7 @@ vi.mock("@/lib/auth", () => ({
       setPassword: setPasswordMock,
       changePassword: changePasswordMock,
       changeEmail: changeEmailMock,
+      unlinkAccount: unlinkAccountMock,
     },
   },
 }));
@@ -54,6 +60,8 @@ describe("auth settings actions", () => {
     vi.clearAllMocks();
     ensureAuthDatabaseReadyMock.mockResolvedValue(undefined);
     hasCredentialPasswordAccountMock.mockReturnValue(false);
+    getLinkedSocialProvidersForUserMock.mockReturnValue(["github"]);
+    hasPasskeyForUserMock.mockReturnValue(false);
     isAuthEmailVerificationEnabledMock.mockReturnValue(false);
     getSessionMock.mockResolvedValue({
       user: { id: "user-1", email: null },
@@ -62,6 +70,7 @@ describe("auth settings actions", () => {
     setPasswordMock.mockResolvedValue({ ok: true, status: 200 });
     changePasswordMock.mockResolvedValue({ ok: true, status: 200 });
     changeEmailMock.mockResolvedValue({ ok: true, status: 200 });
+    unlinkAccountMock.mockResolvedValue({ ok: true, status: 200 });
   });
 
   it("sets password when no credential password account exists", async () => {
@@ -117,6 +126,25 @@ describe("auth settings actions", () => {
     });
     expect(setPasswordMock).not.toHaveBeenCalled();
     expect(changePasswordMock).not.toHaveBeenCalled();
+  });
+
+  it("preserves meaningful password whitespace", async () => {
+    const { updateAccountPasswordAction } = await import(
+      "@/app/auth/settings-actions"
+    );
+
+    const result = await updateAccountPasswordAction({
+      newPassword: " VerySecurePass123 ",
+    });
+
+    expect(result).toEqual({ ok: true, mode: "set" });
+    expect(setPasswordMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          newPassword: " VerySecurePass123 ",
+        }),
+      }),
+    );
   });
 
   it("changes password when current password is provided", async () => {
@@ -281,5 +309,36 @@ describe("auth settings actions", () => {
       ok: false,
       errorKey: "account_email_update_failed",
     });
+  });
+
+  it("refuses to unlink the last available login method", async () => {
+    const { unlinkSocialAccountAction } = await import(
+      "@/app/auth/settings-actions"
+    );
+
+    const result = await unlinkSocialAccountAction("github");
+
+    expect(result).toEqual({
+      ok: false,
+      errorKey: "social_accounts_unlink_error",
+    });
+    expect(unlinkAccountMock).not.toHaveBeenCalled();
+  });
+
+  it("unlinks a social account when another login method remains", async () => {
+    hasCredentialPasswordAccountMock.mockReturnValue(true);
+    const { unlinkSocialAccountAction } = await import(
+      "@/app/auth/settings-actions"
+    );
+
+    const result = await unlinkSocialAccountAction("github");
+
+    expect(result).toEqual({ ok: true });
+    expect(unlinkAccountMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: { providerId: "github" },
+        asResponse: true,
+      }),
+    );
   });
 });

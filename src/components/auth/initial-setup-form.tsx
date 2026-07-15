@@ -64,9 +64,8 @@ export function InitialSetupForm({
     React.useState<AuthSocialProvider | null>(null);
   const [showPassword, setShowPassword] = React.useState(false);
 
-  const trimmedPassword = password.trim();
-  const passwordTouched = trimmedPassword.length > 0;
-  const passwordPolicyMet = isPasswordPolicyValid(trimmedPassword);
+  const passwordTouched = password.length > 0;
+  const passwordPolicyMet = isPasswordPolicyValid(password);
   const passwordInputClass = [
     "pr-10",
     passwordTouched

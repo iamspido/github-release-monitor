@@ -3,6 +3,7 @@
 import { CheckCircle2, Loader2, Unlink2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
+import { unlinkSocialAccountAction } from "@/app/auth/settings-actions";
 import { GoogleBrandIcon } from "@/components/google-brand-icon";
 import { GithubBrandIcon } from "@/components/icons/simple-brand-icon";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -98,10 +99,8 @@ export function SocialAccountsSettingsCard({
     setPendingProvider(provider);
 
     try {
-      const result = await authClient.unlinkAccount({
-        providerId: provider,
-      });
-      if (result?.error) {
+      const result = await unlinkSocialAccountAction(provider);
+      if (!result.ok) {
         setErrorKey("social_accounts_unlink_error");
         return;
       }

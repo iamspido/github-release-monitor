@@ -88,14 +88,11 @@ export function AccountCredentialsSettingsCard() {
     : t("show_password");
   const currentEmail = (emailOverride ?? currentEmailFromSession ?? "").trim();
   const trimmedCurrentPassword = currentPassword.trim();
-  const trimmedNewPassword = newPassword.trim();
-  const trimmedConfirmPassword = confirmPassword.trim();
-  const newPasswordTouched = trimmedNewPassword.length > 0;
-  const confirmPasswordTouched = trimmedConfirmPassword.length > 0;
-  const newPasswordPolicyMet = isPasswordPolicyValid(trimmedNewPassword);
+  const newPasswordTouched = newPassword.length > 0;
+  const confirmPasswordTouched = confirmPassword.length > 0;
+  const newPasswordPolicyMet = isPasswordPolicyValid(newPassword);
   const passwordsMatch =
-    trimmedNewPassword.length > 0 &&
-    trimmedNewPassword === trimmedConfirmPassword;
+    newPassword.length > 0 && newPassword === confirmPassword;
   const currentPasswordRequirementMet =
     !hasPassword || trimmedCurrentPassword.length > 0;
   const currentPasswordMissingForChange =
@@ -216,7 +213,7 @@ export function AccountCredentialsSettingsCard() {
     setPasswordErrorKey(null);
     setPasswordSuccessKey(null);
 
-    if (newPassword.trim() !== confirmPassword.trim()) {
+    if (newPassword !== confirmPassword) {
       setPasswordPending(false);
       setPasswordErrorKey("account_password_confirm_mismatch");
       return;

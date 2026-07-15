@@ -5,7 +5,9 @@ import { headers } from "next/headers";
 import {
   auth,
   ensureAuthDatabaseReady,
+  getLinkedSocialProvidersForUser,
   hasCredentialPasswordAccount,
+  hasPasskeyForUser,
   isAuthEmailVerificationEnabled,
 } from "@/lib/auth";
 import { normalizeSafeRelativePath } from "@/lib/auth/client-flow-utils";
@@ -13,6 +15,7 @@ import {
   getClientIpFromHeaders,
   isLikelyEmail,
 } from "@/lib/auth/request-context";
+import type { SocialLoginProvider } from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
 import { isPasswordPolicyValid } from "@/lib/password-policy";
 
@@ -36,6 +39,11 @@ export type UpdateAccountPasswordResult = {
   ok: boolean;
   mode?: "set" | "changed";
   errorKey?: string;
+};
+
+export type UnlinkSocialAccountResult = {
+  ok: boolean;
+  errorKey?: "social_accounts_unlink_error";
 };
 
 async function getAuthenticatedUserId(headerStore: Headers) {
@@ -195,7 +203,9 @@ export async function updateAccountPasswordAction(
   await ensureAuthDatabaseReady();
   const headerStore = await headers();
   const clientIp = getClientIpFromHeaders(headerStore);
-  const newPassword = input.newPassword.trim();
+  // Passwords are opaque credentials. Do not silently rewrite meaningful
+  // leading or trailing whitespace before validating or storing them.
+  const newPassword = input.newPassword;
   const currentPassword =
     typeof input.currentPassword === "string" ? input.currentPassword : "";
 
@@ -265,4 +275,50 @@ export async function updateAccountPasswordAction(
     );
   revalidatePath("/", "layout");
   return { ok: true, mode: hasCredentialAccount ? "changed" : "set" };
+}
+
+export async function unlinkSocialAccountAction(
+  provider: SocialLoginProvider,
+): Promise<UnlinkSocialAccountResult> {
+  await ensureAuthDatabaseReady();
+  const headerStore = await headers();
+  const userId = await getAuthenticatedUserId(headerStore);
+  if (!userId || (provider !== "github" && provider !== "google")) {
+    return { ok: false, errorKey: "social_accounts_unlink_error" };
+  }
+
+  const linkedSocialProviders = getLinkedSocialProvidersForUser(userId);
+  const remainingSocialProviders = linkedSocialProviders.filter(
+    (candidate) => candidate !== provider,
+  );
+  const hasAlternativeLoginMethod =
+    hasCredentialPasswordAccount(userId) ||
+    hasPasskeyForUser(userId) ||
+    remainingSocialProviders.length > 0;
+
+  if (!linkedSocialProviders.includes(provider) || !hasAlternativeLoginMethod) {
+    logger
+      .withScope("Auth")
+      .warn(
+        `Rejected social account unlink for user='${userId}' because it would remove the last login method or the provider is not linked.`,
+      );
+    return { ok: false, errorKey: "social_accounts_unlink_error" };
+  }
+
+  try {
+    const response = await auth.api.unlinkAccount({
+      headers: headerStore,
+      body: { providerId: provider },
+      asResponse: true,
+    });
+    if (!response.ok) {
+      return { ok: false, errorKey: "social_accounts_unlink_error" };
+    }
+    return { ok: true };
+  } catch (error) {
+    logger
+      .withScope("Auth")
+      .error(`Failed to unlink social account for user='${userId}'.`, error);
+    return { ok: false, errorKey: "social_accounts_unlink_error" };
+  }
 }

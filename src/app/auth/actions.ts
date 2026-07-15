@@ -148,7 +148,7 @@ export async function register(
   if (!isLikelyEmail(email)) {
     return { errorKey: "error_setup_invalid_email" };
   }
-  if (!isPasswordPolicyValid(password.trim())) {
+  if (!isPasswordPolicyValid(password)) {
     return { errorKey: "error_setup_invalid_password_policy" };
   }
 
