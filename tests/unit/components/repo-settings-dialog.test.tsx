@@ -399,6 +399,48 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     });
   });
 
+  it("reconciles a save from an earlier dialog session after reopening", async () => {
+    let resolveSave: ((value: { success: true }) => void) | undefined;
+    updateSettingsMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+
+    renderDialog();
+    const input = await getIncludeInput();
+    await act(async () => {
+      setInputValue(input, "discarded-filter");
+    });
+    await flushEffects();
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+      await Promise.resolve();
+    });
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+
+    renderDialog({ isOpen: false });
+    await flushEffects();
+    renderDialog();
+    await flushEffects();
+
+    await act(async () => {
+      resolveSave?.({ success: true });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await advanceAutosaveDelay();
+
+    await expectEventually(() => {
+      expect(updateSettingsMock).toHaveBeenCalledTimes(2);
+    });
+    expect(updateSettingsMock).toHaveBeenNthCalledWith(
+      2,
+      "owner/repo",
+      expect.objectContaining({ includeRegex: undefined }),
+    );
+  });
+
   it("shows success and commits settings when autosave succeeds", async () => {
     updateSettingsMock.mockResolvedValueOnce({ success: true });
 

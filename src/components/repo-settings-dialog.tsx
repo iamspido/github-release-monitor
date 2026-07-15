@@ -290,6 +290,9 @@ export function RepoSettingsDialog({
 
   const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
   const saveRevisionRef = React.useRef(0);
+  const dialogSessionRef = React.useRef(0);
+  const reconciliationRevisionRef = React.useRef(0);
+  const [reconciliationRevision, setReconciliationRevision] = React.useState(0);
   const { isOnline } = useNetworkStatus();
 
   const savedThisSessionRef = React.useRef(false);
@@ -328,8 +331,14 @@ export function RepoSettingsDialog({
   React.useEffect(() => {
     const wasOpen = prevIsOpenRef.current;
 
+    if (wasOpen && !isOpen) {
+      saveRevisionRef.current += 1;
+    }
+
     // transition: closed -> open
     if (!wasOpen && isOpen) {
+      saveRevisionRef.current += 1;
+      dialogSessionRef.current += 1;
       const initialSettings = {
         releaseChannels: currentRepoSettings?.releaseChannels ?? [],
         preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels,
@@ -578,6 +587,7 @@ export function RepoSettingsDialog({
     }
 
     const saveRevision = ++saveRevisionRef.current;
+    const saveDialogSession = dialogSessionRef.current;
 
     if (
       releasesPerPageError ||
@@ -594,6 +604,7 @@ export function RepoSettingsDialog({
     setSaveStatus("waiting");
 
     const handler = setTimeout(async () => {
+      if (reconciliationRevision !== reconciliationRevisionRef.current) return;
       if (saveRevision !== saveRevisionRef.current) return;
       if (mountedRef.current) setSaveStatus("saving");
 
@@ -608,17 +619,30 @@ export function RepoSettingsDialog({
           // The UI state has moved on, but the serialized server action still
           // persisted this snapshot. If the dialog closed meanwhile, perform
           // the same cache refresh the successful save would normally trigger.
-          if (
-            result.success &&
-            !isOpenRef.current &&
-            hasRefreshSensitiveRepoSettingChanges(
-              prevSettingsRef.current,
-              newSettings,
-            )
-          ) {
-            refreshSingleRepositoryAction(repoId).catch((error: unknown) => {
-              reloadIfServerActionStale(error);
-            });
+          if (result.success) {
+            if (
+              isOpenRef.current &&
+              saveDialogSession !== dialogSessionRef.current
+            ) {
+              // This save belongs to an earlier dialog session. Record the
+              // snapshot that reached the server and trigger a compensating
+              // save for the settings visible in the reopened dialog.
+              prevSettingsRef.current = newSettings;
+              if (mountedRef.current) {
+                reconciliationRevisionRef.current += 1;
+                setReconciliationRevision(reconciliationRevisionRef.current);
+              }
+            } else if (
+              !isOpenRef.current &&
+              hasRefreshSensitiveRepoSettingChanges(
+                prevSettingsRef.current,
+                newSettings,
+              )
+            ) {
+              refreshSingleRepositoryAction(repoId).catch((error: unknown) => {
+                reloadIfServerActionStale(error);
+              });
+            }
           }
           return;
         }
@@ -683,6 +707,7 @@ export function RepoSettingsDialog({
     toast,
     t,
     isOnline,
+    reconciliationRevision,
     refreshAfterClosedSave,
   ]);
 
