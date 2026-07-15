@@ -21,7 +21,14 @@ const getSessionMock = vi.fn<() => Promise<AuthSession>>(async () => ({
 }));
 const setPasswordMock = vi.fn(async () => ({ ok: true, status: 200 }));
 const changePasswordMock = vi.fn(async () => ({ ok: true, status: 200 }));
-const changeEmailMock = vi.fn(async () => ({ ok: true, status: 200 }));
+type ChangeEmailInput = {
+  headers: Headers;
+  body: { newEmail: string; callbackURL: string };
+  asResponse: true;
+};
+const changeEmailMock = vi.fn<
+  (input: ChangeEmailInput) => Promise<{ ok: boolean; status: number }>
+>(async () => ({ ok: true, status: 200 }));
 type UnlinkAccountInput = { body: { providerId: string } };
 const unlinkAccountMock = vi.fn<
   (input: UnlinkAccountInput) => Promise<{ ok: boolean; status: number }>
