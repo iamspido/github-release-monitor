@@ -36,13 +36,15 @@ export default async function HomePage({
     Exclude<FetchError["type"], "not_modified">,
     number
   > | null = null;
-  const updateNotice = await getUpdateNotificationStateOrFallback();
-  const authAccess = await getCurrentAuthAccess();
+  const updateNoticePromise = getUpdateNotificationStateOrFallback();
+  const authAccessPromise = getCurrentAuthAccess();
   const { isAppriseConfigured } = getNotificationRuntimeConfig();
 
   try {
-    settings = await getSettings();
-    repositories = await getRepositories();
+    [settings, repositories] = await Promise.all([
+      getSettings(),
+      getRepositories(),
+    ]);
     if (repositories.length > 0) {
       releases = repositories.map((repo) => {
         return {
@@ -75,6 +77,11 @@ export default async function HomePage({
     settings = createDefaultSettings();
     resolvedError = t("load_error");
   }
+
+  const [updateNotice, authAccess] = await Promise.all([
+    updateNoticePromise,
+    authAccessPromise,
+  ]);
 
   return (
     <div className="min-h-screen w-full">

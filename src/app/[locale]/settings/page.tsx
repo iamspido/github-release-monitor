@@ -26,13 +26,19 @@ export default async function SettingsPage({
     locale: locale,
     namespace: "SettingsPage",
   });
-  const currentSettings: AppSettings = await getSettings();
   const { isAppriseConfigured } = getNotificationRuntimeConfig();
   const isGithubTokenSet = !!process.env.GITHUB_ACCESS_TOKEN?.trim();
   const { passkeyEnabled: isPasskeyEnabled, enabledSocialProviders } =
     getAuthFeatureConfig();
-  const updateNotice = await getUpdateNotificationStateOrFallback();
-  const authAccess = await getCurrentAuthAccess();
+  const [currentSettings, updateNotice, authAccess]: [
+    AppSettings,
+    Awaited<ReturnType<typeof getUpdateNotificationStateOrFallback>>,
+    Awaited<ReturnType<typeof getCurrentAuthAccess>>,
+  ] = await Promise.all([
+    getSettings(),
+    getUpdateNotificationStateOrFallback(),
+    getCurrentAuthAccess(),
+  ]);
   const showInternalAuthSettings =
     authAccess.authenticationMethod !== "External";
 

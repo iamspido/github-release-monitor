@@ -24,29 +24,40 @@ export default async function TestPage({
 }) {
   const { locale } = await params;
   const t = await getTranslations({ locale: locale, namespace: "TestPage" });
-  const rateLimitResult: RateLimitResult = await getGitHubRateLimit();
   const githubTokenSet = !!process.env.GITHUB_ACCESS_TOKEN;
-  const gitlabTokenCheck = await getGitlabTokenCheck();
-  const codebergTokenCheck = await getCodebergTokenCheck();
   const notificationConfig = buildNotificationConfig();
-  const updateNotice: UpdateNotificationState =
-    await getUpdateNotificationStateOrFallback();
-  const authAccess = await getCurrentAuthAccess();
-
-  let appriseStatus: AppriseStatus;
-  try {
-    // This action is now robust and will not throw on network errors.
-    appriseStatus = await checkAppriseStatusAction();
-  } catch (error) {
-    // This is a fallback safety net. The action itself should handle errors.
-    logger
-      .withScope("WebServer")
-      .error("Critical error calling checkAppriseStatusAction:", error);
-    appriseStatus = {
-      status: "error",
-      error: t("apprise_connection_error_fetch"),
-    };
-  }
+  const appriseStatusPromise: Promise<AppriseStatus> =
+    checkAppriseStatusAction().catch((error) => {
+      logger
+        .withScope("WebServer")
+        .error("Critical error calling checkAppriseStatusAction:", error);
+      return {
+        status: "error",
+        error: t("apprise_connection_error_fetch"),
+      };
+    });
+  const [
+    rateLimitResult,
+    gitlabTokenCheck,
+    codebergTokenCheck,
+    updateNotice,
+    authAccess,
+    appriseStatus,
+  ]: [
+    RateLimitResult,
+    Awaited<ReturnType<typeof getGitlabTokenCheck>>,
+    Awaited<ReturnType<typeof getCodebergTokenCheck>>,
+    UpdateNotificationState,
+    Awaited<ReturnType<typeof getCurrentAuthAccess>>,
+    AppriseStatus,
+  ] = await Promise.all([
+    getGitHubRateLimit(),
+    getGitlabTokenCheck(),
+    getCodebergTokenCheck(),
+    getUpdateNotificationStateOrFallback(),
+    getCurrentAuthAccess(),
+    appriseStatusPromise,
+  ]);
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
