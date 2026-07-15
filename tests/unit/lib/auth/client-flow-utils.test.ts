@@ -42,6 +42,12 @@ describe("auth/client-flow-utils", () => {
     expect(normalizeSafeRelativePath("https://evil.example")).toBe("/");
     expect(normalizeSafeRelativePath("//evil.example")).toBe("/");
     expect(normalizeSafeRelativePath("/../settings")).toBe("/");
+    expect(normalizeSafeRelativePath("/\\\\evil.example")).toBe("/");
+    expect(normalizeSafeRelativePath("/%2e%2e/settings")).toBe("/");
+    expect(normalizeSafeRelativePath("/%2f%2fevil.example")).toBe("/");
+    expect(normalizeSafeRelativePath("/settings?q=1#section")).toBe(
+      "/settings?q=1#section",
+    );
     expect(normalizeOptionalSafeRelativePath("/settings")).toBe("/settings");
     expect(normalizeOptionalSafeRelativePath("https://evil.example")).toBe(
       undefined,
