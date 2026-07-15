@@ -219,4 +219,53 @@ describe("runtime/update-check", () => {
       expect.any(Error),
     );
   });
+
+  it("serializes complete update checks", async () => {
+    let resolveFirstResponse: ((response: Response) => void) | undefined;
+    const firstResponse = new Promise<Response>((resolve) => {
+      resolveFirstResponse = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(firstResponse)
+      .mockResolvedValueOnce(new Response(null, { status: 304 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getSystemStatus, updateSystemStatus } = await import(
+      "@/lib/storage/system-status"
+    );
+    const getSystemStatusMock = vi.mocked(getSystemStatus);
+    const updateSystemStatusMock = vi.mocked(updateSystemStatus);
+
+    const previousStatus = {
+      latestKnownVersion: "v1.0.0",
+      lastCheckedAt: "before",
+      latestEtag: '"etag-old"',
+      dismissedVersion: null,
+      lastCheckError: null,
+    };
+    getSystemStatusMock.mockResolvedValue(previousStatus);
+    updateSystemStatusMock.mockImplementation(async (updater) =>
+      updater(previousStatus),
+    );
+
+    const { runApplicationUpdateCheck } = await import(
+      "@/lib/runtime/update-check"
+    );
+    const firstCheck = runApplicationUpdateCheck("1.0.0");
+    const secondCheck = runApplicationUpdateCheck("1.0.0");
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(getSystemStatusMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledOnce();
+
+    resolveFirstResponse?.(new Response(null, { status: 304 }));
+    await Promise.all([firstCheck, secondCheck]);
+
+    expect(getSystemStatusMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(updateSystemStatusMock).toHaveBeenCalledTimes(2);
+  });
 });

@@ -19,7 +19,24 @@ type GithubLatestReleaseResponse = {
   name?: string | null;
 };
 
-export async function runApplicationUpdateCheck(
+let applicationUpdateCheckQueue: Promise<void> = Promise.resolve();
+
+export function runApplicationUpdateCheck(
+  currentVersion: string,
+): Promise<SystemStatus> {
+  const result = applicationUpdateCheckQueue.then(() =>
+    executeApplicationUpdateCheck(currentVersion),
+  );
+
+  applicationUpdateCheckQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+
+  return result;
+}
+
+async function executeApplicationUpdateCheck(
   currentVersion: string,
 ): Promise<SystemStatus> {
   const previousStatus = await getSystemStatus();
