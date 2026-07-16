@@ -11,13 +11,19 @@ vi.mock("next-intl/server", () => ({
   getLocale: async () => "en",
 }));
 
+import {
+  fetchCallHeaders,
+  headerRecord,
+  installFetchMock,
+  mockFetchResponse,
+} from "../helpers/fetch";
+
 describe("resolveRepoProvidersAction", () => {
   const fetchBackup = global.fetch;
 
   beforeEach(() => {
     vi.resetModules();
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
   });
 
   afterEach(() => {
@@ -32,19 +38,20 @@ describe("resolveRepoProvidersAction", () => {
   it("returns only the provider that exists", async () => {
     const actions = await import("@/app/actions");
 
-    // @ts-expect-error
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: "Not Found",
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: "Not Found",
-      });
+      .mockResolvedValueOnce(mockFetchResponse({ status: 200 }))
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          status: 404,
+          statusText: "Not Found",
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          status: 404,
+          statusText: "Not Found",
+        }),
+      );
 
     const res = await actions.resolveRepoProvidersAction("owner/repo");
     expect(res.success).toBe(true);
@@ -60,11 +67,10 @@ describe("resolveRepoProvidersAction", () => {
   it("returns multiple candidates when they all exist", async () => {
     const actions = await import("@/app/actions");
 
-    // @ts-expect-error
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" })
-      .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" })
-      .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" });
+      .mockResolvedValueOnce(mockFetchResponse({ status: 200 }))
+      .mockResolvedValueOnce(mockFetchResponse({ status: 200 }))
+      .mockResolvedValueOnce(mockFetchResponse({ status: 200 }));
 
     const res = await actions.resolveRepoProvidersAction("owner/repo");
     expect(res.success).toBe(true);
@@ -75,26 +81,80 @@ describe("resolveRepoProvidersAction", () => {
     ]);
   });
 
+  it("resolves multiple shorthand inputs in one action call", async () => {
+    const actions = await import("@/app/actions");
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200 }),
+    );
+
+    const result = await actions.resolveRepoProvidersBatchAction([
+      "owner/one",
+      "owner/two",
+      "owner/one",
+    ]);
+
+    expect(result.success).toBe(true);
+    expect(result.resolutions.map((resolution) => resolution.input)).toEqual([
+      "owner/one",
+      "owner/two",
+    ]);
+    expect(
+      result.resolutions.every(
+        (resolution) => resolution.candidates.length === 3,
+      ),
+    ).toBe(true);
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(6);
+  });
+
+  it("rejects oversized provider resolution batches before any lookup", async () => {
+    const { MAX_PROVIDER_RESOLUTION_BATCH_SIZE } = await import(
+      "@/lib/repositories/provider-resolution"
+    );
+    const actions = await import("@/app/actions");
+    const inputs = Array.from(
+      { length: MAX_PROVIDER_RESOLUTION_BATCH_SIZE + 1 },
+      (_, index) => `owner/repo-${index}`,
+    );
+
+    await expect(
+      actions.resolveRepoProvidersBatchAction(inputs),
+    ).resolves.toEqual({ success: false, resolutions: [] });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed batch entries before any lookup", async () => {
+    const actions = await import("@/app/actions");
+
+    await expect(
+      actions.resolveRepoProvidersBatchAction([
+        "owner/repo",
+        123 as unknown as string,
+      ]),
+    ).resolves.toEqual({ success: false, resolutions: [] });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   it("returns candidates for multiple allowed GitLab hosts", async () => {
     process.env.GITLAB_ADDITIONAL_HOSTS = "gitlab.self.test";
     process.env.GITLAB_ACCESS_TOKENS =
       "gitlab.com=glpat-main,gitlab.self.test=glpat-self";
     const actions = await import("@/app/actions");
 
-    // @ts-expect-error
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: "Not Found",
-      }) // github
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: "Not Found",
-      }) // codeberg
-      .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" }) // gitlab.com
-      .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" }); // gitlab.self.test
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          status: 404,
+          statusText: "Not Found",
+        }),
+      ) // github
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          status: 404,
+          statusText: "Not Found",
+        }),
+      ) // codeberg
+      .mockResolvedValueOnce(mockFetchResponse({ status: 200 })) // gitlab.com
+      .mockResolvedValueOnce(mockFetchResponse({ status: 200 })); // gitlab.self.test
 
     const res = await actions.resolveRepoProvidersAction("owner/repo");
     expect(res.success).toBe(true);
@@ -120,38 +180,43 @@ describe("resolveRepoProvidersAction", () => {
       "gitlab.self.test=gitlab+deploy-token-1:gl-dpt-abc";
     const actions = await import("@/app/actions");
 
-    // @ts-expect-error
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: "Not Found",
-      }) // github
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: "Not Found",
-      }) // codeberg
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: "Not Found",
-      }) // gitlab.com
-      .mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK" }); // gitlab.self.test
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          status: 404,
+          statusText: "Not Found",
+        }),
+      ) // github
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          status: 404,
+          statusText: "Not Found",
+        }),
+      ) // codeberg
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          status: 404,
+          statusText: "Not Found",
+        }),
+      ) // gitlab.com
+      .mockResolvedValueOnce(mockFetchResponse({ status: 200 })); // gitlab.self.test
 
     const res = await actions.resolveRepoProvidersAction("owner/repo");
     expect(res.success).toBe(true);
 
-    // @ts-expect-error
     const gitlabSelfCall = vi
       .mocked(global.fetch)
       .mock.calls.find((call) =>
         String(call[0]).includes("https://gitlab.self.test/api/v4/projects/"),
       );
     expect(gitlabSelfCall).toBeTruthy();
-    expect(gitlabSelfCall[1].headers.Authorization.startsWith("Basic ")).toBe(
-      true,
-    );
+    if (!gitlabSelfCall) {
+      throw new Error("Expected self-hosted GitLab lookup call");
+    }
+    const authorization = headerRecord(
+      fetchCallHeaders(gitlabSelfCall),
+    ).Authorization;
+    expect(authorization.startsWith("Basic ")).toBe(true);
   });
 
   it("does nothing for non-shorthand inputs", async () => {

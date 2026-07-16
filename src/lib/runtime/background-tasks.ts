@@ -11,9 +11,10 @@ function getBackgroundTasks() {
 export function trackBackgroundTask<T>(task: Promise<T>) {
   const backgroundTasks = getBackgroundTasks();
   backgroundTasks.add(task);
-  void task.finally(() => {
+  const removeTask = () => {
     backgroundTasks.delete(task);
-  });
+  };
+  void task.then(removeTask, removeTask);
   return task;
 }
 

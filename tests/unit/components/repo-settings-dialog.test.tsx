@@ -108,8 +108,6 @@ vi.mock("@/hooks/use-toast", () => ({
   toast: vi.fn(),
 }));
 
-let fakeSetTimeout: typeof globalThis.setTimeout;
-
 vi.mock("@/components/ui/dialog", () => {
   const passthrough = ({ children, ...rest }: PassthroughProps) => (
     <div {...rest}>{children}</div>
@@ -126,6 +124,7 @@ vi.mock("@/components/ui/dialog", () => {
 });
 
 const updateSettingsMock = vi.fn();
+const refreshRepositoryMock = vi.fn();
 
 vi.mock("@/app/actions", async () => {
   const actual = await vi.importActual("@/app/actions");
@@ -136,7 +135,8 @@ vi.mock("@/app/actions", async () => {
   return {
     ...actual,
     updateRepositorySettingsAction: vi.fn(updateRepositorySettingsAction),
-    refreshSingleRepositoryAction: vi.fn().mockResolvedValue({}),
+    refreshSingleRepositoryAction: (...args: unknown[]) =>
+      refreshRepositoryMock(...args),
   };
 });
 
@@ -192,44 +192,23 @@ describe("RepoSettingsDialog autosave behaviour", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    fakeSetTimeout = globalThis.setTimeout;
-    globalThis.setTimeout = ((
-      cb: TimerHandler,
-      delay?: number,
-      ...args: Parameters<typeof globalThis.setTimeout> extends [
-        TimerHandler,
-        number | undefined,
-        ...infer Rest,
-      ]
-        ? Rest
-        : never
-    ) =>
-      fakeSetTimeout(async () => {
-        if (typeof cb !== "function") {
-          throw new TypeError(
-            "String timer handlers are not supported in tests",
-          );
-        }
-        await act(async () => {
-          await cb(...args);
-        });
-      }, delay)) as typeof globalThis.setTimeout;
     networkState = { isOnline: true };
     toastSpy.mockClear();
     updateSettingsMock.mockReset();
     updateSettingsMock.mockResolvedValue({ success: true });
+    refreshRepositoryMock.mockReset();
+    refreshRepositoryMock.mockResolvedValue({});
     container = document.createElement("div");
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
   });
 
-  afterEach(() => {
-    globalThis.setTimeout = fakeSetTimeout;
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
-    act(() => {
+  afterEach(async () => {
+    await act(async () => {
       root.unmount();
+      await vi.runOnlyPendingTimersAsync();
     });
+    vi.useRealTimers();
     container.remove();
   });
 
@@ -281,7 +260,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
 
   async function advanceAutosaveDelay(delay = 1500) {
     await act(async () => {
-      vi.advanceTimersByTime(delay);
+      await vi.advanceTimersByTimeAsync(delay);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -350,6 +329,101 @@ describe("RepoSettingsDialog autosave behaviour", () => {
       "Offline – this dialog is read-only. Changes will not be saved until you're back online.",
     );
     expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("does not replace inherited prerelease subchannels when opened", async () => {
+    const inheritedSettings = {
+      ...emptyRepoSettings,
+      preReleaseSubChannels: undefined,
+    };
+
+    renderDialog({
+      isOpen: false,
+      currentRepoSettings: inheritedSettings,
+    });
+    renderDialog({ currentRepoSettings: inheritedSettings });
+    await flushEffects();
+    await advanceAutosaveDelay();
+
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("refreshes after a filter save that finishes after the dialog closes", async () => {
+    let resolveSave: ((value: { success: true }) => void) | undefined;
+    updateSettingsMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+
+    renderDialog();
+    const input = await getIncludeInput();
+    await act(async () => {
+      setInputValue(input, "feature");
+    });
+    await flushEffects();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+      await Promise.resolve();
+    });
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+
+    renderDialog({ isOpen: false });
+    await flushEffects();
+    expect(refreshRepositoryMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveSave?.({ success: true });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await expectEventually(() => {
+      expect(refreshRepositoryMock).toHaveBeenCalledWith("owner/repo");
+    });
+  });
+
+  it("reconciles a save from an earlier dialog session after reopening", async () => {
+    let resolveSave: ((value: { success: true }) => void) | undefined;
+    updateSettingsMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+
+    renderDialog();
+    const input = await getIncludeInput();
+    await act(async () => {
+      setInputValue(input, "discarded-filter");
+    });
+    await flushEffects();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+      await Promise.resolve();
+    });
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+
+    renderDialog({ isOpen: false });
+    await flushEffects();
+    renderDialog();
+    await flushEffects();
+
+    await act(async () => {
+      resolveSave?.({ success: true });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await advanceAutosaveDelay();
+
+    await expectEventually(() => {
+      expect(updateSettingsMock).toHaveBeenCalledTimes(2);
+    });
+    expect(updateSettingsMock).toHaveBeenNthCalledWith(
+      2,
+      "owner/repo",
+      expect.objectContaining({ includeRegex: undefined }),
+    );
   });
 
   it("shows success and commits settings when autosave succeeds", async () => {

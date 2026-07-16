@@ -6,7 +6,7 @@ import * as React from "react";
 
 import { dismissUpdateNotificationAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
-import { reloadIfServerActionStale } from "@/lib/server-action-error";
+import { useActionTransition } from "@/hooks/use-action-transition";
 import type { UpdateNotificationState } from "@/types";
 
 type UpdateNoticeBannerProps = {
@@ -19,7 +19,7 @@ export function UpdateNoticeBanner({
   canDismiss = true,
 }: UpdateNoticeBannerProps) {
   const t = useTranslations("UpdateNotice");
-  const [isPending, startTransition] = React.useTransition();
+  const { isPending, runAction } = useActionTransition();
   const [isVisible, setIsVisible] = React.useState<boolean>(
     notice?.shouldNotify ?? false,
   );
@@ -38,18 +38,18 @@ export function UpdateNoticeBanner({
     : "https://github.com/iamspido/github-release-monitor/releases";
 
   const handleDismiss = () => {
-    setIsVisible(false);
-    startTransition(async () => {
-      try {
-        await dismissUpdateNotificationAction();
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
+    runAction(
+      async () => {
+        const result = await dismissUpdateNotificationAction();
+        if (result.success) {
+          setIsVisible(false);
         }
+      },
+      (error) => {
         // eslint-disable-next-line no-console
         console.error("Failed to dismiss update notice:", error);
-      }
-    });
+      },
+    );
   };
 
   return (
@@ -69,11 +69,11 @@ export function UpdateNoticeBanner({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <a href={releaseUrl} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" variant="secondary">
+          <Button asChild size="sm" variant="secondary">
+            <a href={releaseUrl} target="_blank" rel="noopener noreferrer">
               {t("cta_label")}
-            </Button>
-          </a>
+            </a>
+          </Button>
           {canDismiss && (
             <Button
               size="sm"

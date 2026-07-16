@@ -5,13 +5,17 @@ vi.mock("next-intl/server", () => ({
 }));
 
 import type { AppSettings, GithubRelease, Repository } from "@/types";
+import {
+  fetchCallBodyText,
+  installFetchMock,
+  mockFetchResponse,
+} from "../../helpers/fetch";
 
 describe("notifications/text format no truncate for small body", () => {
   const envBackup = { ...process.env };
   const fetchBackup = global.fetch;
   beforeEach(() => {
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
   });
   afterEach(() => {
     process.env = { ...envBackup };
@@ -20,12 +24,9 @@ describe("notifications/text format no truncate for small body", () => {
 
   it("uses text format and does not truncate when under limit", async () => {
     process.env.APPRISE_URL = "http://apprise.test/notify";
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => "",
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
     const { sendNotification } = await import("@/lib/notifications");
 
     const repo: Repository = {
@@ -57,7 +58,7 @@ describe("notifications/text format no truncate for small body", () => {
 
     await sendNotification(repo, release, "en", settings);
     const call = vi.mocked(global.fetch).mock.calls[0];
-    const payload = JSON.parse(call[1].body);
+    const payload = JSON.parse(fetchCallBodyText(call));
     expect(payload.format).toBe("text");
     // Plain text generation includes the label key; ensures body is untruncated and composed
     expect(payload.body).toContain("text_release_notes_label");

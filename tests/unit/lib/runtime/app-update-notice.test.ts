@@ -114,6 +114,54 @@ describe("runtime/app-update-notice", () => {
     });
   });
 
+  it("compares numeric prerelease identifiers according to SemVer", async () => {
+    const { getUpdateNotificationState } = await import(
+      "@/lib/runtime/app-update-notice"
+    );
+
+    process.env.NEXT_PUBLIC_APP_VERSION = "1.2.3-beta.2";
+    storageMocks.getSystemStatus.mockResolvedValueOnce(
+      status({ latestKnownVersion: "1.2.3-beta.10" }),
+    );
+
+    await expect(getUpdateNotificationState()).resolves.toMatchObject({
+      hasUpdate: true,
+      shouldNotify: true,
+    });
+  });
+
+  it("does not advertise malformed versions as updates", async () => {
+    const { getUpdateNotificationState } = await import(
+      "@/lib/runtime/app-update-notice"
+    );
+    storageMocks.getSystemStatus.mockResolvedValueOnce(
+      status({ latestKnownVersion: "not-a-version" }),
+    );
+
+    await expect(getUpdateNotificationState()).resolves.toMatchObject({
+      hasUpdate: false,
+      shouldNotify: false,
+    });
+  });
+
+  it("isolates optional update-state read failures for page rendering", async () => {
+    const readError = new Error("invalid system status");
+    storageMocks.getSystemStatus.mockRejectedValue(readError);
+    const { getUpdateNotificationState, getUpdateNotificationStateOrFallback } =
+      await import("@/lib/runtime/app-update-notice");
+
+    await expect(getUpdateNotificationState()).rejects.toBe(readError);
+    await expect(getUpdateNotificationStateOrFallback()).resolves.toEqual({
+      latestVersion: null,
+      currentVersion: "1.2.3",
+      lastCheckedAt: null,
+      lastCheckError: "read_error",
+      hasUpdate: false,
+      isDismissed: false,
+      shouldNotify: false,
+    });
+  });
+
   it("marks matching dismissed versions as dismissed and suppresses notifications", async () => {
     storageMocks.getSystemStatus.mockResolvedValue(
       status({

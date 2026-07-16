@@ -6,13 +6,19 @@ import {
   isSocialProviderConfigured,
 } from "@/lib/auth";
 import {
+  getClientIpFromRequest,
+  getLoginIdentifierLogLabel,
+  isLikelyEmail,
+  isSupportedAuthSocialProvider,
+  readJsonPayload,
+  toSafeString,
+} from "@/lib/auth/request-context";
+import {
   buildSocialLoginIntentSetCookieHeader,
   buildSocialLoginIntentValue,
 } from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
 import { isUsernamePolicyValid } from "@/lib/username-policy";
-
-type SocialProvider = "github" | "google";
 
 type RegisterSocialPrecheckPayload = {
   provider?: unknown;
@@ -22,32 +28,13 @@ type RegisterSocialPrecheckPayload = {
 
 const log = logger.withScope("AuthRegisterSocialPrecheck");
 
-function toSafeString(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function isSupportedProvider(value: string): value is SocialProvider {
-  return value === "github" || value === "google";
-}
-
-function isLikelyEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
 function isValidUsername(value: string) {
   return isUsernamePolicyValid(value);
 }
 
-function getClientIp(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  return (firstForwardedIp || realIp || "unknown").slice(0, 128);
-}
-
 export async function POST(request: Request) {
   await ensureAuthDatabaseReady();
-  const clientIp = getClientIp(request);
+  const clientIp = getClientIpFromRequest(request);
 
   if (!isSignupEnabled()) {
     log.warn(
@@ -56,18 +43,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "signup_disabled" }, { status: 403 });
   }
 
-  let payload: RegisterSocialPrecheckPayload;
-  try {
-    payload = (await request.json()) as RegisterSocialPrecheckPayload;
-  } catch {
+  const jsonResult =
+    await readJsonPayload<RegisterSocialPrecheckPayload>(request);
+  if (!jsonResult.ok) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
+  const payload = jsonResult.payload;
 
   const provider = toSafeString(payload.provider).toLowerCase();
   const username = toSafeString(payload.username);
   const email = toSafeString(payload.email).toLowerCase();
 
-  if (!isSupportedProvider(provider)) {
+  if (!isSupportedAuthSocialProvider(provider)) {
     return NextResponse.json({ error: "invalid_provider" }, { status: 400 });
   }
 
@@ -88,8 +75,12 @@ export async function POST(request: Request) {
 
   const registrationConflict = findRegistrationConflict(username, email);
   if (registrationConflict !== "none") {
+    const usernameLabel = getLoginIdentifierLogLabel(username);
+    const emailLabel = email
+      ? getLoginIdentifierLogLabel(email)
+      : "email_hash='none'";
     log.info(
-      `Denied register social precheck for provider='${provider}' username='${username}' email='${email || "unknown"}' from ip='${clientIp}' due to conflict='${registrationConflict}'.`,
+      `Denied register social precheck for provider='${provider}' ${usernameLabel} ${emailLabel} from ip='${clientIp}' due to conflict='${registrationConflict}'.`,
     );
     return NextResponse.json(
       { canProceed: false, error: registrationConflict },
@@ -98,7 +89,7 @@ export async function POST(request: Request) {
   }
 
   log.info(
-    `Allowed register social precheck for provider='${provider}' username='${username}' email='${email || "unknown"}' from ip='${clientIp}'.`,
+    `Allowed register social precheck for provider='${provider}' ${getLoginIdentifierLogLabel(username)} from ip='${clientIp}'.`,
   );
   const response = NextResponse.json({ canProceed: true }, { status: 200 });
   const intentValue = buildSocialLoginIntentValue(provider, {

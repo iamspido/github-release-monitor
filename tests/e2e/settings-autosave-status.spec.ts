@@ -1,37 +1,44 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
 async function login(page) {
-  const username = process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || 'test@example.com';
-  const password = process.env.AUTH_PASSWORD || 'TestPassword123';
-  await page.goto('/en/login');
+  const username =
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+  const password = process.env.AUTH_PASSWORD || "TestPassword123";
+  await page.goto("/en/login");
   await page.getByLabel(/email|e-mail/i).fill(username);
   await page.locator('input[name="password"]').fill(password);
   await page.locator('button[type="submit"]').first().click();
   await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
 }
 
-test('autosave ends with All changes saved', async ({ page }) => {
+test("autosave ends with All changes saved", async ({ page }) => {
   await login(page);
-  await page.goto('/en/settings');
+  await page.goto("/en/settings");
 
-  const rpp = page.getByLabel('Number of releases to fetch per repository').or(page.getByLabel('Anzahl der pro Repository abzurufenden Releases'));
+  const rpp = page
+    .getByLabel("Number of releases to fetch per repository")
+    .or(page.getByLabel("Anzahl der pro Repository abzurufenden Releases"));
   // Change to a valid different value to trigger autosave
-  await rpp.fill('31');
+  await rpp.fill("31");
 
   // Wait for final success state (depending on viewport, may show "Saved" instead)
   const success = page.getByText(/All changes saved|^Saved$/);
   await expect(success).toBeVisible({ timeout: 8000 });
 });
 
-test('export button remains enabled during settings autosave', async ({ page }) => {
+test("export button remains enabled during settings autosave", async ({
+  page,
+}) => {
   await login(page);
-  await page.goto('/en/settings');
+  await page.goto("/en/settings");
   // Trigger autosave
-  const rpp = page.getByLabel('Number of releases to fetch per repository').or(page.getByLabel('Anzahl der pro Repository abzurufenden Releases'));
-  await rpp.fill('32');
+  const rpp = page
+    .getByLabel("Number of releases to fetch per repository")
+    .or(page.getByLabel("Anzahl der pro Repository abzurufenden Releases"));
+  await rpp.fill("32");
 
   // Immediately go to home and ensure Export is enabled
-  await page.goto('/en');
-  const exportBtn = page.getByRole('button', { name: 'Export' });
+  await page.goto("/en");
+  const exportBtn = page.getByRole("button", { name: "Export" });
   await expect(exportBtn).toBeEnabled();
 });

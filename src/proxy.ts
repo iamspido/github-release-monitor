@@ -6,39 +6,31 @@ import {
 } from "@/lib/auth/mode";
 import { logger } from "@/lib/logger";
 import {
-  NEXT_LOCALE_COOKIE,
-  nextLocaleCookieOptions,
-  SETTINGS_LOCALE_COOKIE,
-  settingsLocaleCookieOptions,
-} from "@/lib/settings-locale-cookie";
-import { defaultLocale, locales, pathnames, routing } from "./i18n/routing";
+  buildRedirectUrl,
+  getCurrentLocaleFromResponse,
+  getLocalizedLoginPath,
+  getRouteKeyForPath,
+  type ProxyRouteKey,
+  resolveLocalizedRestPath,
+  splitLocaleFromPath,
+} from "@/lib/proxy/locale-routing";
+import {
+  applySecurityHeaders,
+  createRequestSecurityContext,
+  forwardSecurityContext,
+  getBlockedDevOriginResponse,
+} from "@/lib/proxy/security-headers";
+import {
+  attachLocaleCookies,
+  buildSettingsLocaleApiUrls,
+  fetchSettingsLocale,
+  getLocaleFromCookies,
+  type ProxyLocale,
+} from "@/lib/proxy/settings-locale";
+import { routing } from "./i18n/routing";
 
-const localeSet = new Set<string>(locales as readonly string[]);
-
-type LocaleKey = (typeof locales)[number];
-type RouteKey = keyof typeof pathnames;
-
-const reversePathLookup: Record<
-  LocaleKey,
-  Record<string, RouteKey>
-> = locales.reduce(
-  (acc, locale) => {
-    acc[locale] = {};
-    return acc;
-  },
-  {} as Record<LocaleKey, Record<string, RouteKey>>,
-);
-
-for (const routeKey of Object.keys(pathnames) as RouteKey[]) {
-  const localized = pathnames[routeKey] as Record<LocaleKey, string>;
-  for (const locale of locales as readonly LocaleKey[]) {
-    const localizedPath = normalizedRestPath(localized[locale]);
-    reversePathLookup[locale][localizedPath] = routeKey;
-  }
-}
-
-const logSettings = logger.withScope("Settings");
-const SETTINGS_LOCALE_API_PATH = "/api/settings-locale";
+type LocaleKey = ProxyLocale;
+type RouteKey = ProxyRouteKey;
 
 export async function proxy(request: NextRequest) {
   const logAuth = logger.withScope("Auth");
@@ -46,15 +38,20 @@ export async function proxy(request: NextRequest) {
   const authenticationMethod = getAuthenticationMethod();
 
   const pathname = request.nextUrl.pathname;
-  if (
-    pathname.startsWith("/api/") ||
-    pathname.startsWith("/trpc/") ||
-    pathname.startsWith("/_next/") ||
-    pathname.startsWith("/_vercel/") ||
-    pathname.includes(".")
-  ) {
+  if (shouldBypassProxy(pathname)) {
     return NextResponse.next();
   }
+  const securityContext = createRequestSecurityContext();
+  const secureResponse = (
+    response: NextResponse,
+    options: { forwardToRenderer?: boolean } = {},
+  ) => {
+    if (options.forwardToRenderer) {
+      forwardSecurityContext(request, response, securityContext);
+    }
+    applySecurityHeaders(response, securityContext);
+    return response;
+  };
 
   const cookieLocale = getLocaleFromCookies(request);
   const settingsLocale = cookieLocale ?? (await fetchSettingsLocale(request));
@@ -66,7 +63,7 @@ export async function proxy(request: NextRequest) {
     if (redirectUrl.pathname !== pathname) {
       const redirectResponse = NextResponse.redirect(redirectUrl);
       attachLocaleCookies(redirectResponse, settingsLocale);
-      return redirectResponse;
+      return secureResponse(redirectResponse);
     }
   } else if (requestedLocale !== settingsLocale) {
     const targetRest = resolveLocalizedRestPath(
@@ -77,75 +74,42 @@ export async function proxy(request: NextRequest) {
     const redirectUrl = buildRedirectUrl(request, settingsLocale, targetRest);
     const redirectResponse = NextResponse.redirect(redirectUrl);
     attachLocaleCookies(redirectResponse, settingsLocale);
-    return redirectResponse;
+    return secureResponse(redirectResponse);
   }
 
   const handleI18nRouting = createIntlMiddleware(routing);
   const response = handleI18nRouting(request);
 
-  const headerLocale = response.headers.get("x-next-intl-locale");
-  const currentLocale = (locales as readonly string[]).includes(
-    headerLocale || "",
-  )
-    ? (headerLocale as LocaleKey)
-    : settingsLocale;
+  const currentLocale = getCurrentLocaleFromResponse(response, settingsLocale);
 
-  const loginPaths = pathnames["/login"];
-  const loginPathForLocale =
-    loginPaths[currentLocale as "en" | "de"] || loginPaths.en;
   const routeKey = getRouteKeyForPath(currentLocale, request.nextUrl.pathname);
   const isLoginPage = routeKey === "/login";
   const isRegisterPage = routeKey === "/register";
-  let isAuthenticated = false;
-  if (authenticationMethod !== "External") {
-    try {
-      logAuth.debug(`Checking session for path '${pathname}'.`);
-      const { auth, ensureAuthDatabaseReady } = await import("@/lib/auth");
-      await ensureAuthDatabaseReady();
-      const session = await auth.api.getSession({
-        headers: request.headers,
-      });
-      isAuthenticated = Boolean(session?.session && session?.user);
-      logAuth.debug(
-        `Session check result for path '${pathname}': authenticated=${isAuthenticated}.`,
-      );
-    } catch (error) {
-      logAuth.error("Failed to validate session in proxy.", error);
-    }
-  }
+  const isAuthenticated = await checkSessionAuthentication({
+    authenticationMethod,
+    headers: request.headers,
+    pathname,
+  });
 
   if (authenticationMethod === "External" && (isLoginPage || isRegisterPage)) {
     logAuth.info("External auth mode active, redirecting auth page to home.");
-    const redirectResponse = NextResponse.redirect(
-      new URL(`/${currentLocale}`, request.url),
+    return secureResponse(
+      buildLocaleRedirectResponse(request, currentLocale, "/"),
     );
-    attachLocaleCookies(redirectResponse, currentLocale);
-    return redirectResponse;
   }
 
-  const isPublicAuthPage = isLoginPage || isRegisterPage;
-  const canReadPublicHome =
-    routeKey === "/" && canReadHomeUnauthenticated(authenticationMethod);
-  const shouldRequireAuth =
-    authenticationMethod === "Basic"
-      ? !isPublicAuthPage
-      : authenticationMethod === "AllowUnauthenticated"
-        ? !isPublicAuthPage && !canReadPublicHome
-        : false;
+  const authGate = evaluateAuthGate({
+    authenticationMethod,
+    routeKey,
+    isLoginPage,
+    isRegisterPage,
+  });
 
-  if (!isAuthenticated && shouldRequireAuth) {
-    const redirectUrl = new URL(
-      `/${currentLocale}${loginPathForLocale}`,
-      request.url,
-    );
-    const originalPathname = request.nextUrl.pathname;
-    redirectUrl.searchParams.set("next", originalPathname);
+  if (!isAuthenticated && authGate.requiresAuth) {
     logAuth.warn(
-      `Unauthenticated request to '${originalPathname}', redirecting to login.`,
+      `Unauthenticated request to '${request.nextUrl.pathname}', redirecting to login.`,
     );
-    const redirectResponse = NextResponse.redirect(redirectUrl);
-    attachLocaleCookies(redirectResponse, currentLocale);
-    return redirectResponse;
+    return secureResponse(buildLoginRedirectResponse(request, currentLocale));
   }
 
   if (
@@ -154,462 +118,137 @@ export async function proxy(request: NextRequest) {
     (isLoginPage || isRegisterPage)
   ) {
     logAuth.info("Logged-in user on auth page, redirecting to home.");
-    const redirectResponse = NextResponse.redirect(
-      new URL(`/${currentLocale}`, request.url),
+    return secureResponse(
+      buildLocaleRedirectResponse(request, currentLocale, "/"),
     );
-    attachLocaleCookies(redirectResponse, currentLocale);
-    return redirectResponse;
   }
 
   if (isAuthenticated) {
     logAuth.debug(`Authenticated request allowed for path '${pathname}'.`);
   } else if (authenticationMethod === "External") {
     logAuth.debug(`External auth mode allowed request for path '${pathname}'.`);
-  } else if (isLoginPage || isRegisterPage || canReadPublicHome) {
+  } else if (authGate.isPublicAccessAllowed) {
     logAuth.debug(
       `Unauthenticated request allowed for public path '${pathname}'.`,
     );
   }
 
-  if (process.env.NODE_ENV === "development") {
-    const allowedDevOrigins = getAllowedDevOrigins();
-    const origin = request.headers.get("origin");
-    if (
-      origin &&
-      allowedDevOrigins.length > 0 &&
-      !allowedDevOrigins.includes(origin)
-    ) {
-      logSecurity.warn(`Blocked development origin: ${origin}`);
-      return new NextResponse("Forbidden", { status: 403 });
-    }
+  const blockedOriginResponse = getBlockedDevOriginResponse(request);
+  if (blockedOriginResponse) {
+    logSecurity.warn(
+      `Blocked development origin: ${request.headers.get("origin")}`,
+    );
+    return secureResponse(blockedOriginResponse);
   }
 
   attachLocaleCookies(response, currentLocale);
-
-  const securityHeaders = getSecurityHeaders();
-  securityHeaders.forEach((header) => {
-    response.headers.set(header.key, header.value);
-  });
+  secureResponse(response, { forwardToRenderer: true });
   logSecurity.debug("Applied security headers");
 
   return response;
 }
 
-function getAllowedDevOrigins(): string[] {
-  const allowedOriginsFromEnv = process.env.ALLOWED_DEV_ORIGINS;
-  return allowedOriginsFromEnv
-    ? allowedOriginsFromEnv.split(",").map((origin) => origin.trim())
-    : [];
-}
-
-function getRouteKeyForPath(
-  locale: LocaleKey,
-  pathname: string,
-): RouteKey | null {
-  const { restPath } = splitLocaleFromPath(pathname);
-  const normalizedPath = normalizedRestPath(restPath);
-  return reversePathLookup[locale][normalizedPath] ?? null;
-}
-
-function normalizeGitlabHost(value: string): string | null {
-  const host = value.trim().toLowerCase();
-  if (!host) return null;
-  if (host.includes("://")) return null;
-  if (host.includes("/")) return null;
-  if (host.includes(":")) return null;
-  if (host.includes("?") || host.includes("#")) return null;
-  if (!/^[a-z0-9.-]+$/.test(host)) return null;
-  if (host.startsWith(".") || host.endsWith(".")) return null;
-  return host;
-}
-
-function getAllowedGitlabHosts(): string[] {
-  const hosts = new Set<string>(["gitlab.com"]);
-  const raw = process.env.GITLAB_ADDITIONAL_HOSTS;
-  if (!raw) return [...hosts];
-
-  for (const entry of raw.split(",")) {
-    const normalized = normalizeGitlabHost(entry);
-    if (!normalized) continue;
-    hosts.add(normalized);
-  }
-
-  return [...hosts];
-}
-
-function getSecurityHeaders() {
-  const https = process.env.HTTPS !== "false";
-  const gitlabConnectSrc = getAllowedGitlabHosts().map(
-    (host) => `https://${host}`,
+function shouldBypassProxy(pathname: string): boolean {
+  return (
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/trpc/") ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/_vercel/") ||
+    pathname.includes(".")
   );
-  const connectSrc = [
-    "'self'",
-    "https://api.github.com",
-    ...gitlabConnectSrc,
-  ].join(" ");
+}
 
-  const cspPolicies = [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline'",
-    // Allow `data:` image URLs for locally generated QR codes (2FA setup),
-    // plus HTTPS images for release note assets.
-    "img-src 'self' https: data:",
-    `connect-src ${connectSrc}`,
-    "font-src 'self'",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-  ];
-
-  if (https) {
-    cspPolicies.push("upgrade-insecure-requests");
+async function checkSessionAuthentication(args: {
+  authenticationMethod: ReturnType<typeof getAuthenticationMethod>;
+  headers: Headers;
+  pathname: string;
+}): Promise<boolean> {
+  if (args.authenticationMethod === "External") {
+    return false;
   }
 
-  const cspHeader = cspPolicies.join("; ");
+  const logAuth = logger.withScope("Auth");
+  try {
+    logAuth.debug(`Checking session for path '${args.pathname}'.`);
+    const { auth, ensureAuthDatabaseReady } = await import("@/lib/auth");
+    await ensureAuthDatabaseReady();
+    const session = await auth.api.getSession({
+      headers: args.headers,
+    });
+    const isAuthenticated = Boolean(session?.session && session?.user);
+    logAuth.debug(
+      `Session check result for path '${args.pathname}': authenticated=${isAuthenticated}.`,
+    );
+    return isAuthenticated;
+  } catch (error) {
+    logAuth.error("Failed to validate session in proxy.", error);
+    return false;
+  }
+}
 
-  return [
-    { key: "X-Content-Type-Options", value: "nosniff" },
-    { key: "X-Frame-Options", value: "DENY" },
-    { key: "Content-Security-Policy", value: cspHeader },
-    {
-      key: "Permissions-Policy",
-      value: "camera=(), microphone=(), geolocation=()",
-    },
-    { key: "Referrer-Policy", value: "no-referrer" },
-  ];
+function evaluateAuthGate(args: {
+  authenticationMethod: ReturnType<typeof getAuthenticationMethod>;
+  routeKey: RouteKey | null;
+  isLoginPage: boolean;
+  isRegisterPage: boolean;
+}): { requiresAuth: boolean; isPublicAccessAllowed: boolean } {
+  const isPublicAuthPage = args.isLoginPage || args.isRegisterPage;
+  const canReadPublicHome =
+    args.routeKey === "/" &&
+    canReadHomeUnauthenticated(args.authenticationMethod);
+
+  if (args.authenticationMethod === "Basic") {
+    return {
+      requiresAuth: !isPublicAuthPage,
+      isPublicAccessAllowed: isPublicAuthPage,
+    };
+  }
+
+  if (args.authenticationMethod === "AllowUnauthenticated") {
+    return {
+      requiresAuth: !isPublicAuthPage && !canReadPublicHome,
+      isPublicAccessAllowed: isPublicAuthPage || canReadPublicHome,
+    };
+  }
+
+  return {
+    requiresAuth: false,
+    isPublicAccessAllowed: isPublicAuthPage || canReadPublicHome,
+  };
+}
+
+function buildLocaleRedirectResponse(
+  request: NextRequest,
+  locale: LocaleKey,
+  restPath: string,
+): NextResponse {
+  const redirectResponse = NextResponse.redirect(
+    new URL(
+      restPath === "/" ? `/${locale}` : `/${locale}${restPath}`,
+      request.url,
+    ),
+  );
+  attachLocaleCookies(redirectResponse, locale);
+  return redirectResponse;
+}
+
+function buildLoginRedirectResponse(
+  request: NextRequest,
+  locale: LocaleKey,
+): NextResponse {
+  const redirectUrl = new URL(
+    `/${locale}${getLocalizedLoginPath(locale)}`,
+    request.url,
+  );
+  redirectUrl.searchParams.set("next", request.nextUrl.pathname);
+  const redirectResponse = NextResponse.redirect(redirectUrl);
+  attachLocaleCookies(redirectResponse, locale);
+  return redirectResponse;
 }
 
 export const config = {
   matcher: ["/((?!api|trpc|_next|_vercel|.*\\..*).*)"],
 };
-
-async function fetchSettingsLocale(
-  request: NextRequest,
-  options?: { fetchImpl?: typeof fetch },
-): Promise<LocaleKey> {
-  const fetchImpl = options?.fetchImpl ?? fetch;
-  const apiUrls = buildSettingsLocaleApiUrls(request);
-  const attemptSummaries: string[] = [];
-  let lastError: unknown = null;
-
-  for (const apiUrl of apiUrls) {
-    try {
-      const response = await fetchImpl(apiUrl, {
-        cache: "no-store",
-        headers: {
-          "cache-control": "no-store",
-          "x-from-middleware": "1",
-        },
-      });
-
-      if (!response.ok) {
-        attemptSummaries.push(
-          `${apiUrl.toString()} (status=${response.status})`,
-        );
-        logSettings.warn(
-          `Failed to fetch settings locale (status=${response.status}) from ${apiUrl.origin}. Trying next candidate.`,
-        );
-        continue;
-      }
-
-      const data = (await response.json()) as { locale?: string | null };
-      if (data.locale && localeSet.has(data.locale)) {
-        return data.locale as LocaleKey;
-      }
-
-      attemptSummaries.push(
-        `${apiUrl.toString()} (invalid locale='${data.locale ?? "undefined"}')`,
-      );
-      logSettings.warn(
-        `Received invalid locale '${data.locale ?? "undefined"}' from ${apiUrl.origin}. Trying next candidate.`,
-      );
-    } catch (error) {
-      lastError = error;
-      attemptSummaries.push(`${apiUrl.toString()} (fetch failed)`);
-      logSettings.warn(
-        `Error fetching settings locale from ${apiUrl.origin}. Trying next candidate.`,
-        error,
-      );
-    }
-  }
-
-  if (apiUrls.length > 0) {
-    logSettings.error(
-      `Error fetching settings locale in middleware. Attempts: ${attemptSummaries.join("; ")}. Falling back to default locale.`,
-      lastError || undefined,
-    );
-  } else {
-    logSettings.error(
-      "Error fetching settings locale in middleware. No candidate API origins resolved. Falling back to default locale.",
-      lastError || undefined,
-    );
-  }
-
-  return defaultLocale;
-}
-
-function getLocaleFromCookies(request: NextRequest): LocaleKey | null {
-  const cookieLocale =
-    request.cookies.get(SETTINGS_LOCALE_COOKIE)?.value ??
-    request.cookies.get(NEXT_LOCALE_COOKIE)?.value;
-  if (cookieLocale && localeSet.has(cookieLocale)) {
-    return cookieLocale as LocaleKey;
-  }
-  return null;
-}
-
-function attachLocaleCookies(response: NextResponse, locale: LocaleKey) {
-  response.cookies.set(
-    SETTINGS_LOCALE_COOKIE,
-    locale,
-    settingsLocaleCookieOptions,
-  );
-  response.cookies.set(NEXT_LOCALE_COOKIE, locale, nextLocaleCookieOptions);
-}
-
-function splitLocaleFromPath(pathname: string): {
-  locale: LocaleKey | null;
-  restPath: string;
-} {
-  const segments = pathname.split("/");
-  const candidate = segments[1];
-
-  if (candidate && localeSet.has(candidate)) {
-    const restSegments = segments.slice(2);
-    const restPath =
-      restSegments.length > 0 ? `/${restSegments.join("/")}` : "/";
-    return {
-      locale: candidate as LocaleKey,
-      restPath: normalizedRestPath(restPath),
-    };
-  }
-
-  return { locale: null, restPath: normalizedRestPath(pathname || "/") };
-}
-
-function normalizedRestPath(path: string): string {
-  if (!path || path === "/") {
-    return "/";
-  }
-  const prefixed = path.startsWith("/") ? path : `/${path}`;
-  return prefixed.length > 1 && prefixed.endsWith("/")
-    ? prefixed.slice(0, -1)
-    : prefixed;
-}
-
-function resolveLocalizedRestPath(
-  restPath: string,
-  targetLocale: LocaleKey,
-  sourceLocale?: LocaleKey,
-): string {
-  const normalized = normalizedRestPath(restPath);
-
-  if (sourceLocale) {
-    const candidateRoute = reversePathLookup[sourceLocale][normalized];
-    if (candidateRoute) {
-      return normalizedRestPath(pathnames[candidateRoute][targetLocale]);
-    }
-  }
-
-  for (const locale of locales as readonly LocaleKey[]) {
-    const candidateRoute = reversePathLookup[locale][normalized];
-    if (candidateRoute) {
-      return normalizedRestPath(pathnames[candidateRoute][targetLocale]);
-    }
-  }
-
-  return normalized;
-}
-
-function buildRedirectUrl(
-  request: NextRequest,
-  locale: LocaleKey,
-  localizedRest: string,
-): URL {
-  const url = new URL(request.url);
-  url.pathname =
-    localizedRest === "/" ? `/${locale}` : `/${locale}${localizedRest}`;
-  url.search = request.nextUrl.search;
-  url.hash = request.nextUrl.hash;
-  return url;
-}
-
-function buildSettingsLocaleApiUrls(request: NextRequest): URL[] {
-  const origins: string[] = [];
-  const seen = new Set<string>();
-  const configuredOrigins = getConfiguredSettingsLocaleApiOrigins();
-
-  const addOrigin = (candidate?: string | null) => {
-    if (!candidate) return;
-    const normalized = normalizeOrigin(candidate);
-    if (
-      !normalized ||
-      seen.has(normalized) ||
-      !isAllowedSettingsLocaleOrigin(normalized, configuredOrigins)
-    ) {
-      return;
-    }
-    seen.add(normalized);
-    origins.push(normalized);
-  };
-
-  // Optional explicit allowlist for non-loopback origins.
-  // Useful when localhost cannot reach this Next.js instance in specific deployments.
-  configuredOrigins.forEach((origin) => {
-    addOrigin(origin);
-  });
-
-  const requestOrigin = request.nextUrl?.origin;
-  if (requestOrigin && isLoopbackOrigin(requestOrigin)) {
-    addOrigin(requestOrigin);
-  }
-
-  const fallbackPorts = uniqueDefined([
-    normalizePort(process.env.PORT),
-    "3000",
-  ]);
-
-  for (const port of fallbackPorts) {
-    addOrigin(`http://127.0.0.1:${port}`);
-    addOrigin(`http://localhost:${port}`);
-    addOrigin(`http://[::1]:${port}`);
-  }
-
-  if (origins.length === 0) {
-    addOrigin("http://127.0.0.1:3000");
-  }
-
-  return origins.map((origin) => new URL(SETTINGS_LOCALE_API_PATH, origin));
-}
-
-function uniqueDefined(values: Array<string | undefined | null>): string[] {
-  const result: string[] = [];
-  for (const value of values) {
-    if (!value) continue;
-    if (!result.includes(value)) {
-      result.push(value);
-    }
-  }
-  return result;
-}
-
-function normalizePort(value?: string | null): string | undefined {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!/^\d+$/.test(trimmed)) return undefined;
-  const numericPort = Number(trimmed);
-  if (
-    !Number.isInteger(numericPort) ||
-    numericPort < 1 ||
-    numericPort > 65535
-  ) {
-    return undefined;
-  }
-  return String(numericPort);
-}
-
-function getConfiguredSettingsLocaleApiOrigins(): string[] {
-  const raw = process.env.SETTINGS_LOCALE_ALLOWED_ORIGINS;
-  if (!raw) return [];
-  return raw
-    .split(",")
-    .map((entry) => normalizeOrigin(entry))
-    .filter((entry): entry is string => Boolean(entry));
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname.trim().toLowerCase();
-  return (
-    normalized === "localhost" ||
-    normalized === "127.0.0.1" ||
-    normalized === "::1"
-  );
-}
-
-function isLoopbackOrigin(origin: string): boolean {
-  try {
-    const parsed = new URL(origin);
-    return isLoopbackHostname(parsed.hostname);
-  } catch {
-    return false;
-  }
-}
-
-function isAllowedSettingsLocaleOrigin(
-  origin: string,
-  configuredOrigins: string[],
-): boolean {
-  if (isLoopbackOrigin(origin)) {
-    return true;
-  }
-  return configuredOrigins.includes(origin);
-}
-
-function normalizeProtocolValue(
-  value: string | undefined | null,
-): string | undefined {
-  if (!value) return undefined;
-  const trimmed = value.trim().toLowerCase();
-  if (!trimmed) return undefined;
-  return trimmed.endsWith(":") ? trimmed.slice(0, -1) : trimmed;
-}
-
-function normalizeOrigin(candidate: string): string | null {
-  if (!candidate) {
-    return null;
-  }
-  const trimmed = candidate.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const tryNormalize = (value: string): string | null => {
-    try {
-      const url = new URL(value);
-      if (!url.protocol || !url.hostname) {
-        return null;
-      }
-      if (url.username || url.password) {
-        return null;
-      }
-
-      const isZeroAddress = url.hostname === "0.0.0.0" || url.hostname === "::";
-      const hostname = isZeroAddress
-        ? url.hostname === "::"
-          ? "::1"
-          : "127.0.0.1"
-        : url.hostname;
-
-      const protocol = isZeroAddress
-        ? "http"
-        : (normalizeProtocolValue(url.protocol) ?? "http");
-      if (protocol !== "http" && protocol !== "https") {
-        return null;
-      }
-
-      const needsBrackets = hostname.includes(":");
-      const hostWithPort = url.port
-        ? needsBrackets
-          ? `[${hostname}]:${url.port}`
-          : `${hostname}:${url.port}`
-        : needsBrackets
-          ? `[${hostname}]`
-          : hostname;
-
-      return `${protocol}://${hostWithPort}`;
-    } catch {
-      return null;
-    }
-  };
-
-  return (
-    tryNormalize(trimmed) ||
-    tryNormalize(`http://${trimmed}`) ||
-    tryNormalize(`https://${trimmed}`)
-  );
-}
 
 export const __test__ = {
   fetchSettingsLocale,

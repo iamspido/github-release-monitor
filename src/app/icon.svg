@@ -4,6 +4,7 @@
   width="120"
   height="120"
 >
+  <title>GitHub Release Monitor</title>
   <defs>
     <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color: #8B9FE8; stop-opacity: 1" />

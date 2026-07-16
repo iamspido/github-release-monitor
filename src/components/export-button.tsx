@@ -2,26 +2,27 @@
 
 import { Download, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import * as React from "react";
 
 import { getRepositoriesForExport } from "@/app/actions";
 import { Button } from "@/components/ui/button";
+import { useActionTransition } from "@/hooks/use-action-transition";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
-import { reloadIfServerActionStale } from "@/lib/server-action-error";
 
 export function ExportButton() {
   const t = useTranslations("HomePage");
   const { toast } = useToast();
-  const [isPending, startTransition] = React.useTransition();
+  const { isPending, runAction } = useActionTransition();
   const { isOnline } = useNetworkStatus();
 
   const handleExport = () => {
-    startTransition(async () => {
-      try {
+    runAction(
+      async () => {
         const result = await getRepositoriesForExport();
 
         if (result.success && result.data) {
+          let url: string | null = null;
+          let anchor: HTMLAnchorElement | null = null;
           try {
             // Create a blob from the JSON data
             const blob = new Blob([JSON.stringify(result.data, null, 2)], {
@@ -29,18 +30,14 @@ export function ExportButton() {
             });
 
             // Create a temporary URL for the blob
-            const url = window.URL.createObjectURL(blob);
+            url = window.URL.createObjectURL(blob);
 
             // Create a temporary anchor element and trigger the download
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "repositories.json";
-            document.body.appendChild(a);
-            a.click();
-
-            // Clean up the temporary elements
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
+            anchor = document.createElement("a");
+            anchor.href = url;
+            anchor.download = "repositories.json";
+            document.body.appendChild(anchor);
+            anchor.click();
 
             toast({
               title: t("toast_export_success_title"),
@@ -50,9 +47,12 @@ export function ExportButton() {
             console.error("Client-side export failed:", error);
             toast({
               title: t("toast_export_error_title"),
-              description: String(error) || t("toast_export_error_description"),
+              description: t("toast_export_error_description"),
               variant: "destructive",
             });
+          } finally {
+            anchor?.remove();
+            if (url) window.URL.revokeObjectURL(url);
           }
         } else {
           toast({
@@ -61,17 +61,15 @@ export function ExportButton() {
             variant: "destructive",
           });
         }
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
+      },
+      () => {
         toast({
           title: t("toast_export_error_title"),
           description: t("toast_export_error_description"),
           variant: "destructive",
         });
-      }
-    });
+      },
+    );
   };
 
   return (

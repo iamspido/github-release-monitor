@@ -1,18 +1,20 @@
 import { getTranslations } from "next-intl/server";
-import { getUpdateNotificationState } from "@/app/actions";
 import { AutoRefresher } from "@/components/auto-refresher";
 import { BackToTopButton } from "@/components/back-to-top-button";
 import { Header } from "@/components/header";
 import { HomePageClient } from "@/components/home-page-client";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
+import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
+import { toGithubReleaseFromCache } from "@/lib/releases/filters";
+import { toPublicRepository } from "@/lib/repositories/public-repository";
+import { getUpdateNotificationStateOrFallback } from "@/lib/runtime/app-update-notice";
 import { getRepositories } from "@/lib/storage/repositories";
-import { getSettings } from "@/lib/storage/settings";
+import { createDefaultSettings, getSettings } from "@/lib/storage/settings";
 import type {
   AppSettings,
   EnrichedRelease,
   FetchError,
-  GithubRelease,
   Repository,
 } from "@/types";
 
@@ -34,28 +36,21 @@ export default async function HomePage({
     Exclude<FetchError["type"], "not_modified">,
     number
   > | null = null;
-  const updateNotice = await getUpdateNotificationState();
-  const authAccess = await getCurrentAuthAccess();
+  const updateNoticePromise = getUpdateNotificationStateOrFallback();
+  const authAccessPromise = getCurrentAuthAccess();
+  const { isAppriseConfigured } = getNotificationRuntimeConfig();
 
   try {
-    settings = await getSettings();
-    repositories = await getRepositories();
+    [settings, repositories] = await Promise.all([
+      getSettings(),
+      getRepositories(),
+    ]);
     if (repositories.length > 0) {
       releases = repositories.map((repo) => {
-        const cached = repo.latestRelease;
-        const reconstructedRelease: GithubRelease | undefined = cached
-          ? {
-              ...cached,
-              id: 0, // Cached releases might not have a full ID
-              prerelease: false, // This info isn't in CachedRelease
-              draft: false, // This info isn't in CachedRelease
-            }
-          : undefined;
-
         return {
           repoId: repo.id,
           repoUrl: repo.url,
-          release: reconstructedRelease,
+          release: toGithubReleaseFromCache(repo.latestRelease),
           isNew: repo.isNew,
           repoSettings: {
             releaseChannels: repo.releaseChannels,
@@ -73,26 +68,20 @@ export default async function HomePage({
           newEtag: repo.etag,
         };
       });
+      repositories = repositories.map(toPublicRepository);
     }
   } catch (error: unknown) {
     logger
       .withScope("WebServer")
       .error("Failed to load repositories or releases:", error);
-    settings = {
-      timeFormat: "24h",
-      locale: "en",
-      refreshInterval: 10,
-      cacheInterval: 5,
-      releaseChannels: ["stable"],
-      releaseSortOrder: "latest_first",
-      providerSortOrder: ["github", "gitlab", "codeberg"],
-      prioritizeNewSecurityReleases: false,
-      showAcknowledge: true,
-      releasesPerPage: 30,
-      parallelRepoFetches: 1,
-    };
+    settings = createDefaultSettings();
     resolvedError = t("load_error");
   }
+
+  const [updateNotice, authAccess] = await Promise.all([
+    updateNoticePromise,
+    authAccessPromise,
+  ]);
 
   return (
     <div className="min-h-screen w-full">
@@ -115,6 +104,7 @@ export default async function HomePage({
           lastUpdated={lastUpdated}
           locale={locale}
           canMutate={authAccess.canMutate}
+          isAppriseConfigured={isAppriseConfigured}
         />
       </main>
       <BackToTopButton />

@@ -43,6 +43,7 @@ vi.mock("@/lib/storage/repositories", () => ({
 
 vi.mock("@/lib/storage/settings", () => ({
   getSettings: async () => settingsStore.current,
+  normalizeSettings: (settings: AppSettings) => settings,
   saveSettings: async (s: AppSettings) => {
     settingsStore.current = JSON.parse(JSON.stringify(s));
   },
@@ -98,6 +99,63 @@ describe("settings actions", () => {
     // isNew flags reset due to disabling acknowledge
     expect(memRepos.list[0].isNew).toBe(false);
     expect(memRepos.list[1].isNew).toBe(false);
+  });
+
+  it("merges settings patches into the latest persisted state", async () => {
+    const { updateSettingsPatchAction } = await import(
+      "@/app/settings/actions"
+    );
+
+    const first = updateSettingsPatchAction({ releaseSortOrder: "repo_az" });
+    const second = updateSettingsPatchAction({
+      repositoryFormExpanded: false,
+    });
+    await Promise.all([first, second]);
+
+    expect(settingsStore.current.releaseSortOrder).toBe("repo_az");
+    expect(settingsStore.current.repositoryFormExpanded).toBe(false);
+    expect(settingsStore.current.refreshInterval).toBe(10);
+  });
+
+  it("rejects invalid release regexes before persisting settings", async () => {
+    const { updateSettingsAction } = await import("@/app/settings/actions");
+    const previousSettings = structuredClone(settingsStore.current);
+
+    const result = await updateSettingsAction({
+      ...settingsStore.current,
+      includeRegex: "([",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      message: {
+        title: "toast_error_title",
+        description: "regex_error_invalid",
+      },
+    });
+    expect(settingsStore.current).toEqual(previousSettings);
+  });
+
+  it("does not mutate repositories when settings validation fails", async () => {
+    memRepos.list = [
+      {
+        id: "o/a",
+        url: "https://github.com/o/a",
+        etag: "E1",
+        isNew: true,
+      },
+    ];
+    const previousRepositories = structuredClone(memRepos.list);
+    const { updateSettingsAction } = await import("@/app/settings/actions");
+
+    const result = await updateSettingsAction({
+      ...settingsStore.current,
+      includeRegex: "([",
+      showAcknowledge: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(memRepos.list).toEqual(previousRepositories);
   });
 
   it("deleteAllRepositoriesAction clears storage and returns success", async () => {

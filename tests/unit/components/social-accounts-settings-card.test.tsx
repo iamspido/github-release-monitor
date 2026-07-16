@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let networkState = { isOnline: true };
 const linkSocialMock = vi.fn();
-const unlinkAccountMock = vi.fn();
+const unlinkSocialAccountActionMock = vi.fn();
 const listAccountsMock = vi.fn();
 // Required for React act() in this test environment
 (
@@ -20,6 +20,7 @@ vi.mock("next-intl", () => ({
       social_accounts_loading: "Loading linked accounts...",
       social_accounts_link_error: "LINK_ERROR",
       social_accounts_unlink_error: "UNLINK_ERROR",
+      social_accounts_unlink_session_not_fresh: "SESSION_NOT_FRESH",
       social_accounts_status_error: "STATUS_ERROR",
       social_accounts_unlink_button: "Unlink account",
       social_accounts_connect_button: `Link ${values?.provider ?? ""}`.trim(),
@@ -37,9 +38,13 @@ vi.mock("@/hooks/use-network", () => ({
 vi.mock("@/lib/auth/client", () => ({
   authClient: {
     linkSocial: (...args: unknown[]) => linkSocialMock(...args),
-    unlinkAccount: (...args: unknown[]) => unlinkAccountMock(...args),
     listAccounts: (...args: unknown[]) => listAccountsMock(...args),
   },
+}));
+
+vi.mock("@/app/auth/settings-actions", () => ({
+  unlinkSocialAccountAction: (...args: unknown[]) =>
+    unlinkSocialAccountActionMock(...args),
 }));
 
 describe("SocialAccountsSettingsCard", () => {
@@ -52,10 +57,10 @@ describe("SocialAccountsSettingsCard", () => {
     root = ReactDOM.createRoot(container);
     networkState = { isOnline: true };
     linkSocialMock.mockReset();
-    unlinkAccountMock.mockReset();
+    unlinkSocialAccountActionMock.mockReset();
     listAccountsMock.mockReset();
     linkSocialMock.mockResolvedValue({});
-    unlinkAccountMock.mockResolvedValue({});
+    unlinkSocialAccountActionMock.mockResolvedValue({ ok: true });
     listAccountsMock.mockResolvedValue({ data: [] });
     window.history.pushState({}, "", "/de/settings");
   });
@@ -159,16 +164,17 @@ describe("SocialAccountsSettingsCard", () => {
       await Promise.resolve();
     });
 
-    expect(unlinkAccountMock).toHaveBeenCalledWith({
-      providerId: "github",
-    });
+    expect(unlinkSocialAccountActionMock).toHaveBeenCalledWith("github");
   });
 
   it("shows error message when unlinkAccount returns error", async () => {
     listAccountsMock.mockResolvedValueOnce({
       data: [{ providerId: "google" }],
     });
-    unlinkAccountMock.mockResolvedValueOnce({ error: { code: "bad" } });
+    unlinkSocialAccountActionMock.mockResolvedValueOnce({
+      ok: false,
+      errorKey: "social_accounts_unlink_error",
+    });
     await renderCard(["google"]);
     const button = Array.from(container.querySelectorAll("button")).find((el) =>
       el.textContent?.includes("Unlink account"),
@@ -180,6 +186,27 @@ describe("SocialAccountsSettingsCard", () => {
     });
 
     expect(container.textContent).toContain("UNLINK_ERROR");
+  });
+
+  it("shows the server-provided error when unlinking needs a fresh session", async () => {
+    listAccountsMock.mockResolvedValueOnce({
+      data: [{ providerId: "google" }],
+    });
+    unlinkSocialAccountActionMock.mockResolvedValueOnce({
+      ok: false,
+      errorKey: "social_accounts_unlink_session_not_fresh",
+    });
+    await renderCard(["google"]);
+    const button = Array.from(container.querySelectorAll("button")).find((el) =>
+      el.textContent?.includes("Unlink account"),
+    ) as HTMLButtonElement | undefined;
+
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("SESSION_NOT_FRESH");
   });
 
   it("shows error message when linkSocial returns error", async () => {

@@ -1,5 +1,5 @@
-import { test as base } from '@playwright/test';
-import { login } from '../utils';
+import { test as base } from "@playwright/test";
+import { login } from "../utils";
 
 type LoggedInFixtures = {
   loginIfNeeded: () => Promise<void>;

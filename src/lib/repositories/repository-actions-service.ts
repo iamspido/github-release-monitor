@@ -2,12 +2,11 @@ import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { getLatestReleasesForRepos } from "@/lib/releases";
-import {
-  applyEtagUpdate,
-  canReplaceCachedReleaseWithVirtual,
-  toCachedRelease,
-} from "@/lib/releases/filters";
+import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
+import { toPublicRepository } from "@/lib/repositories/public-repository";
+import { applyReleaseFetchResultToRepository } from "@/lib/repositories/release-cache-update";
+import { parseImportedRepository } from "@/lib/repositories/repository-import";
 import { isValidRepoId } from "@/lib/repositories/validation";
 import { trackBackgroundTask } from "@/lib/runtime/background-tasks";
 import {
@@ -22,10 +21,35 @@ import {
   log,
   updateReleaseCacheTags,
 } from "@/lib/server-action-helpers";
+import {
+  buildRepositorySettingsChangeLog,
+  getReleaseCacheInvalidationReasons,
+  getRepositoryReleaseCacheInvalidationChanges,
+  shouldInvalidateReleaseCache,
+} from "@/lib/settings/change-detection";
+import { validateRegexInput } from "@/lib/settings/form-model";
 import { getJobStatus, type JobStatus, setJobStatus } from "@/lib/storage/jobs";
 import { getRepositories, saveRepositories } from "@/lib/storage/repositories";
 import { getSettings } from "@/lib/storage/settings";
-import type { Repository } from "@/types";
+import type { AppSettings, Repository } from "@/types";
+
+function createReleaseFetchFingerprint(
+  repository: Repository,
+  settings: AppSettings,
+): string {
+  const filters = resolveEffectiveRepoFilters(repository, settings);
+  return JSON.stringify({
+    url: repository.url,
+    locale: settings.locale,
+    releaseChannels: [...filters.effectiveReleaseChannels].sort(),
+    preReleaseSubChannels: [...filters.effectivePreReleaseSubChannels].sort(),
+    releasesPerPage: filters.totalReleasesToFetch,
+    includeRegex: filters.effectiveIncludeRegex,
+    excludeRegex: filters.effectiveExcludeRegex,
+    etag: repository.etag,
+    latestRelease: repository.latestRelease,
+  });
+}
 
 export async function addRepositoriesAction(
   _prevState: unknown,
@@ -148,20 +172,10 @@ export async function importRepositoriesAction(
       const currentRepoIds = new Set(currentRepos.map((repo) => repo.id));
       const currentReposMap = new Map(currentRepos.map((r) => [r.id, r]));
 
-      const validImportedRepos: Repository[] = [];
-      for (const repo of importedData) {
-        if (!repo.url) continue;
-        const parsed = parseSupportedRepoUrl(repo.url);
-        if (!parsed) continue;
-
-        // Normalize id/url on import so GitHub/Codeberg repos remain stable even if
-        // the exported data contained variations (trailing paths, `.git`, etc).
-        validImportedRepos.push({
-          ...repo,
-          id: parsed.id,
-          url: parsed.canonicalRepoUrl,
-        });
-      }
+      const validImportedRepos = importedData.flatMap((repo) => {
+        const parsed = parseImportedRepository(repo);
+        return parsed ? [parsed] : [];
+      });
 
       let addedCount = 0;
       let updatedCount = 0;
@@ -220,66 +234,73 @@ export async function importRepositoriesAction(
 }
 
 export async function refreshSingleRepositoryAction(repoId: string) {
-  return scheduleTask(`refreshSingleRepositoryAction: ${repoId}`, async () => {
-    if (!(await isRestrictedActionAllowed())) {
-      return;
-    }
-
-    if (!isValidRepoId(repoId)) {
-      log.error("Invalid repoId format for refresh:", repoId);
-      return;
-    }
-
-    log.info(`Refreshing single repository: ${repoId}`);
-
-    const settings = await getSettings();
-    const locale = settings.locale;
-    const allRepos = await getRepositories();
-    const repoToRefresh = allRepos.find((r) => r.id === repoId);
-
-    if (!repoToRefresh) {
-      log.error(`Repository ${repoId} not found for refresh.`);
-      return;
-    }
-
-    const enrichedReleases = await getLatestReleasesForRepos(
-      [repoToRefresh],
-      settings,
-      locale,
-      { skipCache: true },
-    );
-
-    const enrichedRelease = enrichedReleases[0];
-    if (!enrichedRelease) {
-      log.error(`Failed to get release for ${repoId} during single refresh.`);
-      return;
-    }
-
-    const repoIndex = allRepos.findIndex((r) => r.id === repoId);
-    if (repoIndex === -1) return; // Should not happen
-
-    applyEtagUpdate(allRepos[repoIndex], enrichedRelease.newEtag);
-    if (enrichedRelease.release) {
-      const isVirtual = enrichedRelease.release.id === 0;
-      const newCached = toCachedRelease(enrichedRelease.release);
-      // Avoid overwriting existing real release data with virtual (tag-fallback) data
-      if (
-        !isVirtual ||
-        canReplaceCachedReleaseWithVirtual(allRepos[repoIndex].latestRelease)
-      ) {
-        allRepos[repoIndex].latestRelease = newCached;
-      } else if (
-        isVirtual &&
-        allRepos[repoIndex].latestRelease &&
-        newCached.fetched_at
-      ) {
-        // Update last successful fetch time on 304 not modified
-        allRepos[repoIndex].latestRelease.fetched_at = newCached.fetched_at;
+  const snapshot = await scheduleTask(
+    `refreshSingleRepositoryAction: ${repoId}`,
+    async () => {
+      if (!(await isRestrictedActionAllowed())) {
+        return;
       }
+
+      if (!isValidRepoId(repoId)) {
+        log.error("Invalid repoId format for refresh:", repoId);
+        return;
+      }
+
+      log.info(`Refreshing single repository: ${repoId}`);
+
+      const settings = await getSettings();
+      const allRepos = await getRepositories();
+      const repository = allRepos.find((repo) => repo.id === repoId);
+
+      if (!repository) {
+        log.error(`Repository ${repoId} not found for refresh.`);
+        return;
+      }
+
+      return {
+        repository,
+        settings,
+        fingerprint: createReleaseFetchFingerprint(repository, settings),
+      };
+    },
+  );
+
+  if (!snapshot) return;
+
+  const enrichedReleases = await getLatestReleasesForRepos(
+    [snapshot.repository],
+    snapshot.settings,
+    snapshot.settings.locale,
+    { skipCache: true },
+  );
+  const enrichedRelease = enrichedReleases[0];
+  if (!enrichedRelease) {
+    log.error(`Failed to get release for ${repoId} during single refresh.`);
+    return;
+  }
+
+  return scheduleTask(`commitRefreshSingleRepository: ${repoId}`, async () => {
+    const [allRepos, currentSettings] = await Promise.all([
+      getRepositories(),
+      getSettings(),
+    ]);
+    const repoIndex = allRepos.findIndex((repo) => repo.id === repoId);
+    if (repoIndex === -1) return;
+
+    if (
+      snapshot.fingerprint !==
+      createReleaseFetchFingerprint(allRepos[repoIndex], currentSettings)
+    ) {
+      log.info(
+        `Skipped stale single refresh result for ${repoId} because its effective fetch inputs changed.`,
+      );
+      return;
     }
+
+    applyReleaseFetchResultToRepository(allRepos[repoIndex], enrichedRelease);
 
     await saveRepositories(allRepos);
-    revalidatePath("/"); // Revalidate the home page to show the new data
+    revalidatePath("/");
   });
 }
 
@@ -297,6 +318,12 @@ export async function refreshMultipleRepositoriesAction(
     const reposToRefresh = allRepos.filter((r) => repoIds.includes(r.id));
 
     if (reposToRefresh.length > 0) {
+      const fetchFingerprints = new Map(
+        reposToRefresh.map((repository) => [
+          repository.id,
+          createReleaseFetchFingerprint(repository, settings),
+        ]),
+      );
       const enrichedReleases = await getLatestReleasesForRepos(
         reposToRefresh,
         settings,
@@ -305,37 +332,34 @@ export async function refreshMultipleRepositoriesAction(
       );
 
       const enrichedMap = new Map(enrichedReleases.map((r) => [r.repoId, r]));
-
-      const updatedRepos = allRepos.map((repo) => {
-        const enriched = enrichedMap.get(repo.id);
-        if (enriched) {
-          if (enriched.release) {
-            const isVirtual = enriched.release.id === 0;
-            const newCached = toCachedRelease(enriched.release);
-            // Avoid overwriting existing real release data with virtual (tag-fallback) data
+      await scheduleTask(
+        `commitRefreshMultipleRepositories: ${jobId}`,
+        async () => {
+          // Re-read after the network phase so concurrent deletes, imports, and
+          // unrelated settings changes are preserved. Results whose effective
+          // fetch inputs changed are left for the next refresh.
+          const currentRepos = await getRepositories();
+          const currentSettings = await getSettings();
+          for (const repo of currentRepos) {
+            const enriched = enrichedMap.get(repo.id);
+            const fetchFingerprint = fetchFingerprints.get(repo.id);
             if (
-              !isVirtual ||
-              canReplaceCachedReleaseWithVirtual(repo.latestRelease)
+              enriched &&
+              fetchFingerprint ===
+                createReleaseFetchFingerprint(repo, currentSettings)
             ) {
-              repo.latestRelease = newCached;
-            } else if (
-              isVirtual &&
-              repo.latestRelease &&
-              newCached.fetched_at
-            ) {
-              // Update last successful fetch time on 304 not modified
-              repo.latestRelease.fetched_at = newCached.fetched_at;
-            }
-            // Do not initialize lastSeenReleaseTag from a virtual (tag-fallback) release
-            if (!repo.lastSeenReleaseTag && !isVirtual) {
-              repo.lastSeenReleaseTag = enriched.release.tag_name;
+              applyReleaseFetchResultToRepository(repo, enriched, {
+                initializeLastSeenFromRealRelease: true,
+              });
+            } else if (enriched && fetchFingerprint) {
+              log.info(
+                `Skipped stale background refresh result for ${repo.id} because its effective fetch inputs changed.`,
+              );
             }
           }
-          applyEtagUpdate(repo, enriched.newEtag);
-        }
-        return repo;
-      });
-      await saveRepositories(updatedRepos);
+          await saveRepositories(currentRepos);
+        },
+      );
     }
     setJobStatus(jobId, "complete");
     log.info(`Refresh multiple repositories complete: jobId=${jobId}`);
@@ -436,7 +460,7 @@ export async function getRepositoriesForExport(): Promise<{
 }> {
   try {
     const repos = await getRepositories();
-    return { success: true, data: repos };
+    return { success: true, data: repos.map(toPublicRepository) };
   } catch (error: unknown) {
     log.error("Failed to get repositories for export:", error);
     return { success: false, error: "Failed to read repository data." };
@@ -484,10 +508,14 @@ export async function updateRepositorySettingsAction(
 
       const existing = currentRepos[repoIndex];
 
-      const prevInclude = (existing.includeRegex ?? "").trim() || undefined;
-      const prevExclude = (existing.excludeRegex ?? "").trim() || undefined;
       const newInclude = (settings.includeRegex ?? "").trim() || undefined;
       const newExclude = (settings.excludeRegex ?? "").trim() || undefined;
+      if (
+        (newInclude && validateRegexInput(newInclude)) ||
+        (newExclude && validateRegexInput(newExclude))
+      ) {
+        return { success: false, error: t("regex_error_invalid") };
+      }
       const cronInput = (settings.backgroundCheckCron ?? "").trim();
       const newBackgroundCheckCron = cronInput
         ? normalizeBackgroundCheckCron(cronInput)
@@ -507,101 +535,20 @@ export async function updateRepositorySettingsAction(
           ? (normalizeCacheInterval(settings.cacheInterval) ?? null)
           : null;
 
-      const filtersChanged =
-        prevInclude !== newInclude || prevExclude !== newExclude;
-
-      // Normalize arrays for comparison (treat empty array as undefined/global)
-      const normArray = <T>(arr?: T[] | null) => {
-        if (!arr || arr.length === 0) return undefined;
-        return [...arr].sort();
-      };
-      const prevChannels = normArray(existing.releaseChannels);
-      const newChannels = normArray(settings.releaseChannels);
-      const channelsChanged =
-        JSON.stringify(prevChannels) !== JSON.stringify(newChannels);
-
-      const prevPreSubs = normArray(existing.preReleaseSubChannels);
-      const newPreSubs = normArray(settings.preReleaseSubChannels);
-      const preSubsChanged =
-        JSON.stringify(prevPreSubs) !== JSON.stringify(newPreSubs);
-
-      const prevRpp = existing.releasesPerPage ?? undefined;
-      const newRpp = settings.releasesPerPage ?? undefined;
-      const rppChanged = prevRpp !== newRpp;
-      const refreshIntervalChanged =
-        (existing.refreshInterval ?? null) !== newRefreshInterval;
-      const cacheIntervalChanged =
-        (existing.cacheInterval ?? null) !== newCacheInterval;
+      const releaseCacheInvalidation =
+        getRepositoryReleaseCacheInvalidationChanges(existing, settings);
       const backgroundCheckCronChanged =
         (existing.backgroundCheckCron ?? undefined) !== newBackgroundCheckCron;
 
-      // Build change summary for logging
-      const changes: string[] = [];
-      const fmt = (value: unknown) =>
-        value === undefined ? "undefined" : JSON.stringify(value);
-      const cmpArr = (a?: unknown[] | null, b?: unknown[] | null) =>
-        JSON.stringify((a || []).slice().sort()) ===
-        JSON.stringify((b || []).slice().sort());
-      if (!cmpArr(existing.releaseChannels, settings.releaseChannels)) {
-        changes.push(
-          `releaseChannels: ${fmt(existing.releaseChannels)} -> ${fmt(settings.releaseChannels)}`,
-        );
-      }
-      if (
-        !cmpArr(existing.preReleaseSubChannels, settings.preReleaseSubChannels)
-      ) {
-        changes.push(
-          `preReleaseSubChannels: ${fmt(existing.preReleaseSubChannels)} -> ${fmt(settings.preReleaseSubChannels)}`,
-        );
-      }
-      if (
-        (existing.releasesPerPage ?? undefined) !==
-        (settings.releasesPerPage ?? undefined)
-      ) {
-        changes.push(
-          `releasesPerPage: ${fmt(existing.releasesPerPage)} -> ${fmt(settings.releasesPerPage)}`,
-        );
-      }
-      if (refreshIntervalChanged) {
-        changes.push(
-          `refreshInterval: ${fmt(existing.refreshInterval)} -> ${fmt(newRefreshInterval)}`,
-        );
-      }
-      if (cacheIntervalChanged) {
-        changes.push(
-          `cacheInterval: ${fmt(existing.cacheInterval)} -> ${fmt(newCacheInterval)}`,
-        );
-      }
-      if (backgroundCheckCronChanged) {
-        changes.push(
-          `backgroundCheckCron: ${fmt(existing.backgroundCheckCron)} -> ${fmt(newBackgroundCheckCron)}`,
-        );
-      }
-      if (prevInclude !== newInclude) {
-        changes.push(`includeRegex: ${fmt(prevInclude)} -> ${fmt(newInclude)}`);
-      }
-      if (prevExclude !== newExclude) {
-        changes.push(`excludeRegex: ${fmt(prevExclude)} -> ${fmt(newExclude)}`);
-      }
-      if (
-        (existing.appriseTags ?? undefined) !==
-        (settings.appriseTags ?? undefined)
-      ) {
-        changes.push(
-          `appriseTags: ${fmt(existing.appriseTags)} -> ${fmt(settings.appriseTags)}`,
-        );
-      }
-      if (
-        (existing.appriseFormat ?? undefined) !==
-        (settings.appriseFormat ?? undefined)
-      ) {
-        changes.push(
-          `appriseFormat: ${fmt(existing.appriseFormat)} -> ${fmt(settings.appriseFormat)}`,
-        );
-      }
+      const changes = buildRepositorySettingsChangeLog(existing, settings, {
+        refreshInterval: newRefreshInterval,
+        cacheInterval: newCacheInterval,
+        backgroundCheckCron: newBackgroundCheckCron,
+      });
 
-      const etagInvalidated =
-        filtersChanged || channelsChanged || preSubsChanged || rppChanged;
+      const etagInvalidated = shouldInvalidateReleaseCache(
+        releaseCacheInvalidation,
+      );
 
       currentRepos[repoIndex] = {
         ...existing,
@@ -625,11 +572,9 @@ export async function updateRepositorySettingsAction(
       await saveRepositories(currentRepos);
       revalidatePath("/");
       if (etagInvalidated) {
-        const reasons: string[] = [];
-        if (filtersChanged) reasons.push("filtersChanged");
-        if (channelsChanged) reasons.push("releaseChannelsChanged");
-        if (preSubsChanged) reasons.push("preReleaseSubChannelsChanged");
-        if (rppChanged) reasons.push("releasesPerPageChanged");
+        const reasons = getReleaseCacheInvalidationReasons(
+          releaseCacheInvalidation,
+        );
         log.info(`Cleared ETag for ${repoId} due to: ${reasons.join(", ")}`);
       }
       if (changes.length > 0) {

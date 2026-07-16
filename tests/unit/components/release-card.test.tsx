@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type React from "react";
+import { act } from "react";
 import { flushSync } from "react-dom";
 import ReactDOM from "react-dom/client";
 import {
@@ -12,6 +13,10 @@ import {
   vi,
 } from "vitest";
 import type { AppSettings, EnrichedRelease } from "@/types";
+
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 type RichValues = Record<
   string,
@@ -42,6 +47,9 @@ const translationMap: Record<string, Record<string, string>> = {
     remove_button: "Remove repository",
     confirm_dialog_title: "Remove repository?",
     confirm_dialog_description_long: "Remove {repoId}?",
+    security_acknowledge_confirm_title: "Confirm security acknowledge",
+    security_acknowledge_confirm_description: "Confirm {repoId}",
+    security_acknowledge_confirm_button: "Confirm security seen",
     confirm_button: "Confirm removal",
     cancel_button: "Cancel",
     view_on_github: "Open release",
@@ -176,8 +184,20 @@ vi.mock("@/components/ui/alert-dialog", () => ({
 }));
 
 vi.mock("@/components/repo-settings-dialog", () => ({
-  RepoSettingsDialog: ({ isOpen }: { isOpen: boolean }) => (
-    <div data-testid="repo-settings-dialog" data-open={isOpen} />
+  RepoSettingsDialog: ({
+    isOpen,
+    setIsOpen,
+  }: {
+    isOpen: boolean;
+    setIsOpen: (open: boolean) => void;
+  }) => (
+    <div data-testid="repo-settings-dialog" data-open={isOpen}>
+      {isOpen ? (
+        <button type="button" onClick={() => setIsOpen(false)}>
+          Close settings
+        </button>
+      ) : null}
+    </div>
   ),
 }));
 
@@ -187,6 +207,15 @@ vi.mock("@/app/actions", () => ({
   markAsNewAction: vi.fn().mockResolvedValue({ success: true }),
   revalidateReleasesAction: vi.fn(),
 }));
+
+async function mockedActions() {
+  const actions = await import("@/app/actions");
+  return {
+    removeRepositoryAction: vi.mocked(actions.removeRepositoryAction),
+    acknowledgeNewReleaseAction: vi.mocked(actions.acknowledgeNewReleaseAction),
+    markAsNewAction: vi.mocked(actions.markAsNewAction),
+  };
+}
 
 const baseSettings: AppSettings = {
   timeFormat: "24h",
@@ -261,7 +290,7 @@ beforeEach(async () => {
   toastSpy.mockClear();
   dismissToastSpy.mockClear();
   networkState = { isOnline: true };
-  const actions = await import("@/app/actions");
+  const actions = await mockedActions();
   actions.removeRepositoryAction.mockClear();
   actions.acknowledgeNewReleaseAction.mockClear();
   actions.markAsNewAction.mockClear();
@@ -339,6 +368,35 @@ describe("ReleaseCard component", () => {
     expect(settingsButton).toBeTruthy();
   });
 
+  it("returns focus to the settings trigger after closing from an error card", async () => {
+    vi.useFakeTimers();
+    const enrichedRelease: EnrichedRelease = {
+      repoId: "owner/repo",
+      repoUrl: "https://github.com/owner/repo",
+      error: { type: "repo_not_found" },
+      repoSettings: {},
+    };
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={baseSettings}
+      />,
+    );
+
+    const settingsButton = container?.querySelector(
+      'button[aria-label="Open repository settings"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => settingsButton?.click());
+    const closeButton = getElementByText("button", "Close settings") as
+      | HTMLButtonElement
+      | undefined;
+    await act(async () => closeButton?.click());
+    await act(async () => vi.advanceTimersByTime(0));
+
+    expect(document.activeElement).toBe(settingsButton);
+  });
+
   it("disables key actions when offline", async () => {
     networkState = { isOnline: false };
 
@@ -370,7 +428,7 @@ describe("ReleaseCard component", () => {
 
   it("acknowledges a new release via the server action", async () => {
     networkState = { isOnline: true };
-    const actions = await import("@/app/actions");
+    const actions = await mockedActions();
     actions.acknowledgeNewReleaseAction.mockResolvedValue({ success: true });
 
     const enrichedRelease = {
@@ -421,6 +479,61 @@ describe("ReleaseCard component", () => {
     expect(card).toBeTruthy();
   });
 
+  it("uses the configured preset color for security highlights", async () => {
+    const enrichedRelease = makeSecurityRelease(true);
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={{ ...baseSettings, securityHighlightColorPreset: "red" }}
+      />,
+    );
+
+    const securityBadge = Array.from(
+      container?.querySelectorAll("div") ?? [],
+    ).find(
+      (element) =>
+        element.textContent === "Security" &&
+        element.className.includes("border-red-500/70"),
+    );
+    expect(securityBadge).toBeTruthy();
+    const card = Array.from(container?.querySelectorAll("div") ?? []).find(
+      (element) => element.className.includes("ring-red-500/60"),
+    );
+    expect(card).toBeTruthy();
+  });
+
+  it("requires confirmation before acknowledging security releases when enabled", async () => {
+    const actions = await mockedActions();
+    actions.acknowledgeNewReleaseAction.mockResolvedValue({ success: true });
+    const enrichedRelease = makeSecurityRelease(true);
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={{ ...baseSettings, confirmSecurityAcknowledge: true }}
+      />,
+    );
+
+    const acknowledgeButton = getButtonBySpanText("Acknowledge release");
+    expect(acknowledgeButton).toBeTruthy();
+    acknowledgeButton?.click();
+    await Promise.resolve();
+    expect(actions.acknowledgeNewReleaseAction).not.toHaveBeenCalled();
+
+    const confirmButton = getElementByText("button", "Confirm security seen") as
+      | HTMLButtonElement
+      | undefined;
+    expect(confirmButton).toBeTruthy();
+    confirmButton?.click();
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(actions.acknowledgeNewReleaseAction).toHaveBeenCalledWith(
+      "owner/repo",
+    );
+  });
+
   it("does not show the security badge for seen security releases", async () => {
     const enrichedRelease = makeSecurityRelease(false);
 
@@ -447,7 +560,7 @@ describe("ReleaseCard component", () => {
 
   it("shows toast error when mark-as-new action fails", async () => {
     networkState = { isOnline: true };
-    const actions = await import("@/app/actions");
+    const actions = await mockedActions();
     actions.markAsNewAction.mockResolvedValue({ success: false, error: "bad" });
 
     const enrichedRelease = {
@@ -479,7 +592,7 @@ describe("ReleaseCard component", () => {
 
   it("shows validation error when acknowledge action reports failure", async () => {
     networkState = { isOnline: true };
-    const actions = await import("@/app/actions");
+    const actions = await mockedActions();
     actions.acknowledgeNewReleaseAction.mockResolvedValue({
       success: false,
       error: "nope",
@@ -516,7 +629,7 @@ describe("ReleaseCard component", () => {
 
   it("shows generic error toast when acknowledge action throws", async () => {
     networkState = { isOnline: true };
-    const actions = await import("@/app/actions");
+    const actions = await mockedActions();
     actions.acknowledgeNewReleaseAction.mockRejectedValue(new Error("broken"));
 
     const enrichedRelease = {

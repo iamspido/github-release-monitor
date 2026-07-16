@@ -17,7 +17,7 @@ const { mail } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/notifications/email", async (orig) => {
-  const actual = await orig();
+  const actual = await orig<typeof import("@/lib/notifications/email")>();
   return {
     ...actual,
     sendTestEmail: (...args: unknown[]) => mail.sendTestEmail(...args),

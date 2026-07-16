@@ -14,60 +14,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { authClient } from "@/lib/auth/client";
-
-type PasskeyEntry = {
-  id: string;
-  name: string;
-  createdAt: string | null;
-};
-
-function normalizeCreatedAt(value: unknown): string | null {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    const millis = value < 1_000_000_000_000 ? value * 1_000 : value;
-    return new Date(millis).toISOString();
-  }
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value.toISOString();
-  }
-  return null;
-}
-
-function normalizePasskeys(response: unknown): PasskeyEntry[] {
-  const data = (response as { data?: unknown })?.data;
-  const source = Array.isArray(data)
-    ? data
-    : Array.isArray((data as { passkeys?: unknown[] })?.passkeys)
-      ? (data as { passkeys: unknown[] }).passkeys
-      : [];
-
-  return source
-    .map((entry) => {
-      const value = entry as {
-        id?: unknown;
-        name?: unknown;
-        createdAt?: unknown;
-      };
-      const id = typeof value.id === "string" ? value.id : "";
-      if (!id) return null;
-      const name =
-        typeof value.name === "string" && value.name.trim()
-          ? value.name.trim()
-          : id.slice(0, 8);
-      const createdAt = normalizeCreatedAt(
-        value.createdAt ??
-          (value as { created_at?: unknown }).created_at ??
-          (value as { updatedAt?: unknown }).updatedAt ??
-          (value as { updated_at?: unknown }).updated_at,
-      );
-
-      return { id, name, createdAt };
-    })
-    .filter((entry): entry is PasskeyEntry => Boolean(entry));
-}
+import {
+  addPasskey,
+  deletePasskey,
+  listPasskeys,
+  type PasskeyEntry,
+} from "@/lib/auth/client-adapters";
 
 function formatTimestamp(value: string | null): string {
   if (!value) return "-";
@@ -90,8 +42,7 @@ export function PasskeySettingsCard() {
     setIsLoading(true);
     setErrorKey(null);
     try {
-      const response = await authClient.passkey.listUserPasskeys();
-      setPasskeys(normalizePasskeys(response));
+      setPasskeys(await listPasskeys());
     } catch {
       setErrorKey("passkeys_error_load");
     } finally {
@@ -108,10 +59,8 @@ export function PasskeySettingsCard() {
     setIsCreating(true);
     setErrorKey(null);
     try {
-      const result = await authClient.passkey.addPasskey({
-        name: passkeyName.trim() || undefined,
-      });
-      if (result.error) {
+      const success = await addPasskey(passkeyName.trim() || undefined);
+      if (!success) {
         setErrorKey("passkeys_error_create");
         return;
       }
@@ -129,8 +78,7 @@ export function PasskeySettingsCard() {
     setDeletingId(id);
     setErrorKey(null);
     try {
-      const result = await authClient.passkey.deletePasskey({ id });
-      if (result.error) {
+      if (!(await deletePasskey(id))) {
         setErrorKey("passkeys_error_delete");
         return;
       }

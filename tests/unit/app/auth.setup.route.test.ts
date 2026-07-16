@@ -15,7 +15,12 @@ vi.mock("@/lib/auth", () => ({
 const isAuthSetupLockedMock = vi.fn(async () => false);
 const writeAuthSetupLockMock = vi.fn(async () => "created" as const);
 const releaseAuthSetupBootstrapLockMock = vi.fn(async () => undefined);
-const acquireAuthSetupBootstrapLockMock = vi.fn(async () => ({
+type AuthSetupBootstrapLock =
+  | { status: "acquired"; release: typeof releaseAuthSetupBootstrapLockMock }
+  | { status: "busy"; release: typeof releaseAuthSetupBootstrapLockMock };
+const acquireAuthSetupBootstrapLockMock = vi.fn<
+  (_options?: unknown) => Promise<AuthSetupBootstrapLock>
+>(async () => ({
   status: "acquired" as const,
   release: releaseAuthSetupBootstrapLockMock,
 }));
@@ -235,6 +240,27 @@ describe("auth setup route", () => {
         token: process.env.AUTH_SETUP_TOKEN,
         email: "admin@example.com",
         password: "lowercaseonly12",
+        username: "admin",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "invalid_password_policy",
+    });
+    expect(signUpEmailMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    " SuperSecurePass123 ",
+    "Super SecurePass123",
+  ])("POST: rejects password whitespace without normalizing it: %j", async (password) => {
+    const { POST } = await import("@/app/api/auth/setup/route");
+    const response = await POST(
+      setupRequest({
+        token: process.env.AUTH_SETUP_TOKEN,
+        email: "admin@example.com",
+        password,
         username: "admin",
       }),
     );

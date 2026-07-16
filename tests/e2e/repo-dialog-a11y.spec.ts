@@ -1,17 +1,22 @@
-import { test, expect } from '@playwright/test';
-import { login, ensureTestRepo } from './utils';
+import { expect, test } from "@playwright/test";
+import { ensureTestRepo, login } from "./utils";
 
-test('repo settings dialog has dialog role, labelledby, and traps focus on open', async ({ page }) => {
+test("repo settings dialog has dialog role, labelledby, and traps focus on open", async ({
+  page,
+}) => {
   await login(page);
   await ensureTestRepo(page);
-  await page.goto('/en');
+  await page.goto("/en");
 
-  await page.getByRole('button', { name: 'Open settings for this repository' }).first().click();
+  await page
+    .getByRole("button", { name: "Open settings for this repository" })
+    .first()
+    .click();
 
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
 
-  const labelledBy = await dialog.getAttribute('aria-labelledby');
+  const labelledBy = await dialog.getAttribute("aria-labelledby");
   expect(labelledBy).toBeTruthy();
   const title = page.locator(`#${labelledBy}`);
   await expect(title).toBeVisible();

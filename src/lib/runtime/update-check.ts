@@ -1,7 +1,13 @@
-"use server";
-
+import {
+  consumeResponseWithTimeout,
+  discardResponseWithTimeout,
+  fetchWithTimeout,
+} from "@/lib/http/fetch-with-timeout";
 import { logger } from "@/lib/logger";
-import { getSystemStatus, saveSystemStatus } from "@/lib/storage/system-status";
+import {
+  getSystemStatus,
+  updateSystemStatus,
+} from "@/lib/storage/system-status";
 import type { SystemStatus } from "@/types";
 
 const log = logger.withScope("UpdateCheck");
@@ -13,7 +19,24 @@ type GithubLatestReleaseResponse = {
   name?: string | null;
 };
 
-export async function runApplicationUpdateCheck(
+let applicationUpdateCheckQueue: Promise<void> = Promise.resolve();
+
+export function runApplicationUpdateCheck(
+  currentVersion: string,
+): Promise<SystemStatus> {
+  const result = applicationUpdateCheckQueue.then(() =>
+    executeApplicationUpdateCheck(currentVersion),
+  );
+
+  applicationUpdateCheckQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+
+  return result;
+}
+
+async function executeApplicationUpdateCheck(
   currentVersion: string,
 ): Promise<SystemStatus> {
   const previousStatus = await getSystemStatus();
@@ -34,56 +57,54 @@ export async function runApplicationUpdateCheck(
   const nowIso = new Date().toISOString();
 
   try {
-    const response = await fetch(GITHUB_RELEASES_API, {
+    const response = await fetchWithTimeout(GITHUB_RELEASES_API, {
       cache: "no-store",
       headers,
     });
 
     if (response.status === 304) {
-      const updated: SystemStatus = {
-        ...previousStatus,
+      await discardResponseWithTimeout(response);
+      const updated = await updateSystemStatus((current) => ({
+        ...current,
         lastCheckedAt: nowIso,
         lastCheckError: null,
-      };
-      await saveSystemStatus(updated);
+      }));
       log.debug("Update check: release information unchanged (304).");
       return updated;
     }
 
     if (!response.ok) {
+      await discardResponseWithTimeout(response);
       const message = `${response.status} ${response.statusText}`;
-      const updated: SystemStatus = {
-        ...previousStatus,
+      const updated = await updateSystemStatus((current) => ({
+        ...current,
         lastCheckedAt: nowIso,
         lastCheckError: message,
-      };
-      await saveSystemStatus(updated);
+      }));
       log.warn(`Update check failed with HTTP error: ${message}`);
       return updated;
     }
 
-    const payload = (await response.json()) as GithubLatestReleaseResponse;
+    const payload = await consumeResponseWithTimeout(
+      response,
+      async (result) => (await result.json()) as GithubLatestReleaseResponse,
+    );
     const latestVersion = payload.tag_name || payload.name || null;
     const etag = response.headers.get("etag");
 
-    let dismissedVersion = previousStatus.dismissedVersion;
-    if (
-      latestVersion &&
-      dismissedVersion &&
-      dismissedVersion !== latestVersion
-    ) {
-      dismissedVersion = null;
-    }
-
-    const updated: SystemStatus = {
+    const updated = await updateSystemStatus((current) => ({
+      ...current,
       latestKnownVersion: latestVersion,
       lastCheckedAt: nowIso,
       latestEtag: etag,
-      dismissedVersion,
+      dismissedVersion:
+        latestVersion &&
+        current.dismissedVersion &&
+        current.dismissedVersion !== latestVersion
+          ? null
+          : current.dismissedVersion,
       lastCheckError: null,
-    };
-
-    await saveSystemStatus(updated);
+    }));
 
     if (!latestVersion) {
       log.warn("Update check succeeded but no version tag was returned.");
@@ -103,12 +124,11 @@ export async function runApplicationUpdateCheck(
         : typeof error === "string"
           ? error
           : "unexpected_error";
-    const updated: SystemStatus = {
-      ...previousStatus,
+    const updated = await updateSystemStatus((current) => ({
+      ...current,
       lastCheckedAt: nowIso,
       lastCheckError: message,
-    };
-    await saveSystemStatus(updated);
+    }));
     log.error("Update check failed with exception:", error);
     return updated;
   }

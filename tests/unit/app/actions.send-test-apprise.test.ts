@@ -17,7 +17,7 @@ const { notif } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/notifications", async (orig) => {
-  const actual = await orig();
+  const actual = await orig<typeof import("@/lib/notifications")>();
   return {
     ...actual,
     sendTestAppriseNotification: (...args: unknown[]) =>

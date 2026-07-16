@@ -21,6 +21,27 @@ export type Repository = {
   excludeRegex?: string;
   appriseTags?: string;
   appriseFormat?: AppriseFormat;
+  pendingNotifications?: PendingReleaseNotification[];
+};
+
+export type NotificationChannel = "email" | "apprise";
+
+export type PendingReleaseNotification = {
+  id: string;
+  repository: {
+    id: string;
+    url: string;
+    appriseTags?: string;
+    appriseFormat?: AppriseFormat;
+  };
+  release: GithubRelease;
+  locale: string;
+  settings: NotificationSettings;
+  channels: NotificationChannel[];
+  createdAt: string;
+  attempts: number;
+  nextAttemptAt?: string;
+  abandonedAt?: string;
 };
 
 export type GithubRelease = {
@@ -128,9 +149,14 @@ export type GitlabTokenCheckResult =
 export type NotificationConfig = {
   isSmtpConfigured: boolean;
   isAppriseConfigured: boolean;
-  variables: {
-    [key: string]: string | null;
-  };
+  variables: Array<{
+    key: string;
+    displayValue: string | null;
+    isSet: boolean;
+    isRequired: boolean;
+    isSensitive: boolean;
+    revealMode: "none" | "external_click" | "password_confirm";
+  }>;
 };
 
 export type AppriseStatus = {
@@ -200,6 +226,16 @@ export const defaultProviderSortOrder: ReleaseProviderSortKey[] = [
   "gitlab",
   "codeberg",
 ];
+export const securityHighlightColorPresets = [
+  "yellow",
+  "red",
+  "orange",
+  "blue",
+  "purple",
+  "custom",
+] as const;
+export type SecurityHighlightColorPreset =
+  (typeof securityHighlightColorPresets)[number];
 
 export type AppSettings = {
   timeFormat: TimeFormat;
@@ -217,6 +253,11 @@ export type AppSettings = {
   releaseSortOrder?: ReleaseSortOrder;
   providerSortOrder?: ReleaseProviderSortKey[];
   prioritizeNewSecurityReleases?: boolean;
+  securityHighlightColorPreset?: SecurityHighlightColorPreset;
+  securityHighlightCustomColor?: string;
+  confirmSecurityAcknowledge?: boolean;
+  includeDefaultSecurityPatterns?: boolean;
+  customSecurityPatterns?: string;
   showAcknowledge?: boolean;
   showMarkAsNew?: boolean;
   showProviderPrefixInRepoId?: boolean;
@@ -228,6 +269,11 @@ export type AppSettings = {
   appriseTags?: string;
   appriseFormat?: AppriseFormat;
 };
+
+export type NotificationSettings = Pick<
+  AppSettings,
+  "timeFormat" | "appriseMaxCharacters" | "appriseTags" | "appriseFormat"
+>;
 
 export type SystemStatus = {
   latestKnownVersion: string | null;

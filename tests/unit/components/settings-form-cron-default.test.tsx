@@ -34,7 +34,7 @@ vi.mock("next-intl", () => ({
 }));
 
 vi.mock("@/app/settings/actions", () => ({
-  updateSettingsAction: vi
+  updateSettingsPatchAction: vi
     .fn()
     .mockResolvedValue({ success: true, message: { title: "ok" } }),
   deleteAllRepositoriesAction: vi

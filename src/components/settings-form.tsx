@@ -12,7 +12,7 @@ import { useTranslations } from "next-intl";
 import * as React from "react";
 import {
   deleteAllRepositoriesAction,
-  updateSettingsAction,
+  updateSettingsPatchAction,
 } from "@/app/settings/actions";
 import { CronTimeSelect } from "@/components/cron-time-select";
 import {
@@ -45,10 +45,51 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  type AutosaveStatus,
+  useDebouncedAutosave,
+} from "@/hooks/use-debounced-autosave";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { usePathname, useRouter } from "@/i18n/navigation";
+import {
+  defaultSecurityHighlightCustomColor,
+  getInvalidCustomSecurityPattern,
+  isValidSecurityHighlightCustomColor,
+  normalizeSecurityHighlightColorPreset,
+  normalizeSecurityHighlightCustomColor,
+} from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
+import {
+  getSettingsReconciliationPatch,
+  hasSettingsSnapshotDrift,
+  isCacheIntervalInvalid,
+  type RangeValidationError,
+  validateCronInput,
+  validateFilledInterval,
+  validateOptionalIntegerInput,
+  validateRegexInput,
+} from "@/lib/settings/form-model";
+import {
+  shouldSelectAllPreReleaseSubChannels,
+  togglePreReleaseSubChannel,
+  toggleReleaseChannel,
+} from "@/lib/settings/release-channel-fields";
+import {
+  buildCronExpression,
+  type CronPreset,
+  cronPresetOptions,
+  cronWeekdayOptions,
+  defaultCronExpression,
+  inferCronParts,
+  inferCronPresetValue,
+  inferCronWeekday,
+  MAX_INTERVAL_MINUTES,
+  MINUTES_IN_DAY,
+  MINUTES_IN_HOUR,
+  minutesToDhms,
+} from "@/lib/settings/schedule-fields";
 import { cn } from "@/lib/utils";
 import type {
   AppriseFormat,
@@ -58,101 +99,18 @@ import type {
   ReleaseChannel,
   ReleaseProviderSortKey,
   ReleaseSortOrder,
+  SecurityHighlightColorPreset,
   TimeFormat,
 } from "@/types";
 import { allPreReleaseTypes, defaultProviderSortOrder } from "@/types";
 
-const MINUTES_IN_DAY = 24 * 60;
-const MINUTES_IN_HOUR = 60;
-const MAX_INTERVAL_MINUTES = 5256000;
-
-function minutesToDhms(totalMinutes: number) {
-  const d = Math.floor(totalMinutes / MINUTES_IN_DAY);
-  const h = Math.floor((totalMinutes % MINUTES_IN_DAY) / MINUTES_IN_HOUR);
-  const m = totalMinutes % MINUTES_IN_HOUR;
-  return { d, h, m };
-}
-
 type GlobalAutomationMode = "interval" | "cron";
-type CronPreset = "daily" | "weekdays" | "weekly" | "custom";
 
-const defaultCronExpression = "0 8 * * *";
-const weekdays = [
-  { value: "1", labelKey: "cron_weekday_monday" },
-  { value: "2", labelKey: "cron_weekday_tuesday" },
-  { value: "3", labelKey: "cron_weekday_wednesday" },
-  { value: "4", labelKey: "cron_weekday_thursday" },
-  { value: "5", labelKey: "cron_weekday_friday" },
-  { value: "6", labelKey: "cron_weekday_saturday" },
-  { value: "0", labelKey: "cron_weekday_sunday" },
-] as const;
-
-function splitCronTime(cron?: string) {
-  const [minute, hour] = (cron || defaultCronExpression).split(" ");
-  const h = Number.parseInt(hour, 10);
-  const m = Number.parseInt(minute, 10);
-  return `${String(Number.isFinite(h) ? h : 8).padStart(2, "0")}:${String(
-    Number.isFinite(m) ? m : 0,
-  ).padStart(2, "0")}`;
-}
-
-function inferCronPreset(cron?: string): CronPreset {
-  if (!cron) return "daily";
-  const parts = cron.trim().replace(/\s+/g, " ").split(" ");
-  if (parts.length !== 5) return "custom";
-  const [, , dayOfMonth, month, dayOfWeek] = parts;
-  if (dayOfMonth === "*" && month === "*" && dayOfWeek === "*") {
-    return "daily";
-  }
-  if (dayOfMonth === "*" && month === "*" && dayOfWeek === "1-5") {
-    return "weekdays";
-  }
-  if (dayOfMonth === "*" && month === "*" && /^[0-6]$/.test(dayOfWeek)) {
-    return "weekly";
-  }
-  return "custom";
-}
-
-function inferCronWeekday(cron?: string) {
-  const parts = cron?.trim().replace(/\s+/g, " ").split(" ") ?? [];
-  return parts.length === 5 && /^[0-6]$/.test(parts[4]) ? parts[4] : "1";
-}
-
-function buildCronExpression(
-  preset: CronPreset,
-  time: string,
-  weekday: string,
-  customExpression: string,
-) {
-  if (preset === "custom") return customExpression.trim().replace(/\s+/g, " ");
-  const [hour = "8", minute = "0"] = time.split(":");
-  const h = Number.parseInt(hour, 10);
-  const m = Number.parseInt(minute, 10);
-  const safeHour = Number.isFinite(h) ? Math.min(Math.max(h, 0), 23) : 8;
-  const safeMinute = Number.isFinite(m) ? Math.min(Math.max(m, 0), 59) : 0;
-  if (preset === "weekdays") return `${safeMinute} ${safeHour} * * 1-5`;
-  if (preset === "weekly") return `${safeMinute} ${safeHour} * * ${weekday}`;
-  return `${safeMinute} ${safeHour} * * *`;
-}
-
-function isValidFiveFieldCron(cron: string) {
-  const parts = cron.trim().replace(/\s+/g, " ").split(" ");
-  if (parts.length !== 5) return false;
-  return parts.every((part) => part.length > 0);
-}
-
-type SaveStatus =
-  | "idle"
-  | "waiting"
-  | "saving"
-  | "success"
-  | "error"
-  | "paused";
-type IntervalValidationError = "too_low" | "too_high" | null;
-type ReleasesPerPageError = "too_low" | "too_high" | null;
-type ParallelRepoFetchError = "too_low" | "too_high" | null;
-type RegexError = "invalid" | null;
-type CronValidationError = "invalid" | null;
+type IntervalValidationError = RangeValidationError;
+type ReleasesPerPageError = RangeValidationError;
+type ParallelRepoFetchError = RangeValidationError;
+type HexColorError = "invalid" | null;
+type SecurityPatternsError = "invalid" | null;
 
 const providerSortOrderOptions: ReleaseProviderSortKey[][] = [
   ["github", "gitlab", "codeberg"],
@@ -162,6 +120,43 @@ const providerSortOrderOptions: ReleaseProviderSortKey[][] = [
   ["codeberg", "github", "gitlab"],
   ["codeberg", "gitlab", "github"],
 ];
+
+const securityHighlightColorOptions = [
+  {
+    value: "yellow",
+    labelKey: "security_highlight_color_yellow",
+    swatchClassName: "bg-yellow-500",
+  },
+  {
+    value: "red",
+    labelKey: "security_highlight_color_red",
+    swatchClassName: "bg-red-500",
+  },
+  {
+    value: "orange",
+    labelKey: "security_highlight_color_orange",
+    swatchClassName: "bg-orange-500",
+  },
+  {
+    value: "blue",
+    labelKey: "security_highlight_color_blue",
+    swatchClassName: "bg-blue-500",
+  },
+  {
+    value: "purple",
+    labelKey: "security_highlight_color_purple",
+    swatchClassName: "bg-purple-500",
+  },
+  {
+    value: "custom",
+    labelKey: "security_highlight_color_custom",
+    swatchClassName: "",
+  },
+] as const satisfies readonly {
+  value: SecurityHighlightColorPreset;
+  labelKey: string;
+  swatchClassName: string;
+}[];
 
 function serializeProviderSortOrder(order: ReleaseProviderSortKey[]) {
   return order.join(",");
@@ -176,7 +171,7 @@ function deserializeProviderSortOrder(value: string): ReleaseProviderSortKey[] {
   return selected ?? defaultProviderSortOrder;
 }
 
-function FloatingSaveIndicator({ status }: { status: SaveStatus }) {
+function FloatingSaveIndicator({ status }: { status: AutosaveStatus }) {
   const t = useTranslations("SettingsForm");
 
   if (status === "idle") {
@@ -184,7 +179,7 @@ function FloatingSaveIndicator({ status }: { status: SaveStatus }) {
   }
 
   const messages: Record<
-    SaveStatus,
+    AutosaveStatus,
     { text: React.ReactNode; icon: React.ReactNode; className: string }
   > = {
     idle: { text: "", icon: null, className: "" },
@@ -257,6 +252,12 @@ export function SettingsForm({
       releaseSortOrder: `${baseId}-release-sort-order`,
       providerSortOrder: `${baseId}-provider-sort-order`,
       prioritizeNewSecurityReleases: `${baseId}-prioritize-new-security-releases`,
+      securityHighlightColor: `${baseId}-security-highlight-color`,
+      securityHighlightCustomColor: `${baseId}-security-highlight-custom-color`,
+      securityHighlightCustomColorPicker: `${baseId}-security-highlight-custom-color-picker`,
+      confirmSecurityAcknowledge: `${baseId}-confirm-security-acknowledge`,
+      includeDefaultSecurityPatterns: `${baseId}-include-default-security-patterns`,
+      customSecurityPatterns: `${baseId}-custom-security-patterns`,
       showAcknowledge: `${baseId}-show-acknowledge`,
       showMarkAsNew: `${baseId}-show-mark-new`,
       showProviderPrefixInRepoId: `${baseId}-show-provider-prefix-in-repo-id`,
@@ -304,6 +305,30 @@ export function SettingsForm({
     React.useState<boolean>(
       currentSettings.prioritizeNewSecurityReleases ?? false,
     );
+  const [securityHighlightColorPreset, setSecurityHighlightColorPreset] =
+    React.useState<SecurityHighlightColorPreset>(
+      normalizeSecurityHighlightColorPreset(
+        currentSettings.securityHighlightColorPreset,
+      ),
+    );
+  const [securityHighlightCustomColor, setSecurityHighlightCustomColor] =
+    React.useState(
+      normalizeSecurityHighlightCustomColor(
+        currentSettings.securityHighlightCustomColor ??
+          defaultSecurityHighlightCustomColor,
+      ),
+    );
+  const [confirmSecurityAcknowledge, setConfirmSecurityAcknowledge] =
+    React.useState<boolean>(
+      currentSettings.confirmSecurityAcknowledge ?? false,
+    );
+  const [includeDefaultSecurityPatterns, setIncludeDefaultSecurityPatterns] =
+    React.useState<boolean>(
+      currentSettings.includeDefaultSecurityPatterns ?? true,
+    );
+  const [customSecurityPatterns, setCustomSecurityPatterns] = React.useState(
+    currentSettings.customSecurityPatterns ?? "",
+  );
   const [releasesPerPage, setReleasesPerPage] = React.useState(
     String(currentSettings.releasesPerPage || 30),
   );
@@ -348,10 +373,10 @@ export function SettingsForm({
       currentSettings.backgroundCheckCron ? "cron" : "interval",
     );
   const [cronPreset, setCronPreset] = React.useState<CronPreset>(() =>
-    inferCronPreset(currentSettings.backgroundCheckCron),
+    inferCronPresetValue(currentSettings.backgroundCheckCron),
   );
-  const [cronTime, setCronTime] = React.useState(() =>
-    splitCronTime(currentSettings.backgroundCheckCron),
+  const [cronTime, setCronTime] = React.useState(
+    () => inferCronParts(currentSettings.backgroundCheckCron).time,
   );
   const [cronWeekday, setCronWeekday] = React.useState(() =>
     inferCronWeekday(currentSettings.backgroundCheckCron),
@@ -380,21 +405,15 @@ export function SettingsForm({
     String(minutesToDhms(currentSettings.cacheInterval).m),
   );
 
-  const [intervalError, setIntervalError] =
-    React.useState<IntervalValidationError>(null);
-  const [releasesPerPageError, setReleasesPerPageError] =
-    React.useState<ReleasesPerPageError>(null);
-  const [parallelRepoFetchesError, setParallelRepoFetchesError] =
-    React.useState<ParallelRepoFetchError>(null);
-  const [isCacheInvalid, setIsCacheInvalid] = React.useState(false);
-  const [includeRegexError, setIncludeRegexError] =
-    React.useState<RegexError>(null);
-  const [excludeRegexError, setExcludeRegexError] =
-    React.useState<RegexError>(null);
-  const [cronError, setCronError] = React.useState<CronValidationError>(null);
-
-  const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
+  const {
+    status: saveStatus,
+    setStatus: setSaveStatus,
+    cancel: cancelAutosave,
+    schedule: scheduleAutosave,
+  } = useDebouncedAutosave();
   const isInitialMount = React.useRef(true);
+  const lastSavedSettingsRef = React.useRef(currentSettings);
+  const lastSubmittedSettingsRef = React.useRef(currentSettings);
 
   // Check for saved state after locale change
   React.useEffect(() => {
@@ -407,7 +426,7 @@ export function SettingsForm({
       // Auto-hide success message after 3 seconds
       setTimeout(() => setSaveStatus("idle"), 3000);
     }
-  }, []);
+  }, [setSaveStatus]);
 
   const newSettings: AppSettings = React.useMemo(() => {
     const d = parseInt(days, 10) || 0;
@@ -443,6 +462,11 @@ export function SettingsForm({
       releaseSortOrder,
       providerSortOrder,
       prioritizeNewSecurityReleases,
+      securityHighlightColorPreset,
+      securityHighlightCustomColor,
+      confirmSecurityAcknowledge,
+      includeDefaultSecurityPatterns,
+      customSecurityPatterns,
       showAcknowledge,
       showMarkAsNew,
       showProviderPrefixInRepoId,
@@ -477,6 +501,11 @@ export function SettingsForm({
     releaseSortOrder,
     providerSortOrder,
     prioritizeNewSecurityReleases,
+    securityHighlightColorPreset,
+    securityHighlightCustomColor,
+    confirmSecurityAcknowledge,
+    includeDefaultSecurityPatterns,
+    customSecurityPatterns,
     showAcknowledge,
     showMarkAsNew,
     showProviderPrefixInRepoId,
@@ -490,98 +519,67 @@ export function SettingsForm({
     currentSettings.parallelRepoFetches,
   ]);
 
-  // Validation Effect
-  React.useEffect(() => {
+  const {
+    intervalError,
+    releasesPerPageError,
+    parallelRepoFetchesError,
+    isCacheInvalid,
+    includeRegexError,
+    excludeRegexError,
+    cronError,
+    securityHighlightCustomColorError,
+    customSecurityPatternsError,
+  } = React.useMemo(() => {
     const refreshFieldsFilled = days !== "" && hours !== "" && minutes !== "";
     const cacheFieldsFilled =
       cacheDays !== "" && cacheHours !== "" && cacheMinutes !== "";
     const releasesPerPageFilled = releasesPerPage !== "";
     const parallelRepoFetchesFilled = parallelRepoFetches !== "";
-
-    // Refresh Interval Validation
-    if (automationMode === "interval" && refreshFieldsFilled) {
-      if (newSettings.refreshInterval < 1) {
-        setIntervalError("too_low");
-      } else if (newSettings.refreshInterval > MAX_INTERVAL_MINUTES) {
-        setIntervalError("too_high");
-      } else {
-        setIntervalError(null);
-      }
-    } else {
-      setIntervalError(null);
-    }
-
-    if (automationMode === "cron") {
-      const cron = newSettings.backgroundCheckCron ?? "";
-      setCronError(isValidFiveFieldCron(cron) ? null : "invalid");
-    } else {
-      setCronError(null);
-    }
-
-    // Releases Per Page Validation
-    if (releasesPerPageFilled) {
-      const numReleases = parseInt(releasesPerPage, 10);
-      if (numReleases < 1) {
-        setReleasesPerPageError("too_low");
-      } else if (numReleases > 1000) {
-        setReleasesPerPageError("too_high");
-      } else {
-        setReleasesPerPageError(null);
-      }
-    } else {
-      setReleasesPerPageError(null);
-    }
-
-    // Parallel Repo Fetches Validation
-    if (parallelRepoFetchesFilled) {
-      const numParallel = parseInt(parallelRepoFetches, 10);
-      if (numParallel < 1) {
-        setParallelRepoFetchesError("too_low");
-      } else if (numParallel > 50) {
-        setParallelRepoFetchesError("too_high");
-      } else {
-        setParallelRepoFetchesError(null);
-      }
-    } else {
-      setParallelRepoFetchesError(null);
-    }
-
-    // Include Regex Validation
-    if (!includeRegex.trim()) {
-      setIncludeRegexError(null);
-    } else {
-      try {
-        new RegExp(includeRegex);
-        setIncludeRegexError(null);
-      } catch {
-        setIncludeRegexError("invalid");
-      }
-    }
-
-    // Exclude Regex Validation
-    if (!excludeRegex.trim()) {
-      setExcludeRegexError(null);
-    } else {
-      try {
-        new RegExp(excludeRegex);
-        setExcludeRegexError(null);
-      } catch {
-        setExcludeRegexError("invalid");
-      }
-    }
-
-    // Cache Validation
-    const isCacheEnabled = newSettings.cacheInterval > 0;
-    const cacheIsLarger =
-      automationMode === "interval" &&
-      newSettings.cacheInterval > newSettings.refreshInterval;
-    setIsCacheInvalid(
-      automationMode === "interval" &&
-        refreshFieldsFilled &&
-        cacheFieldsFilled &&
-        isCacheEnabled &&
-        cacheIsLarger,
+    const nextIntervalError: IntervalValidationError =
+      automationMode === "interval"
+        ? validateFilledInterval(
+            newSettings.refreshInterval,
+            refreshFieldsFilled,
+            MAX_INTERVAL_MINUTES,
+          )
+        : null;
+    const nextCronError = validateCronInput(
+      newSettings.backgroundCheckCron,
+      automationMode === "cron",
     );
+    const nextReleasesPerPageError: ReleasesPerPageError = releasesPerPageFilled
+      ? validateOptionalIntegerInput(releasesPerPage, 1, 1000)
+      : null;
+    const nextParallelRepoFetchesError: ParallelRepoFetchError =
+      parallelRepoFetchesFilled
+        ? validateOptionalIntegerInput(parallelRepoFetches, 1, 50)
+        : null;
+    const nextSecurityColorError: HexColorError =
+      securityHighlightColorPreset === "custom" &&
+      !isValidSecurityHighlightCustomColor(securityHighlightCustomColor)
+        ? "invalid"
+        : null;
+    const nextSecurityPatternsError: SecurityPatternsError =
+      getInvalidCustomSecurityPattern(customSecurityPatterns)
+        ? "invalid"
+        : null;
+
+    return {
+      intervalError: nextIntervalError,
+      releasesPerPageError: nextReleasesPerPageError,
+      parallelRepoFetchesError: nextParallelRepoFetchesError,
+      includeRegexError: validateRegexInput(includeRegex),
+      excludeRegexError: validateRegexInput(excludeRegex),
+      cronError: nextCronError,
+      securityHighlightCustomColorError: nextSecurityColorError,
+      customSecurityPatternsError: nextSecurityPatternsError,
+      isCacheInvalid: isCacheIntervalInvalid({
+        enabled: automationMode === "interval" && refreshFieldsFilled,
+        fieldsFilled: cacheFieldsFilled,
+        cacheInterval: newSettings.cacheInterval,
+        refreshInterval: newSettings.refreshInterval,
+      }),
+    };
   }, [
     days,
     hours,
@@ -595,6 +593,9 @@ export function SettingsForm({
     newSettings.cacheInterval,
     includeRegex,
     excludeRegex,
+    securityHighlightColorPreset,
+    securityHighlightCustomColor,
+    customSecurityPatterns,
     automationMode,
     newSettings.backgroundCheckCron,
   ]);
@@ -608,7 +609,17 @@ export function SettingsForm({
     }
 
     if (!isOnline) {
-      setSaveStatus("paused");
+      cancelAutosave("paused");
+      return;
+    }
+
+    if (
+      !hasSettingsSnapshotDrift(
+        lastSavedSettingsRef.current,
+        lastSubmittedSettingsRef.current,
+        newSettings,
+      )
+    ) {
       return;
     }
 
@@ -641,20 +652,29 @@ export function SettingsForm({
       parallelRepoFetchesError ||
       includeRegexError ||
       excludeRegexError ||
+      securityHighlightCustomColorError ||
+      customSecurityPatternsError ||
       cronError
     ) {
-      setSaveStatus("idle");
+      cancelAutosave("idle");
       return;
     }
 
-    setSaveStatus("waiting");
-
-    const handler = setTimeout(async () => {
-      setSaveStatus("saving");
+    return scheduleAutosave(async ({ isCurrent, setStatus }) => {
       try {
-        const result = await updateSettingsAction(newSettings);
+        const settingsPatch = getSettingsReconciliationPatch(
+          lastSavedSettingsRef.current,
+          lastSubmittedSettingsRef.current,
+          newSettings,
+        );
+        lastSubmittedSettingsRef.current = newSettings;
+        const result = await updateSettingsPatchAction(settingsPatch);
+
+        if (!isCurrent()) return;
 
         if (result.success) {
+          lastSavedSettingsRef.current = newSettings;
+          lastSubmittedSettingsRef.current = newSettings;
           // On locale change: save flag and redirect immediately
           if (newSettings.locale !== currentSettings.locale) {
             sessionStorage.setItem("settingsSavedAfterLocaleChange", "true");
@@ -663,10 +683,12 @@ export function SettingsForm({
           }
 
           // Normal save: show success status and auto-hide after 3 seconds
-          setSaveStatus("success");
-          setTimeout(() => setSaveStatus("idle"), 3000);
+          setStatus("success");
+          setTimeout(() => {
+            setStatus("idle");
+          }, 3000);
         } else {
-          setSaveStatus("error");
+          setStatus("error");
           // Toast only on error
           toast({
             title: result.message.title,
@@ -675,10 +697,11 @@ export function SettingsForm({
           });
         }
       } catch (error: unknown) {
+        if (!isCurrent()) return;
         if (reloadIfServerActionStale(error)) {
           return;
         }
-        setSaveStatus("error");
+        setStatus("error");
         // Toast only on error
         toast({
           title: t("toast_error_title"),
@@ -686,11 +709,7 @@ export function SettingsForm({
           variant: "destructive",
         });
       }
-    }, 1500);
-
-    return () => {
-      clearTimeout(handler);
-    };
+    });
   }, [
     newSettings,
     days,
@@ -712,16 +731,18 @@ export function SettingsForm({
     parallelRepoFetchesError,
     includeRegexError,
     excludeRegexError,
+    securityHighlightCustomColorError,
+    customSecurityPatternsError,
     cronError,
     appriseMaxCharacters,
     isOnline,
     currentSettings.locale,
+    cancelAutosave,
+    scheduleAutosave,
   ]);
 
   const handleChannelChange = (channel: ReleaseChannel) => {
-    const newChannels = channels.includes(channel)
-      ? channels.filter((c) => c !== channel)
-      : [...channels, channel];
+    const newChannels = toggleReleaseChannel(channels, channel);
 
     if (newChannels.length === 0) {
       toast({
@@ -733,7 +754,7 @@ export function SettingsForm({
     }
     setChannels(newChannels);
 
-    if (channel === "prerelease" && newChannels.includes("prerelease")) {
+    if (shouldSelectAllPreReleaseSubChannels(channel, newChannels)) {
       setPreReleaseSubChannels(allPreReleaseTypes);
     }
   };
@@ -742,9 +763,7 @@ export function SettingsForm({
     subChannel: PreReleaseChannelType,
   ) => {
     setPreReleaseSubChannels((prev) =>
-      prev.includes(subChannel)
-        ? prev.filter((sc) => sc !== subChannel)
-        : [...prev, subChannel],
+      togglePreReleaseSubChannel(prev, subChannel),
     );
   };
 
@@ -898,28 +917,6 @@ export function SettingsForm({
             <div className="space-y-4 pt-2">
               <div className="flex items-start space-x-3">
                 <Checkbox
-                  id={ids.prioritizeNewSecurityReleases}
-                  checked={prioritizeNewSecurityReleases}
-                  onCheckedChange={(checked) =>
-                    setPrioritizeNewSecurityReleases(Boolean(checked))
-                  }
-                  disabled={saveStatus === "saving" || !isOnline}
-                  className="mt-1"
-                />
-                <div className="grid gap-1.5 leading-none">
-                  <Label
-                    htmlFor={ids.prioritizeNewSecurityReleases}
-                    className="font-medium cursor-pointer"
-                  >
-                    {t("prioritize_new_security_releases_title")}
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    {t("prioritize_new_security_releases_description")}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Checkbox
                   id={ids.showAcknowledge}
                   checked={showAcknowledge}
                   onCheckedChange={(checked) =>
@@ -1038,6 +1035,218 @@ export function SettingsForm({
                     {t("repository_form_expanded_description")}
                   </p>
                 </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("security_releases_settings_title")}</CardTitle>
+            <CardDescription>
+              {t("security_releases_settings_description")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-start space-x-3">
+              <Checkbox
+                id={ids.prioritizeNewSecurityReleases}
+                checked={prioritizeNewSecurityReleases}
+                onCheckedChange={(checked) =>
+                  setPrioritizeNewSecurityReleases(Boolean(checked))
+                }
+                disabled={saveStatus === "saving" || !isOnline}
+                className="mt-1"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor={ids.prioritizeNewSecurityReleases}
+                  className="font-medium cursor-pointer"
+                >
+                  {t("prioritize_new_security_releases_title")}
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {t("prioritize_new_security_releases_description")}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label>{t("security_highlight_color_label")}</Label>
+              <RadioGroup
+                value={securityHighlightColorPreset}
+                onValueChange={(value) =>
+                  setSecurityHighlightColorPreset(
+                    normalizeSecurityHighlightColorPreset(value),
+                  )
+                }
+                className="grid gap-2 sm:grid-cols-2"
+                disabled={saveStatus === "saving" || !isOnline}
+              >
+                {securityHighlightColorOptions.map((option) => {
+                  const optionId = `${ids.securityHighlightColor}-${option.value}`;
+                  const customSwatchColor = isValidSecurityHighlightCustomColor(
+                    securityHighlightCustomColor,
+                  )
+                    ? securityHighlightCustomColor
+                    : defaultSecurityHighlightCustomColor;
+                  return (
+                    <div
+                      key={option.value}
+                      className="flex items-center space-x-2 rounded-md border p-3"
+                    >
+                      <RadioGroupItem value={option.value} id={optionId} />
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "size-4 shrink-0 rounded-full border",
+                          option.swatchClassName,
+                        )}
+                        style={
+                          option.value === "custom"
+                            ? { backgroundColor: customSwatchColor }
+                            : undefined
+                        }
+                      />
+                      <Label
+                        htmlFor={optionId}
+                        className="cursor-pointer font-normal"
+                      >
+                        {t(option.labelKey)}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </RadioGroup>
+              {securityHighlightColorPreset === "custom" && (
+                <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-[auto_1fr]">
+                  <div className="space-y-2">
+                    <Label htmlFor={ids.securityHighlightCustomColorPicker}>
+                      {t("security_highlight_color_picker_label")}
+                    </Label>
+                    <Input
+                      id={ids.securityHighlightCustomColorPicker}
+                      type="color"
+                      value={
+                        isValidSecurityHighlightCustomColor(
+                          securityHighlightCustomColor,
+                        )
+                          ? securityHighlightCustomColor
+                          : defaultSecurityHighlightCustomColor
+                      }
+                      onChange={(event) =>
+                        setSecurityHighlightCustomColor(
+                          event.target.value.toLowerCase(),
+                        )
+                      }
+                      disabled={saveStatus === "saving" || !isOnline}
+                      className="h-10 w-16 p-1"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={ids.securityHighlightCustomColor}>
+                      {t("security_highlight_hex_label")}
+                    </Label>
+                    <Input
+                      id={ids.securityHighlightCustomColor}
+                      value={securityHighlightCustomColor}
+                      onChange={(event) =>
+                        setSecurityHighlightCustomColor(event.target.value)
+                      }
+                      placeholder={defaultSecurityHighlightCustomColor}
+                      disabled={saveStatus === "saving" || !isOnline}
+                      className={cn(
+                        !!securityHighlightCustomColorError &&
+                          "border-destructive focus-visible:ring-destructive",
+                      )}
+                    />
+                    {securityHighlightCustomColorError ? (
+                      <p className="text-sm text-destructive">
+                        {t("security_highlight_hex_error_invalid")}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {t("security_highlight_hex_hint")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-start space-x-3">
+              <Checkbox
+                id={ids.confirmSecurityAcknowledge}
+                checked={confirmSecurityAcknowledge}
+                onCheckedChange={(checked) =>
+                  setConfirmSecurityAcknowledge(Boolean(checked))
+                }
+                disabled={saveStatus === "saving" || !isOnline}
+                className="mt-1"
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor={ids.confirmSecurityAcknowledge}
+                  className="font-medium cursor-pointer"
+                >
+                  {t("confirm_security_acknowledge_title")}
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {t("confirm_security_acknowledge_description")}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id={ids.includeDefaultSecurityPatterns}
+                  checked={includeDefaultSecurityPatterns}
+                  onCheckedChange={(checked) =>
+                    setIncludeDefaultSecurityPatterns(Boolean(checked))
+                  }
+                  disabled={saveStatus === "saving" || !isOnline}
+                  className="mt-1"
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label
+                    htmlFor={ids.includeDefaultSecurityPatterns}
+                    className="font-medium cursor-pointer"
+                  >
+                    {t("include_default_security_patterns_title")}
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {t("include_default_security_patterns_description")}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={ids.customSecurityPatterns}>
+                  {t("custom_security_patterns_label")}
+                </Label>
+                <Textarea
+                  id={ids.customSecurityPatterns}
+                  value={customSecurityPatterns}
+                  onChange={(event) =>
+                    setCustomSecurityPatterns(event.target.value)
+                  }
+                  placeholder={t("custom_security_patterns_placeholder")}
+                  disabled={saveStatus === "saving" || !isOnline}
+                  className={cn(
+                    "min-h-32 font-mono text-sm",
+                    !!customSecurityPatternsError &&
+                      "border-destructive focus-visible:ring-destructive",
+                  )}
+                />
+                {customSecurityPatternsError ? (
+                  <p className="text-sm text-destructive">
+                    {t("security_patterns_error_invalid")}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {t("custom_security_patterns_hint")}
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -1349,18 +1558,11 @@ export function SettingsForm({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="daily">
-                        {t("cron_preset_daily")}
-                      </SelectItem>
-                      <SelectItem value="weekdays">
-                        {t("cron_preset_weekdays")}
-                      </SelectItem>
-                      <SelectItem value="weekly">
-                        {t("cron_preset_weekly")}
-                      </SelectItem>
-                      <SelectItem value="custom">
-                        {t("cron_preset_custom")}
-                      </SelectItem>
+                      {cronPresetOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {t(option.labelKey)}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1402,7 +1604,7 @@ export function SettingsForm({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {weekdays.map((weekday) => (
+                            {cronWeekdayOptions.map((weekday) => (
                               <SelectItem
                                 key={weekday.value}
                                 value={weekday.value}

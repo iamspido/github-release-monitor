@@ -9,7 +9,7 @@ describe("storage/jobs", () => {
     vi.useRealTimers();
   });
 
-  it("stores and retrieves job status, then expires", () => {
+  it("keeps pending jobs and expires terminal status", () => {
     const id = "job-123";
     const status: JobStatus = "pending";
     setJobStatus(id, status);
@@ -20,7 +20,13 @@ describe("storage/jobs", () => {
     vi.advanceTimersByTime(5 * 60 * 1000 - 1);
     expect(getJobStatus(id)).toBe("pending");
 
-    // Advance past expiration
+    vi.advanceTimersByTime(2);
+    expect(getJobStatus(id)).toBe("pending");
+
+    setJobStatus(id, "complete");
+    vi.advanceTimersByTime(5 * 60 * 1000 - 1);
+    expect(getJobStatus(id)).toBe("complete");
+
     vi.advanceTimersByTime(2);
     expect(getJobStatus(id)).toBeUndefined();
   });

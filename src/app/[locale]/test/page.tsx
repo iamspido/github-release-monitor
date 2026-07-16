@@ -1,57 +1,21 @@
 import { getTranslations } from "next-intl/server";
-import {
-  checkAppriseStatusAction,
-  getCodebergTokenCheck,
-  getGitHubRateLimit,
-  getGitlabTokenCheck,
-  getUpdateNotificationState,
-} from "@/app/actions";
+import { checkAppriseStatusAction } from "@/app/actions";
 import { Header } from "@/components/header";
 import { TestPageClient } from "@/components/test-page-client";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
+import { buildNotificationConfig } from "@/lib/diagnostics/notification-config";
+import {
+  getCodebergTokenCheck,
+  getGitHubRateLimit,
+  getGitlabTokenCheck,
+} from "@/lib/diagnostics/provider-checks";
 import { logger } from "@/lib/logger";
+import { getUpdateNotificationStateOrFallback } from "@/lib/runtime/app-update-notice";
 import type {
   AppriseStatus,
-  NotificationConfig,
   RateLimitResult,
   UpdateNotificationState,
 } from "@/types";
-
-function getNotificationConfig(): NotificationConfig {
-  const {
-    MAIL_HOST,
-    MAIL_PORT,
-    MAIL_USERNAME,
-    MAIL_PASSWORD,
-    MAIL_FROM_ADDRESS,
-    MAIL_FROM_NAME,
-    MAIL_TO_ADDRESS,
-    APPRISE_URL,
-  } = process.env;
-
-  const isSmtpConfigured = !!(
-    MAIL_HOST &&
-    MAIL_PORT &&
-    MAIL_FROM_ADDRESS &&
-    MAIL_TO_ADDRESS
-  );
-  const isAppriseConfigured = !!APPRISE_URL;
-
-  return {
-    isSmtpConfigured,
-    isAppriseConfigured,
-    variables: {
-      MAIL_HOST: MAIL_HOST || null,
-      MAIL_PORT: MAIL_PORT || null,
-      MAIL_USERNAME: MAIL_USERNAME || null,
-      MAIL_PASSWORD: MAIL_PASSWORD || null,
-      MAIL_FROM_ADDRESS: MAIL_FROM_ADDRESS || null,
-      MAIL_FROM_NAME: MAIL_FROM_NAME || null,
-      MAIL_TO_ADDRESS: MAIL_TO_ADDRESS || null,
-      APPRISE_URL: APPRISE_URL || null,
-    },
-  };
-}
 
 export default async function TestPage({
   params,
@@ -60,29 +24,40 @@ export default async function TestPage({
 }) {
   const { locale } = await params;
   const t = await getTranslations({ locale: locale, namespace: "TestPage" });
-  const rateLimitResult: RateLimitResult = await getGitHubRateLimit();
   const githubTokenSet = !!process.env.GITHUB_ACCESS_TOKEN;
-  const gitlabTokenCheck = await getGitlabTokenCheck();
-  const codebergTokenCheck = await getCodebergTokenCheck();
-  const notificationConfig = getNotificationConfig();
-  const updateNotice: UpdateNotificationState =
-    await getUpdateNotificationState();
-  const authAccess = await getCurrentAuthAccess();
-
-  let appriseStatus: AppriseStatus;
-  try {
-    // This action is now robust and will not throw on network errors.
-    appriseStatus = await checkAppriseStatusAction();
-  } catch (error) {
-    // This is a fallback safety net. The action itself should handle errors.
-    logger
-      .withScope("WebServer")
-      .error("Critical error calling checkAppriseStatusAction:", error);
-    appriseStatus = {
-      status: "error",
-      error: t("apprise_connection_error_fetch"),
-    };
-  }
+  const notificationConfig = buildNotificationConfig();
+  const appriseStatusPromise: Promise<AppriseStatus> =
+    checkAppriseStatusAction().catch((error) => {
+      logger
+        .withScope("WebServer")
+        .error("Critical error calling checkAppriseStatusAction:", error);
+      return {
+        status: "error",
+        error: t("apprise_connection_error_fetch"),
+      };
+    });
+  const [
+    rateLimitResult,
+    gitlabTokenCheck,
+    codebergTokenCheck,
+    updateNotice,
+    authAccess,
+    appriseStatus,
+  ]: [
+    RateLimitResult,
+    Awaited<ReturnType<typeof getGitlabTokenCheck>>,
+    Awaited<ReturnType<typeof getCodebergTokenCheck>>,
+    UpdateNotificationState,
+    Awaited<ReturnType<typeof getCurrentAuthAccess>>,
+    AppriseStatus,
+  ] = await Promise.all([
+    getGitHubRateLimit(),
+    getGitlabTokenCheck(),
+    getCodebergTokenCheck(),
+    getUpdateNotificationStateOrFallback(),
+    getCurrentAuthAccess(),
+    appriseStatusPromise,
+  ]);
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">

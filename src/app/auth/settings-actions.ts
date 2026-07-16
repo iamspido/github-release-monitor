@@ -4,12 +4,25 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import {
   auth,
+  canUnlinkSocialProviderForUser,
   ensureAuthDatabaseReady,
   hasCredentialPasswordAccount,
   isAuthEmailVerificationEnabled,
 } from "@/lib/auth";
+import {
+  AUTH_EMAIL_DELIVERY_TRACKING_HEADER,
+  beginAuthEmailDeliveryTracking,
+  consumeAuthEmailDeliveryStatus,
+} from "@/lib/auth/email-delivery-status";
+import { scheduleLoginMethodRemoval } from "@/lib/auth/login-method-removal-queue";
+import {
+  getClientIpFromHeaders,
+  isLikelyEmail,
+} from "@/lib/auth/request-context";
+import type { SocialLoginProvider } from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
 import { isPasswordPolicyValid } from "@/lib/password-policy";
+import { normalizeSafeRelativePath } from "@/lib/safe-redirect";
 
 type UpdateEmailInput = {
   newEmail: string;
@@ -33,29 +46,12 @@ export type UpdateAccountPasswordResult = {
   errorKey?: string;
 };
 
-function getClientIp(headerStore: Headers): string {
-  const forwardedFor = headerStore.get("x-forwarded-for");
-  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
-  const realIp = headerStore.get("x-real-ip")?.trim();
-  return (firstForwardedIp || realIp || "unknown").slice(0, 128);
-}
-
-function isLikelyEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function normalizeCallbackPath(value: string | undefined): string {
-  if (!value) return "/";
-  const trimmed = value.trim();
-  if (
-    !trimmed?.startsWith("/") ||
-    trimmed.startsWith("//") ||
-    trimmed.includes("..")
-  ) {
-    return "/";
-  }
-  return trimmed;
-}
+export type UnlinkSocialAccountResult = {
+  ok: boolean;
+  errorKey?:
+    | "social_accounts_unlink_error"
+    | "social_accounts_unlink_session_not_fresh";
+};
 
 async function getAuthenticatedUserId(headerStore: Headers) {
   const session = await auth.api.getSession({
@@ -127,9 +123,9 @@ export async function updateAccountEmailAction(
   await ensureAuthDatabaseReady();
   const emailVerificationEnabled = isAuthEmailVerificationEnabled();
   const headerStore = await headers();
-  const clientIp = getClientIp(headerStore);
+  const clientIp = getClientIpFromHeaders(headerStore);
   const normalizedEmail = input.newEmail.trim().toLowerCase();
-  const callbackURL = normalizeCallbackPath(input.callbackURL);
+  const callbackURL = normalizeSafeRelativePath(input.callbackURL);
 
   if (!isLikelyEmail(normalizedEmail)) {
     logger
@@ -158,14 +154,30 @@ export async function updateAccountEmailAction(
     return { ok: true, mode: "updated" };
   }
 
-  const response = await auth.api.changeEmail({
-    headers: headerStore,
-    body: {
-      newEmail: normalizedEmail,
-      callbackURL,
-    },
-    asResponse: true,
-  });
+  const deliveryTrackingId = emailVerificationEnabled
+    ? beginAuthEmailDeliveryTracking()
+    : null;
+  const authHeaders = new Headers(headerStore);
+  if (deliveryTrackingId) {
+    authHeaders.set(AUTH_EMAIL_DELIVERY_TRACKING_HEADER, deliveryTrackingId);
+  }
+
+  let response: Response;
+  let deliveryStatus: ReturnType<typeof consumeAuthEmailDeliveryStatus> = null;
+  try {
+    response = await auth.api.changeEmail({
+      headers: authHeaders,
+      body: {
+        newEmail: normalizedEmail,
+        callbackURL,
+      },
+      asResponse: true,
+    });
+  } finally {
+    deliveryStatus = deliveryTrackingId
+      ? consumeAuthEmailDeliveryStatus(deliveryTrackingId)
+      : null;
+  }
 
   if (!response.ok) {
     const errorText = await readErrorCodeFromResponse(response);
@@ -196,6 +208,15 @@ export async function updateAccountEmailAction(
     return { ok: false, errorKey: "account_email_update_failed" };
   }
 
+  if (deliveryStatus === "failed") {
+    logger
+      .withScope("Auth")
+      .warn(
+        `Email update failed for user='${userId}' from ip='${clientIp}' because the verification email could not be delivered.`,
+      );
+    return { ok: false, errorKey: "account_email_update_failed" };
+  }
+
   logger
     .withScope("Auth")
     .info(
@@ -213,8 +234,8 @@ export async function updateAccountPasswordAction(
 ): Promise<UpdateAccountPasswordResult> {
   await ensureAuthDatabaseReady();
   const headerStore = await headers();
-  const clientIp = getClientIp(headerStore);
-  const newPassword = input.newPassword.trim();
+  const clientIp = getClientIpFromHeaders(headerStore);
+  const newPassword = input.newPassword;
   const currentPassword =
     typeof input.currentPassword === "string" ? input.currentPassword : "";
 
@@ -284,4 +305,65 @@ export async function updateAccountPasswordAction(
     );
   revalidatePath("/", "layout");
   return { ok: true, mode: hasCredentialAccount ? "changed" : "set" };
+}
+
+export async function unlinkSocialAccountAction(
+  provider: SocialLoginProvider,
+): Promise<UnlinkSocialAccountResult> {
+  await ensureAuthDatabaseReady();
+  const headerStore = await headers();
+  const userId = await getAuthenticatedUserId(headerStore);
+  if (!userId || (provider !== "github" && provider !== "google")) {
+    return { ok: false, errorKey: "social_accounts_unlink_error" };
+  }
+
+  return scheduleLoginMethodRemoval(userId, async () => {
+    if (!canUnlinkSocialProviderForUser(userId, provider)) {
+      logger
+        .withScope("Auth")
+        .warn(
+          `Rejected social account unlink for user='${userId}' because it would remove the last login method or the provider is not linked.`,
+        );
+      return { ok: false, errorKey: "social_accounts_unlink_error" };
+    }
+
+    try {
+      const response = await auth.api.unlinkAccount({
+        headers: headerStore,
+        body: { providerId: provider },
+        asResponse: true,
+      });
+      if (!response.ok) {
+        const errorText = await readErrorCodeFromResponse(response);
+        const errorSummary =
+          errorText.replace(/[\r\n']/g, " ").slice(0, 200) || "unknown";
+        logger
+          .withScope("Auth")
+          .warn(
+            `Failed to unlink social account provider='${provider}' for user='${userId}' with status=${response.status} error='${errorSummary}'.`,
+          );
+        if (
+          errorText.includes("session_not_fresh") ||
+          errorText.includes("session is not fresh")
+        ) {
+          return {
+            ok: false,
+            errorKey: "social_accounts_unlink_session_not_fresh",
+          };
+        }
+        return { ok: false, errorKey: "social_accounts_unlink_error" };
+      }
+      logger
+        .withScope("Auth")
+        .info(
+          `Unlinked social account provider='${provider}' for user='${userId}'.`,
+        );
+      return { ok: true };
+    } catch (error) {
+      logger
+        .withScope("Auth")
+        .error(`Failed to unlink social account for user='${userId}'.`, error);
+      return { ok: false, errorKey: "social_accounts_unlink_error" };
+    }
+  });
 }

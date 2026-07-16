@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { RegisterForm } from "@/components/auth/register-form";
 import { Logo } from "@/components/logo";
 import { pathnames } from "@/i18n/routing";
+import { getAuthFeatureConfig } from "@/lib/auth/config";
 import { getAuthenticationMethod } from "@/lib/auth/mode";
 import { redirectLocalized } from "@/lib/redirect-localized";
 
@@ -16,20 +17,7 @@ export default async function RegisterPage({
   }
 
   const t = await getTranslations({ locale, namespace: "RegisterPage" });
-  const signupEnabled = process.env.AUTH_ENABLE_SIGNUP === "true";
-  const enabledSocialProviders: Array<"github" | "google"> = [];
-  if (
-    process.env.AUTH_GITHUB_CLIENT_ID?.trim() &&
-    process.env.AUTH_GITHUB_CLIENT_SECRET?.trim()
-  ) {
-    enabledSocialProviders.push("github");
-  }
-  if (
-    process.env.AUTH_GOOGLE_CLIENT_ID?.trim() &&
-    process.env.AUTH_GOOGLE_CLIENT_SECRET?.trim()
-  ) {
-    enabledSocialProviders.push("google");
-  }
+  const { signupEnabled, enabledSocialProviders } = getAuthFeatureConfig();
 
   if (!signupEnabled) {
     const loginPath = pathnames["/login"][locale as "en" | "de"];

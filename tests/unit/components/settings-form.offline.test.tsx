@@ -10,7 +10,7 @@ vi.mock("next-intl", () => ({
 }));
 
 vi.mock("@/app/settings/actions", () => ({
-  updateSettingsAction: vi.fn().mockResolvedValue({
+  updateSettingsPatchAction: vi.fn().mockResolvedValue({
     success: true,
     message: { title: "ok", description: "ok" },
   }),
@@ -69,13 +69,15 @@ describe("SettingsForm offline autosave paused", () => {
     vi.useFakeTimers();
     const { div, cleanup } = renderForm(false);
     try {
-      const { updateSettingsAction } = await import("@/app/settings/actions");
+      const { updateSettingsPatchAction } = await import(
+        "@/app/settings/actions"
+      );
       // Trigger a change that would normally autosave
       const localeSelect = div.querySelector("#language-select");
       if (localeSelect)
         localeSelect.dispatchEvent(new Event("change", { bubbles: true }));
       vi.advanceTimersByTime(2000);
-      expect(updateSettingsAction).not.toHaveBeenCalled();
+      expect(updateSettingsPatchAction).not.toHaveBeenCalled();
     } finally {
       cleanup();
       vi.useRealTimers();
@@ -100,6 +102,18 @@ describe("SettingsForm offline autosave paused", () => {
     try {
       expect(div.textContent ?? "").toContain(
         "prioritize_new_security_releases_title",
+      );
+      expect(div.textContent ?? "").toContain(
+        "security_releases_settings_title",
+      );
+      expect(div.textContent ?? "").toContain(
+        "security_highlight_color_yellow",
+      );
+      expect(div.textContent ?? "").toContain(
+        "confirm_security_acknowledge_title",
+      );
+      expect(div.textContent ?? "").toContain(
+        "include_default_security_patterns_title",
       );
     } finally {
       cleanup();

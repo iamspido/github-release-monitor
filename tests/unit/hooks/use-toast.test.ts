@@ -55,9 +55,7 @@ describe("toast reducer", () => {
     expect(result.toasts[0].title).toBe("Updated title");
   });
 
-  it("dismisses a single toast and schedules removal", async () => {
-    vi.useFakeTimers();
-    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+  it("dismisses a single toast without reducer side effects", async () => {
     const { reducer } = await import("@/hooks/use-toast");
     const state = {
       toasts: [
@@ -72,14 +70,9 @@ describe("toast reducer", () => {
       toastId: "1",
     });
     expect(result.toasts[0].open).toBe(false);
-    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
-    expect(setTimeoutSpy.mock.calls[0][1]).toBe(1_000_000);
-    setTimeoutSpy.mockRestore();
   });
 
   it("dismisses all toasts when no id is provided", async () => {
-    vi.useFakeTimers();
-    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const { reducer } = await import("@/hooks/use-toast");
     const state = {
       toasts: [
@@ -91,10 +84,6 @@ describe("toast reducer", () => {
       type: "DISMISS_TOAST",
     });
     expect(result.toasts.every((t) => t.open === false)).toBe(true);
-    expect(setTimeoutSpy).toHaveBeenCalledTimes(2);
-    expect(setTimeoutSpy.mock.calls[0][1]).toBe(1_000_000);
-    expect(setTimeoutSpy.mock.calls[1][1]).toBe(1_000_000);
-    setTimeoutSpy.mockRestore();
   });
 
   it("removes a toast when requested", async () => {
@@ -129,6 +118,7 @@ describe("toast reducer", () => {
 
   it("creates toast helpers that can dismiss and update", async () => {
     vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const { toast } = await import("@/hooks/use-toast");
     const instance = toast({ title: "Hello" });
     expect(instance.id).toBeDefined();
@@ -138,5 +128,8 @@ describe("toast reducer", () => {
       instance.update({ id: instance.id, title: "Updated", open: true }),
     ).not.toThrow();
     expect(() => instance.dismiss()).not.toThrow();
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+    expect(setTimeoutSpy.mock.calls[0][1]).toBe(5_000);
+    setTimeoutSpy.mockRestore();
   });
 });

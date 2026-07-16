@@ -1,17 +1,24 @@
 import { getTranslations } from "next-intl/server";
+import { discardResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
 import { buildCodebergAuthChain } from "@/lib/releases/auth-chains";
 import { fetchJsonResponseWithRetryAuthChain } from "@/lib/releases/fetch";
+import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
 import {
-  isPreReleaseByTagName,
-  resolveEffectiveRepoFilters,
-} from "@/lib/releases/filters";
+  applyCommitMetadata,
+  buildFallbackMarkdown,
+  notModifiedResult,
+  releaseErrorResult,
+  releaseSuccessResult,
+  resolvePageCount,
+  resolvePageSize,
+  selectLatestMatchingRelease,
+} from "@/lib/releases/provider-pipeline";
 import type {
   LatestReleaseFetchResult,
   RepoSettingsForFetch,
 } from "@/lib/releases/types";
 import { log, normalizeEnvToken } from "@/lib/server-action-helpers";
 import type { AppSettings, GithubRelease } from "@/types";
-import { allPreReleaseTypes } from "@/types";
 
 type CodebergReleaseApi = {
   id: number;
@@ -93,7 +100,11 @@ async function tryFetchCodebergCommitMessage(
           chain,
           { description: `Codeberg commit (${refOrSha})` },
         );
-      if (!response.ok || !data) continue;
+      if (!response.ok) {
+        await discardResponseWithTimeout(response);
+        continue;
+      }
+      if (!data) continue;
 
       const message: string | undefined =
         typeof data.message === "string"
@@ -111,7 +122,7 @@ async function tryFetchCodebergCommitMessage(
               ? data.commit.committer.date
               : undefined;
 
-      if (message) return { message, date };
+      if (message || date) return { message, date };
     } catch {
       // best-effort only
     }
@@ -140,10 +151,13 @@ async function fetchCodebergRepoInfo(
     );
 
   if (!response.ok) {
+    const status = response.status;
+    const statusText = response.statusText;
+    await discardResponseWithTimeout(response);
     return {
       ok: false,
-      status: response.status,
-      statusText: response.statusText,
+      status,
+      statusText,
     };
   }
 
@@ -160,20 +174,16 @@ export async function fetchLatestReleaseFromCodeberg(
   log.info(`Fetching Codeberg release for ${owner}/${repo}`);
   const fetchedAtTimestamp = new Date().toISOString();
 
-  const {
-    effectiveReleaseChannels,
-    effectivePreReleaseSubChannels,
-    totalReleasesToFetch,
-    effectiveIncludeRegex,
-    effectiveExcludeRegex,
-  } = resolveEffectiveRepoFilters(repoSettings, globalSettings);
+  const filters = resolveEffectiveRepoFilters(repoSettings, globalSettings);
+  const { totalReleasesToFetch } = filters;
 
   const CODEBERG_API_BASE_URL = `https://codeberg.org/api/v1/repos/${owner}/${repo}`;
   const MAX_PER_PAGE = 50;
-  const pagesToFetch = Math.ceil(totalReleasesToFetch / MAX_PER_PAGE);
+  const pagesToFetch = resolvePageCount(totalReleasesToFetch, MAX_PER_PAGE);
   let allReleases: GithubRelease[] = [];
   let newEtag: string | undefined;
   let tagFallbackReason: string | undefined;
+  const commitRefsByTag = new Map<string, string>();
 
   const headersWithoutAuth: Record<string, string> = {
     Accept: "application/json",
@@ -183,10 +193,11 @@ export async function fetchLatestReleaseFromCodeberg(
 
   try {
     for (let page = 1; page <= pagesToFetch; page++) {
-      const releasesOnThisPage = Math.min(
-        MAX_PER_PAGE,
-        totalReleasesToFetch - allReleases.length,
-      );
+      const releasesOnThisPage = resolvePageSize({
+        maxPerPage: MAX_PER_PAGE,
+        totalItemsToFetch: totalReleasesToFetch,
+        alreadyFetched: allReleases.length,
+      });
       if (releasesOnThisPage <= 0) break;
 
       const url = `${CODEBERG_API_BASE_URL}/releases?limit=${releasesOnThisPage}&page=${page}`;
@@ -213,16 +224,15 @@ export async function fetchLatestReleaseFromCodeberg(
       if (page === 1) {
         newEtag = response.headers.get("etag") || undefined;
         if (response.status === 304) {
-          log.info(`[ETag] No changes for codeberg:${owner}/${repo}.`);
-          return {
-            release: null,
-            error: { type: "not_modified" },
-            newEtag: repoSettings.etag,
-          };
+          return notModifiedResult(
+            `codeberg:${owner}/${repo}`,
+            repoSettings.etag,
+          );
         }
       }
 
       if (!response.ok) {
+        await discardResponseWithTimeout(response);
         if (response.status === 404) {
           // Codeberg (Gitea/Forgejo) may return 404 on the releases endpoint if releases are disabled,
           // even though the repository exists and tags are available.
@@ -311,41 +321,55 @@ export async function fetchLatestReleaseFromCodeberg(
         `Codeberg releases unavailable for codeberg:${owner}/${repo} (reason=${reason}). Falling back to tags.`,
       );
 
-      const tagUrls = [
-        `${CODEBERG_API_BASE_URL}/tags?limit=1&page=1`,
-        `${CODEBERG_API_BASE_URL}/tags?per_page=1&page=1`,
-        `${CODEBERG_API_BASE_URL}/tags`,
-      ];
-
       let tagsResponse: Response | null = null;
-      let tags: CodebergTagApi[] | undefined;
+      const tags: CodebergTagApi[] = [];
+      const tagPagesToFetch = resolvePageCount(
+        totalReleasesToFetch,
+        MAX_PER_PAGE,
+      );
 
-      for (const tagUrl of tagUrls) {
-        try {
-          const tagChain = buildCodebergAuthChain(
-            headersWithoutAuth,
-            codebergToken,
-          );
+      for (let page = 1; page <= tagPagesToFetch; page += 1) {
+        const tagsOnThisPage = resolvePageSize({
+          maxPerPage: MAX_PER_PAGE,
+          totalItemsToFetch: totalReleasesToFetch,
+          alreadyFetched: tags.length,
+        });
+        const tagUrls = [
+          `${CODEBERG_API_BASE_URL}/tags?limit=${tagsOnThisPage}&page=${page}`,
+          `${CODEBERG_API_BASE_URL}/tags?per_page=${tagsOnThisPage}&page=${page}`,
+          ...(page === 1 ? [`${CODEBERG_API_BASE_URL}/tags`] : []),
+        ];
+        let pageTags: CodebergTagApi[] | null = null;
 
-          const result = await fetchJsonResponseWithRetryAuthChain<
-            CodebergTagApi[]
-          >(tagUrl, tagChain, {
-            description: `Codeberg tags for ${owner}/${repo}`,
-          });
+        for (const tagUrl of tagUrls) {
+          try {
+            const tagChain = buildCodebergAuthChain(
+              headersWithoutAuth,
+              codebergToken,
+            );
 
-          tagsResponse = result.response;
-          if (!tagsResponse.ok) {
-            continue;
-          }
+            const result = await fetchJsonResponseWithRetryAuthChain<
+              CodebergTagApi[]
+            >(tagUrl, tagChain, {
+              description: `Codeberg tags for ${owner}/${repo} page ${page}`,
+            });
 
-          const received = result.data ?? [];
-          if (received.length > 0) {
-            tags = received;
+            tagsResponse = result.response;
+            if (!tagsResponse.ok) {
+              await discardResponseWithTimeout(tagsResponse);
+              continue;
+            }
+
+            pageTags = result.data ?? [];
             break;
+          } catch {
+            // Try the next candidate URL
           }
-        } catch {
-          // Try the next candidate URL
         }
+
+        if (!pageTags) break;
+        tags.push(...pageTags);
+        if (pageTags.length < tagsOnThisPage) break;
       }
 
       if (!tagsResponse?.ok) {
@@ -355,133 +379,66 @@ export async function fetchLatestReleaseFromCodeberg(
         return { release: null, error: { type: "no_releases_found" }, newEtag };
       }
 
-      if (!tags || tags.length === 0) {
+      if (tags.length === 0) {
         log.info(`No tags found for codeberg:${owner}/${repo}.`);
         return { release: null, error: { type: "no_releases_found" }, newEtag };
       }
 
-      const latestTag = tags[0];
       const t = await getTranslations({ locale, namespace: "Actions" });
-
-      let bodyContent = "";
-      let publicationDate = new Date().toISOString();
-
-      const sha = extractCodebergTagCommitSha(latestTag);
-      if (sha) {
-        const commit = await tryFetchCodebergCommitMessage(
-          CODEBERG_API_BASE_URL,
-          headersWithoutAuth,
-          codebergToken,
-          sha,
-        );
-        if (commit?.message) {
-          bodyContent = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commit.message}`;
-        }
-        if (commit?.date) {
-          publicationDate = commit.date;
-        }
-      }
-
-      if (!bodyContent && typeof latestTag.message === "string") {
-        bodyContent = `### ${t("tag_message_fallback_title")}\n\n---\n\n${latestTag.message}`;
-      }
-
-      const virtualRelease: GithubRelease = {
-        id: 0,
-        html_url: `https://codeberg.org/${owner}/${repo}/src/tag/${latestTag.name}`,
-        tag_name: latestTag.name,
-        name: `Tag: ${latestTag.name}`,
-        body: bodyContent,
-        created_at: publicationDate,
-        published_at: publicationDate,
-        prerelease: false,
-        draft: false,
-      };
-      allReleases = [virtualRelease];
+      allReleases = tags.map((tag) => {
+        const commitRef = extractCodebergTagCommitSha(tag);
+        if (commitRef) commitRefsByTag.set(tag.name, commitRef);
+        return {
+          id: 0,
+          html_url: `https://codeberg.org/${owner}/${repo}/src/tag/${tag.name}`,
+          tag_name: tag.name,
+          name: `Tag: ${tag.name}`,
+          body:
+            typeof tag.message === "string"
+              ? buildFallbackMarkdown(
+                  t("tag_message_fallback_title"),
+                  tag.message,
+                )
+              : "",
+          created_at: fetchedAtTimestamp,
+          published_at: fetchedAtTimestamp,
+          published_at_unknown: true,
+          prerelease: false,
+          draft: false,
+        };
+      });
     }
 
-    const filteredReleases = allReleases.filter((r) => {
-      try {
-        if (effectiveExcludeRegex) {
-          const exclude = new RegExp(effectiveExcludeRegex, "i");
-          if (exclude.test(r.tag_name)) return false;
-        }
-        if (effectiveIncludeRegex) {
-          const include = new RegExp(effectiveIncludeRegex, "i");
-          return include.test(r.tag_name);
-        }
-      } catch (e) {
-        log.error(
-          `Invalid regex for repo codeberg:${owner}/${repo}. Regex filters will be ignored. Error:`,
-          e,
-        );
-      }
-
-      if (r.draft) {
-        return effectiveReleaseChannels.includes("draft");
-      }
-
-      const isTagMarkedPreRelease = isPreReleaseByTagName(
-        r.tag_name,
-        allPreReleaseTypes,
-      );
-      const isConsideredPreRelease = r.prerelease || isTagMarkedPreRelease;
-
-      if (isConsideredPreRelease) {
-        if (!effectiveReleaseChannels.includes("prerelease")) return false;
-
-        // If the tag explicitly includes a pre-release marker (e.g. -beta/-rc),
-        // apply the configured sub-channel filter. Otherwise, fall back to the API flag.
-        if (isTagMarkedPreRelease) {
-          return isPreReleaseByTagName(
-            r.tag_name,
-            effectivePreReleaseSubChannels,
-          );
-        }
-
-        return true;
-      }
-
-      return effectiveReleaseChannels.includes("stable");
+    const latestRelease = selectLatestMatchingRelease({
+      releases: allReleases,
+      filters,
+      repoIdForLog: `codeberg:${owner}/${repo}`,
     });
 
-    if (filteredReleases.length === 0) {
-      return {
-        release: null,
-        error: { type: "no_matching_releases" },
-        newEtag,
-      };
+    if (!latestRelease) {
+      return releaseErrorResult("no_matching_releases", newEtag);
     }
-
-    const sortedReleases = filteredReleases.slice().sort((a, b) => {
-      const aTime = new Date(a.published_at || a.created_at).getTime();
-      const bTime = new Date(b.published_at || b.created_at).getTime();
-      return bTime - aTime;
-    });
-
-    const latestRelease = sortedReleases[0];
 
     if (
-      latestRelease.id !== 0 &&
-      (!latestRelease.body || latestRelease.body.trim() === "")
+      latestRelease.published_at_unknown ||
+      !latestRelease.body ||
+      latestRelease.body.trim() === ""
     ) {
       const commit = await tryFetchCodebergCommitMessage(
         CODEBERG_API_BASE_URL,
         headersWithoutAuth,
         codebergToken,
-        latestRelease.tag_name,
+        commitRefsByTag.get(latestRelease.tag_name) ?? latestRelease.tag_name,
       );
-      if (commit?.message) {
-        const t = await getTranslations({ locale, namespace: "Actions" });
-        latestRelease.body = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commit.message}`;
-      }
-      if (commit?.date) {
-        latestRelease.published_at = latestRelease.published_at ?? commit.date;
-      }
+      const t = await getTranslations({ locale, namespace: "Actions" });
+      applyCommitMetadata(
+        latestRelease,
+        commit,
+        t("commit_message_fallback_title"),
+      );
     }
 
-    latestRelease.fetched_at = fetchedAtTimestamp;
-    return { release: latestRelease, error: null, newEtag };
+    return releaseSuccessResult(latestRelease, newEtag, fetchedAtTimestamp);
   } catch (error) {
     log.error(`Failed to fetch Codeberg releases for ${owner}/${repo}:`, error);
     return { release: null, error: { type: "api_error" } };

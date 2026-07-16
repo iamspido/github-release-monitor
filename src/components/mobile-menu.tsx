@@ -1,17 +1,14 @@
 "use client";
 
-import {
-  FlaskConical,
-  Home,
-  Loader2,
-  LogIn,
-  LogOut,
-  Menu,
-  Settings,
-} from "lucide-react";
+import { Loader2, LogIn, LogOut, Menu } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 import { GithubBrandIcon } from "@/components/icons/simple-brand-icon";
+import {
+  defaultAuthAccess,
+  getNavLinks,
+  isNavLinkActive,
+} from "@/components/navigation-model";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,7 +19,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { usePathname, useRouter } from "@/i18n/navigation";
-import { pathnames } from "@/i18n/routing";
 import type { AuthAccess } from "@/lib/auth/mode";
 import { cn } from "@/lib/utils";
 
@@ -31,26 +27,6 @@ interface MobileMenuProps {
   isLoggingOut: boolean;
   authAccess?: AuthAccess;
 }
-
-type NavPage = "home" | "settings" | "test";
-
-type NavLink = {
-  href: keyof typeof pathnames;
-  label: string;
-  icon: typeof Home;
-  page: NavPage;
-};
-
-const defaultAuthAccess: AuthAccess = {
-  authenticationMethod: "Basic",
-  isAuthenticated: true,
-  canMutate: true,
-  canAccessRestrictedPages: true,
-  showLogin: false,
-  showLogout: true,
-  showSettings: true,
-  showTest: true,
-};
 
 export function MobileMenu({
   onLogout,
@@ -63,71 +39,9 @@ export function MobileMenu({
   const locale = useLocale();
   const { isOnline } = useNetworkStatus();
 
-  const navLinks: NavLink[] = [
-    { href: "/", label: t("home_aria"), icon: Home, page: "home" },
-    ...(authAccess.showSettings
-      ? [
-          {
-            href: "/settings" as const,
-            label: t("settings_aria"),
-            icon: Settings,
-            page: "settings" as const,
-          },
-        ]
-      : []),
-    ...(authAccess.showTest
-      ? [
-          {
-            href: "/test" as const,
-            label: t("test_aria"),
-            icon: FlaskConical,
-            page: "test" as const,
-          },
-        ]
-      : []),
-  ];
-
-  const normalizePath = (path: string | null | undefined) => {
-    if (!path) {
-      return "/";
-    }
-
-    const localePrefix = `/${locale}`;
-    let normalized = path;
-
-    if (normalized === localePrefix) {
-      return "/";
-    }
-
-    if (normalized.startsWith(`${localePrefix}/`)) {
-      normalized = normalized.slice(localePrefix.length);
-    }
-
-    if (!normalized.startsWith("/")) {
-      normalized = `/${normalized}`;
-    }
-
-    if (normalized.length > 1 && normalized.endsWith("/")) {
-      normalized = normalized.slice(0, -1);
-    }
-
-    return normalized;
-  };
-
-  const isActive = (href: keyof typeof pathnames) => {
-    const currentPath = normalizePath(pathname);
-    const candidates = new Set<string>();
-
-    candidates.add(normalizePath(href));
-
-    const routeConfig = pathnames[href];
-    const localizedPath = routeConfig?.[locale as "en" | "de"];
-    if (localizedPath) {
-      candidates.add(normalizePath(localizedPath));
-    }
-
-    return candidates.has(currentPath);
-  };
+  const navLinks = getNavLinks(authAccess, t);
+  const isActive = (href: (typeof navLinks)[number]["href"]) =>
+    isNavLinkActive({ href, locale, pathname });
 
   return (
     <div className="md:hidden">

@@ -1,4 +1,8 @@
 import {
+  consumeResponseWithTimeout,
+  discardResponseWithTimeout,
+} from "@/lib/http/fetch-with-timeout";
+import {
   fetchJsonResponseWithRetry,
   fetchWithRetry,
 } from "@/lib/releases/fetch";
@@ -40,6 +44,7 @@ export async function getGitHubRateLimit(): Promise<RateLimitResult> {
     );
 
     if (!response.ok) {
+      await discardResponseWithTimeout(response);
       log.error(
         `GitHub API error for rate_limit: ${response.status} ${response.statusText}`,
       );
@@ -110,6 +115,7 @@ export async function getGitlabTokenCheck(): Promise<GitlabTokenCheckResult> {
 
       // Deploy tokens are usually not accepted on `/user` even when valid for repo access.
       if (response.status === 401 || response.status === 403) {
+        await discardResponseWithTimeout(response);
         return {
           status: "valid",
           username: null,
@@ -121,7 +127,9 @@ export async function getGitlabTokenCheck(): Promise<GitlabTokenCheckResult> {
       if (!response.ok) {
         let bodyText: string | undefined;
         try {
-          bodyText = await response.text();
+          bodyText = await consumeResponseWithTimeout(response, (result) =>
+            result.text(),
+          );
         } catch {
           bodyText = undefined;
         }
@@ -135,7 +143,10 @@ export async function getGitlabTokenCheck(): Promise<GitlabTokenCheckResult> {
 
       let data: GitlabUserApi | undefined;
       try {
-        data = (await response.json()) as GitlabUserApi;
+        data = await consumeResponseWithTimeout(
+          response,
+          async (result) => (await result.json()) as GitlabUserApi,
+        );
       } catch {
         return {
           status: "valid",
@@ -183,12 +194,15 @@ export async function getGitlabTokenCheck(): Promise<GitlabTokenCheckResult> {
 
       if (!response.ok) {
         if (response.status === 401) {
+          await discardResponseWithTimeout(response);
           continue;
         }
 
         let bodyText: string | undefined;
         try {
-          bodyText = await response.text();
+          bodyText = await consumeResponseWithTimeout(response, (result) =>
+            result.text(),
+          );
         } catch {
           bodyText = undefined;
         }
@@ -202,7 +216,10 @@ export async function getGitlabTokenCheck(): Promise<GitlabTokenCheckResult> {
 
       let data: GitlabUserApi | undefined;
       try {
-        data = (await response.json()) as GitlabUserApi;
+        data = await consumeResponseWithTimeout(
+          response,
+          async (result) => (await result.json()) as GitlabUserApi,
+        );
       } catch (error) {
         log.error(
           `GitLab token check returned invalid JSON (${attempt.scheme}).`,
@@ -262,7 +279,9 @@ export async function getCodebergTokenCheck(): Promise<CodebergTokenCheckResult>
       if (!response.ok) {
         let bodyText: string | undefined;
         try {
-          bodyText = await response.text();
+          bodyText = await consumeResponseWithTimeout(response, (result) =>
+            result.text(),
+          );
         } catch {
           bodyText = undefined;
         }
@@ -294,7 +313,10 @@ export async function getCodebergTokenCheck(): Promise<CodebergTokenCheckResult>
 
       let data: CodebergUserApi | undefined;
       try {
-        data = (await response.json()) as CodebergUserApi;
+        data = await consumeResponseWithTimeout(
+          response,
+          async (result) => (await result.json()) as CodebergUserApi,
+        );
       } catch (error) {
         log.error(
           `Codeberg token check returned invalid JSON (${attempt.scheme}).`,

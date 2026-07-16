@@ -1,7 +1,5 @@
 "use client";
 
-import { formatDistanceToNowStrict } from "date-fns";
-import { de } from "date-fns/locale";
 import {
   AlertTriangle,
   BellPlus,
@@ -13,17 +11,13 @@ import {
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeRaw from "rehype-raw";
-import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import remarkGemoji from "remark-gemoji";
-import remarkGfm from "remark-gfm";
 
 import {
   acknowledgeNewReleaseAction,
   markAsNewAction,
   removeRepositoryAction,
 } from "@/app/actions";
+import { useReleaseRelativeTimes } from "@/components/release-card-hooks";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,59 +52,147 @@ import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
 import { isSecurityRelease } from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
-import type { AppSettings, EnrichedRelease, FetchError } from "@/types";
+import type { AppSettings, EnrichedRelease } from "@/types";
+import {
+  getReleaseErrorMessage,
+  getSecurityHighlightStyle,
+  hasCustomRepoSettings,
+} from "./release-card-helpers";
+import { ReleaseNotesPreview } from "./release-notes-preview";
 import { RepoSettingsDialog } from "./repo-settings-dialog";
-
-function getErrorMessage(
-  error: FetchError,
-  t: (key: string) => string,
-): string {
-  switch (error.type) {
-    case "rate_limit":
-      return t("error_rate_limit");
-    case "no_matching_releases":
-      return t("error_no_matching_releases");
-    case "repo_not_found":
-      return t("error_repo_not_found");
-    case "invalid_url":
-      return t("error_invalid_url");
-    case "no_releases_found":
-      return t("error_no_releases_found");
-    default:
-      return t("error_generic_fetch");
-  }
-}
 
 interface ReleaseCardProps {
   enrichedRelease: EnrichedRelease;
   settings: AppSettings;
   canMutate?: boolean;
+  isAppriseConfigured?: boolean;
 }
 
-const markdownSanitizeSchema: typeof defaultSchema = {
-  ...defaultSchema,
-  attributes: {
-    ...(defaultSchema.attributes || {}),
-    a: [...(defaultSchema.attributes?.a || []), "target", "rel"],
-    img: [
-      ...(defaultSchema.attributes?.img || []),
-      "src",
-      "alt",
-      "title",
-      "width",
-      "height",
-    ],
-  },
-  protocols: {
-    ...(defaultSchema.protocols || {}),
-    src: ["http", "https"],
-  },
-};
+function CustomSettingsBadge() {
+  const t = useTranslations("ReleaseCard");
+
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className="border-accent text-accent">
+            {t("custom_settings_badge")}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{t("custom_settings_tooltip")}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function RepoSettingsTrigger({
+  buttonRef,
+  className,
+  onOpen,
+}: {
+  buttonRef?: React.Ref<HTMLButtonElement>;
+  className?: string;
+  onOpen: () => void;
+}) {
+  const t = useTranslations("ReleaseCard");
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn("size-8 shrink-0 text-muted-foreground", className)}
+      onClick={onOpen}
+      ref={buttonRef}
+      aria-label={t("settings_button_aria")}
+    >
+      <Settings className="size-4" />
+    </Button>
+  );
+}
+
+function RemoveRepositoryButton({
+  buttonClassName,
+  buttonVariant = "ghost",
+  disabled = false,
+  isOnline,
+  isRemoving,
+  onRemove,
+  repoId,
+}: {
+  buttonClassName?: string;
+  buttonVariant?: React.ComponentProps<typeof Button>["variant"];
+  disabled?: boolean;
+  isOnline: boolean;
+  isRemoving: boolean;
+  onRemove: () => void;
+  repoId: string;
+}) {
+  const t = useTranslations("ReleaseCard");
+
+  const triggerButton = (
+    <Button
+      variant={buttonVariant}
+      size="sm"
+      className={buttonClassName}
+      disabled={disabled || isRemoving || !isOnline}
+      aria-disabled={!isOnline}
+    >
+      {isRemoving ? <Loader2 className="animate-spin" /> : <Trash2 />}
+      {t("remove_button")}
+    </Button>
+  );
+
+  return (
+    <AlertDialog>
+      {buttonVariant === "ghost" ? (
+        <TooltipProvider delayDuration={100}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <AlertDialogTrigger asChild>{triggerButton}</AlertDialogTrigger>
+            </TooltipTrigger>
+            {!isOnline && (
+              <TooltipContent>
+                <p>{t("offline_tooltip")}</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        <AlertDialogTrigger asChild>{triggerButton}</AlertDialogTrigger>
+      )}
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("confirm_dialog_title")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t.rich("confirm_dialog_description_long", {
+              bold: (chunks) => <span className="font-bold">{chunks}</span>,
+              repoId,
+            })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("cancel_button")}</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={onRemove}
+            disabled={isRemoving || !isOnline}
+          >
+            {isRemoving ? <Loader2 className="animate-spin" /> : null}
+            {t("confirm_button")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 export function ReleaseCard({
   enrichedRelease,
   settings,
   canMutate = true,
+  isAppriseConfigured = false,
 }: ReleaseCardProps) {
   const t = useTranslations("ReleaseCard");
   const tActions = useTranslations("Actions");
@@ -127,61 +209,29 @@ export function ReleaseCard({
   const [isRemoving, startRemoveTransition] = React.useTransition();
   const [isAcknowledging, startAcknowledgeTransition] = React.useTransition();
   const [isMarkingAsNew, startMarkingAsNewTransition] = React.useTransition();
-  const [timeAgo, setTimeAgo] = React.useState("");
-  const [checkedAgo, setCheckedAgo] = React.useState("");
+  const { checkedAgo, isReleaseTimeUnknown, timeAgo } = useReleaseRelativeTimes(
+    release,
+    locale,
+  );
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const settingsButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const prevIsSettingsOpenRef = React.useRef(false);
   const isTagLink = Boolean(release?.html_url?.includes("/src/tag/"));
-  const isReleaseTimeUnknown = Boolean(release?.published_at_unknown);
 
   React.useEffect(() => {
     // When the settings dialog transitions from open -> closed, return focus to the trigger button.
     // Use a micro-delay to ensure the overlay has unmounted before focusing.
+    let focusTimeout: ReturnType<typeof setTimeout> | undefined;
     if (prevIsSettingsOpenRef.current && !isSettingsOpen) {
       const btn = settingsButtonRef.current;
-      setTimeout(() => btn?.focus(), 0);
+      focusTimeout = setTimeout(() => btn?.focus(), 0);
     }
     prevIsSettingsOpenRef.current = isSettingsOpen;
-  }, [isSettingsOpen]);
 
-  React.useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-
-    const updateTimes = () => {
-      // Update release time ago
-      if (release?.created_at && !isReleaseTimeUnknown) {
-        const dateToUse = release.published_at || release.created_at;
-        setTimeAgo(
-          formatDistanceToNowStrict(new Date(dateToUse), {
-            addSuffix: true,
-            locale: locale === "de" ? de : undefined,
-          }),
-        );
-      } else {
-        setTimeAgo("");
-      }
-      // Update checked time ago
-      if (release?.fetched_at) {
-        setCheckedAgo(
-          formatDistanceToNowStrict(new Date(release.fetched_at), {
-            addSuffix: true,
-            locale: locale === "de" ? de : undefined,
-          }),
-        );
-      }
-    };
-
-    updateTimes(); // Initial call
-    intervalId = setInterval(updateTimes, 60000); // Update every minute
-
-    // Clean up the interval when the component unmounts or dependencies change.
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
+      if (focusTimeout) clearTimeout(focusTimeout);
     };
-  }, [release, locale, isReleaseTimeUnknown]);
+  }, [isSettingsOpen]);
   const handleRemove = () => {
     startRemoveTransition(async () => {
       try {
@@ -251,25 +301,10 @@ export function ReleaseCard({
     });
   };
 
-  const repoHasCustomSettings =
-    (repoSettings?.releaseChannels &&
-      repoSettings.releaseChannels.length > 0) ||
-    (repoSettings?.preReleaseSubChannels &&
-      repoSettings.preReleaseSubChannels.length > 0) ||
-    (repoSettings?.releasesPerPage !== null &&
-      typeof repoSettings?.releasesPerPage === "number") ||
-    (repoSettings?.refreshInterval !== null &&
-      typeof repoSettings?.refreshInterval === "number") ||
-    (repoSettings?.cacheInterval !== null &&
-      typeof repoSettings?.cacheInterval === "number") ||
-    repoSettings?.backgroundCheckCron ||
-    repoSettings?.includeRegex ||
-    repoSettings?.excludeRegex ||
-    repoSettings?.appriseTags ||
-    repoSettings?.appriseFormat;
+  const repoHasCustomSettings = hasCustomRepoSettings(repoSettings);
 
   if (error && error.type !== "not_modified") {
-    const errorMessage = getErrorMessage(error, tActions);
+    const errorMessage = getReleaseErrorMessage(error, tActions);
     return (
       <>
         {canMutate && (
@@ -279,6 +314,7 @@ export function ReleaseCard({
             repoId={repoId}
             currentRepoSettings={repoSettings}
             globalSettings={settings}
+            isAppriseConfigured={isAppriseConfigured}
           />
         )}
         <Card className="border-destructive/50 bg-destructive/10 flex flex-col">
@@ -300,33 +336,13 @@ export function ReleaseCard({
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                {repoHasCustomSettings && (
-                  <TooltipProvider delayDuration={100}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant="outline"
-                          className="border-accent text-accent"
-                        >
-                          {t("custom_settings_badge")}
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{t("custom_settings_tooltip")}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+                {repoHasCustomSettings && <CustomSettingsBadge />}
                 {canMutate && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
+                  <RepoSettingsTrigger
+                    buttonRef={settingsButtonRef}
                     className="size-8 shrink-0 text-red-400/80 hover:bg-red-400/10 hover:text-red-400"
-                    onClick={() => setIsSettingsOpen(true)}
-                    aria-label={t("settings_button_aria")}
-                  >
-                    <Settings className="size-4" />
-                  </Button>
+                    onOpen={() => setIsSettingsOpen(true)}
+                  />
                 )}
               </div>
             </div>
@@ -341,49 +357,13 @@ export function ReleaseCard({
           </CardContent>
           {canMutate && (
             <CardFooter className="pt-4 flex items-start">
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={isRemoving || !isOnline}
-                    aria-disabled={!isOnline}
-                  >
-                    {isRemoving ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <Trash2 />
-                    )}
-                    {t("remove_button")}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t("confirm_dialog_title")}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t.rich("confirm_dialog_description_long", {
-                        bold: (chunks) => (
-                          <span className="font-bold">{chunks}</span>
-                        ),
-                        repoId,
-                      })}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("cancel_button")}</AlertDialogCancel>
-                    <AlertDialogAction
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      onClick={handleRemove}
-                      disabled={isRemoving || !isOnline}
-                    >
-                      {isRemoving ? <Loader2 className="animate-spin" /> : null}
-                      {t("confirm_button")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <RemoveRepositoryButton
+                buttonVariant="destructive"
+                isOnline={isOnline}
+                isRemoving={isRemoving}
+                onRemove={handleRemove}
+                repoId={repoId}
+              />
             </CardFooter>
           )}
         </Card>
@@ -401,6 +381,7 @@ export function ReleaseCard({
             repoId={repoId}
             currentRepoSettings={repoSettings}
             globalSettings={settings}
+            isAppriseConfigured={isAppriseConfigured}
           />
         )}
         <Card className="flex flex-col">
@@ -418,34 +399,12 @@ export function ReleaseCard({
                 </a>
               </div>
               <div className="flex items-center gap-2">
-                {repoHasCustomSettings && (
-                  <TooltipProvider delayDuration={100}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant="outline"
-                          className="border-accent text-accent"
-                        >
-                          {t("custom_settings_badge")}
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{t("custom_settings_tooltip")}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+                {repoHasCustomSettings && <CustomSettingsBadge />}
                 {canMutate && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 shrink-0 text-muted-foreground"
-                    onClick={() => setIsSettingsOpen(true)}
-                    ref={settingsButtonRef}
-                    aria-label={t("settings_button_aria")}
-                  >
-                    <Settings className="size-4" />
-                  </Button>
+                  <RepoSettingsTrigger
+                    buttonRef={settingsButtonRef}
+                    onOpen={() => setIsSettingsOpen(true)}
+                  />
                 )}
               </div>
             </div>
@@ -458,49 +417,13 @@ export function ReleaseCard({
           </CardContent>
           {canMutate && (
             <CardFooter className="justify-between pt-4">
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={isRemoving || !isOnline}
-                    aria-disabled={!isOnline}
-                  >
-                    {isRemoving ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <Trash2 />
-                    )}
-                    {t("remove_button")}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t("confirm_dialog_title")}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t.rich("confirm_dialog_description_long", {
-                        bold: (chunks) => (
-                          <span className="font-bold">{chunks}</span>
-                        ),
-                        repoId,
-                      })}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("cancel_button")}</AlertDialogCancel>
-                    <AlertDialogAction
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      onClick={handleRemove}
-                      disabled={isRemoving || !isOnline}
-                    >
-                      {isRemoving ? <Loader2 className="animate-spin" /> : null}
-                      {t("confirm_button")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <RemoveRepositoryButton
+                buttonVariant="destructive"
+                isOnline={isOnline}
+                isRemoving={isRemoving}
+                onRemove={handleRemove}
+                repoId={repoId}
+              />
               <Skeleton className="h-8 w-32" />
             </CardFooter>
           )}
@@ -512,7 +435,12 @@ export function ReleaseCard({
   const showAcknowledgeFeature = settings.showAcknowledge ?? true;
   const showMarkAsNewButton = settings.showMarkAsNew ?? true;
   const isNewSecurityRelease =
-    Boolean(isNew) && showAcknowledgeFeature && isSecurityRelease(release);
+    Boolean(isNew) &&
+    showAcknowledgeFeature &&
+    isSecurityRelease(release, settings);
+  const securityHighlightStyle = getSecurityHighlightStyle(settings);
+  const shouldConfirmSecurityAcknowledge =
+    isNewSecurityRelease && settings.confirmSecurityAcknowledge === true;
 
   return (
     <>
@@ -523,18 +451,19 @@ export function ReleaseCard({
           repoId={repoId}
           currentRepoSettings={repoSettings}
           globalSettings={settings}
+          isAppriseConfigured={isAppriseConfigured}
         />
       )}
       <Card
         className={cn(
           "flex flex-col transition-all",
-          isNewSecurityRelease &&
-            "border-yellow-500/70 ring-2 ring-yellow-500/60 ring-offset-2 ring-offset-background",
+          isNewSecurityRelease && securityHighlightStyle.cardClassName,
           isNew &&
             showAcknowledgeFeature &&
             !isNewSecurityRelease &&
             "border-primary ring-2 ring-primary ring-offset-2 ring-offset-background",
         )}
+        style={isNewSecurityRelease ? securityHighlightStyle.style : undefined}
       >
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
@@ -566,39 +495,18 @@ export function ReleaseCard({
                 {isNewSecurityRelease && (
                   <Badge
                     variant="outline"
-                    className="border-yellow-500/70 bg-yellow-500/15 text-yellow-700 dark:text-yellow-300"
+                    className={securityHighlightStyle.badgeClassName}
+                    style={securityHighlightStyle.style}
                   >
                     {t("security_release_badge")}
                   </Badge>
                 )}
-                {repoHasCustomSettings && (
-                  <TooltipProvider delayDuration={100}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge
-                          variant="outline"
-                          className="border-accent text-accent"
-                        >
-                          {t("custom_settings_badge")}
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{t("custom_settings_tooltip")}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+                {repoHasCustomSettings && <CustomSettingsBadge />}
                 {canMutate && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 shrink-0 text-muted-foreground"
-                    onClick={() => setIsSettingsOpen(true)}
-                    ref={settingsButtonRef}
-                    aria-label={t("settings_button_aria")}
-                  >
-                    <Settings className="size-4" />
-                  </Button>
+                  <RepoSettingsTrigger
+                    buttonRef={settingsButtonRef}
+                    onOpen={() => setIsSettingsOpen(true)}
+                  />
                 )}
               </div>
             </div>
@@ -624,71 +532,106 @@ export function ReleaseCard({
           </div>
         </CardHeader>
         <CardContent className="grow pt-0 min-w-0">
-          {release.body && release.body.trim() !== "" ? (
-            <div className="relative w-full max-h-72 overflow-hidden rounded-md border bg-background">
-              <div className="prose prose-sm dark:prose-invert max-w-none h-72 overflow-auto break-words p-4 prose-img:rounded prose-img:max-w-full prose-img:h-auto">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkGemoji]}
-                  rehypePlugins={[
-                    rehypeRaw,
-                    [rehypeSanitize, markdownSanitizeSchema],
-                  ]}
-                  skipHtml={false}
-                  components={{
-                    table: ({ node, ...props }) => (
-                      <div className="overflow-x-auto">
-                        <table {...props} className="table-fixed">
-                          {props.children}
-                        </table>
-                      </div>
-                    ),
-                  }}
-                >
-                  {release.body}
-                </ReactMarkdown>
-              </div>
-            </div>
-          ) : (
-            <div className="flex h-72 items-center justify-center rounded-md border border-dashed">
-              <p className="text-center text-sm text-muted-foreground">
-                {t("no_release_notes")}
-              </p>
-            </div>
-          )}
+          <ReleaseNotesPreview body={release.body} />
         </CardContent>
         <CardFooter className="flex flex-col items-stretch gap-3 pt-4">
           {canMutate &&
             showAcknowledgeFeature &&
             (isNew ? (
-              <TooltipProvider delayDuration={100}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      onClick={handleAcknowledge}
-                      disabled={
-                        isAcknowledging ||
-                        isRemoving ||
-                        isMarkingAsNew ||
-                        !isOnline
-                      }
-                      aria-disabled={!isOnline}
-                    >
-                      {isAcknowledging ? (
-                        <Loader2 className="animate-spin" />
-                      ) : (
-                        <CheckSquare />
+              shouldConfirmSecurityAcknowledge ? (
+                <AlertDialog>
+                  <TooltipProvider delayDuration={100}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            disabled={
+                              isAcknowledging ||
+                              isRemoving ||
+                              isMarkingAsNew ||
+                              !isOnline
+                            }
+                            aria-disabled={!isOnline}
+                          >
+                            {isAcknowledging ? (
+                              <Loader2 className="animate-spin" />
+                            ) : (
+                              <CheckSquare />
+                            )}
+                            <span>{t("acknowledge_button")}</span>
+                          </Button>
+                        </AlertDialogTrigger>
+                      </TooltipTrigger>
+                      {!isOnline && (
+                        <TooltipContent>
+                          <p>{t("offline_tooltip")}</p>
+                        </TooltipContent>
                       )}
-                      <span>{t("acknowledge_button")}</span>
-                    </Button>
-                  </TooltipTrigger>
-                  {!isOnline && (
-                    <TooltipContent>
-                      <p>{t("offline_tooltip")}</p>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        {t("security_acknowledge_confirm_title")}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {t.rich("security_acknowledge_confirm_description", {
+                          bold: (chunks) => (
+                            <span className="font-bold">{chunks}</span>
+                          ),
+                          repoId,
+                        })}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>
+                        {t("cancel_button")}
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={handleAcknowledge}
+                        disabled={isAcknowledging || !isOnline}
+                      >
+                        {isAcknowledging ? (
+                          <Loader2 className="animate-spin" />
+                        ) : null}
+                        {t("security_acknowledge_confirm_button")}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : (
+                <TooltipProvider delayDuration={100}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        onClick={handleAcknowledge}
+                        disabled={
+                          isAcknowledging ||
+                          isRemoving ||
+                          isMarkingAsNew ||
+                          !isOnline
+                        }
+                        aria-disabled={!isOnline}
+                      >
+                        {isAcknowledging ? (
+                          <Loader2 className="animate-spin" />
+                        ) : (
+                          <CheckSquare />
+                        )}
+                        <span>{t("acknowledge_button")}</span>
+                      </Button>
+                    </TooltipTrigger>
+                    {!isOnline && (
+                      <TooltipContent>
+                        <p>{t("offline_tooltip")}</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
+              )
             ) : (
               showMarkAsNewButton && (
                 <TooltipProvider delayDuration={100}>
@@ -725,61 +668,14 @@ export function ReleaseCard({
             ))}
           <div className="flex items-center justify-between">
             {canMutate ? (
-              <AlertDialog>
-                <TooltipProvider delayDuration={100}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-muted-foreground"
-                          disabled={isRemoving || isMarkingAsNew || !isOnline}
-                          aria-disabled={!isOnline}
-                        >
-                          {isRemoving ? (
-                            <Loader2 className="animate-spin" />
-                          ) : (
-                            <Trash2 />
-                          )}
-                          {t("remove_button")}
-                        </Button>
-                      </AlertDialogTrigger>
-                    </TooltipTrigger>
-                    {!isOnline && (
-                      <TooltipContent>
-                        <p>{t("offline_tooltip")}</p>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                </TooltipProvider>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t("confirm_dialog_title")}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t.rich("confirm_dialog_description_long", {
-                        bold: (chunks) => (
-                          <span className="font-bold">{chunks}</span>
-                        ),
-                        repoId,
-                      })}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("cancel_button")}</AlertDialogCancel>
-                    <AlertDialogAction
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      onClick={handleRemove}
-                      disabled={isRemoving || !isOnline}
-                    >
-                      {isRemoving ? <Loader2 className="animate-spin" /> : null}
-                      {t("confirm_button")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <RemoveRepositoryButton
+                buttonClassName="text-muted-foreground"
+                disabled={isMarkingAsNew}
+                isOnline={isOnline}
+                isRemoving={isRemoving}
+                onRemove={handleRemove}
+                repoId={repoId}
+              />
             ) : (
               <span />
             )}

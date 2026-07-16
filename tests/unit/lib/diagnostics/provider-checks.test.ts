@@ -120,8 +120,12 @@ describe("diagnostics/provider-checks", () => {
       [401, "invalid_token"],
       [500, "api_error"],
     ] as const)("maps HTTP %s to %s", async (status, error) => {
+      const response = new Response("failure", {
+        status,
+        statusText: "Error",
+      });
       fetchMocks.fetchJsonResponseWithRetry.mockResolvedValue({
-        response: textResponse(status, "failure"),
+        response,
         data: null,
       });
       const { getGitHubRateLimit } = await import(
@@ -132,6 +136,7 @@ describe("diagnostics/provider-checks", () => {
         data: null,
         error,
       });
+      expect(response.bodyUsed).toBe(true);
     });
 
     it("maps thrown fetch failures to api_error", async () => {
@@ -244,8 +249,11 @@ describe("diagnostics/provider-checks", () => {
       providerMocks.getGitlabAccessTokensByHost.mockReturnValue(
         new Map([["gitlab.com", "access-token"]]),
       );
+      const rejectedResponse = new Response("bad private token", {
+        status: 401,
+      });
       fetchMocks.fetchWithRetry
-        .mockResolvedValueOnce(textResponse(401, "bad private token"))
+        .mockResolvedValueOnce(rejectedResponse)
         .mockResolvedValueOnce(
           jsonResponse(200, { username: "token-user", name: "Token User" }),
         );
@@ -278,6 +286,7 @@ describe("diagnostics/provider-checks", () => {
         },
         { description: "GitLab user endpoint on gitlab.com (bearer)" },
       );
+      expect(rejectedResponse.bodyUsed).toBe(true);
     });
 
     it("returns invalid_token when both GitLab access-token schemes are rejected", async () => {

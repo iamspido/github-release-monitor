@@ -14,6 +14,12 @@ vi.mock("next-intl/server", () => ({
 }));
 
 import type { AppSettings, Repository } from "@/types";
+import {
+  fetchCallHeaders,
+  headerRecord,
+  installFetchMock,
+  mockFetchResponse,
+} from "../helpers/fetch";
 
 describe("actions fetcher scenarios", () => {
   const fetchBackup = global.fetch;
@@ -29,8 +35,7 @@ describe("actions fetcher scenarios", () => {
 
   beforeEach(() => {
     vi.resetModules();
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
   });
   afterEach(() => {
     global.fetch = fetchBackup;
@@ -54,13 +59,12 @@ describe("actions fetcher scenarios", () => {
       },
     };
 
-    // 304 on first page
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      status: 304,
-      ok: false,
-      headers: { get: () => 'W/"def"' },
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 304,
+        headers: { etag: 'W/"def"' },
+      }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -83,37 +87,36 @@ describe("actions fetcher scenarios", () => {
     };
 
     const nowIso = new Date().toISOString();
-    // releases empty
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => '"empty-releases"' },
-      json: async () => [],
-    });
-    // tags
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [{ name: "6.5.1", commit: { sha: "sha1" } }],
-    });
-    // ref to annotated tag? return not annotated
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ object: { type: "commit", url: "unused" } }),
-    });
-    // commit message
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        commit: { message: "msg", committer: { date: nowIso } },
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        headers: { etag: '"empty-releases"' },
+        json: [],
       }),
-    });
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [{ name: "6.5.1", commit: { sha: "sha1" } }],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: { object: { type: "commit", url: "unused" } },
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: {
+          commit: { message: "msg", committer: { date: nowIso } },
+        },
+      }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -123,7 +126,9 @@ describe("actions fetcher scenarios", () => {
     );
     const releasesRequest = vi.mocked(global.fetch).mock.calls[0];
 
-    expect(releasesRequest[1].headers["If-None-Match"]).toBeUndefined();
+    expect(
+      headerRecord(fetchCallHeaders(releasesRequest))["If-None-Match"],
+    ).toBeUndefined();
     expect(enriched[0].release?.tag_name).toBe("6.5.1");
     expect(enriched[0].newEtag).toBeNull();
   });
@@ -161,22 +166,18 @@ describe("actions fetcher scenarios", () => {
       draft: false,
     }));
 
-    // page 1
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => page1,
-    });
-    // page 2
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => page2,
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: page1,
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: page2,
+      }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -196,40 +197,38 @@ describe("actions fetcher scenarios", () => {
       url: "https://github.com/o/r",
     };
 
-    // releases empty
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [],
-    });
-    // tags
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [{ name: "v1", commit: { sha: "sha1" } }],
-    });
-    // ref to annotated tag? return not annotated
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ object: { type: "commit", url: "unused" } }),
-    });
-    // commit message
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        commit: {
-          message: "msg",
-          committer: { date: new Date().toISOString() },
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [{ name: "v1", commit: { sha: "sha1" } }],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: { object: { type: "commit", url: "unused" } },
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: {
+          commit: {
+            message: "msg",
+            committer: { date: new Date().toISOString() },
+          },
         },
       }),
-    });
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -242,6 +241,70 @@ describe("actions fetcher scenarios", () => {
     expect(enriched[0].error).toBeUndefined();
   });
 
+  it("uses GitHub's chronological tags page before its REST tags order", async () => {
+    const actions = await import("@/app/actions");
+
+    const repo: Repository = {
+      id: "github:golang/go",
+      url: "https://github.com/golang/go",
+    };
+    const selectedSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: [] }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        text: `
+          <a href="/golang/go/releases/tag/go1.27rc2">go1.27rc2</a>
+          <relative-time datetime="2026-07-07T19:42:34Z">Jul 7</relative-time>
+          <a href="/golang/go/commit/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">aaaaaaa</a>
+          <a href="/golang/go/releases/tag/go1.26.5">go1.26.5</a>
+          <relative-time datetime="2026-07-07T19:29:04Z">Jul 7</relative-time>
+          <a href="/golang/go/commit/${selectedSha}">bbbbbbb</a>
+          <a href="/golang/go/releases/tag/weekly.2012-03-27">weekly.2012-03-27</a>
+          <relative-time datetime="2012-03-27T00:00:00Z">Mar 27</relative-time>
+          <a href="/golang/go/commit/cccccccccccccccccccccccccccccccccccccccc">ccccccc</a>
+        `,
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: { object: { type: "commit", sha: selectedSha, url: "unused" } },
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: {
+          commit: {
+            message: "go1.26.5",
+            committer: { date: "2026-07-07T19:29:04Z" },
+          },
+        },
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+    const calls = vi.mocked(global.fetch).mock.calls;
+
+    expect(enriched[0].release?.tag_name).toBe("go1.26.5");
+    expect(enriched[0].release?.created_at).toBe("2026-07-07T19:29:04Z");
+    expect(calls[1][0]).toBe("https://github.com/golang/go/tags");
+    expect(
+      headerRecord(fetchCallHeaders(calls[1])).Authorization,
+    ).toBeUndefined();
+    expect(calls[3][0]).toContain(`/commits/${selectedSha}`);
+    expect(calls.some(([url]) => String(url).includes("/tags?"))).toBe(false);
+  });
+
   it("falls back to the first matching stable tag when newer tags are prereleases", async () => {
     const actions = await import("@/app/actions");
 
@@ -251,41 +314,39 @@ describe("actions fetcher scenarios", () => {
     };
     const nowIso = new Date().toISOString();
 
-    // releases empty
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [],
-    });
-    // tags include newer prereleases before the latest stable tag
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [
-        { name: "7.2.0-alpha", commit: { sha: "sha-alpha-2" } },
-        { name: "7.1.0-alpha", commit: { sha: "sha-alpha-1" } },
-        { name: "7.0.1", commit: { sha: "sha-stable" } },
-      ],
-    });
-    // ref to annotated tag? return not annotated
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ object: { type: "commit", url: "unused" } }),
-    });
-    // commit message for stable tag
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        commit: { message: "stable msg", committer: { date: nowIso } },
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [],
       }),
-    });
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          { name: "7.2.0-alpha", commit: { sha: "sha-alpha-2" } },
+          { name: "7.1.0-alpha", commit: { sha: "sha-alpha-1" } },
+          { name: "7.0.1", commit: { sha: "sha-stable" } },
+        ],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: { object: { type: "commit", url: "unused" } },
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: {
+          commit: { message: "stable msg", committer: { date: nowIso } },
+        },
+      }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -295,7 +356,7 @@ describe("actions fetcher scenarios", () => {
     );
 
     expect(enriched[0].release?.tag_name).toBe("7.0.1");
-    expect(vi.mocked(global.fetch).mock.calls[3][0]).toContain(
+    expect(vi.mocked(global.fetch).mock.calls[4][0]).toContain(
       "/commits/sha-stable",
     );
   });
@@ -307,14 +368,13 @@ describe("actions fetcher scenarios", () => {
       url: "https://github.com/o/r",
     };
 
-    // rate limit 403
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: false,
+    const rateLimitResponse = mockFetchResponse({
       status: 403,
       statusText: "Forbidden",
-      headers: { get: () => "1" },
+      headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1" },
+      text: "rate limited",
     });
+    vi.mocked(global.fetch).mockResolvedValueOnce(rateLimitResponse);
     let enriched = await actions.getLatestReleasesForRepos(
       [repo],
       baseSettings,
@@ -322,15 +382,14 @@ describe("actions fetcher scenarios", () => {
       { skipCache: true },
     );
     expect(enriched[0].error?.type).toBe("rate_limit");
+    expect(rateLimitResponse.bodyUsed).toBe(true);
 
-    // repo not found 404
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: false,
+    const notFoundResponse = mockFetchResponse({
       status: 404,
       statusText: "Not Found",
-      headers: { get: () => null },
+      text: "missing",
     });
+    vi.mocked(global.fetch).mockResolvedValueOnce(notFoundResponse);
     enriched = await actions.getLatestReleasesForRepos(
       [repo],
       baseSettings,
@@ -338,6 +397,7 @@ describe("actions fetcher scenarios", () => {
       { skipCache: true },
     );
     expect(enriched[0].error?.type).toBe("repo_not_found");
+    expect(notFoundResponse.bodyUsed).toBe(true);
   });
 
   it("preserves repository order when parallel batches resolve out of order", async () => {
@@ -410,30 +470,18 @@ describe("actions fetcher scenarios", () => {
       "gamma/repo-c": 0,
     };
 
-    // @ts-expect-error
-    global.fetch = vi.fn((url: string) => {
+    global.fetch = vi.fn<typeof fetch>((input): Promise<Response> => {
+      const url = String(input);
       const match = url.match(/repos\/([^/]+\/[^/]+)\/releases/);
       if (!match) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          headers: { get: () => null },
-          json: async () => [],
-        });
+        return Promise.resolve(mockFetchResponse({ json: [] }));
       }
       const repoId = match[1];
       const data = releaseMap[repoId];
       const delay = delays[repoId] ?? 0;
-      return new Promise((resolve) => {
+      return new Promise<Response>((resolve) => {
         setTimeout(() => {
-          resolve({
-            ok: true,
-            status: 200,
-            statusText: "OK",
-            headers: { get: () => null },
-            json: async () => data,
-          });
+          resolve(mockFetchResponse({ json: data }));
         }, delay);
       });
     });

@@ -4,6 +4,9 @@ const fsMock = vi.hoisted(() => ({
   access: vi.fn(),
   mkdir: vi.fn(),
   readFile: vi.fn(),
+  readdir: vi.fn(),
+  rmdir: vi.fn(),
+  stat: vi.fn(),
   unlink: vi.fn(),
   writeFile: vi.fn(),
 }));
@@ -29,6 +32,25 @@ describe("auth/setup-lock", () => {
         source: "test",
       }),
     );
+    fsMock.readdir.mockImplementation(async () => {
+      const claimPath = fsMock.mkdir.mock.calls
+        .map(([filePath]) => String(filePath))
+        .reverse()
+        .find((filePath) =>
+          filePath.includes("auth-setup-bootstrap.gate/claim-"),
+        );
+      if (!claimPath) return [];
+      return [
+        {
+          name: claimPath.split("/").at(-1),
+          isDirectory: () => true,
+        },
+      ];
+    });
+    fsMock.rmdir.mockResolvedValue(undefined);
+    fsMock.stat.mockResolvedValue({
+      mtimeMs: new Date("2024-01-01T12:00:00.000Z").getTime(),
+    });
     fsMock.unlink.mockResolvedValue(undefined);
     fsMock.writeFile.mockResolvedValue(undefined);
   });
@@ -46,6 +68,12 @@ describe("auth/setup-lock", () => {
     fsMock.access.mockRejectedValueOnce(nodeError("ENOENT"));
 
     await expect(isAuthSetupLocked()).resolves.toBe(false);
+
+    fsMock.access.mockRejectedValueOnce(nodeError("EACCES"));
+
+    await expect(isAuthSetupLocked()).rejects.toMatchObject({
+      code: "EACCES",
+    });
   });
 
   it("writes the permanent setup lock once and treats existing locks as idempotent", async () => {
@@ -82,9 +110,16 @@ describe("auth/setup-lock", () => {
     expect(lock.status).toBe("acquired");
     expect(fsMock.writeFile).toHaveBeenCalledWith(
       expect.stringContaining("auth-setup-bootstrap.lock"),
-      expect.stringContaining('"source": "signup"'),
+      expect.stringMatching(/"ownerId": "[^"]+"[\s\S]*"source": "signup"/),
       expect.objectContaining({ encoding: "utf8", flag: "wx" }),
     );
+
+    const lockPayload = JSON.parse(
+      fsMock.writeFile.mock.calls.find(([filePath]) =>
+        String(filePath).includes("auth-setup-bootstrap.lock"),
+      )?.[1] as string,
+    ) as { ownerId: string };
+    fsMock.readFile.mockResolvedValueOnce(JSON.stringify(lockPayload));
 
     await lock.release();
 
@@ -126,5 +161,96 @@ describe("auth/setup-lock", () => {
       expect.stringContaining("auth-setup-bootstrap.lock"),
     );
     expect(fsMock.writeFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("recovers a gate claim left behind by a terminated process", async () => {
+    fsMock.readdir.mockImplementationOnce(async () => {
+      const currentClaimPath = fsMock.mkdir.mock.calls
+        .map(([filePath]) => String(filePath))
+        .find((filePath) =>
+          filePath.includes("auth-setup-bootstrap.gate/claim-"),
+        );
+      return [
+        { name: "claim-stale-owner", isDirectory: () => true },
+        {
+          name: currentClaimPath?.split("/").at(-1),
+          isDirectory: () => true,
+        },
+      ];
+    });
+    fsMock.stat.mockImplementation(async (filePath) => ({
+      mtimeMs: String(filePath).endsWith("claim-stale-owner")
+        ? new Date("2024-01-01T11:00:00.000Z").getTime()
+        : new Date("2024-01-01T12:00:00.000Z").getTime(),
+    }));
+    const { acquireAuthSetupBootstrapLock } = await import(
+      "@/lib/auth/setup-lock"
+    );
+
+    const lock = await acquireAuthSetupBootstrapLock({ source: "recovery" });
+
+    expect(lock.status).toBe("acquired");
+    expect(fsMock.rmdir).toHaveBeenCalledWith(
+      expect.stringContaining("auth-setup-bootstrap.gate/claim-stale-owner"),
+    );
+    expect(fsMock.rmdir).not.toHaveBeenCalledWith(
+      expect.stringMatching(/auth-setup-bootstrap\.gate$/),
+    );
+  });
+
+  it("does not remove a newer gate claim while cleaning a stale claim", async () => {
+    const newerClaimName = "claim-newer-owner";
+    fsMock.readdir.mockImplementationOnce(async () => {
+      const currentClaimPath = fsMock.mkdir.mock.calls
+        .map(([filePath]) => String(filePath))
+        .find((filePath) =>
+          filePath.includes("auth-setup-bootstrap.gate/claim-"),
+        );
+      return [
+        { name: "claim-stale-owner", isDirectory: () => true },
+        { name: newerClaimName, isDirectory: () => true },
+        {
+          name: currentClaimPath?.split("/").at(-1),
+          isDirectory: () => true,
+        },
+      ];
+    });
+    fsMock.stat.mockImplementation(async (filePath) => ({
+      mtimeMs: String(filePath).endsWith("claim-stale-owner")
+        ? new Date("2024-01-01T11:00:00.000Z").getTime()
+        : new Date("2024-01-01T12:00:00.000Z").getTime(),
+    }));
+    const { acquireAuthSetupBootstrapLock } = await import(
+      "@/lib/auth/setup-lock"
+    );
+
+    const lock = await acquireAuthSetupBootstrapLock({ source: "contender" });
+
+    expect(lock.status).toBe("busy");
+    expect(fsMock.rmdir).toHaveBeenCalledWith(
+      expect.stringContaining("auth-setup-bootstrap.gate/claim-stale-owner"),
+    );
+    expect(fsMock.rmdir).not.toHaveBeenCalledWith(
+      expect.stringContaining(`auth-setup-bootstrap.gate/${newerClaimName}`),
+    );
+    expect(fsMock.writeFile).not.toHaveBeenCalled();
+  });
+
+  it("does not release a bootstrap lock owned by another process", async () => {
+    const { acquireAuthSetupBootstrapLock } = await import(
+      "@/lib/auth/setup-lock"
+    );
+    const lock = await acquireAuthSetupBootstrapLock({ source: "owner-a" });
+    fsMock.readFile.mockResolvedValueOnce(
+      JSON.stringify({
+        createdAt: "2024-01-01T12:00:00.000Z",
+        ownerId: "owner-b",
+        source: "owner-b",
+      }),
+    );
+
+    await lock.release();
+
+    expect(fsMock.unlink).not.toHaveBeenCalled();
   });
 });

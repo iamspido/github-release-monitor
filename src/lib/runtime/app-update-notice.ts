@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 import { scheduleTask } from "@/lib/runtime/task-scheduler";
 import { runApplicationUpdateCheck } from "@/lib/runtime/update-check";
 import { isRestrictedActionAllowed } from "@/lib/server-action-helpers";
@@ -7,37 +8,50 @@ import {
 } from "@/lib/storage/system-status";
 import type { UpdateNotificationState } from "@/types";
 
-function normalizeVersion(value: string | null | undefined): string | null {
+type ParsedVersion = {
+  core: [number, number, number];
+  prerelease: string[];
+};
+
+function parseVersion(value: string | null | undefined): ParsedVersion | null {
   if (!value) return null;
-  return value.trim().replace(/^v/i, "").replace(/\+.*$/, "");
+  const normalized = value.trim().replace(/^v/i, "").replace(/\+.*$/, "");
+  const match = /^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?$/.exec(
+    normalized,
+  );
+  if (!match) return null;
+  return {
+    core: [Number(match[1]), Number(match[2] ?? 0), Number(match[3] ?? 0)],
+    prerelease: match[4]?.split(".") ?? [],
+  };
 }
 
-function compareSemanticVersions(a: string, b: string): number {
-  const parse = (version: string) => {
-    const [core, preRelease] = version.split("-", 2);
-    const parts = core.split(".").map((part) => {
-      const numeric = Number(part);
-      return Number.isNaN(numeric) ? 0 : numeric;
-    });
-    return { parts, preRelease: preRelease ?? null };
-  };
-
-  const parsedA = parse(a);
-  const parsedB = parse(b);
-  const length = Math.max(parsedA.parts.length, parsedB.parts.length);
-
-  for (let i = 0; i < length; i += 1) {
-    const segmentA = parsedA.parts[i] ?? 0;
-    const segmentB = parsedB.parts[i] ?? 0;
+function compareParsedVersions(a: ParsedVersion, b: ParsedVersion): number {
+  for (let i = 0; i < a.core.length; i += 1) {
+    const segmentA = a.core[i];
+    const segmentB = b.core[i];
     if (segmentA > segmentB) return 1;
     if (segmentA < segmentB) return -1;
   }
 
-  if (parsedA.preRelease && !parsedB.preRelease) return -1;
-  if (!parsedA.preRelease && parsedB.preRelease) return 1;
-  if (parsedA.preRelease && parsedB.preRelease) {
-    if (parsedA.preRelease > parsedB.preRelease) return 1;
-    if (parsedA.preRelease < parsedB.preRelease) return -1;
+  if (a.prerelease.length > 0 && b.prerelease.length === 0) return -1;
+  if (a.prerelease.length === 0 && b.prerelease.length > 0) return 1;
+
+  const length = Math.max(a.prerelease.length, b.prerelease.length);
+  for (let i = 0; i < length; i += 1) {
+    const identifierA = a.prerelease[i];
+    const identifierB = b.prerelease[i];
+    if (identifierA === undefined) return -1;
+    if (identifierB === undefined) return 1;
+    if (identifierA === identifierB) continue;
+
+    const numericA = /^\d+$/.test(identifierA);
+    const numericB = /^\d+$/.test(identifierB);
+    if (numericA && numericB) {
+      return Number(identifierA) > Number(identifierB) ? 1 : -1;
+    }
+    if (numericA !== numericB) return numericA ? -1 : 1;
+    return identifierA > identifierB ? 1 : -1;
   }
 
   return 0;
@@ -47,16 +61,14 @@ export async function getUpdateNotificationState(): Promise<UpdateNotificationSt
   const status = await getSystemStatus();
   const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0";
   const latestVersion = status.latestKnownVersion;
-  const normalizedCurrent = normalizeVersion(currentVersion);
-  const normalizedLatest = normalizeVersion(latestVersion);
+  const normalizedCurrent = parseVersion(currentVersion);
+  const normalizedLatest = parseVersion(latestVersion);
 
   let hasUpdate = false;
 
   if (normalizedCurrent && normalizedLatest) {
     hasUpdate =
-      compareSemanticVersions(normalizedLatest, normalizedCurrent) === 1;
-  } else if (latestVersion) {
-    hasUpdate = latestVersion !== currentVersion;
+      compareParsedVersions(normalizedLatest, normalizedCurrent) === 1;
   }
 
   const isDismissed =
@@ -73,6 +85,25 @@ export async function getUpdateNotificationState(): Promise<UpdateNotificationSt
     isDismissed,
     shouldNotify: hasUpdate && !isDismissed,
   };
+}
+
+export async function getUpdateNotificationStateOrFallback(): Promise<UpdateNotificationState> {
+  try {
+    return await getUpdateNotificationState();
+  } catch (error) {
+    logger
+      .withScope("UpdateCheck")
+      .error("Could not load the optional update notification state.", error);
+    return {
+      latestVersion: null,
+      currentVersion: process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0",
+      lastCheckedAt: null,
+      lastCheckError: "read_error",
+      hasUpdate: false,
+      isDismissed: false,
+      shouldNotify: false,
+    };
+  }
 }
 
 export async function dismissUpdateNotificationAction(): Promise<{

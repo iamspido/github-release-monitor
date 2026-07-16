@@ -1,6 +1,7 @@
 // vitest globals enabled
 
 import type { Repository } from "@/types";
+import { installFetchMock, mockFetchResponse } from "../helpers/fetch";
 
 vi.mock("next-intl/server", () => ({
   getLocale: async () => "en",
@@ -39,9 +40,10 @@ vi.mock("@/lib/storage/settings", () => ({
 
 const sendNotificationMock = vi.fn();
 vi.mock("@/lib/notifications", async (orig) => {
-  const actual = await orig();
+  const actual = await orig<typeof import("@/lib/notifications")>();
   return {
     ...actual,
+    getConfiguredNotificationChannels: () => ["apprise"],
     sendNotification: (...args: unknown[]) => sendNotificationMock(...args),
   };
 });
@@ -69,27 +71,25 @@ describe("refreshAndCheckAction", () => {
       { id: "o/r", url: "https://github.com/o/r", lastSeenReleaseTag: "v1" },
     ];
     sendNotificationMock.mockResolvedValueOnce(undefined);
-    // Mock fetch to return a new release v2
     const fetchBackup = global.fetch;
-    // @ts-expect-error
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 2,
-          html_url: "#",
-          tag_name: "v2",
-          name: "v2",
-          body: "x",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-      ],
-    });
+    installFetchMock().mockResolvedValue(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            id: 2,
+            html_url: "#",
+            tag_name: "v2",
+            name: "v2",
+            body: "x",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
     const res = await refreshAndCheckAction();
     expect(res.messageKey).toBe("toast_refresh_found_new");
     global.fetch = fetchBackup;
@@ -112,25 +112,24 @@ describe("refreshAndCheckAction", () => {
       },
     ];
     const fetchBackup = global.fetch;
-    // @ts-expect-error
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 1,
-          html_url: "#",
-          tag_name: "v1",
-          name: "v1",
-          body: "x",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-      ],
-    });
+    installFetchMock().mockResolvedValue(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            id: 1,
+            html_url: "#",
+            tag_name: "v1",
+            name: "v1",
+            body: "x",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
 
     const res = await checkForNewReleases({ skipCache: true, onlyDue: true });
 
@@ -157,25 +156,24 @@ describe("refreshAndCheckAction", () => {
       },
     ];
     const fetchBackup = global.fetch;
-    // @ts-expect-error
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 1,
-          html_url: "#",
-          tag_name: "v1",
-          name: "v1",
-          body: "x",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-      ],
-    });
+    installFetchMock().mockResolvedValue(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            id: 1,
+            html_url: "#",
+            tag_name: "v1",
+            name: "v1",
+            body: "x",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
 
     await refreshAndCheckAction();
 

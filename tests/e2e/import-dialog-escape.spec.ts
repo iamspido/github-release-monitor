@@ -1,31 +1,37 @@
-import { test, expect } from '@playwright/test';
-import path from 'node:path';
+import path from "node:path";
+import { expect, test } from "@playwright/test";
 
 async function login(page) {
-  const username = process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || 'test@example.com';
-  const password = process.env.AUTH_PASSWORD || 'TestPassword123';
-  await page.goto('/en/login');
+  const username =
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+  const password = process.env.AUTH_PASSWORD || "TestPassword123";
+  await page.goto("/en/login");
   await page.getByLabel(/email|e-mail/i).fill(username);
   await page.locator('input[name="password"]').fill(password);
   await page.locator('button[type="submit"]').first().click();
   await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
 }
 
-test('import confirmation dialog closes via ESC and does not import', async ({ page }) => {
+test("import confirmation dialog closes via ESC and does not import", async ({
+  page,
+}) => {
   await login(page);
-  await page.goto('/en');
+  await page.goto("/en");
 
-  const fileInput = page.locator('input[type="file"][accept=".json"]');
-  const jsonPath = path.resolve(__dirname, 'fixtures', 'repos.json');
+  const fileInput = page.locator('input[type="file"][accept*=".json"]');
+  const jsonPath = path.resolve(__dirname, "fixtures", "repos.json");
   await fileInput.setInputFiles(jsonPath);
 
-  const dialog = page.getByRole('alertdialog');
+  const dialog = page.getByRole("alertdialog");
   await expect(dialog).toBeVisible();
-  await page.keyboard.press('Escape');
+  await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 
   // No success toasts
-  await expect(page.getByText('Import Successful', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('Update Complete', { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText("Import Successful", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByText("Update Complete", { exact: true })).toHaveCount(
+    0,
+  );
 });
-

@@ -1,6 +1,19 @@
 "use server";
 
 import {
+  getRestrictedActionError,
+  runExposedRestrictedActionOrThrow,
+  runExposedRestrictedActionWithFallback,
+} from "@/lib/auth/exposed-action-policy";
+import {
+  beginSecretRevealStepUpActionImpl,
+  completeSecretRevealStepUpActionImpl,
+  getSecretRevealOptionsActionImpl,
+  revealAppriseUrlActionImpl,
+  revealMailPasswordActionImpl,
+  verifySecretRevealTotpActionImpl,
+} from "@/lib/diagnostics/notification-config";
+import {
   getCodebergTokenCheck as getCodebergTokenCheckImpl,
   getGitHubRateLimit as getGitHubRateLimitImpl,
   getGitlabTokenCheck as getGitlabTokenCheckImpl,
@@ -8,7 +21,10 @@ import {
 import { previewComposeImportAction as previewComposeImportActionImpl } from "@/lib/import/compose-ghcr";
 import { getLatestReleasesForRepos as getLatestReleasesForReposImpl } from "@/lib/releases";
 import { checkForNewReleases as checkForNewReleasesImpl } from "@/lib/releases/checker";
-import { resolveRepoProvidersAction as resolveRepoProvidersActionImpl } from "@/lib/repositories/provider-resolution";
+import {
+  resolveRepoProvidersAction as resolveRepoProvidersActionImpl,
+  resolveRepoProvidersBatchAction as resolveRepoProvidersBatchActionImpl,
+} from "@/lib/repositories/provider-resolution";
 import {
   acknowledgeNewReleaseAction as acknowledgeNewReleaseActionImpl,
   addRepositoriesAction as addRepositoriesActionImpl,
@@ -36,6 +52,19 @@ import {
   setupTestRepositoryAction as setupTestRepositoryActionImpl,
   triggerReleaseCheckAction as triggerReleaseCheckActionImpl,
 } from "@/lib/test-release-actions";
+import type { UpdateNotificationState } from "@/types";
+
+function getEmptyUpdateNotificationState(): UpdateNotificationState {
+  return {
+    latestVersion: null,
+    currentVersion: process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0",
+    lastCheckedAt: null,
+    lastCheckError: null,
+    hasUpdate: false,
+    isDismissed: false,
+    shouldNotify: false,
+  };
+}
 
 export async function previewComposeImportAction(
   ...args: Parameters<typeof previewComposeImportActionImpl>
@@ -49,10 +78,19 @@ export async function resolveRepoProvidersAction(
   return resolveRepoProvidersActionImpl(...args);
 }
 
+export async function resolveRepoProvidersBatchAction(
+  ...args: Parameters<typeof resolveRepoProvidersBatchActionImpl>
+) {
+  return resolveRepoProvidersBatchActionImpl(...args);
+}
+
 export async function getLatestReleasesForRepos(
   ...args: Parameters<typeof getLatestReleasesForReposImpl>
 ) {
-  return getLatestReleasesForReposImpl(...args);
+  return runExposedRestrictedActionWithFallback(
+    () => getLatestReleasesForReposImpl(...args),
+    [],
+  );
 }
 
 export async function addRepositoriesAction(
@@ -76,7 +114,10 @@ export async function refreshSingleRepositoryAction(
 export async function refreshMultipleRepositoriesAction(
   ...args: Parameters<typeof refreshMultipleRepositoriesActionImpl>
 ) {
-  return refreshMultipleRepositoriesActionImpl(...args);
+  return runExposedRestrictedActionWithFallback(
+    () => refreshMultipleRepositoriesActionImpl(...args),
+    undefined,
+  );
 }
 
 export async function removeRepositoryAction(
@@ -100,13 +141,18 @@ export async function markAsNewAction(
 export async function checkForNewReleases(
   ...args: Parameters<typeof checkForNewReleasesImpl>
 ) {
-  return checkForNewReleasesImpl(...args);
+  return runExposedRestrictedActionOrThrow(() =>
+    checkForNewReleasesImpl(...args),
+  );
 }
 
 export async function getUpdateNotificationState(
   ...args: Parameters<typeof getUpdateNotificationStateImpl>
 ) {
-  return getUpdateNotificationStateImpl(...args);
+  return runExposedRestrictedActionWithFallback(
+    () => getUpdateNotificationStateImpl(...args),
+    getEmptyUpdateNotificationState,
+  );
 }
 
 export async function dismissUpdateNotificationAction(
@@ -136,19 +182,71 @@ export async function triggerReleaseCheckAction(
 export async function getGitHubRateLimit(
   ...args: Parameters<typeof getGitHubRateLimitImpl>
 ) {
-  return getGitHubRateLimitImpl(...args);
+  return runExposedRestrictedActionWithFallback(
+    () => getGitHubRateLimitImpl(...args),
+    {
+      data: null,
+      error: "api_error" as const,
+    },
+  );
 }
 
 export async function getGitlabTokenCheck(
   ...args: Parameters<typeof getGitlabTokenCheckImpl>
 ) {
-  return getGitlabTokenCheckImpl(...args);
+  return runExposedRestrictedActionWithFallback(
+    () => getGitlabTokenCheckImpl(...args),
+    {
+      status: "api_error" as const,
+    },
+  );
 }
 
 export async function getCodebergTokenCheck(
   ...args: Parameters<typeof getCodebergTokenCheckImpl>
 ) {
-  return getCodebergTokenCheckImpl(...args);
+  return runExposedRestrictedActionWithFallback(
+    () => getCodebergTokenCheckImpl(...args),
+    {
+      status: "api_error" as const,
+    },
+  );
+}
+
+export async function revealMailPasswordAction(
+  ...args: Parameters<typeof revealMailPasswordActionImpl>
+) {
+  return revealMailPasswordActionImpl(...args);
+}
+
+export async function revealAppriseUrlAction(
+  ...args: Parameters<typeof revealAppriseUrlActionImpl>
+) {
+  return revealAppriseUrlActionImpl(...args);
+}
+
+export async function getSecretRevealOptionsAction(
+  ...args: Parameters<typeof getSecretRevealOptionsActionImpl>
+) {
+  return getSecretRevealOptionsActionImpl(...args);
+}
+
+export async function beginSecretRevealStepUpAction(
+  ...args: Parameters<typeof beginSecretRevealStepUpActionImpl>
+) {
+  return beginSecretRevealStepUpActionImpl(...args);
+}
+
+export async function completeSecretRevealStepUpAction(
+  ...args: Parameters<typeof completeSecretRevealStepUpActionImpl>
+) {
+  return completeSecretRevealStepUpActionImpl(...args);
+}
+
+export async function verifySecretRevealTotpAction(
+  ...args: Parameters<typeof verifySecretRevealTotpActionImpl>
+) {
+  return verifySecretRevealTotpActionImpl(...args);
 }
 
 export async function sendTestEmailAction(
@@ -184,7 +282,10 @@ export async function refreshDueRepositoriesAction(
 export async function getRepositoriesForExport(
   ...args: Parameters<typeof getRepositoriesForExportImpl>
 ) {
-  return getRepositoriesForExportImpl(...args);
+  return runExposedRestrictedActionWithFallback(
+    () => getRepositoriesForExportImpl(...args),
+    async () => ({ success: false, error: await getRestrictedActionError() }),
+  );
 }
 
 export async function updateRepositorySettingsAction(
@@ -196,11 +297,19 @@ export async function updateRepositorySettingsAction(
 export async function revalidateReleasesAction(
   ...args: Parameters<typeof revalidateReleasesActionImpl>
 ) {
-  return revalidateReleasesActionImpl(...args);
+  return runExposedRestrictedActionWithFallback(
+    () => revalidateReleasesActionImpl(...args),
+    undefined,
+  );
 }
 
 export async function getJobStatusAction(
   ...args: Parameters<typeof getJobStatusActionImpl>
 ) {
-  return getJobStatusActionImpl(...args);
+  return runExposedRestrictedActionWithFallback(
+    () => getJobStatusActionImpl(...args),
+    {
+      status: undefined,
+    },
+  );
 }

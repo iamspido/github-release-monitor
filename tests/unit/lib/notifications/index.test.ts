@@ -8,6 +8,12 @@ const { sendNewReleaseEmailMock } = vi.hoisted(() => ({
 vi.mock("next-intl/server", () => ({
   getTranslations:
     async () => (key: string, vars?: Record<string, unknown>) => {
+      if (key === "text_new_version_of_markdown") {
+        return "A new version of REPO_PLACEHOLDER has been released.";
+      }
+      if (key === "view_on_github_link" && vars?.link) {
+        return `[View release](${vars.link})`;
+      }
       if (vars?.repoId) return `${key}:${vars.repoId}`;
       if (vars?.tagName) return `${key}:${vars.tagName}`;
       return key;
@@ -16,7 +22,7 @@ vi.mock("next-intl/server", () => ({
 
 // Mock email module to avoid sending real emails; we only ensure it's called
 vi.mock("@/lib/notifications/email", async (orig) => {
-  const actual = await orig();
+  const actual = await orig<typeof import("@/lib/notifications/email")>();
   return {
     ...actual,
     sendNewReleaseEmail: sendNewReleaseEmailMock,
@@ -24,10 +30,16 @@ vi.mock("@/lib/notifications/email", async (orig) => {
 });
 
 import {
+  getConfiguredNotificationChannels,
   sendNotification,
   sendTestAppriseNotification,
 } from "@/lib/notifications";
 import type { AppSettings, GithubRelease, Repository } from "@/types";
+import {
+  fetchCallBodyText,
+  installFetchMock,
+  mockFetchResponse,
+} from "../../helpers/fetch";
 
 const repo: Repository = {
   id: "owner/repo",
@@ -62,8 +74,7 @@ describe("notifications/index", () => {
 
   beforeEach(() => {
     sendNewReleaseEmailMock.mockReset();
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
   });
 
   afterEach(() => {
@@ -71,22 +82,48 @@ describe("notifications/index", () => {
     global.fetch = fetchBackup;
   });
 
-  it("sendNotification: sends only email when only MAIL_HOST is set", async () => {
+  it("sendNotification: sends email when SMTP is fully configured", async () => {
     process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_PORT = "587";
+    process.env.MAIL_FROM_ADDRESS = "from@example.com";
+    process.env.MAIL_TO_ADDRESS = "to@example.com";
     await sendNotification(repo, release, "en", baseSettings);
     expect(sendNewReleaseEmailMock).toHaveBeenCalledTimes(1);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it("does not select email when the SMTP configuration is incomplete", () => {
+    process.env.MAIL_HOST = "smtp.example.com";
+    delete process.env.MAIL_PORT;
+    delete process.env.MAIL_FROM_ADDRESS;
+    delete process.env.MAIL_TO_ADDRESS;
+    delete process.env.APPRISE_URL;
+
+    expect(getConfiguredNotificationChannels()).toEqual([]);
+  });
+
+  it.each([
+    "invalid",
+    "587suffix",
+    "0",
+    "65536",
+    "-1",
+    "5.5",
+  ])("does not select email when MAIL_PORT is %s", (port) => {
+    process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_PORT = port;
+    process.env.MAIL_FROM_ADDRESS = "from@example.com";
+    process.env.MAIL_TO_ADDRESS = "to@example.com";
+    delete process.env.APPRISE_URL;
+
+    expect(getConfiguredNotificationChannels()).toEqual([]);
+  });
+
   it("sendNotification: sends only apprise when only APPRISE_URL is set", async () => {
     process.env.APPRISE_URL = "http://apprise.test";
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      text: async () => "",
-      status: 200,
-      headers: new Headers(),
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
     await sendNotification(repo, release, "en", baseSettings);
     expect(sendNewReleaseEmailMock).not.toHaveBeenCalled();
     expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -94,17 +131,19 @@ describe("notifications/index", () => {
 
   it("sendNotification: both configured, failure of one rejects", async () => {
     process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_PORT = "587";
+    process.env.MAIL_FROM_ADDRESS = "from@example.com";
+    process.env.MAIL_TO_ADDRESS = "to@example.com";
     process.env.APPRISE_URL = "http://apprise.test";
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: false,
-      text: async () => "err",
-      status: 500,
-      headers: new Headers(),
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 500, text: "err" }),
+    );
     await expect(
       sendNotification(repo, release, "en", baseSettings),
-    ).rejects.toThrow(/failed to send/i);
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/failed to send/i),
+      failedChannels: ["apprise"],
+    });
     // email still attempted
     expect(sendNewReleaseEmailMock).toHaveBeenCalled();
   });
@@ -118,92 +157,126 @@ describe("notifications/index", () => {
 
   it("sendNotification: repo appriseFormat overrides settings and URL normalization adds /notify", async () => {
     process.env.APPRISE_URL = "http://apprise.test"; // no /notify
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      text: async () => "",
-      status: 200,
-      headers: new Headers(),
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
 
-    const settings = { ...baseSettings, appriseFormat: "html" };
+    const settings: AppSettings = { ...baseSettings, appriseFormat: "html" };
     const repoOverrides: Repository = { ...repo, appriseFormat: "markdown" };
     await sendNotification(repoOverrides, release, "en", settings);
     expect(global.fetch).toHaveBeenCalledTimes(1);
     const call = vi.mocked(global.fetch).mock.calls[0];
     const url = call[0] as string;
-    const body = JSON.parse(call[1].body);
+    const body = JSON.parse(fetchCallBodyText(call));
     expect(url).toMatch(/\/notify$/);
     expect(body.format).toBe("markdown"); // repo override
   });
 
+  it("escapes Apprise markdown metadata and unsafe link destinations", async () => {
+    process.env.APPRISE_URL = "http://apprise.test/notify";
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
+
+    const maliciousRepo: Repository = {
+      id: "owner](https://evil.test)<b>",
+      url: "javascript:alert(1)",
+      appriseFormat: "markdown",
+    };
+    const maliciousRelease: GithubRelease = {
+      ...release,
+      html_url: "javascript:alert(2)",
+      tag_name: "v1](https://evil.test)",
+      name: "Name **bold** [x](https://evil.test)",
+    };
+
+    await sendNotification(maliciousRepo, maliciousRelease, "en", baseSettings);
+
+    const call = vi.mocked(global.fetch).mock.calls[0];
+    const payload = JSON.parse(fetchCallBodyText(call));
+    expect(payload.format).toBe("markdown");
+    expect(payload.body).toContain("owner\\]\\(https://evil\\.test\\)\\<b\\>");
+    expect(payload.body).toContain("v1\\]\\(https://evil\\.test\\)");
+    expect(payload.body).toContain(
+      "Name \\*\\*bold\\*\\* \\[x\\]\\(https://evil\\.test\\)",
+    );
+    expect(payload.body).toContain("](#)");
+    expect(payload.body).not.toContain("javascript:");
+    expect(payload.body).not.toContain("Name **bold** [x]");
+  });
+
   it("appriseMaxCharacters truncates text payload", async () => {
     process.env.APPRISE_URL = "http://apprise.test/notify";
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      text: async () => "",
-      status: 200,
-      headers: new Headers(),
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
 
-    const settings = {
+    const settings: AppSettings = {
       ...baseSettings,
       appriseMaxCharacters: 10,
       appriseFormat: "text",
     };
     await sendNotification(repo, release, "en", settings);
     const call = vi.mocked(global.fetch).mock.calls[0];
-    const payload = JSON.parse(call[1].body);
+    const payload = JSON.parse(fetchCallBodyText(call));
     expect(payload.body.length).toBeLessThanOrEqual(10);
   });
 
   it("apprise tags: repo overrides global; global applied when repo absent", async () => {
     process.env.APPRISE_URL = "http://apprise.test/notify";
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      text: async () => "",
-      status: 200,
-      headers: new Headers(),
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
 
-    // Global tags only
-    await sendNotification({ ...repo }, release, "en", {
+    const globalTagsSettings: AppSettings = {
       ...baseSettings,
       appriseTags: "g1,g2",
       appriseFormat: "text",
-    });
+    };
+    await sendNotification({ ...repo }, release, "en", globalTagsSettings);
     let call = vi.mocked(global.fetch).mock.calls.pop();
-    let body = JSON.parse(call[1].body);
+    if (!call) {
+      throw new Error("Expected Apprise fetch call");
+    }
+    let body = JSON.parse(fetchCallBodyText(call));
     expect(body.tag).toBe("g1,g2");
 
     // Repo overrides global
-    await sendNotification({ ...repo, appriseTags: "r1" }, release, "en", {
+    const repoTagsSettings: AppSettings = {
       ...baseSettings,
       appriseTags: "g1,g2",
       appriseFormat: "text",
-    });
+    };
+    await sendNotification(
+      { ...repo, appriseTags: "r1" },
+      release,
+      "en",
+      repoTagsSettings,
+    );
     call = vi.mocked(global.fetch).mock.calls.pop();
-    body = JSON.parse(call[1].body);
+    if (!call) {
+      throw new Error("Expected Apprise fetch call");
+    }
+    body = JSON.parse(fetchCallBodyText(call));
     expect(body.tag).toBe("r1");
   });
 
   it("normalizes APPRISE_URL with trailing slashes after /notify", async () => {
     process.env.APPRISE_URL = "http://apprise.test/notify///";
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      text: async () => "",
-      status: 200,
-      headers: new Headers(),
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
 
-    await sendNotification(repo, release, "en", {
+    const settings: AppSettings = {
       ...baseSettings,
       appriseFormat: "text",
-    });
-    const url = vi.mocked(global.fetch).mock.calls[0][0] as string;
+    };
+    await sendNotification(repo, release, "en", settings);
+    const [call] = vi.mocked(global.fetch).mock.calls;
+    if (!call) {
+      throw new Error("Expected Apprise fetch call");
+    }
+    const url = call[0] as string;
     expect(url).toBe("http://apprise.test/notify");
   });
 });

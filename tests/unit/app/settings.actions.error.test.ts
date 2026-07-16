@@ -24,6 +24,7 @@ describe("settings actions error paths", () => {
 
   it("updateSettingsAction returns error message when saveSettings throws", async () => {
     vi.doMock("@/lib/storage/settings", () => ({
+      normalizeSettings: (settings: unknown) => settings,
       getSettings: async () => ({
         timeFormat: "24h",
         locale: "en",
@@ -60,6 +61,57 @@ describe("settings actions error paths", () => {
     });
     expect(res.success).toBe(false);
     expect(res.message.description).toBe("toast_error_description");
+  });
+
+  it("rolls repository cache fields back when saving settings fails", async () => {
+    const originalRepositories: Repository[] = [
+      {
+        id: "o/a",
+        url: "https://github.com/o/a",
+        etag: "original-etag",
+        isNew: true,
+      },
+    ];
+    mem.repos = structuredClone(originalRepositories);
+    vi.doMock("@/lib/storage/settings", () => ({
+      normalizeSettings: (settings: unknown) => settings,
+      getSettings: async () => ({
+        timeFormat: "24h",
+        locale: "en",
+        refreshInterval: 10,
+        cacheInterval: 5,
+        releasesPerPage: 30,
+        parallelRepoFetches: 5,
+        releaseChannels: ["stable"],
+        includeRegex: undefined,
+        showAcknowledge: true,
+      }),
+      saveSettings: async () => {
+        throw new Error("fail-save");
+      },
+    }));
+    vi.doMock("@/lib/storage/repositories", () => ({
+      getRepositories: async () => structuredClone(mem.repos),
+      saveRepositories: async (list: Repository[]) => {
+        mem.repos = structuredClone(list);
+      },
+    }));
+
+    const { updateSettingsAction } = await import("@/app/settings/actions");
+    const result = await updateSettingsAction({
+      timeFormat: "24h",
+      locale: "en",
+      refreshInterval: 10,
+      cacheInterval: 5,
+      releasesPerPage: 30,
+      parallelRepoFetches: 5,
+      releaseChannels: ["stable"],
+      includeRegex: "v.*",
+      showAcknowledge: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(mem.repos).toEqual(originalRepositories);
   });
 
   it("deleteAllRepositoriesAction returns error message when save fails", async () => {

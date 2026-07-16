@@ -14,6 +14,12 @@ vi.mock("next-intl/server", () => ({
 }));
 
 import type { AppSettings, Repository } from "@/types";
+import {
+  fetchCallHeaders,
+  headerRecord,
+  installFetchMock,
+  mockFetchResponse,
+} from "../helpers/fetch";
 
 describe("actions Codeberg fetcher scenarios", () => {
   const fetchBackup = global.fetch;
@@ -29,8 +35,7 @@ describe("actions Codeberg fetcher scenarios", () => {
 
   beforeEach(() => {
     vi.resetModules();
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
     delete process.env.CODEBERG_ACCESS_TOKEN;
   });
 
@@ -56,13 +61,12 @@ describe("actions Codeberg fetcher scenarios", () => {
       },
     };
 
-    // 304 on first page
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      status: 304,
-      ok: false,
-      headers: { get: () => 'W/"def"' },
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 304,
+        headers: { etag: 'W/"def"' },
+      }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -77,42 +81,37 @@ describe("actions Codeberg fetcher scenarios", () => {
 
   it("falls back to tags when no releases", async () => {
     const actions = await import("@/app/actions");
+    const commitDate = "2020-02-03T04:05:06.000Z";
 
     const repo: Repository = {
       id: "codeberg:o/r",
       url: "https://codeberg.org/o/r",
     };
 
-    // releases empty
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null },
-      json: async () => [],
-    });
-    // tags
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null },
-      json: async () => [{ name: "v1", commit: { sha: "sha1" } }],
-    });
-    // commit message (first candidate endpoint `/commits/:sha`)
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null },
-      json: async () => ({
-        message: "msg",
-        author: { date: new Date().toISOString() },
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        statusText: "OK",
+        json: [],
       }),
-    });
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        statusText: "OK",
+        json: [{ name: "v1", commit: { sha: "sha1" } }],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        statusText: "OK",
+        json: {
+          message: "msg",
+          author: { date: commitDate },
+        },
+      }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -122,7 +121,38 @@ describe("actions Codeberg fetcher scenarios", () => {
     );
     expect(enriched[0].release?.id).toBe(0);
     expect(enriched[0].release?.tag_name).toBe("v1");
+    expect(enriched[0].release?.created_at).toBe(commitDate);
+    expect(enriched[0].release?.published_at).toBe(commitDate);
+    expect(enriched[0].release?.published_at_unknown).toBe(false);
     expect(enriched[0].error).toBeUndefined();
+  });
+
+  it("selects an older matching tag when the newest tag is filtered out", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "codeberg:o/r",
+      url: "https://codeberg.org/o/r",
+    };
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(mockFetchResponse({ json: [] }))
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: [
+            { name: "v2.0.0-beta", message: "beta" },
+            { name: "v1.9.0", message: "stable" },
+          ],
+        }),
+      );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      { ...baseSettings, releaseChannels: ["stable"] },
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("v1.9.0");
   });
 
   it("falls back to tags when releases endpoint returns 404 but repo exists", async () => {
@@ -133,49 +163,39 @@ describe("actions Codeberg fetcher scenarios", () => {
       url: "https://codeberg.org/o/r",
     };
 
-    // releases endpoint 404 (happens on Codeberg when releases are disabled)
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      statusText: "Not Found",
-      headers: { get: () => null },
-    });
-
-    // repo info exists
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null },
-      json: async () => ({ has_releases: false, release_counter: 0 }),
-    });
-
-    // tags
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null },
-      json: async () => [
-        { name: "v404", message: "msg", commit: { sha: "sha404" } },
-      ],
-    });
-
-    // commit message for tag fallback
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null },
-      json: async () => ({
-        message: "commit-msg",
-        author: { date: new Date().toISOString() },
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 404,
+        statusText: "Not Found",
       }),
-    });
+    );
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        statusText: "OK",
+        json: { has_releases: false, release_counter: 0 },
+      }),
+    );
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        statusText: "OK",
+        json: [{ name: "v404", message: "msg", commit: { sha: "sha404" } }],
+      }),
+    );
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        statusText: "OK",
+        json: {
+          message: "commit-msg",
+          author: { date: new Date().toISOString() },
+        },
+      }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -196,36 +216,30 @@ describe("actions Codeberg fetcher scenarios", () => {
       url: "https://codeberg.org/o/r",
     };
 
-    // releases empty
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null },
-      json: async () => [],
-    });
-    // tags: commit.id instead of commit.sha
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null },
-      json: async () => [{ name: "v2", commit: { id: "commit-id-2" } }],
-    });
-    // commit message (first candidate endpoint `/commits/:sha`)
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null },
-      json: async () => ({
-        message: "msg2",
-        author: { date: new Date().toISOString() },
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        statusText: "OK",
+        json: [],
       }),
-    });
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        statusText: "OK",
+        json: [{ name: "v2", commit: { id: "commit-id-2" } }],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        statusText: "OK",
+        json: {
+          message: "msg2",
+          author: { date: new Date().toISOString() },
+        },
+      }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -246,14 +260,13 @@ describe("actions Codeberg fetcher scenarios", () => {
       url: "https://codeberg.org/o/r",
     };
 
-    // rate limit 429
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: false,
+    const rateLimitResponse = mockFetchResponse({
       status: 429,
       statusText: "Too Many Requests",
-      headers: { get: () => "60" },
+      headers: { "retry-after": "60" },
+      text: "slow down",
     });
+    vi.mocked(global.fetch).mockResolvedValueOnce(rateLimitResponse);
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -262,6 +275,7 @@ describe("actions Codeberg fetcher scenarios", () => {
       { skipCache: true },
     );
     expect(enriched[0].error?.type).toBe("rate_limit");
+    expect(rateLimitResponse.bodyUsed).toBe(true);
   });
 
   it("falls back from token to bearer auth on 401", async () => {
@@ -273,35 +287,31 @@ describe("actions Codeberg fetcher scenarios", () => {
       url: "https://codeberg.org/o/r",
     };
 
-    // token auth attempt -> 401
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      statusText: "Unauthorized",
-      headers: { get: () => null },
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 401,
+        statusText: "Unauthorized",
+      }),
+    );
 
-    // bearer auth attempt -> 200 with one release
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 1,
-          tag_name: "v1",
-          name: "v1",
-          body: "body",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-      ],
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        statusText: "OK",
+        json: [
+          {
+            id: 1,
+            tag_name: "v1",
+            name: "v1",
+            body: "body",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -310,13 +320,12 @@ describe("actions Codeberg fetcher scenarios", () => {
       { skipCache: true },
     );
 
-    // Ensure the two auth schemes were tried
-    // @ts-expect-error
-    const firstAuth = vi.mocked(global.fetch).mock.calls[0][1].headers
-      .Authorization;
-    // @ts-expect-error
-    const secondAuth = vi.mocked(global.fetch).mock.calls[1][1].headers
-      .Authorization;
+    const firstAuth = headerRecord(
+      fetchCallHeaders(vi.mocked(global.fetch).mock.calls[0]),
+    ).Authorization;
+    const secondAuth = headerRecord(
+      fetchCallHeaders(vi.mocked(global.fetch).mock.calls[1]),
+    ).Authorization;
     expect(firstAuth).toBe("token tok");
     expect(secondAuth).toBe("Bearer tok");
 

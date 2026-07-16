@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
-import { ensureAuthDatabaseReady, hasAnyAuthUser, setupAuth } from "@/lib/auth";
+import { hasAnyAuthUser, setupAuth } from "@/lib/auth";
+import {
+  getClientIpFromRequest,
+  isLikelyEmail,
+  readJsonPayload,
+  toSafeString,
+} from "@/lib/auth/request-context";
+import { secretsEqual } from "@/lib/auth/secret";
 import {
   acquireAuthSetupBootstrapLock,
   getAuthSetupLockPath,
   isAuthSetupLocked,
   writeAuthSetupLock,
 } from "@/lib/auth/setup-lock";
+import { getAuthSetupAvailability } from "@/lib/auth/setup-route-guard";
 import { logger } from "@/lib/logger";
 import { isPasswordPolicyValid } from "@/lib/password-policy";
 import { isUsernamePolicyValid } from "@/lib/username-policy";
@@ -31,19 +39,6 @@ type SetupErrorBody = {
   code?: unknown;
 };
 
-function getClientIp(request: Request | undefined) {
-  if (!request) return "unknown";
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  return (firstForwardedIp || realIp || "unknown").slice(0, 128);
-}
-
-function isSetupEnabledByEnv() {
-  const token = process.env.AUTH_SETUP_TOKEN;
-  return typeof token === "string" && token.length >= 32;
-}
-
 function logMissingSetupTokenOnce() {
   if (global._authSetupTokenWarningLogged) {
     return;
@@ -60,14 +55,6 @@ function disabledResponse() {
 
 function setupStateUnknownResponse() {
   return NextResponse.json({ error: "setup_state_unknown" }, { status: 503 });
-}
-
-function toSafeString(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function isLikelyEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function isValidUsername(value: string) {
@@ -185,92 +172,77 @@ async function disableSetupAfterSuccessfulBootstrap(email: string) {
   }
 }
 
-export async function GET(request?: Request) {
-  const clientIp = getClientIp(request);
-  log.info(`Auth setup status check requested from ip='${clientIp}'.`);
+async function guardSetupAvailability(
+  clientIp: string,
+  operation: "status check" | "attempt",
+): Promise<Response | null> {
+  const availability = await getAuthSetupAvailability();
+  if (availability === "available") return null;
 
-  await ensureAuthDatabaseReady();
-  if (!isSetupEnabledByEnv()) {
+  if (availability === "token_invalid") {
     logMissingSetupTokenOnce();
     log.warn(
-      `Rejected setup status check from ip='${clientIp}' because AUTH_SETUP_TOKEN is not valid.`,
+      `Rejected setup ${operation} from ip='${clientIp}' because AUTH_SETUP_TOKEN is not valid.`,
     );
     return disabledResponse();
   }
-  if (await isAuthSetupLocked()) {
-    log.info(
-      `Rejected setup status check from ip='${clientIp}' because setup is locked.`,
+  if (availability === "locked") {
+    const writeLog = operation === "status check" ? log.info : log.warn;
+    writeLog(
+      `Rejected setup ${operation} from ip='${clientIp}' because setup is locked.`,
     );
     return disabledResponse();
   }
-  const authUserState = hasAnyAuthUser();
-  if (authUserState === "unknown") {
+  if (availability === "state_unknown") {
     log.error(
-      `Rejected setup status check from ip='${clientIp}' because auth user existence could not be determined.`,
+      `Rejected setup ${operation} from ip='${clientIp}' because auth user existence could not be determined.`,
     );
     return setupStateUnknownResponse();
   }
-  if (authUserState === "has_user") {
-    await backfillSetupLockForExistingUsers();
-    log.info(
-      `Rejected setup status check from ip='${clientIp}' because at least one auth user already exists.`,
-    );
-    return disabledResponse();
-  }
+
+  await backfillSetupLockForExistingUsers();
+  const writeLog = operation === "status check" ? log.info : log.warn;
+  writeLog(
+    `Rejected setup ${operation} from ip='${clientIp}' because at least one auth user already exists.`,
+  );
+  return disabledResponse();
+}
+
+export async function GET(request?: Request) {
+  const clientIp = getClientIpFromRequest(request);
+  log.info(`Auth setup status check requested from ip='${clientIp}'.`);
+
+  const rejection = await guardSetupAvailability(clientIp, "status check");
+  if (rejection) return rejection;
   log.info(`Setup is available for ip='${clientIp}'.`);
   return NextResponse.json({ setupRequired: true }, { status: 200 });
 }
 
 export async function POST(request: Request) {
-  const clientIp = getClientIp(request);
+  const clientIp = getClientIpFromRequest(request);
   log.info(`Initial setup attempt received from ip='${clientIp}'.`);
 
-  await ensureAuthDatabaseReady();
-  if (!isSetupEnabledByEnv()) {
-    logMissingSetupTokenOnce();
-    log.warn(
-      `Rejected setup attempt from ip='${clientIp}' because AUTH_SETUP_TOKEN is not valid.`,
-    );
-    return disabledResponse();
-  }
-  if (await isAuthSetupLocked()) {
-    log.warn(
-      `Rejected setup attempt from ip='${clientIp}' because setup is locked.`,
-    );
-    return disabledResponse();
-  }
-  const authUserState = hasAnyAuthUser();
-  if (authUserState === "unknown") {
-    log.error(
-      `Rejected setup attempt from ip='${clientIp}' because auth user existence could not be determined.`,
-    );
-    return setupStateUnknownResponse();
-  }
-  if (authUserState === "has_user") {
-    await backfillSetupLockForExistingUsers();
-    log.warn(
-      `Rejected setup attempt from ip='${clientIp}' because at least one auth user already exists.`,
-    );
-    return disabledResponse();
-  }
+  const rejection = await guardSetupAvailability(clientIp, "attempt");
+  if (rejection) return rejection;
 
-  let payload: SetupPayload;
-  try {
-    payload = (await request.json()) as SetupPayload;
-  } catch {
+  const jsonResult = await readJsonPayload<SetupPayload>(request);
+  if (!jsonResult.ok) {
     log.warn(
       `Rejected setup attempt from ip='${clientIp}' due to invalid JSON body.`,
     );
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
+  const payload = jsonResult.payload;
 
   const token = toSafeString(payload.token);
   const email = toSafeString(payload.email).toLowerCase();
-  const password = toSafeString(payload.password);
+  const rawPassword =
+    typeof payload.password === "string" ? payload.password : "";
+  const password = rawPassword.trim();
   const name = toSafeString(payload.name);
   const username = toSafeString(payload.username);
 
-  if (token !== process.env.AUTH_SETUP_TOKEN) {
+  if (!secretsEqual(token, process.env.AUTH_SETUP_TOKEN ?? "")) {
     log.warn(
       `Rejected setup attempt from ip='${clientIp}' due to invalid setup token.`,
     );
@@ -279,6 +251,7 @@ export async function POST(request: Request) {
 
   if (
     !isLikelyEmail(email) ||
+    password !== rawPassword ||
     !isPasswordPolicyValid(password) ||
     !isValidUsername(username)
   ) {

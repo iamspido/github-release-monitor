@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -7,7 +8,15 @@ const authSetupBootstrapLockPath = path.join(
   dataDirPath,
   "auth-setup-bootstrap.lock",
 );
+const authSetupBootstrapGatePath = path.join(
+  dataDirPath,
+  "auth-setup-bootstrap.gate",
+);
 const authSetupBootstrapLockStaleMs = 10 * 60 * 1_000;
+const authSetupBootstrapGateStaleMs = authSetupBootstrapLockStaleMs;
+const authSetupBootstrapGateRetryMs = 10;
+const authSetupBootstrapGateMaxWaitMs = 5_000;
+const authSetupBootstrapGateClaimPrefix = "claim-";
 
 type AuthSetupLockReason = "setup_completed" | "user_exists";
 
@@ -20,6 +29,7 @@ type AuthSetupLockPayload = {
 
 type AuthSetupBootstrapLockPayload = {
   createdAt: string;
+  ownerId?: string;
   source: string;
 };
 
@@ -38,8 +48,11 @@ export async function isAuthSetupLocked() {
   try {
     await fs.access(authSetupLockPath);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
   }
 }
 
@@ -81,6 +94,87 @@ async function removeAuthSetupBootstrapLock() {
   }
 }
 
+async function releaseAuthSetupBootstrapGateClaim(claimPath: string) {
+  try {
+    await fs.rmdir(claimPath);
+  } catch (error) {
+    if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function tryAcquireAuthSetupBootstrapGate() {
+  await fs.mkdir(authSetupBootstrapGatePath, { recursive: true });
+  // Claims have unique paths so stale cleanup and delayed releases can never
+  // remove a newer owner's gate. Only the sole active claim enters the
+  // bootstrap-lock critical section; competing claims fail closed.
+  const claimPath = path.join(
+    authSetupBootstrapGatePath,
+    `${authSetupBootstrapGateClaimPrefix}${randomUUID()}`,
+  );
+  await fs.mkdir(claimPath);
+
+  try {
+    const entries = await fs.readdir(authSetupBootstrapGatePath, {
+      withFileTypes: true,
+    });
+    const activeClaimPaths: string[] = [];
+
+    for (const entry of entries) {
+      if (
+        !entry.isDirectory() ||
+        !entry.name.startsWith(authSetupBootstrapGateClaimPrefix)
+      ) {
+        continue;
+      }
+
+      const candidatePath = path.join(authSetupBootstrapGatePath, entry.name);
+      let isStale = false;
+      try {
+        const stats = await fs.stat(candidatePath);
+        isStale = Date.now() - stats.mtimeMs > authSetupBootstrapGateStaleMs;
+      } catch (error) {
+        if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+          continue;
+        }
+        throw error;
+      }
+
+      if (isStale) {
+        await releaseAuthSetupBootstrapGateClaim(candidatePath);
+        continue;
+      }
+      activeClaimPaths.push(candidatePath);
+    }
+
+    if (activeClaimPaths.length === 1 && activeClaimPaths[0] === claimPath) {
+      return claimPath;
+    }
+  } catch (error) {
+    await releaseAuthSetupBootstrapGateClaim(claimPath);
+    throw error;
+  }
+
+  await releaseAuthSetupBootstrapGateClaim(claimPath);
+  return null;
+}
+
+async function acquireAuthSetupBootstrapGateWithWait() {
+  const deadline = Date.now() + authSetupBootstrapGateMaxWaitMs;
+  while (true) {
+    const claimPath = await tryAcquireAuthSetupBootstrapGate();
+    if (claimPath) return claimPath;
+    if (Date.now() >= deadline) {
+      throw new Error("Timed out waiting for auth setup bootstrap lock gate.");
+    }
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, authSetupBootstrapGateRetryMs),
+    );
+  }
+}
+
 async function isExistingBootstrapLockStale() {
   try {
     const raw = await fs.readFile(authSetupBootstrapLockPath, "utf8");
@@ -98,9 +192,10 @@ async function isExistingBootstrapLockStale() {
   }
 }
 
-async function tryWriteAuthSetupBootstrapLock(source: string) {
+async function tryWriteAuthSetupBootstrapLock(source: string, ownerId: string) {
   const lockData: AuthSetupBootstrapLockPayload = {
     createdAt: new Date().toISOString(),
+    ownerId,
     source,
   };
 
@@ -122,15 +217,51 @@ async function tryWriteAuthSetupBootstrapLock(source: string) {
   }
 }
 
+async function releaseOwnedAuthSetupBootstrapLock(ownerId: string) {
+  const gateClaimPath = await acquireAuthSetupBootstrapGateWithWait();
+  try {
+    let currentLock: Partial<AuthSetupBootstrapLockPayload> | null = null;
+    try {
+      const raw = await fs.readFile(authSetupBootstrapLockPath, "utf8");
+      currentLock = JSON.parse(raw) as Partial<AuthSetupBootstrapLockPayload>;
+    } catch (error) {
+      if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+        return;
+      }
+      throw error;
+    }
+
+    if (currentLock.ownerId === ownerId) {
+      await removeAuthSetupBootstrapLock();
+    }
+  } finally {
+    await releaseAuthSetupBootstrapGateClaim(gateClaimPath);
+  }
+}
+
 export async function acquireAuthSetupBootstrapLock(payload?: {
   source?: string;
 }) {
   await fs.mkdir(dataDirPath, { recursive: true });
   const source = payload?.source || "unknown";
-  let acquired = await tryWriteAuthSetupBootstrapLock(source);
-  if (!acquired && (await isExistingBootstrapLockStale())) {
-    await removeAuthSetupBootstrapLock();
-    acquired = await tryWriteAuthSetupBootstrapLock(source);
+  const ownerId = randomUUID();
+  const gateClaimPath = await tryAcquireAuthSetupBootstrapGate();
+  if (!gateClaimPath) {
+    return {
+      status: "busy" as const,
+      release: async () => undefined,
+    };
+  }
+
+  let acquired = false;
+  try {
+    acquired = await tryWriteAuthSetupBootstrapLock(source, ownerId);
+    if (!acquired && (await isExistingBootstrapLockStale())) {
+      await removeAuthSetupBootstrapLock();
+      acquired = await tryWriteAuthSetupBootstrapLock(source, ownerId);
+    }
+  } finally {
+    await releaseAuthSetupBootstrapGateClaim(gateClaimPath);
   }
 
   if (!acquired) {
@@ -142,7 +273,7 @@ export async function acquireAuthSetupBootstrapLock(payload?: {
 
   return {
     status: "acquired" as const,
-    release: removeAuthSetupBootstrapLock,
+    release: () => releaseOwnedAuthSetupBootstrapLock(ownerId),
   };
 }
 

@@ -2,23 +2,12 @@ import { updateTag } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { canPerformRestrictedAction } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
+import { normalizeAccessTokenEnvValue } from "@/lib/secret-env";
 
 export const log = logger.withScope("WebServer");
 
 export function normalizeEnvToken(value?: string): string | null {
-  const trimmed = value?.trim();
-  if (!trimmed) return null;
-
-  const first = trimmed[0];
-  const last = trimmed[trimmed.length - 1];
-  const isWrappedInQuotes =
-    (first === '"' && last === '"') || (first === "'" && last === "'");
-  const raw = isWrappedInQuotes ? trimmed.slice(1, -1).trim() : trimmed;
-  if (!raw) return null;
-
-  // Defensive: some env providers may inject newlines/whitespace into tokens.
-  // Token formats are typically alphanumeric and do not include whitespace.
-  return raw.replace(/\s+/g, "");
+  return normalizeAccessTokenEnvValue(value);
 }
 
 export function updateReleaseCacheTags(): void {

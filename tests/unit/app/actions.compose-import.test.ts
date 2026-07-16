@@ -33,6 +33,13 @@ describe("previewComposeImportAction", () => {
 
   it("finds recursive image keys and imports GitHub source labels from GHCR", async () => {
     const actions = await import("@/app/actions");
+    const challengeResponse = new Response("authentication required", {
+      status: 401,
+      headers: {
+        "www-authenticate":
+          'Bearer realm="https://ghcr.io/token",service="ghcr.io",scope="repository:zammad/zammad:pull"',
+      },
+    });
     const compose = `
 x-zammad-service: &zammad-service
   image: "ghcr.io/zammad/zammad:7.0.1-0032"
@@ -44,15 +51,7 @@ services:
 `;
 
     vi.mocked(global.fetch)
-      .mockResolvedValueOnce(
-        new Response(null, {
-          status: 401,
-          headers: {
-            "www-authenticate":
-              'Bearer realm="https://ghcr.io/token",service="ghcr.io",scope="repository:zammad/zammad:pull"',
-          },
-        }),
-      )
+      .mockResolvedValueOnce(challengeResponse)
       .mockResolvedValueOnce(jsonResponse({ token: "token" }))
       .mockResolvedValueOnce(
         jsonResponse({
@@ -86,6 +85,7 @@ services:
       },
     ]);
     expect(result.skipped.unsupported_registry).toBe(1);
+    expect(challengeResponse.bodyUsed).toBe(true);
   });
 
   it("reads source labels from multi-arch child manifests", async () => {

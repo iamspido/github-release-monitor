@@ -6,10 +6,6 @@
     "moduleDetection": "force",
     "types": ["vitest/globals", "node"]
   },
-  "include": [
-    "../src/types/**/*.d.ts",
-    "./**/*.ts",
-    "./**/*.tsx"
-  ],
+  "include": ["../src/types/**/*.d.ts", "./**/*.ts", "./**/*.tsx"],
   "exclude": ["../node_modules"]
 }

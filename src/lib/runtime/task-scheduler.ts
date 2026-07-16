@@ -1,8 +1,16 @@
 import { logger } from "@/lib/logger";
+import { scheduleProcessTask } from "@/lib/runtime/process-task-queue";
+import { getSchedulerRuntimeSummary } from "@/lib/runtime/scheduler-capabilities";
 
-// This promise is used to create a sequential task queue.
-// All actions that modify the repository list should be wrapped in `scheduleTask`.
-let currentUpdatePromise: Promise<unknown> = Promise.resolve();
+let runtimeModelLogged = false;
+
+const SHARED_STATE_QUEUE = "shared-json-state";
+
+function logRuntimeModelOnce() {
+  if (runtimeModelLogged) return;
+  runtimeModelLogged = true;
+  logger.withScope("Scheduler").info(getSchedulerRuntimeSummary());
+}
 
 /**
  * Schedules a task to be executed sequentially, preventing race conditions
@@ -15,18 +23,19 @@ export function scheduleTask<T>(
   taskName: string,
   taskFunction: () => Promise<T>,
 ): Promise<T> {
+  logRuntimeModelOnce();
   const log = logger.withScope("Scheduler");
   log.info(`Queuing task: ${taskName}`);
 
-  const taskPromise = currentUpdatePromise.then(async () => {
+  return scheduleProcessTask(SHARED_STATE_QUEUE, async () => {
     log.info(`Starting task: ${taskName}`);
     try {
       return await taskFunction();
+    } catch (error) {
+      log.error(`Task failed: ${taskName}`, error);
+      throw error;
     } finally {
       log.info(`Finished task: ${taskName}`);
     }
   });
-
-  currentUpdatePromise = taskPromise;
-  return taskPromise;
 }

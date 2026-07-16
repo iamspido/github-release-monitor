@@ -47,7 +47,9 @@ describe("storage/settings failure scenarios", () => {
   });
 
   it("throws when ensureDataFileExists cannot write settings file", async () => {
-    fsMock.access.mockRejectedValueOnce(new Error("missing"));
+    fsMock.access.mockRejectedValueOnce(
+      Object.assign(new Error("missing"), { code: "ENOENT" }),
+    );
     const failure = new Error("disk full");
     fsMock.writeFile.mockRejectedValueOnce(failure);
     const { getSettings } = await import("@/lib/storage/settings");
@@ -77,6 +79,37 @@ describe("storage/settings failure scenarios", () => {
     const settings = await getSettings();
 
     expect(settings.prioritizeNewSecurityReleases).toBe(false);
+  });
+
+  it("creates independent complete default settings", async () => {
+    const { createDefaultSettings } = await import("@/lib/storage/settings");
+    const first = createDefaultSettings({ GITHUB_ACCESS_TOKEN: "token" });
+    const second = createDefaultSettings({});
+
+    expect(first.parallelRepoFetches).toBe(5);
+    expect(second.parallelRepoFetches).toBe(1);
+    expect(first).toHaveProperty("repositoryFormExpanded", true);
+    expect(first).toHaveProperty("appriseMaxCharacters", 1800);
+
+    first.releaseChannels.push("draft");
+    if (!first.providerSortOrder) {
+      throw new Error("Expected complete default provider sort order.");
+    }
+    first.providerSortOrder.reverse();
+    expect(second.releaseChannels).toEqual(["stable"]);
+    expect(second.providerSortOrder).toEqual(["github", "gitlab", "codeberg"]);
+  });
+
+  it("defaults security release settings for old settings files", async () => {
+    const { getSettings } = await import("@/lib/storage/settings");
+
+    const settings = await getSettings();
+
+    expect(settings.securityHighlightColorPreset).toBe("yellow");
+    expect(settings.securityHighlightCustomColor).toBe("#eab308");
+    expect(settings.confirmSecurityAcknowledge).toBe(false);
+    expect(settings.includeDefaultSecurityPatterns).toBe(true);
+    expect(settings.customSecurityPatterns).toBeUndefined();
   });
 
   it("defaults the repository form to expanded for old settings files", async () => {
@@ -140,18 +173,51 @@ describe("storage/settings failure scenarios", () => {
     expect(fsMock.readFile).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to default settings and logs when settings JSON is invalid", async () => {
+  it("fails closed and logs when settings JSON is invalid", async () => {
     fsMock.readFile.mockResolvedValue("{");
     const { getSettings } = await import("@/lib/storage/settings");
 
-    await expect(getSettings()).resolves.toMatchObject({
-      locale: "en",
-      releaseChannels: ["stable"],
-    });
+    await expect(getSettings()).rejects.toBeInstanceOf(SyntaxError);
     expect(loggerMock.error).toHaveBeenCalledWith(
       "Error reading or parsing settings.json:",
       expect.any(SyntaxError),
     );
+  });
+
+  it("rejects structurally invalid settings JSON", async () => {
+    fsMock.readFile.mockResolvedValue(
+      JSON.stringify({ refreshInterval: "ten" }),
+    );
+    const { getSettings } = await import("@/lib/storage/settings");
+
+    await expect(getSettings()).rejects.toThrow(
+      "refreshInterval must be an integer between 1 and 5256000",
+    );
+  });
+
+  it.each([
+    [{ releasesPerPage: 0 }, "releasesPerPage"],
+    [{ releasesPerPage: 1001 }, "releasesPerPage"],
+    [{ parallelRepoFetches: 51 }, "parallelRepoFetches"],
+    [{ appriseMaxCharacters: -1 }, "appriseMaxCharacters"],
+  ])("rejects semantically invalid persisted settings %j", async (value, key) => {
+    fsMock.readFile.mockResolvedValue(JSON.stringify(value));
+    const { getSettings } = await import("@/lib/storage/settings");
+
+    await expect(getSettings()).rejects.toThrow(String(key));
+  });
+
+  it("rejects semantically invalid settings before writing", async () => {
+    const { getSettings, saveSettings } = await import(
+      "@/lib/storage/settings"
+    );
+    const current = await getSettings();
+    fsMock.writeFile.mockClear();
+
+    await expect(
+      saveSettings({ ...current, releasesPerPage: -1 }),
+    ).rejects.toThrow("Could not save settings data.");
+    expect(fsMock.writeFile).not.toHaveBeenCalled();
   });
 
   it("returns the configured locale only when it is supported", async () => {
@@ -178,7 +244,7 @@ describe("storage/settings failure scenarios", () => {
       ...current,
       releaseSortOrder: "not-real",
       providerSortOrder: ["gitlab", "bad", "github"],
-    } as typeof current);
+    } as unknown as typeof current);
 
     await expect(getSettings()).resolves.toMatchObject({
       releaseSortOrder: "latest_first",

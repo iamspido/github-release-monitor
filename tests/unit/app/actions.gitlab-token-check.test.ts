@@ -12,13 +12,19 @@ vi.mock("next-intl/server", () => ({
   getLocale: async () => "en",
 }));
 
+import {
+  fetchCallHeaders,
+  headerRecord,
+  installFetchMock,
+  mockFetchResponse,
+} from "../helpers/fetch";
+
 describe("getGitlabTokenCheck", () => {
   const fetchBackup = global.fetch;
 
   beforeEach(() => {
     vi.resetModules();
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
     delete process.env.GITLAB_ACCESS_TOKENS;
     delete process.env.GITLAB_DEPLOY_TOKENS;
     delete process.env.GITLAB_ADDITIONAL_HOSTS;
@@ -34,13 +40,12 @@ describe("getGitlabTokenCheck", () => {
       "gitlab.self.test=gitlab+deploy-token-1:gl-dpt-abc";
     const actions = await import("@/app/actions");
 
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      statusText: "Unauthorized",
-      headers: { get: () => null },
-    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 401,
+        statusText: "Unauthorized",
+      }),
+    );
 
     const result = await actions.getGitlabTokenCheck();
     expect(result).toEqual({
@@ -50,8 +55,9 @@ describe("getGitlabTokenCheck", () => {
       diagnosticsLimited: true,
     });
 
-    // @ts-expect-error
-    const [, requestOpts] = vi.mocked(global.fetch).mock.calls[0];
-    expect(requestOpts.headers.Authorization.startsWith("Basic ")).toBe(true);
+    const authorization = headerRecord(
+      fetchCallHeaders(vi.mocked(global.fetch).mock.calls[0]),
+    ).Authorization;
+    expect(authorization.startsWith("Basic ")).toBe(true);
   });
 });

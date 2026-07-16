@@ -47,14 +47,14 @@ export function getGitlabAccessTokensByHost(): Map<string, string> {
   const raw = process.env.GITLAB_ACCESS_TOKENS;
   if (!raw) return tokensByHost;
 
-  for (const entry of raw.split(",")) {
+  for (const [index, entry] of raw.split(",").entries()) {
     const trimmed = entry.trim();
     if (!trimmed) continue;
 
     const separatorIndex = trimmed.indexOf("=");
     if (separatorIndex <= 0) {
       log.warn(
-        `Ignoring invalid GITLAB_ACCESS_TOKENS entry (missing host=token): '${trimmed}'`,
+        `Ignoring invalid GITLAB_ACCESS_TOKENS entry ${index + 1}: missing host=token.`,
       );
       continue;
     }
@@ -64,8 +64,9 @@ export function getGitlabAccessTokensByHost(): Map<string, string> {
     const host = normalizeGitlabHost(rawHost);
     const token = normalizeEnvToken(rawToken);
     if (!host || !token) {
+      const hostDescription = host ?? "invalid-host";
       log.warn(
-        `Ignoring invalid GITLAB_ACCESS_TOKENS entry: '${trimmed.slice(0, Math.min(trimmed.length, 48))}${trimmed.length > 48 ? "..." : ""}'`,
+        `Ignoring invalid GITLAB_ACCESS_TOKENS entry ${index + 1} for host '${hostDescription}'.`,
       );
       continue;
     }
@@ -94,14 +95,14 @@ export function getGitlabDeployTokensByHost(): Map<string, GitlabDeployToken> {
   const raw = process.env.GITLAB_DEPLOY_TOKENS;
   if (!raw) return tokensByHost;
 
-  for (const entry of raw.split(",")) {
+  for (const [index, entry] of raw.split(",").entries()) {
     const trimmed = entry.trim();
     if (!trimmed) continue;
 
     const separatorIndex = trimmed.indexOf("=");
     if (separatorIndex <= 0) {
       log.warn(
-        `Ignoring invalid GITLAB_DEPLOY_TOKENS entry (missing host=username:token): '${trimmed}'`,
+        `Ignoring invalid GITLAB_DEPLOY_TOKENS entry ${index + 1}: missing host=username:token.`,
       );
       continue;
     }
@@ -111,7 +112,7 @@ export function getGitlabDeployTokensByHost(): Map<string, GitlabDeployToken> {
     const credentialSeparatorIndex = rawCredentials.indexOf(":");
     if (credentialSeparatorIndex <= 0) {
       log.warn(
-        `Ignoring invalid GITLAB_DEPLOY_TOKENS entry (missing username:token): '${trimmed.slice(0, Math.min(trimmed.length, 48))}${trimmed.length > 48 ? "..." : ""}'`,
+        `Ignoring invalid GITLAB_DEPLOY_TOKENS entry ${index + 1}: missing username:token.`,
       );
       continue;
     }
@@ -122,8 +123,9 @@ export function getGitlabDeployTokensByHost(): Map<string, GitlabDeployToken> {
     const username = normalizeGitlabDeployUsername(rawUsername);
     const token = normalizeEnvToken(rawToken);
     if (!host || !username || !token) {
+      const hostDescription = host ?? "invalid-host";
       log.warn(
-        `Ignoring invalid GITLAB_DEPLOY_TOKENS entry: '${trimmed.slice(0, Math.min(trimmed.length, 48))}${trimmed.length > 48 ? "..." : ""}'`,
+        `Ignoring invalid GITLAB_DEPLOY_TOKENS entry ${index + 1} for host '${hostDescription}'.`,
       );
       continue;
     }

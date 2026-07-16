@@ -1,6 +1,7 @@
 // vitest globals enabled
 
 import type { Repository } from "@/types";
+import { installFetchMock, mockFetchResponse } from "../helpers/fetch";
 
 vi.mock("next/cache", () => ({
   unstable_cache: <T extends (...args: never[]) => unknown>(fn: T) => fn,
@@ -37,9 +38,10 @@ vi.mock("@/lib/storage/settings", () => ({
 
 const sendNotificationMock = vi.fn();
 vi.mock("@/lib/notifications", async (orig) => {
-  const actual = await orig();
+  const actual = await orig<typeof import("@/lib/notifications")>();
   return {
     ...actual,
+    getConfiguredNotificationChannels: () => ["apprise"],
     sendNotification: (...args: unknown[]) => sendNotificationMock(...args),
   };
 });
@@ -48,8 +50,7 @@ describe("checkForNewReleases with showAcknowledge=false", () => {
   const fetchBackup = global.fetch;
   beforeEach(() => {
     vi.resetModules();
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
     mem.repos = [];
     sendNotificationMock.mockReset();
   });
@@ -63,31 +64,30 @@ describe("checkForNewReleases with showAcknowledge=false", () => {
       { id: "o/r", url: "https://github.com/o/r", lastSeenReleaseTag: "v1" },
     ];
 
-    // Mock fetch to return a new release v2
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: { get: () => null },
-      json: async () => [
-        {
-          id: 2,
-          html_url: "#",
-          tag_name: "v2",
-          name: "v2",
-          body: "x",
-          created_at: new Date().toISOString(),
-          published_at: new Date().toISOString(),
-          prerelease: false,
-          draft: false,
-        },
-      ],
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            id: 2,
+            html_url: "#",
+            tag_name: "v2",
+            name: "v2",
+            body: "x",
+            created_at: new Date().toISOString(),
+            published_at: new Date().toISOString(),
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
 
     const { checkForNewReleases } = await import("@/app/actions");
     const res = await checkForNewReleases({ skipCache: true });
     expect(res.notificationsSent).toBe(1);
-    expect(mem.repos[0].lastSeenReleaseTag).toBe("v2");
-    expect(mem.repos[0].isNew).toBe(false); // no highlight when showAcknowledge=false
+    const [repo] = mem.repos;
+    expect(repo?.lastSeenReleaseTag).toBe("v2");
+    expect(repo?.isNew).toBe(false); // no highlight when showAcknowledge=false
   });
 });

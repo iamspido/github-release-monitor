@@ -1,4 +1,11 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { getAuthCookieSecret } from "@/lib/auth/config";
+import {
+  buildHttpOnlyCookieHeader,
+  decodeSignedJsonCookieValue,
+  encodeSignedJsonCookieValue,
+  getCookieValue,
+} from "@/lib/auth/signed-cookie";
 import { isUsernamePolicyValid } from "@/lib/username-policy";
 
 const SOCIAL_LOGIN_INTENT_COOKIE_NAME = "auth_social_login_intent";
@@ -17,37 +24,7 @@ type SocialLoginIntentPayload = {
 };
 
 function getIntentSecret() {
-  return (
-    process.env.BETTER_AUTH_SECRET ||
-    process.env.AUTH_SECRET ||
-    process.env.AUTH_SETUP_TOKEN ||
-    ""
-  );
-}
-
-function toBase64Url(value: string) {
-  return Buffer.from(value, "utf8").toString("base64url");
-}
-
-function fromBase64Url(value: string) {
-  return Buffer.from(value, "base64url").toString("utf8");
-}
-
-function signPayload(payloadPart: string) {
-  return createHmac("sha256", getIntentSecret())
-    .update(payloadPart)
-    .digest("base64url");
-}
-
-function getCookieValue(rawCookieHeader: string | null, name: string) {
-  if (!rawCookieHeader) return null;
-  const targetPrefix = `${name}=`;
-  for (const part of rawCookieHeader.split(";")) {
-    const segment = part.trim();
-    if (!segment.startsWith(targetPrefix)) continue;
-    return segment.slice(targetPrefix.length);
-  }
-  return null;
+  return getAuthCookieSecret();
 }
 
 function isSupportedProvider(
@@ -77,9 +54,9 @@ export function buildSocialLoginIntentValue(
     payload.username = options?.username?.trim();
     payload.email = options?.email?.trim().toLowerCase();
   }
-  const payloadPart = toBase64Url(JSON.stringify(payload));
-  const signature = signPayload(payloadPart);
-  return `${payloadPart}.${signature}`;
+  return encodeSignedJsonCookieValue(payload, {
+    secret: getIntentSecret(),
+  });
 }
 
 export function readSocialLoginIntentFromRequest(
@@ -91,24 +68,11 @@ export function readSocialLoginIntentFromRequest(
   );
   if (!encoded) return null;
 
-  const [payloadPart, signaturePart] = encoded.split(".");
-  if (!payloadPart || !signaturePart) return null;
-
-  const expectedSignature = signPayload(payloadPart);
   try {
-    const valid = timingSafeEqual(
-      Buffer.from(signaturePart, "utf8"),
-      Buffer.from(expectedSignature, "utf8"),
-    );
-    if (!valid) return null;
-  } catch {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(
-      fromBase64Url(payloadPart),
-    ) as Partial<SocialLoginIntentPayload>;
+    const parsed = decodeSignedJsonCookieValue(encoded, {
+      secret: getIntentSecret(),
+    }) as Partial<SocialLoginIntentPayload> | null;
+    if (!parsed) return null;
 
     if (!isSupportedProvider(parsed.provider)) return null;
     const purpose = parsed.purpose === "register" ? "register" : "login";
@@ -147,17 +111,22 @@ export function readSocialLoginIntentFromRequest(
 export function buildSocialLoginIntentSetCookieHeader(
   value: string | null,
 ): string {
-  const secure = process.env.HTTPS !== "false";
-  const cookieValue = value ?? "";
+  return buildHttpOnlyCookieHeader({
+    name: SOCIAL_LOGIN_INTENT_COOKIE_NAME,
+    value,
+    maxAge: SOCIAL_LOGIN_INTENT_TTL_SECONDS,
+  });
+}
+
+export async function setSocialLoginIntentCookie(value: string | null) {
+  const { cookies } = await import("next/headers");
+  const cookieStore = await cookies();
   const maxAge = value ? SOCIAL_LOGIN_INTENT_TTL_SECONDS : 0;
-  return [
-    `${SOCIAL_LOGIN_INTENT_COOKIE_NAME}=${cookieValue}`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
-    `Max-Age=${maxAge}`,
-    secure ? "Secure" : "",
-  ]
-    .filter(Boolean)
-    .join("; ");
+  cookieStore.set(SOCIAL_LOGIN_INTENT_COOKIE_NAME, value ?? "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.HTTPS !== "false",
+    path: "/",
+    maxAge,
+  });
 }

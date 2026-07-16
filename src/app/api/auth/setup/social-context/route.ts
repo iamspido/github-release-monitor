@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
-import { ensureAuthDatabaseReady, hasAnyAuthUser } from "@/lib/auth";
-import { isAuthSetupLocked } from "@/lib/auth/setup-lock";
+import {
+  getAuthSetupToken,
+  isSocialProviderConfigured,
+} from "@/lib/auth/config";
+import {
+  getClientIpFromRequest,
+  isSupportedAuthSocialProvider,
+  readJsonPayload,
+  toSafeString,
+} from "@/lib/auth/request-context";
+import { secretsEqual } from "@/lib/auth/secret";
+import { getAuthSetupAvailability } from "@/lib/auth/setup-route-guard";
 import {
   buildSetupSocialContextSetCookieHeader,
   buildSetupSocialContextValue,
@@ -17,41 +27,8 @@ type SetupSocialPayload = {
   name?: unknown;
 };
 
-function toSafeString(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function isSetupEnabledByEnv() {
-  const token = process.env.AUTH_SETUP_TOKEN;
-  return typeof token === "string" && token.length >= 32;
-}
-
 function isValidUsername(value: string) {
   return isUsernamePolicyValid(value);
-}
-
-function isSupportedProvider(value: string): value is "github" | "google" {
-  return value === "github" || value === "google";
-}
-
-function isProviderConfigured(provider: "github" | "google") {
-  if (provider === "github") {
-    return Boolean(
-      process.env.AUTH_GITHUB_CLIENT_ID?.trim() &&
-        process.env.AUTH_GITHUB_CLIENT_SECRET?.trim(),
-    );
-  }
-  return Boolean(
-    process.env.AUTH_GOOGLE_CLIENT_ID?.trim() &&
-      process.env.AUTH_GOOGLE_CLIENT_SECRET?.trim(),
-  );
-}
-
-function getClientIp(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim();
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  return (firstForwardedIp || realIp || "unknown").slice(0, 128);
 }
 
 function disabledResponse() {
@@ -62,61 +39,59 @@ function setupStateUnknownResponse() {
   return NextResponse.json({ error: "setup_state_unknown" }, { status: 503 });
 }
 
-export async function POST(request: Request) {
-  const clientIp = getClientIp(request);
-  log.info(`Initial social setup context requested from ip='${clientIp}'.`);
-
-  await ensureAuthDatabaseReady();
-
-  if (!isSetupEnabledByEnv()) {
-    log.warn(
-      `Rejected initial social setup context from ip='${clientIp}' because AUTH_SETUP_TOKEN is invalid.`,
-    );
-    return disabledResponse();
-  }
-  if (await isAuthSetupLocked()) {
-    log.warn(
-      `Rejected initial social setup context from ip='${clientIp}' because setup is locked.`,
-    );
-    return disabledResponse();
-  }
-  const authUserState = hasAnyAuthUser();
-  if (authUserState === "unknown") {
+async function guardSocialSetupAvailability(
+  clientIp: string,
+): Promise<Response | null> {
+  const availability = await getAuthSetupAvailability();
+  if (availability === "available") return null;
+  if (availability === "state_unknown") {
     log.error(
       `Rejected initial social setup context from ip='${clientIp}' because auth user existence could not be determined.`,
     );
     return setupStateUnknownResponse();
   }
-  if (authUserState === "has_user") {
-    log.warn(
-      `Rejected initial social setup context from ip='${clientIp}' because at least one auth user already exists.`,
-    );
-    return disabledResponse();
-  }
 
-  let payload: SetupSocialPayload;
-  try {
-    payload = (await request.json()) as SetupSocialPayload;
-  } catch {
+  const reason =
+    availability === "token_invalid"
+      ? "AUTH_SETUP_TOKEN is invalid"
+      : availability === "locked"
+        ? "setup is locked"
+        : "at least one auth user already exists";
+  log.warn(
+    `Rejected initial social setup context from ip='${clientIp}' because ${reason}.`,
+  );
+  return disabledResponse();
+}
+
+export async function POST(request: Request) {
+  const clientIp = getClientIpFromRequest(request);
+  log.info(`Initial social setup context requested from ip='${clientIp}'.`);
+
+  const rejection = await guardSocialSetupAvailability(clientIp);
+  if (rejection) return rejection;
+
+  const jsonResult = await readJsonPayload<SetupSocialPayload>(request);
+  if (!jsonResult.ok) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
+  const payload = jsonResult.payload;
 
   const token = toSafeString(payload.token);
   const provider = toSafeString(payload.provider).toLowerCase();
   const username = toSafeString(payload.username);
   const name = toSafeString(payload.name);
 
-  if (token !== process.env.AUTH_SETUP_TOKEN) {
+  if (!secretsEqual(token, getAuthSetupToken())) {
     log.warn(
       `Rejected initial social setup context from ip='${clientIp}' due to invalid setup token.`,
     );
     return NextResponse.json({ error: "invalid_setup_token" }, { status: 401 });
   }
 
-  if (!isSupportedProvider(provider)) {
+  if (!isSupportedAuthSocialProvider(provider)) {
     return NextResponse.json({ error: "invalid_provider" }, { status: 400 });
   }
-  if (!isProviderConfigured(provider)) {
+  if (!isSocialProviderConfigured(provider)) {
     return NextResponse.json(
       { error: "provider_not_configured" },
       { status: 400 },

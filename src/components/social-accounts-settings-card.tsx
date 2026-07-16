@@ -3,6 +3,7 @@
 import { CheckCircle2, Loader2, Unlink2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
+import { unlinkSocialAccountAction } from "@/app/auth/settings-actions";
 import { GoogleBrandIcon } from "@/components/google-brand-icon";
 import { GithubBrandIcon } from "@/components/icons/simple-brand-icon";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -16,76 +17,17 @@ import {
 } from "@/components/ui/card";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { authClient } from "@/lib/auth/client";
+import {
+  extractLinkedAccounts,
+  type LinkedSocialAccountMap,
+  type LinkedSocialProvider,
+} from "@/lib/auth/client-accounts";
+import { listAuthAccounts } from "@/lib/auth/client-adapters";
 
-type SocialProvider = "github" | "google";
+type SocialProvider = LinkedSocialProvider;
 
 interface SocialAccountsSettingsCardProps {
   enabledSocialProviders: SocialProvider[];
-}
-
-interface AccountLike {
-  provider?: string | { id?: string | null; name?: string | null } | null;
-  providerId?: string | null;
-}
-
-function toSocialProvider(value: string): SocialProvider | null {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) return null;
-  if (normalized.includes("github")) return "github";
-  if (normalized.includes("google")) return "google";
-  return null;
-}
-
-function findAccountsArray(payload: unknown): AccountLike[] {
-  if (Array.isArray(payload)) {
-    return payload as AccountLike[];
-  }
-  if (!payload || typeof payload !== "object") {
-    return [];
-  }
-
-  const record = payload as Record<string, unknown>;
-  const nestedCandidates: unknown[] = [
-    record.data,
-    record.accounts,
-    record.result,
-    record.response,
-  ];
-  for (const candidate of nestedCandidates) {
-    if (Array.isArray(candidate)) {
-      return candidate as AccountLike[];
-    }
-    if (candidate && typeof candidate === "object") {
-      const nested = candidate as Record<string, unknown>;
-      if (Array.isArray(nested.accounts)) {
-        return nested.accounts as AccountLike[];
-      }
-      if (Array.isArray(nested.data)) {
-        return nested.data as AccountLike[];
-      }
-    }
-  }
-  return [];
-}
-
-type LinkedAccountMap = Partial<Record<SocialProvider, true>>;
-
-function extractLinkedAccounts(payload: unknown): LinkedAccountMap {
-  const accounts = findAccountsArray(payload);
-  const linked: LinkedAccountMap = {};
-  for (const account of accounts) {
-    const providerRaw =
-      typeof account.provider === "string"
-        ? account.provider
-        : account.provider?.id || account.provider?.name || "";
-    const provider = toSocialProvider(
-      String(account.providerId || providerRaw || ""),
-    );
-    if (provider) {
-      linked[provider] = true;
-    }
-  }
-  return linked;
 }
 
 export function SocialAccountsSettingsCard({
@@ -97,9 +39,8 @@ export function SocialAccountsSettingsCard({
     React.useState<SocialProvider | null>(null);
   const [errorKey, setErrorKey] = React.useState<string | null>(null);
   const [accountsLoading, setAccountsLoading] = React.useState(true);
-  const [linkedAccounts, setLinkedAccounts] = React.useState<LinkedAccountMap>(
-    {},
-  );
+  const [linkedAccounts, setLinkedAccounts] =
+    React.useState<LinkedSocialAccountMap>({});
 
   const providerLabel: Record<SocialProvider, string> = {
     github: "GitHub",
@@ -110,7 +51,7 @@ export function SocialAccountsSettingsCard({
     let active = true;
     (async () => {
       try {
-        const result = await authClient.listAccounts();
+        const result = await listAuthAccounts();
         if (!active) return;
         setLinkedAccounts(extractLinkedAccounts(result));
       } catch {
@@ -159,11 +100,9 @@ export function SocialAccountsSettingsCard({
     setPendingProvider(provider);
 
     try {
-      const result = await authClient.unlinkAccount({
-        providerId: provider,
-      });
-      if (result?.error) {
-        setErrorKey("social_accounts_unlink_error");
+      const result = await unlinkSocialAccountAction(provider);
+      if (!result.ok) {
+        setErrorKey(result.errorKey ?? "social_accounts_unlink_error");
         return;
       }
       setLinkedAccounts((previous) => {

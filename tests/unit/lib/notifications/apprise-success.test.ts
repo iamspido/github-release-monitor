@@ -5,14 +5,14 @@ vi.mock("next-intl/server", () => ({
     key,
 }));
 
-import type { AppSettings, GithubRelease, Repository } from "@/types";
+import type { GithubRelease, Repository } from "@/types";
+import { installFetchMock, mockFetchResponse } from "../../helpers/fetch";
 
 describe("sendTestAppriseNotification success path", () => {
   const env = { ...process.env };
   const fetchBackup = global.fetch;
   beforeEach(() => {
-    // @ts-expect-error
-    global.fetch = vi.fn();
+    installFetchMock();
   });
   afterEach(() => {
     process.env = { ...env };
@@ -21,12 +21,12 @@ describe("sendTestAppriseNotification success path", () => {
 
   it("returns when APPRISE_URL set and server responds 200", async () => {
     process.env.APPRISE_URL = "http://apprise.test";
-    // @ts-expect-error
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: async () => "",
-    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({
+        status: 200,
+        text: "",
+      }),
+    );
     const { sendTestAppriseNotification } = await import("@/lib/notifications");
     const repo: Repository = { id: "o/r", url: "https://github.com/o/r" };
     const release: GithubRelease = {
@@ -43,13 +43,7 @@ describe("sendTestAppriseNotification success path", () => {
     await expect(
       sendTestAppriseNotification(repo, release, "en", {
         timeFormat: "24h",
-        locale: "en",
-        refreshInterval: 10,
-        cacheInterval: 5,
-        releasesPerPage: 30,
-        parallelRepoFetches: 5,
-        releaseChannels: ["stable"],
-      } satisfies AppSettings),
+      }),
     ).resolves.toBeUndefined();
     expect(vi.mocked(global.fetch).mock.calls.length).toBe(1);
   });

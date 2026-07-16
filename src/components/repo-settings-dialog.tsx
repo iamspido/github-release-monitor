@@ -50,10 +50,41 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  type AutosaveStatus,
+  useDebouncedAutosave,
+} from "@/hooks/use-debounced-autosave";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
+import {
+  hasRefreshSensitiveRepoSettingChanges,
+  hasSettingsSnapshotDrift,
+  isCacheIntervalInvalid,
+  type RangeValidationError,
+  validateCronInput,
+  validateFilledInterval,
+  validateOptionalIntegerInput,
+  validateRegexInput,
+} from "@/lib/settings/form-model";
+import {
+  shouldSelectAllPreReleaseSubChannels,
+  togglePreReleaseSubChannel,
+  toggleReleaseChannel,
+} from "@/lib/settings/release-channel-fields";
+import {
+  buildCronExpression,
+  type CronPreset,
+  cronPresetOptions,
+  cronWeekdayOptions,
+  defaultCronExpression,
+  inferCronParts,
+  MAX_INTERVAL_MINUTES,
+  MINUTES_IN_DAY,
+  MINUTES_IN_HOUR,
+  minutesToDhms,
+} from "@/lib/settings/schedule-fields";
 import { cn } from "@/lib/utils";
 import type {
   AppriseFormat,
@@ -65,30 +96,9 @@ import type {
 import { allPreReleaseTypes } from "@/types";
 import { Input } from "./ui/input";
 
-type SaveStatus =
-  | "idle"
-  | "waiting"
-  | "saving"
-  | "success"
-  | "error"
-  | "paused";
-type ReleasesPerPageError = "too_low" | "too_high" | null;
-type IntervalValidationError = "too_low" | "too_high" | null;
-type RegexError = "invalid" | null;
-type CronError = "invalid" | null;
+type ReleasesPerPageError = RangeValidationError;
+type IntervalValidationError = RangeValidationError;
 type AutomationMode = "global" | "interval" | "cron";
-type CronPreset = "daily" | "weekdays" | "weekly" | "custom";
-
-const MINUTES_IN_DAY = 24 * 60;
-const MINUTES_IN_HOUR = 60;
-const MAX_INTERVAL_MINUTES = 5_256_000;
-
-function minutesToDhms(totalMinutes: number) {
-  const d = Math.floor(totalMinutes / MINUTES_IN_DAY);
-  const h = Math.floor((totalMinutes % MINUTES_IN_DAY) / MINUTES_IN_HOUR);
-  const m = totalMinutes % MINUTES_IN_HOUR;
-  return { d, h, m };
-}
 
 function getAutomationMode(
   settings?: Pick<Repository, "refreshInterval" | "backgroundCheckCron">,
@@ -98,82 +108,7 @@ function getAutomationMode(
   return "global";
 }
 
-function normalizeTimeInput(value: string) {
-  return /^\d{2}:\d{2}$/.test(value) ? value : "08:00";
-}
-
-function timeToCronParts(time: string) {
-  const [hour = "8", minute = "0"] = normalizeTimeInput(time).split(":");
-  return { hour: Number(hour), minute: Number(minute) };
-}
-
-function inferCronPreset(cron: string | undefined): {
-  preset: CronPreset;
-  time: string;
-  weekday: string;
-  expression: string;
-} {
-  const fallback = {
-    preset: "daily" as CronPreset,
-    time: "08:00",
-    weekday: "1",
-    expression: "",
-  };
-  if (!cron) return fallback;
-
-  const parts = cron.trim().split(/\s+/);
-  if (parts.length !== 5) {
-    return { ...fallback, preset: "custom", expression: cron };
-  }
-
-  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-  const hourNumber = Number(hour);
-  const minuteNumber = Number(minute);
-  const hasSimpleTime =
-    Number.isInteger(hourNumber) &&
-    hourNumber >= 0 &&
-    hourNumber <= 23 &&
-    Number.isInteger(minuteNumber) &&
-    minuteNumber >= 0 &&
-    minuteNumber <= 59;
-  const time = hasSimpleTime
-    ? `${String(hourNumber).padStart(2, "0")}:${String(minuteNumber).padStart(2, "0")}`
-    : fallback.time;
-
-  if (hasSimpleTime && dayOfMonth === "*" && month === "*") {
-    if (dayOfWeek === "*") return { ...fallback, preset: "daily", time };
-    if (dayOfWeek === "1-5") return { ...fallback, preset: "weekdays", time };
-    if (/^[0-6]$/.test(dayOfWeek)) {
-      return { ...fallback, preset: "weekly", time, weekday: dayOfWeek };
-    }
-  }
-
-  return { ...fallback, preset: "custom", expression: cron };
-}
-
-function buildCronExpression(
-  preset: CronPreset,
-  time: string,
-  weekday: string,
-  customExpression: string,
-) {
-  if (preset === "custom") return customExpression.trim();
-  const { hour, minute } = timeToCronParts(time);
-  if (preset === "weekdays") return `${minute} ${hour} * * 1-5`;
-  if (preset === "weekly") return `${minute} ${hour} * * ${weekday}`;
-  return `${minute} ${hour} * * *`;
-}
-
-function isValidFiveFieldCron(value: string) {
-  const trimmed = value.trim().replace(/\s+/g, " ");
-  if (!trimmed) return false;
-  if (trimmed.split(" ").length !== 5) return false;
-  return /^[-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+ [-*/,\dA-Z?a-z]+$/.test(
-    trimmed,
-  );
-}
-
-function SaveStatusIndicator({ status }: { status: SaveStatus }) {
+function SaveStatusIndicator({ status }: { status: AutosaveStatus }) {
   const t = useTranslations("RepoSettingsDialog");
   const tLong = useTranslations("SettingsForm");
 
@@ -182,7 +117,7 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
   }
 
   const messages: Record<
-    SaveStatus,
+    AutosaveStatus,
     { text: React.ReactNode; icon: React.ReactNode; className: string }
   > = {
     idle: { text: "", icon: null, className: "" },
@@ -251,6 +186,7 @@ interface RepoSettingsDialogProps {
     | "appriseFormat"
   >;
   globalSettings: AppSettings;
+  isAppriseConfigured?: boolean;
 }
 
 export function RepoSettingsDialog({
@@ -259,6 +195,7 @@ export function RepoSettingsDialog({
   repoId,
   currentRepoSettings,
   globalSettings,
+  isAppriseConfigured = false,
 }: RepoSettingsDialogProps) {
   const t = useTranslations("RepoSettingsDialog");
   const tGlobal = useTranslations("SettingsForm");
@@ -327,8 +264,7 @@ export function RepoSettingsDialog({
     String(minutesToDhms(currentRepoSettings?.cacheInterval ?? 0).m),
   );
   const cronInitial = React.useMemo(
-    () =>
-      inferCronPreset(currentRepoSettings?.backgroundCheckCron ?? undefined),
+    () => inferCronParts(currentRepoSettings?.backgroundCheckCron ?? undefined),
     [currentRepoSettings?.backgroundCheckCron],
   );
   const [cronPreset, setCronPreset] = React.useState<CronPreset>(
@@ -352,22 +288,40 @@ export function RepoSettingsDialog({
     currentRepoSettings?.appriseFormat ?? "",
   );
 
-  const [releasesPerPageError, setReleasesPerPageError] =
-    React.useState<ReleasesPerPageError>(null);
-  const [intervalError, setIntervalError] =
-    React.useState<IntervalValidationError>(null);
-  const [isCacheInvalid, setIsCacheInvalid] = React.useState(false);
-  const [cronError, setCronError] = React.useState<CronError>(null);
-  const [includeRegexError, setIncludeRegexError] =
-    React.useState<RegexError>(null);
-  const [excludeRegexError, setExcludeRegexError] =
-    React.useState<RegexError>(null);
-
-  const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
+  const {
+    status: saveStatus,
+    setStatus: setSaveStatus,
+    cancel: cancelAutosave,
+    schedule: scheduleAutosave,
+  } = useDebouncedAutosave();
+  const dialogSessionRef = React.useRef(0);
+  const reconciliationRevisionRef = React.useRef(0);
+  const [reconciliationRevision, setReconciliationRevision] = React.useState(0);
   const { isOnline } = useNetworkStatus();
 
   const savedThisSessionRef = React.useRef(false);
   const filterSettingsChangedRef = React.useRef(false);
+  const isOpenRef = React.useRef(isOpen);
+
+  React.useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  const refreshAfterClosedSave = React.useCallback(() => {
+    if (!savedThisSessionRef.current) return;
+
+    const shouldRefresh = filterSettingsChangedRef.current;
+    savedThisSessionRef.current = false;
+    filterSettingsChangedRef.current = false;
+
+    if (shouldRefresh) {
+      refreshSingleRepositoryAction(repoId).catch((error: unknown) => {
+        if (reloadIfServerActionStale(error)) {
+          return;
+        }
+      });
+    }
+  }, [repoId]);
 
   const mountedRef = React.useRef(true);
   React.useEffect(() => {
@@ -381,8 +335,14 @@ export function RepoSettingsDialog({
   React.useEffect(() => {
     const wasOpen = prevIsOpenRef.current;
 
+    if (wasOpen && !isOpen) {
+      cancelAutosave();
+    }
+
     // transition: closed -> open
     if (!wasOpen && isOpen) {
+      cancelAutosave();
+      dialogSessionRef.current += 1;
       const initialSettings = {
         releaseChannels: currentRepoSettings?.releaseChannels ?? [],
         preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels,
@@ -412,7 +372,7 @@ export function RepoSettingsDialog({
       setCacheDays(String(cacheParts.d));
       setCacheHours(String(cacheParts.h));
       setCacheMinutes(String(cacheParts.m));
-      const inferredCron = inferCronPreset(initialSettings.backgroundCheckCron);
+      const inferredCron = inferCronParts(initialSettings.backgroundCheckCron);
       setCronPreset(inferredCron.preset);
       setCronTime(inferredCron.time);
       setCronWeekday(inferredCron.weekday);
@@ -431,26 +391,15 @@ export function RepoSettingsDialog({
         ...initialSettings,
         releasesPerPage: initialSettings.releasesPerPage,
       };
-    }
-
-    if (wasOpen && !isOpen) {
-      if (savedThisSessionRef.current && filterSettingsChangedRef.current) {
-        // Fire and forget; avoid unhandled rejection on flaky connections
-        refreshSingleRepositoryAction(repoId).catch((error: unknown) => {
-          if (reloadIfServerActionStale(error)) {
-            return;
-          }
-        });
-        savedThisSessionRef.current = false;
-        filterSettingsChangedRef.current = false;
-      } else if (savedThisSessionRef.current) {
-        // Settings were saved but no filter changes - no refresh needed
-        savedThisSessionRef.current = false;
-      }
+      lastSubmittedSettingsRef.current = prevSettingsRef.current;
     }
 
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, currentRepoSettings, repoId]);
+  }, [isOpen, currentRepoSettings, cancelAutosave, setSaveStatus]);
+
+  React.useEffect(() => {
+    if (!isOpen) refreshAfterClosedSave();
+  }, [isOpen, refreshAfterClosedSave]);
 
   const useGlobalChannels = channels.length === 0;
   const useGlobalSubChannels = preReleaseSubChannels === undefined;
@@ -463,6 +412,7 @@ export function RepoSettingsDialog({
 
   const isUsingAllGlobalSettings =
     useGlobalChannels &&
+    useGlobalSubChannels &&
     useGlobalReleasesPerPage &&
     useGlobalAutomation &&
     useGlobalIncludeRegex &&
@@ -519,7 +469,7 @@ export function RepoSettingsDialog({
 
     return {
       releaseChannels: channels,
-      preReleaseSubChannels: preReleaseSubChannels ?? [],
+      preReleaseSubChannels,
       releasesPerPage: finalReleasesPerPage,
       refreshInterval: finalRefreshInterval,
       cacheInterval: finalCacheInterval,
@@ -552,42 +502,26 @@ export function RepoSettingsDialog({
   ]);
 
   const prevSettingsRef = React.useRef(newSettings);
+  const lastSubmittedSettingsRef = React.useRef(newSettings);
 
-  React.useEffect(() => {
-    if (String(releasesPerPage).trim() !== "") {
-      const numReleases = parseInt(String(releasesPerPage), 10);
-      if (Number.isNaN(numReleases)) {
-        setReleasesPerPageError(null);
-      } else if (numReleases < 1) {
-        setReleasesPerPageError("too_low");
-      } else if (numReleases > 1000) {
-        setReleasesPerPageError("too_high");
-      } else {
-        setReleasesPerPageError(null);
-      }
-    } else {
-      setReleasesPerPageError(null);
-    }
-
-    if (automationMode === "interval") {
-      const fieldsFilled =
-        intervalDays !== "" && intervalHours !== "" && intervalMinutes !== "";
-      if (fieldsFilled) {
-        const interval = newSettings.refreshInterval ?? 0;
-        if (interval < 1) {
-          setIntervalError("too_low");
-        } else if (interval > MAX_INTERVAL_MINUTES) {
-          setIntervalError("too_high");
-        } else {
-          setIntervalError(null);
-        }
-      } else {
-        setIntervalError(null);
-      }
-    } else {
-      setIntervalError(null);
-    }
-
+  const {
+    releasesPerPageError,
+    intervalError,
+    isCacheInvalid,
+    cronError,
+    includeRegexError,
+    excludeRegexError,
+  } = React.useMemo(() => {
+    const intervalFieldsFilled =
+      intervalDays !== "" && intervalHours !== "" && intervalMinutes !== "";
+    const nextIntervalError: IntervalValidationError =
+      automationMode === "interval"
+        ? validateFilledInterval(
+            newSettings.refreshInterval ?? 0,
+            intervalFieldsFilled,
+            MAX_INTERVAL_MINUTES,
+          )
+        : null;
     const cacheFieldsFilled =
       cacheDays !== "" && cacheHours !== "" && cacheMinutes !== "";
     const effectiveAutomationUsesInterval =
@@ -597,42 +531,27 @@ export function RepoSettingsDialog({
       automationMode === "interval"
         ? (newSettings.refreshInterval ?? 0)
         : globalSettings.refreshInterval;
-    const cacheIsLarger =
-      effectiveAutomationUsesInterval &&
-      useCustomCache &&
-      cacheFieldsFilled &&
-      (newSettings.cacheInterval ?? 0) > 0 &&
-      (newSettings.cacheInterval ?? 0) > effectiveRefreshInterval;
-    setIsCacheInvalid(cacheIsLarger);
 
-    if (automationMode === "cron") {
-      const cron = newSettings.backgroundCheckCron ?? "";
-      setCronError(isValidFiveFieldCron(cron) ? null : "invalid");
-    } else {
-      setCronError(null);
-    }
-
-    if (!includeRegex.trim()) {
-      setIncludeRegexError(null);
-    } else {
-      try {
-        new RegExp(includeRegex);
-        setIncludeRegexError(null);
-      } catch {
-        setIncludeRegexError("invalid");
-      }
-    }
-
-    if (!excludeRegex.trim()) {
-      setExcludeRegexError(null);
-    } else {
-      try {
-        new RegExp(excludeRegex);
-        setExcludeRegexError(null);
-      } catch {
-        setExcludeRegexError("invalid");
-      }
-    }
+    return {
+      releasesPerPageError: validateOptionalIntegerInput(
+        releasesPerPage,
+        1,
+        1000,
+      ) as ReleasesPerPageError,
+      intervalError: nextIntervalError,
+      isCacheInvalid: isCacheIntervalInvalid({
+        enabled: effectiveAutomationUsesInterval && useCustomCache,
+        fieldsFilled: cacheFieldsFilled,
+        cacheInterval: newSettings.cacheInterval ?? 0,
+        refreshInterval: effectiveRefreshInterval,
+      }),
+      cronError: validateCronInput(
+        newSettings.backgroundCheckCron,
+        automationMode === "cron",
+      ),
+      includeRegexError: validateRegexInput(includeRegex),
+      excludeRegexError: validateRegexInput(excludeRegex),
+    };
   }, [
     releasesPerPage,
     automationMode,
@@ -656,15 +575,21 @@ export function RepoSettingsDialog({
     if (!isOpen) return;
 
     if (!isOnline) {
-      setSaveStatus("paused");
+      cancelAutosave("paused");
       return;
     }
 
     if (
-      JSON.stringify(newSettings) === JSON.stringify(prevSettingsRef.current)
+      !hasSettingsSnapshotDrift(
+        prevSettingsRef.current,
+        lastSubmittedSettingsRef.current,
+        newSettings,
+      )
     ) {
       return;
     }
+
+    const saveDialogSession = dialogSessionRef.current;
 
     if (
       releasesPerPageError ||
@@ -674,64 +599,76 @@ export function RepoSettingsDialog({
       includeRegexError ||
       excludeRegexError
     ) {
-      setSaveStatus("idle");
+      cancelAutosave("idle");
       return;
     }
 
-    setSaveStatus("waiting");
-
-    const handler = setTimeout(async () => {
-      if (mountedRef.current) setSaveStatus("saving");
+    return scheduleAutosave(async ({ isCurrent, setStatus }) => {
+      if (reconciliationRevision !== reconciliationRevisionRef.current) return;
+      if (!isCurrent()) return;
 
       try {
+        lastSubmittedSettingsRef.current = newSettings;
         const result = await updateRepositorySettingsAction(
           repoId,
           newSettings,
         );
 
+        if (!isCurrent()) {
+          // The UI state has moved on, but the serialized server action still
+          // persisted this snapshot. If the dialog closed meanwhile, perform
+          // the same cache refresh the successful save would normally trigger.
+          if (result.success) {
+            if (
+              isOpenRef.current &&
+              saveDialogSession !== dialogSessionRef.current
+            ) {
+              // This save belongs to an earlier dialog session. Record the
+              // snapshot that reached the server and trigger a compensating
+              // save for the settings visible in the reopened dialog.
+              prevSettingsRef.current = newSettings;
+              if (mountedRef.current) {
+                reconciliationRevisionRef.current += 1;
+                setReconciliationRevision(reconciliationRevisionRef.current);
+              }
+            } else if (
+              !isOpenRef.current &&
+              hasRefreshSensitiveRepoSettingChanges(
+                prevSettingsRef.current,
+                newSettings,
+              )
+            ) {
+              refreshSingleRepositoryAction(repoId).catch((error: unknown) => {
+                reloadIfServerActionStale(error);
+              });
+            }
+          }
+          return;
+        }
+
         if (result.success) {
           if (mountedRef.current) {
-            setSaveStatus("success");
-
-            // Track if filter settings changed to determine if refresh is needed
-            const filtersChanged =
-              (prevSettingsRef.current.includeRegex ?? "").trim() !==
-                (newSettings.includeRegex ?? "").trim() ||
-              (prevSettingsRef.current.excludeRegex ?? "").trim() !==
-                (newSettings.excludeRegex ?? "").trim();
-
-            const channelsChanged =
-              JSON.stringify(
-                (prevSettingsRef.current.releaseChannels || []).sort(),
-              ) !== JSON.stringify((newSettings.releaseChannels || []).sort());
-
-            const preSubsChanged =
-              JSON.stringify(
-                (prevSettingsRef.current.preReleaseSubChannels || []).sort(),
-              ) !==
-              JSON.stringify((newSettings.preReleaseSubChannels || []).sort());
-
-            const rppChanged =
-              prevSettingsRef.current.releasesPerPage !==
-              newSettings.releasesPerPage;
+            setStatus("success");
 
             if (
-              filtersChanged ||
-              channelsChanged ||
-              preSubsChanged ||
-              rppChanged
+              hasRefreshSensitiveRepoSettingChanges(
+                prevSettingsRef.current,
+                newSettings,
+              )
             ) {
               filterSettingsChangedRef.current = true;
             }
 
             prevSettingsRef.current = newSettings;
+            lastSubmittedSettingsRef.current = newSettings;
             savedThisSessionRef.current = true;
+            if (!isOpenRef.current) refreshAfterClosedSave();
           } else {
             savedThisSessionRef.current = true;
           }
         } else {
           if (mountedRef.current) {
-            setSaveStatus("error");
+            setStatus("error");
             toast({
               title: t("toast_error_title"),
               description: result.error,
@@ -740,11 +677,12 @@ export function RepoSettingsDialog({
           }
         }
       } catch (error: unknown) {
+        if (!isCurrent()) return;
         if (reloadIfServerActionStale(error)) {
           return;
         }
         if (mountedRef.current) {
-          setSaveStatus("error");
+          setStatus("error");
           toast({
             title: t("toast_error_title"),
             description: String(error),
@@ -752,9 +690,7 @@ export function RepoSettingsDialog({
           });
         }
       }
-    }, 1500);
-
-    return () => clearTimeout(handler);
+    });
   }, [
     newSettings,
     repoId,
@@ -768,6 +704,10 @@ export function RepoSettingsDialog({
     toast,
     t,
     isOnline,
+    reconciliationRevision,
+    refreshAfterClosedSave,
+    cancelAutosave,
+    scheduleAutosave,
   ]);
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -776,9 +716,7 @@ export function RepoSettingsDialog({
       ? globalSettings.releaseChannels
       : channels;
 
-    const newChannels = baseChannels.includes(channel)
-      ? baseChannels.filter((c) => c !== channel)
-      : [...baseChannels, channel];
+    const newChannels = toggleReleaseChannel(baseChannels, channel);
 
     if (newChannels.length === 0) {
       toast({
@@ -794,8 +732,7 @@ export function RepoSettingsDialog({
     if (
       useGlobalChannels &&
       useGlobalSubChannels &&
-      channel === "prerelease" &&
-      newChannels.includes("prerelease")
+      shouldSelectAllPreReleaseSubChannels(channel, newChannels)
     ) {
       setPreReleaseSubChannels(
         globalSettings.preReleaseSubChannels || allPreReleaseTypes,
@@ -811,9 +748,10 @@ export function RepoSettingsDialog({
       ? globalSettings.preReleaseSubChannels || allPreReleaseTypes
       : preReleaseSubChannels || [];
 
-    const newSubChannels = baseSubChannels.includes(subChannel)
-      ? baseSubChannels.filter((sc) => sc !== subChannel)
-      : [...baseSubChannels, subChannel];
+    const newSubChannels = togglePreReleaseSubChannel(
+      baseSubChannels,
+      subChannel,
+    );
     setPreReleaseSubChannels(newSubChannels);
   };
 
@@ -852,7 +790,7 @@ export function RepoSettingsDialog({
   const handleResetAll = () => {
     if (!isOnline) return;
     setChannels([]);
-    setPreReleaseSubChannels([]);
+    setPreReleaseSubChannels(undefined);
     setReleasesPerPage("");
     resetAutomationOverrideState();
     setIncludeRegex("");
@@ -864,7 +802,7 @@ export function RepoSettingsDialog({
   const handleResetFilters = () => {
     if (!isOnline) return;
     setChannels([]);
-    setPreReleaseSubChannels([]);
+    setPreReleaseSubChannels(undefined);
     setIncludeRegex("");
     setExcludeRegex("");
   };
@@ -889,8 +827,6 @@ export function RepoSettingsDialog({
   const effectivePreReleaseSubChannels = useGlobalSubChannels
     ? globalSettings.preReleaseSubChannels || allPreReleaseTypes
     : preReleaseSubChannels || [];
-
-  const isAppriseConfigured = !!globalSettings.appriseMaxCharacters;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -1277,18 +1213,11 @@ export function RepoSettingsDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="daily">
-                        {t("cron_preset_daily")}
-                      </SelectItem>
-                      <SelectItem value="weekdays">
-                        {t("cron_preset_weekdays")}
-                      </SelectItem>
-                      <SelectItem value="weekly">
-                        {t("cron_preset_weekly")}
-                      </SelectItem>
-                      <SelectItem value="custom">
-                        {t("cron_preset_custom")}
-                      </SelectItem>
+                      {cronPresetOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {t(option.labelKey)}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1330,27 +1259,14 @@ export function RepoSettingsDialog({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="1">
-                              {t("cron_weekday_monday")}
-                            </SelectItem>
-                            <SelectItem value="2">
-                              {t("cron_weekday_tuesday")}
-                            </SelectItem>
-                            <SelectItem value="3">
-                              {t("cron_weekday_wednesday")}
-                            </SelectItem>
-                            <SelectItem value="4">
-                              {t("cron_weekday_thursday")}
-                            </SelectItem>
-                            <SelectItem value="5">
-                              {t("cron_weekday_friday")}
-                            </SelectItem>
-                            <SelectItem value="6">
-                              {t("cron_weekday_saturday")}
-                            </SelectItem>
-                            <SelectItem value="0">
-                              {t("cron_weekday_sunday")}
-                            </SelectItem>
+                            {cronWeekdayOptions.map((weekday) => (
+                              <SelectItem
+                                key={weekday.value}
+                                value={weekday.value}
+                              >
+                                {t(weekday.labelKey)}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1367,7 +1283,7 @@ export function RepoSettingsDialog({
                       id={cronExpressionId}
                       value={cronExpression}
                       onChange={(e) => setCronExpression(e.target.value)}
-                      placeholder="0 8 * * *"
+                      placeholder={defaultCronExpression}
                       disabled={!isOnline}
                       className={cn(
                         !!cronError &&

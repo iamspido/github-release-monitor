@@ -225,4 +225,27 @@ describe("AccountCredentialsSettingsCard", () => {
 
     expect(submitButton?.disabled).toBe(false);
   });
+
+  it("does not accept whitespace in new password inputs", async () => {
+    await renderCard();
+
+    const [newPasswordField, confirmPasswordField] = Array.from(
+      container.querySelectorAll('input[autocomplete="new-password"]'),
+    ) as HTMLInputElement[];
+
+    await act(async () => {
+      setControlledInputValue(newPasswordField, "StrongPassword123");
+      setControlledInputValue(confirmPasswordField, "StrongPassword123");
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      setControlledInputValue(newPasswordField, "Strong Password123");
+      setControlledInputValue(confirmPasswordField, "StrongPassword123 ");
+      await Promise.resolve();
+    });
+
+    expect(newPasswordField.value).toBe("StrongPassword123");
+    expect(confirmPasswordField.value).toBe("StrongPassword123");
+  });
 });

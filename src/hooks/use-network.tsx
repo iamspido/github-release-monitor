@@ -34,9 +34,7 @@ function initializeListeners() {
 
   window.addEventListener("online", handleOnline);
   window.addEventListener("offline", handleOffline);
-
-  // Do not trust navigator.onLine blindly in headless CI; default remains true
-  // unless an event flips it.
+  storeIsOnline = navigator.onLine;
   listenersInitialized = true;
 }
 

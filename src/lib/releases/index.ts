@@ -1,17 +1,15 @@
+import { mapWithConcurrency } from "@/lib/concurrency";
 import { fetchLatestReleaseWithCache } from "@/lib/releases/cache";
-import { resolveParallelRepoFetches } from "@/lib/releases/filters";
+import {
+  resolveParallelRepoFetches,
+  toGithubReleaseFromCache,
+} from "@/lib/releases/filters";
 import {
   hasAnyGitlabTokenForAllowedHosts,
   parseSupportedRepoUrl,
 } from "@/lib/repositories/providers";
 import { log } from "@/lib/server-action-helpers";
-import type {
-  AppSettings,
-  CachedRelease,
-  EnrichedRelease,
-  GithubRelease,
-  Repository,
-} from "@/types";
+import type { AppSettings, EnrichedRelease, Repository } from "@/types";
 
 export async function getLatestReleasesForRepos(
   repositories: Repository[],
@@ -77,19 +75,10 @@ export async function getLatestReleasesForRepos(
     );
 
     if (error?.type === "not_modified") {
-      const cached: CachedRelease | undefined = repo.latestRelease;
-      const reconstructedRelease: GithubRelease | undefined = cached
-        ? {
-            ...cached,
-            id: 0,
-            prerelease: false,
-            draft: false,
-          }
-        : undefined;
-
-      if (reconstructedRelease) {
-        reconstructedRelease.fetched_at = new Date().toISOString();
-      }
+      const reconstructedRelease = toGithubReleaseFromCache(
+        repo.latestRelease,
+        new Date().toISOString(),
+      );
 
       return {
         repoId: repo.id,
@@ -134,21 +123,9 @@ export async function getLatestReleasesForRepos(
     };
   };
 
-  const results: EnrichedRelease[] = new Array(repositories.length);
-
-  for (
-    let start = 0;
-    start < repositories.length;
-    start += effectiveBatchSize
-  ) {
-    const batch = repositories.slice(start, start + effectiveBatchSize);
-    await Promise.all(
-      batch.map(async (repo, offset) => {
-        const result = await buildEnrichedRelease(repo);
-        results[start + offset] = result;
-      }),
-    );
-  }
-
-  return results;
+  return mapWithConcurrency(
+    repositories,
+    effectiveBatchSize,
+    buildEnrichedRelease,
+  );
 }

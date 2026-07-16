@@ -17,13 +17,18 @@ describe("getRepositoriesForExport", () => {
   it("returns data on success", async () => {
     await vi.doMock("@/lib/storage/repositories", () => ({
       getRepositories: async () => [
-        { id: "o/r", url: "https://github.com/o/r" },
+        {
+          id: "o/r",
+          url: "https://github.com/o/r",
+          pendingNotifications: [{ id: "internal-delivery" }],
+        },
       ],
     }));
     const { getRepositoriesForExport } = await import("@/app/actions");
     const res = await getRepositoriesForExport();
     expect(res.success).toBe(true);
     expect(res.data?.length).toBe(1);
+    expect(res.data?.[0]).not.toHaveProperty("pendingNotifications");
   });
 
   it("returns error when storage throws", async () => {

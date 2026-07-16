@@ -3,7 +3,6 @@
 import { AlertTriangle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
-import { updateSettingsAction } from "@/app/settings/actions";
 import { EmptyState } from "@/components/empty-state";
 import { ExportButton } from "@/components/export-button";
 import { RefreshButton } from "@/components/refresh-button";
@@ -16,13 +15,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
+import { useOptimisticSettingsPatch } from "@/hooks/use-optimistic-settings-patch";
 import {
   normalizeReleaseSortOrder,
   sortEnrichedReleases,
 } from "@/lib/release-sort";
 import { isSecurityRelease } from "@/lib/security-release";
-import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import type {
   AppSettings,
   EnrichedRelease,
@@ -41,6 +39,7 @@ interface HomePageClientProps {
   lastUpdated: Date;
   locale: string;
   canMutate?: boolean;
+  isAppriseConfigured?: boolean;
 }
 
 // Helper to get the translation key for a specific error type.
@@ -68,21 +67,30 @@ export function HomePageClient({
   lastUpdated,
   locale,
   canMutate = true,
+  isAppriseConfigured = false,
 }: HomePageClientProps) {
   const t = useTranslations("HomePage");
   const tActions = useTranslations("Actions");
-  const { toast } = useToast();
 
   const [formattedLastUpdated, setFormattedLastUpdated] = React.useState("");
-  const [releaseSortOrder, setReleaseSortOrder] =
-    React.useState<ReleaseSortOrder>(
-      normalizeReleaseSortOrder(settings.releaseSortOrder),
-    );
-  const [isSortSaving, startSortSavingTransition] = React.useTransition();
-  const [repositoryFormExpanded, setRepositoryFormExpanded] =
-    React.useState<boolean>(settings.repositoryFormExpanded ?? true);
-  const [isRepositoryFormSaving, startRepositoryFormSavingTransition] =
-    React.useTransition();
+  const sortSetting = useOptimisticSettingsPatch<ReleaseSortOrder>({
+    canMutate,
+    serverValue: normalizeReleaseSortOrder(settings.releaseSortOrder),
+    createPatch: (releaseSortOrder) => ({ releaseSortOrder }),
+    unexpectedError: {
+      title: t("sort_save_error_title"),
+      description: t("sort_save_error_description"),
+    },
+  });
+  const repositoryFormSetting = useOptimisticSettingsPatch<boolean>({
+    canMutate,
+    serverValue: settings.repositoryFormExpanded ?? true,
+    createPatch: (repositoryFormExpanded) => ({ repositoryFormExpanded }),
+    unexpectedError: {
+      title: t("repository_form_toggle_save_error_title"),
+      description: t("repository_form_toggle_save_error_description"),
+    },
+  });
 
   React.useEffect(() => {
     // This effect runs only on the client, after the initial render.
@@ -94,120 +102,42 @@ export function HomePageClient({
     );
   }, [lastUpdated, locale, settings.timeFormat]);
 
-  React.useEffect(() => {
-    setReleaseSortOrder(normalizeReleaseSortOrder(settings.releaseSortOrder));
-  }, [settings.releaseSortOrder]);
-
-  React.useEffect(() => {
-    setRepositoryFormExpanded(settings.repositoryFormExpanded ?? true);
-  }, [settings.repositoryFormExpanded]);
-
   const handleSortOrderChange = (value: ReleaseSortOrder) => {
-    const previousValue = releaseSortOrder;
-    setReleaseSortOrder(value);
-
-    if (!canMutate) {
-      return;
-    }
-
-    startSortSavingTransition(async () => {
-      try {
-        const result = await updateSettingsAction({
-          ...settings,
-          releaseSortOrder: value,
-        });
-
-        if (!result.success) {
-          setReleaseSortOrder(previousValue);
-          toast({
-            title: result.message.title,
-            description: result.message.description,
-            variant: "destructive",
-          });
-        }
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        setReleaseSortOrder(previousValue);
-        toast({
-          title: t("sort_save_error_title"),
-          description: t("sort_save_error_description"),
-          variant: "destructive",
-        });
-      }
-    });
+    sortSetting.update(value);
   };
 
   const handleRepositoryFormToggle = () => {
-    const previousValue = repositoryFormExpanded;
-    const nextValue = !previousValue;
-    setRepositoryFormExpanded(nextValue);
-
-    if (!canMutate) {
-      return;
-    }
-
-    startRepositoryFormSavingTransition(async () => {
-      try {
-        const result = await updateSettingsAction({
-          ...settings,
-          repositoryFormExpanded: nextValue,
-        });
-
-        if (!result.success) {
-          setRepositoryFormExpanded(previousValue);
-          toast({
-            title: result.message.title,
-            description: result.message.description,
-            variant: "destructive",
-          });
-        }
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        setRepositoryFormExpanded(previousValue);
-        toast({
-          title: t("repository_form_toggle_save_error_title"),
-          description: t("repository_form_toggle_save_error_description"),
-          variant: "destructive",
-        });
-      }
-    });
+    repositoryFormSetting.update(!repositoryFormSetting.value);
   };
 
   const sortedReleases = React.useMemo(
     () =>
       sortEnrichedReleases(
         releases,
-        releaseSortOrder,
+        sortSetting.value,
         settings.providerSortOrder,
         settings.prioritizeNewSecurityReleases,
+        settings,
       ),
-    [
-      releases,
-      releaseSortOrder,
-      settings.providerSortOrder,
-      settings.prioritizeNewSecurityReleases,
-    ],
+    [releases, sortSetting.value, settings],
   );
   const repositoryStats = React.useMemo(() => {
     const newCount = releases.filter((item) => Boolean(item.isNew)).length;
     const securityCount = releases.filter(
-      (item) => Boolean(item.isNew) && isSecurityRelease(item.release),
+      (item) =>
+        Boolean(item.isNew) && isSecurityRelease(item.release, settings),
     ).length;
 
     return { newCount, securityCount };
-  }, [releases]);
+  }, [releases, settings]);
 
   return (
     <>
       {canMutate && (
         <RepositoryForm
           currentRepositories={repositories}
-          isExpanded={repositoryFormExpanded}
-          isExpansionSaving={isRepositoryFormSaving}
+          isExpanded={repositoryFormSetting.value}
+          isExpansionSaving={repositoryFormSetting.isSaving}
           onToggleExpanded={handleRepositoryFormToggle}
         />
       )}
@@ -243,11 +173,11 @@ export function HomePageClient({
                 {t("sort_label")}
               </label>
               <Select
-                value={releaseSortOrder}
+                value={sortSetting.value}
                 onValueChange={(value: ReleaseSortOrder) =>
                   handleSortOrderChange(value)
                 }
-                disabled={!canMutate || isSortSaving}
+                disabled={!canMutate || sortSetting.isSaving}
               >
                 <SelectTrigger
                   id="release-sort-order"
@@ -317,6 +247,7 @@ export function HomePageClient({
                 enrichedRelease={enrichedRelease}
                 settings={settings}
                 canMutate={canMutate}
+                isAppriseConfigured={isAppriseConfigured}
               />
             ))}
           </div>
