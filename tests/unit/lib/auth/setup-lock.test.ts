@@ -4,6 +4,7 @@ const fsMock = vi.hoisted(() => ({
   access: vi.fn(),
   mkdir: vi.fn(),
   readFile: vi.fn(),
+  readdir: vi.fn(),
   rmdir: vi.fn(),
   stat: vi.fn(),
   unlink: vi.fn(),
@@ -31,6 +32,21 @@ describe("auth/setup-lock", () => {
         source: "test",
       }),
     );
+    fsMock.readdir.mockImplementation(async () => {
+      const claimPath = fsMock.mkdir.mock.calls
+        .map(([filePath]) => String(filePath))
+        .reverse()
+        .find((filePath) =>
+          filePath.includes("auth-setup-bootstrap.gate/claim-"),
+        );
+      if (!claimPath) return [];
+      return [
+        {
+          name: claimPath.split("/").at(-1),
+          isDirectory: () => true,
+        },
+      ];
+    });
     fsMock.rmdir.mockResolvedValue(undefined);
     fsMock.stat.mockResolvedValue({
       mtimeMs: new Date("2024-01-01T12:00:00.000Z").getTime(),
@@ -149,14 +165,26 @@ describe("auth/setup-lock", () => {
     expect(fsMock.writeFile).toHaveBeenCalledTimes(2);
   });
 
-  it("recovers a gate left behind by a terminated process", async () => {
-    fsMock.mkdir
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(nodeError("EEXIST"))
-      .mockResolvedValueOnce(undefined);
-    fsMock.stat.mockResolvedValueOnce({
-      mtimeMs: new Date("2024-01-01T11:00:00.000Z").getTime(),
+  it("recovers a gate claim left behind by a terminated process", async () => {
+    fsMock.readdir.mockImplementationOnce(async () => {
+      const currentClaimPath = fsMock.mkdir.mock.calls
+        .map(([filePath]) => String(filePath))
+        .find((filePath) =>
+          filePath.includes("auth-setup-bootstrap.gate/claim-"),
+        );
+      return [
+        { name: "claim-stale-owner", isDirectory: () => true },
+        {
+          name: currentClaimPath?.split("/").at(-1),
+          isDirectory: () => true,
+        },
+      ];
     });
+    fsMock.stat.mockImplementation(async (filePath) => ({
+      mtimeMs: String(filePath).endsWith("claim-stale-owner")
+        ? new Date("2024-01-01T11:00:00.000Z").getTime()
+        : new Date("2024-01-01T12:00:00.000Z").getTime(),
+    }));
     const { acquireAuthSetupBootstrapLock } = await import(
       "@/lib/auth/setup-lock"
     );
@@ -165,8 +193,55 @@ describe("auth/setup-lock", () => {
 
     expect(lock.status).toBe("acquired");
     expect(fsMock.rmdir).toHaveBeenCalledWith(
-      expect.stringContaining("auth-setup-bootstrap.gate"),
+      expect.stringContaining(
+        "auth-setup-bootstrap.gate/claim-stale-owner",
+      ),
     );
+    expect(fsMock.rmdir).not.toHaveBeenCalledWith(
+      expect.stringMatching(/auth-setup-bootstrap\.gate$/),
+    );
+  });
+
+  it("does not remove a newer gate claim while cleaning a stale claim", async () => {
+    const newerClaimName = "claim-newer-owner";
+    fsMock.readdir.mockImplementationOnce(async () => {
+      const currentClaimPath = fsMock.mkdir.mock.calls
+        .map(([filePath]) => String(filePath))
+        .find((filePath) =>
+          filePath.includes("auth-setup-bootstrap.gate/claim-"),
+        );
+      return [
+        { name: "claim-stale-owner", isDirectory: () => true },
+        { name: newerClaimName, isDirectory: () => true },
+        {
+          name: currentClaimPath?.split("/").at(-1),
+          isDirectory: () => true,
+        },
+      ];
+    });
+    fsMock.stat.mockImplementation(async (filePath) => ({
+      mtimeMs: String(filePath).endsWith("claim-stale-owner")
+        ? new Date("2024-01-01T11:00:00.000Z").getTime()
+        : new Date("2024-01-01T12:00:00.000Z").getTime(),
+    }));
+    const { acquireAuthSetupBootstrapLock } = await import(
+      "@/lib/auth/setup-lock"
+    );
+
+    const lock = await acquireAuthSetupBootstrapLock({ source: "contender" });
+
+    expect(lock.status).toBe("busy");
+    expect(fsMock.rmdir).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "auth-setup-bootstrap.gate/claim-stale-owner",
+      ),
+    );
+    expect(fsMock.rmdir).not.toHaveBeenCalledWith(
+      expect.stringContaining(
+        `auth-setup-bootstrap.gate/${newerClaimName}`,
+      ),
+    );
+    expect(fsMock.writeFile).not.toHaveBeenCalled();
   });
 
   it("does not release a bootstrap lock owned by another process", async () => {
