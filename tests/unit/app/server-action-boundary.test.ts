@@ -27,20 +27,35 @@ describe("server action boundary", () => {
 
   it("keeps auth guards on exposed helper actions in src/app/actions.ts", () => {
     const source = readSource("src/app/actions.ts");
-    const guardedExports = [
-      "getLatestReleasesForRepos",
-      "refreshMultipleRepositoriesAction",
-      "checkForNewReleases",
-      "getUpdateNotificationState",
-      "getGitHubRateLimit",
-      "getGitlabTokenCheck",
-      "getCodebergTokenCheck",
-      "getRepositoriesForExport",
-      "revalidateReleasesAction",
-      "getJobStatusAction",
-    ];
+    const guardedExports = new Map([
+      [
+        "getLatestReleasesForRepos",
+        "runExposedRestrictedActionWithFallback",
+      ],
+      [
+        "refreshMultipleRepositoriesAction",
+        "runExposedRestrictedActionWithFallback",
+      ],
+      ["checkForNewReleases", "runExposedRestrictedActionOrThrow"],
+      [
+        "getUpdateNotificationState",
+        "runExposedRestrictedActionWithFallback",
+      ],
+      ["getGitHubRateLimit", "runExposedRestrictedActionWithFallback"],
+      ["getGitlabTokenCheck", "runExposedRestrictedActionWithFallback"],
+      ["getCodebergTokenCheck", "runExposedRestrictedActionWithFallback"],
+      [
+        "getRepositoriesForExport",
+        "runExposedRestrictedActionWithFallback",
+      ],
+      [
+        "revalidateReleasesAction",
+        "runExposedRestrictedActionWithFallback",
+      ],
+      ["getJobStatusAction", "runExposedRestrictedActionWithFallback"],
+    ]);
 
-    for (const exportName of guardedExports) {
+    for (const [exportName, policyName] of guardedExports) {
       const start = source.indexOf(`export async function ${exportName}`);
       expect(start).toBeGreaterThanOrEqual(0);
       const nextExport = source.indexOf("\nexport async function ", start + 1);
@@ -48,7 +63,7 @@ describe("server action boundary", () => {
         nextExport === -1
           ? source.slice(start)
           : source.slice(start, nextExport);
-      expect(body).toContain("canCallExposedRestrictedAction()");
+      expect(body).toContain(policyName);
     }
   });
 });

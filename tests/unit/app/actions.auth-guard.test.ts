@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth/access", () => ({
   getCurrentAuthAccess: mocks.authAccess,
+  canPerformRestrictedAction: async () =>
+    Boolean((await mocks.authAccess())?.canMutate),
 }));
 
 vi.mock("next-intl/server", () => ({

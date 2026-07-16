@@ -1,6 +1,10 @@
 "use server";
 
-import { getCurrentAuthAccess } from "@/lib/auth/access";
+import {
+  getRestrictedActionError,
+  runExposedRestrictedActionOrThrow,
+  runExposedRestrictedActionWithFallback,
+} from "@/lib/auth/exposed-action-policy";
 import {
   beginSecretRevealStepUpActionImpl,
   completeSecretRevealStepUpActionImpl,
@@ -50,41 +54,6 @@ import {
 } from "@/lib/test-release-actions";
 import type { UpdateNotificationState } from "@/types";
 
-async function canCallExposedRestrictedAction(): Promise<boolean> {
-  const access = await getCurrentAuthAccess();
-  return access.canMutate;
-}
-
-async function requireExposedRestrictedAction(
-  allowed: Promise<boolean>,
-): Promise<void> {
-  if (!(await allowed)) {
-    throw new Error(await getRestrictedActionError());
-  }
-}
-
-async function runExposedRestrictedAction<TArgs extends unknown[], TResult>(
-  allowed: Promise<boolean>,
-  action: (...args: TArgs) => Promise<TResult>,
-  args: TArgs,
-  fallback: TResult | (() => TResult | Promise<TResult>),
-): Promise<TResult> {
-  if (!(await allowed)) {
-    return typeof fallback === "function"
-      ? (fallback as () => Promise<TResult>)()
-      : fallback;
-  }
-
-  return action(...args);
-}
-
-async function getRestrictedActionError(): Promise<string> {
-  const { getLocale, getTranslations } = await import("next-intl/server");
-  const locale = await getLocale();
-  const t = await getTranslations({ locale, namespace: "Actions" });
-  return t("error_auth_required");
-}
-
 function getEmptyUpdateNotificationState(): UpdateNotificationState {
   return {
     latestVersion: null,
@@ -118,10 +87,8 @@ export async function resolveRepoProvidersBatchAction(
 export async function getLatestReleasesForRepos(
   ...args: Parameters<typeof getLatestReleasesForReposImpl>
 ) {
-  return runExposedRestrictedAction(
-    canCallExposedRestrictedAction(),
-    getLatestReleasesForReposImpl,
-    args,
+  return runExposedRestrictedActionWithFallback(
+    () => getLatestReleasesForReposImpl(...args),
     [],
   );
 }
@@ -147,10 +114,8 @@ export async function refreshSingleRepositoryAction(
 export async function refreshMultipleRepositoriesAction(
   ...args: Parameters<typeof refreshMultipleRepositoriesActionImpl>
 ) {
-  return runExposedRestrictedAction(
-    canCallExposedRestrictedAction(),
-    refreshMultipleRepositoriesActionImpl,
-    args,
+  return runExposedRestrictedActionWithFallback(
+    () => refreshMultipleRepositoriesActionImpl(...args),
     undefined,
   );
 }
@@ -176,17 +141,16 @@ export async function markAsNewAction(
 export async function checkForNewReleases(
   ...args: Parameters<typeof checkForNewReleasesImpl>
 ) {
-  await requireExposedRestrictedAction(canCallExposedRestrictedAction());
-  return checkForNewReleasesImpl(...args);
+  return runExposedRestrictedActionOrThrow(() =>
+    checkForNewReleasesImpl(...args),
+  );
 }
 
 export async function getUpdateNotificationState(
   ...args: Parameters<typeof getUpdateNotificationStateImpl>
 ) {
-  return runExposedRestrictedAction(
-    canCallExposedRestrictedAction(),
-    getUpdateNotificationStateImpl,
-    args,
+  return runExposedRestrictedActionWithFallback(
+    () => getUpdateNotificationStateImpl(...args),
     getEmptyUpdateNotificationState,
   );
 }
@@ -218,10 +182,8 @@ export async function triggerReleaseCheckAction(
 export async function getGitHubRateLimit(
   ...args: Parameters<typeof getGitHubRateLimitImpl>
 ) {
-  return runExposedRestrictedAction(
-    canCallExposedRestrictedAction(),
-    getGitHubRateLimitImpl,
-    args,
+  return runExposedRestrictedActionWithFallback(
+    () => getGitHubRateLimitImpl(...args),
     {
       data: null,
       error: "api_error" as const,
@@ -232,10 +194,8 @@ export async function getGitHubRateLimit(
 export async function getGitlabTokenCheck(
   ...args: Parameters<typeof getGitlabTokenCheckImpl>
 ) {
-  return runExposedRestrictedAction(
-    canCallExposedRestrictedAction(),
-    getGitlabTokenCheckImpl,
-    args,
+  return runExposedRestrictedActionWithFallback(
+    () => getGitlabTokenCheckImpl(...args),
     {
       status: "api_error" as const,
     },
@@ -245,10 +205,8 @@ export async function getGitlabTokenCheck(
 export async function getCodebergTokenCheck(
   ...args: Parameters<typeof getCodebergTokenCheckImpl>
 ) {
-  return runExposedRestrictedAction(
-    canCallExposedRestrictedAction(),
-    getCodebergTokenCheckImpl,
-    args,
+  return runExposedRestrictedActionWithFallback(
+    () => getCodebergTokenCheckImpl(...args),
     {
       status: "api_error" as const,
     },
@@ -324,10 +282,8 @@ export async function refreshDueRepositoriesAction(
 export async function getRepositoriesForExport(
   ...args: Parameters<typeof getRepositoriesForExportImpl>
 ) {
-  return runExposedRestrictedAction(
-    canCallExposedRestrictedAction(),
-    getRepositoriesForExportImpl,
-    args,
+  return runExposedRestrictedActionWithFallback(
+    () => getRepositoriesForExportImpl(...args),
     async () => ({ success: false, error: await getRestrictedActionError() }),
   );
 }
@@ -341,10 +297,8 @@ export async function updateRepositorySettingsAction(
 export async function revalidateReleasesAction(
   ...args: Parameters<typeof revalidateReleasesActionImpl>
 ) {
-  return runExposedRestrictedAction(
-    canCallExposedRestrictedAction(),
-    revalidateReleasesActionImpl,
-    args,
+  return runExposedRestrictedActionWithFallback(
+    () => revalidateReleasesActionImpl(...args),
     undefined,
   );
 }
@@ -352,10 +306,8 @@ export async function revalidateReleasesAction(
 export async function getJobStatusAction(
   ...args: Parameters<typeof getJobStatusActionImpl>
 ) {
-  return runExposedRestrictedAction(
-    canCallExposedRestrictedAction(),
-    getJobStatusActionImpl,
-    args,
+  return runExposedRestrictedActionWithFallback(
+    () => getJobStatusActionImpl(...args),
     {
       status: undefined,
     },
