@@ -17,6 +17,16 @@ import {
   isSupportedAuthSocialProvider,
 } from "@/lib/auth/request-context";
 import {
+  getAccountSelectionFromUnlinkRequest,
+  getAuthActionFromPathname,
+  getOAuthErrorFromResponseLocation,
+  getOAuthProviderFromAction,
+  getPasskeyIdFromDeleteRequest,
+  getSocialProviderFromSignInRequest,
+  isSocialAuthAction,
+  isSocialSignInAction,
+} from "@/lib/auth/route-request";
+import {
   acquireAuthSetupBootstrapLock,
   isAuthSetupLocked,
   writeAuthSetupLock,
@@ -65,96 +75,9 @@ interface AuthRouteState {
   socialRegistrationSnapshot: ReturnType<typeof getAuthUserIdSnapshot> | null;
 }
 
-function getAuthActionFromPathname(pathname: string) {
-  const prefix = "/api/auth/";
-  if (!pathname.startsWith(prefix)) {
-    return pathname;
-  }
-  return pathname.slice(prefix.length) || "(root)";
-}
-
-function getOAuthProviderFromAction(action: string) {
-  if (!action.startsWith("callback/")) {
-    return null;
-  }
-  const provider = action.split("/")[1] || "";
-  return provider || null;
-}
-
 function isSetupEnvEnabled() {
   const token = process.env.AUTH_SETUP_TOKEN;
   return typeof token === "string" && token.length >= 32;
-}
-
-function isSocialAuthAction(action: string) {
-  return action === "sign-in/social" || action.startsWith("callback/");
-}
-
-function isSocialSignInAction(action: string) {
-  return action === "sign-in/social";
-}
-
-async function getSocialProviderFromSignInRequest(request: Request) {
-  const contentType = request.headers.get("content-type") || "";
-  const clonedRequest = request.clone();
-  const bodyText = await clonedRequest.text();
-  if (!bodyText) return null;
-
-  if (contentType.includes("application/json")) {
-    try {
-      const data = JSON.parse(bodyText) as { provider?: unknown };
-      const provider =
-        typeof data.provider === "string"
-          ? data.provider.trim().toLowerCase()
-          : "";
-      return provider || null;
-    } catch {
-      return null;
-    }
-  }
-
-  if (contentType.includes("application/x-www-form-urlencoded")) {
-    const params = new URLSearchParams(bodyText);
-    const provider = params.get("provider")?.trim().toLowerCase();
-    return provider || null;
-  }
-
-  return null;
-}
-
-type UnlinkAccountSelection = {
-  providerId: string;
-  accountId?: string;
-};
-
-async function getAccountSelectionFromUnlinkRequest(
-  request: Request,
-): Promise<UnlinkAccountSelection | null> {
-  try {
-    const data = (await request.clone().json()) as {
-      providerId?: unknown;
-      accountId?: unknown;
-    };
-    if (typeof data.providerId !== "string" || !data.providerId) return null;
-    if (data.accountId !== undefined && typeof data.accountId !== "string") {
-      return null;
-    }
-    return {
-      providerId: data.providerId,
-      ...(data.accountId !== undefined ? { accountId: data.accountId } : {}),
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function getPasskeyIdFromDeleteRequest(request: Request) {
-  try {
-    const data = (await request.clone().json()) as { id?: unknown };
-    return typeof data.id === "string" ? data.id.trim() : "";
-  } catch {
-    return "";
-  }
 }
 
 function setupStateUnknownResponse(clearSetupContext = false) {
@@ -307,18 +230,6 @@ function markSecretRevealSocialStepUpVerified(args: {
     `Secret reveal social step-up verified via provider callback '${args.action}'.`,
   );
   return finalResponse;
-}
-
-function getOAuthErrorFromResponseLocation(response: Response) {
-  const location = response.headers.get("location");
-  if (!location) return null;
-
-  try {
-    const parsed = new URL(location, "http://localhost");
-    return parsed.searchParams.get("error") || parsed.searchParams.get("code");
-  } catch {
-    return null;
-  }
 }
 
 async function createAuthRouteState(request: Request): Promise<AuthRouteState> {
