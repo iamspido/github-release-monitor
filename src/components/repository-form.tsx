@@ -6,12 +6,7 @@ import { useTranslations } from "next-intl";
 import * as React from "react";
 import { useActionState } from "react";
 
-import {
-  addRepositoriesAction,
-  importRepositoriesAction,
-  previewComposeImportAction,
-  resolveRepoProvidersBatchAction,
-} from "@/app/actions";
+import { addRepositoriesAction } from "@/app/actions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,24 +30,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { useJobPolling } from "@/hooks/use-job-polling";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
-import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type { Repository } from "@/types";
 import {
-  getProviderResolutionBatches,
   getRepositoryDisplayName,
-  getRepositoryImportStats,
   getRepositoryProviderName,
   initialRepositoryFormState,
-  isComposeFileName,
-  isHttpUrl,
-  isOwnerRepoShorthand,
-  type ProviderChoiceCandidate,
-  parseRepositoryImportJson,
-  type RepositoryImportStats,
-  readTextFile,
-  sortProviderChoiceCandidates,
 } from "./repository-form-helpers";
+import {
+  useRepositoryImportWorkflow,
+  useRepositoryProviderWorkflow,
+} from "./repository-form-workflows";
 
 function SubmitButton({
   isDisabled,
@@ -105,40 +93,15 @@ export function RepositoryForm({
   );
   const [jobId, setJobId] = React.useState<string | undefined>(undefined);
   const hasProcessedResult = React.useRef(true);
-  const [isResolvingProviders, startProviderResolveTransition] =
-    React.useTransition();
-  const [providerDialogOpen, setProviderDialogOpen] = React.useState(false);
-  const [providerDialogRepo, setProviderDialogRepo] = React.useState<
-    string | null
-  >(null);
-  const [providerDialogCandidates, setProviderDialogCandidates] =
-    React.useState<ProviderChoiceCandidate[]>([]);
-  const [providerDialogPendingState, setProviderDialogPendingState] =
-    React.useState<{
-      lines: string[];
-      nextIndex: number;
-      resolvedLines: string[];
-      resolutions: Array<{
-        input: string;
-        candidates: ProviderChoiceCandidate[];
-      }>;
-    } | null>(null);
-
+  const providerWorkflow = useRepositoryProviderWorkflow(
+    formAction,
+    hasProcessedResult,
+  );
+  const importWorkflow = useRepositoryImportWorkflow({
+    currentRepositories,
+    onJobStarted: setJobId,
+  });
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-  const [isImporting, startImportTransition] = React.useTransition();
-  const [isDialogVisible, setIsDialogVisible] = React.useState(false);
-  const [reposToImport, setReposToImport] = React.useState<Repository[] | null>(
-    null,
-  );
-  const [importStats, setImportStats] =
-    React.useState<RepositoryImportStats | null>(null);
-  const [fileInputKey, setFileInputKey] = React.useState(0);
-  const currentRepositoryIds = React.useMemo(
-    () => new Set(currentRepositories.map((repo) => repo.id)),
-    [currentRepositories],
-  );
 
   React.useEffect(() => {
     if (isPending) {
@@ -218,252 +181,6 @@ export function RepositoryForm({
     }
   }, [urls]);
 
-  const submitResolvedLines = React.useCallback(
-    (lines: string[]) => {
-      const fd = new FormData();
-      fd.set("urls", lines.join("\n"));
-      formAction(fd);
-    },
-    [formAction],
-  );
-
-  const processResolvedLines = React.useCallback(
-    (
-      lines: string[],
-      resolutions: Array<{
-        input: string;
-        candidates: ProviderChoiceCandidate[];
-      }>,
-      startIndex = 0,
-      seedResolved: string[] = [],
-    ) => {
-      const resolved: string[] = [...seedResolved];
-      const resolutionsByInput = new Map(
-        resolutions.map((resolution) => [resolution.input, resolution]),
-      );
-
-      for (let i = startIndex; i < lines.length; i += 1) {
-        const raw = lines[i]?.trim() ?? "";
-        if (!raw) continue;
-
-        if (isHttpUrl(raw)) {
-          resolved.push(raw);
-          continue;
-        }
-
-        if (!isOwnerRepoShorthand(raw)) {
-          resolved.push(raw);
-          continue;
-        }
-
-        const candidates = resolutionsByInput.get(raw)?.candidates ?? [];
-
-        if (candidates.length === 1) {
-          resolved.push(candidates[0].canonicalRepoUrl);
-          continue;
-        }
-
-        if (candidates.length > 1) {
-          setProviderDialogRepo(raw);
-          setProviderDialogCandidates(candidates);
-          setProviderDialogPendingState({
-            lines,
-            nextIndex: i + 1,
-            resolvedLines: resolved,
-            resolutions,
-          });
-          setProviderDialogOpen(true);
-          return;
-        }
-
-        // No matching provider found: keep the shorthand so the server action can report it as invalid.
-        resolved.push(raw);
-      }
-
-      submitResolvedLines(resolved);
-    },
-    [submitResolvedLines],
-  );
-
-  const resolveLinesAndSubmit = React.useCallback(
-    async (lines: string[]) => {
-      const resolutions: Array<{
-        input: string;
-        candidates: ProviderChoiceCandidate[];
-      }> = [];
-
-      for (const batch of getProviderResolutionBatches(lines)) {
-        const result = await resolveRepoProvidersBatchAction(batch);
-        resolutions.push(
-          ...result.resolutions.map((resolution) => ({
-            input: resolution.input,
-            candidates: resolution.candidates.map((candidate) => ({
-              provider: candidate.provider,
-              providerHost: candidate.providerHost,
-              canonicalRepoUrl: candidate.canonicalRepoUrl,
-            })),
-          })),
-        );
-
-        if (!result.success) break;
-      }
-
-      processResolvedLines(lines, resolutions);
-    },
-    [processResolvedLines],
-  );
-
-  const handleChooseProvider = (candidateUrl: string) => {
-    const pending = providerDialogPendingState;
-    if (!pending) return;
-
-    setProviderDialogOpen(false);
-    setProviderDialogRepo(null);
-    setProviderDialogCandidates([]);
-    setProviderDialogPendingState(null);
-
-    hasProcessedResult.current = false;
-    startProviderResolveTransition(() => {
-      processResolvedLines(
-        pending.lines,
-        pending.resolutions,
-        pending.nextIndex,
-        [...pending.resolvedLines, candidateUrl],
-      );
-    });
-  };
-
-  const orderedProviderCandidates = React.useMemo(() => {
-    return sortProviderChoiceCandidates(providerDialogCandidates);
-  }, [providerDialogCandidates]);
-
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const prepareImportPreview = React.useCallback(
-    (importedData: Repository[], skippedImages?: number) => {
-      setReposToImport(importedData);
-      setImportStats(
-        getRepositoryImportStats(
-          importedData,
-          currentRepositoryIds,
-          skippedImages,
-        ),
-      );
-      setIsDialogVisible(true);
-    },
-    [currentRepositoryIds],
-  );
-
-  const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const content = await readTextFile(file);
-
-      if (isComposeFileName(file.name)) {
-        startImportTransition(async () => {
-          try {
-            const result = await previewComposeImportAction(file.name, content);
-            if (!result.success) {
-              toast({
-                title: t("toast_import_error_title"),
-                description:
-                  result.error ?? t("toast_import_error_description"),
-                variant: "destructive",
-              });
-              return;
-            }
-
-            const skippedImages = Object.values(result.skipped).reduce(
-              (sum, count) => sum + count,
-              0,
-            );
-            if (result.repositories.length === 0 && skippedImages === 0) {
-              toast({
-                title: t("toast_import_error_title"),
-                description: t("toast_import_error_no_compose_images"),
-                variant: "destructive",
-              });
-              return;
-            }
-
-            prepareImportPreview(result.repositories, skippedImages);
-          } catch (error: unknown) {
-            if (reloadIfServerActionStale(error)) {
-              return;
-            }
-            toast({
-              title: t("toast_import_error_title"),
-              description: t("toast_import_error_description"),
-              variant: "destructive",
-            });
-          }
-        });
-        return;
-      }
-
-      prepareImportPreview(parseRepositoryImportJson(content));
-    } catch (error: unknown) {
-      const description =
-        error instanceof Error && error.message === "invalid_format"
-          ? t("toast_import_error_invalid_format")
-          : error instanceof Error && error.message === "file_read_failed"
-            ? t("toast_import_error_reading")
-            : t("toast_import_error_parsing");
-      toast({
-        title: t("toast_import_error_title"),
-        description,
-        variant: "destructive",
-      });
-    } finally {
-      setFileInputKey((currentKey) => currentKey + 1);
-    }
-  };
-
-  const handleConfirmImport = () => {
-    if (!reposToImport) return;
-
-    startImportTransition(async () => {
-      try {
-        const result = await importRepositoriesAction(reposToImport);
-
-        if (result.success) {
-          toast({
-            title: t("toast_import_success_title"),
-            description: result.message,
-          });
-          if (result.jobId) {
-            setJobId(result.jobId);
-          }
-        } else {
-          toast({
-            title: t("toast_import_error_title"),
-            description: result.message,
-            variant: "destructive",
-          });
-        }
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        toast({
-          title: t("toast_import_error_title"),
-          description: t("toast_import_error_description"),
-          variant: "destructive",
-        });
-      } finally {
-        setIsDialogVisible(false);
-        setReposToImport(null);
-        setImportStats(null);
-      }
-    });
-  };
-
   return (
     <>
       <Card>
@@ -472,10 +189,10 @@ export function RepositoryForm({
             <CardTitle>{t("title")}</CardTitle>
             <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
               <input
-                key={fileInputKey}
+                key={importWorkflow.fileInputKey}
                 type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
+                ref={importWorkflow.fileInputRef}
+                onChange={importWorkflow.handleFileChange}
                 accept=".json,.yml,.yaml"
                 className="hidden"
               />
@@ -483,11 +200,16 @@ export function RepositoryForm({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={handleImportClick}
+                  onClick={importWorkflow.selectFile}
                   className="min-w-0 flex-1 sm:flex-none"
-                  disabled={isPending || isImporting || !!jobId || !isOnline}
+                  disabled={
+                    isPending ||
+                    importWorkflow.isImporting ||
+                    !!jobId ||
+                    !isOnline
+                  }
                 >
-                  {isImporting ? (
+                  {importWorkflow.isImporting ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Upload className="mr-2 h-4 w-4" />
@@ -548,20 +270,21 @@ export function RepositoryForm({
 
                   e.preventDefault();
                   if (!urls.trim()) return;
-                  if (isPending || isResolvingProviders || providerDialogOpen) {
+                  if (
+                    isPending ||
+                    providerWorkflow.isResolving ||
+                    providerWorkflow.dialogOpen
+                  ) {
                     return;
                   }
                   if (jobId) return;
 
-                  hasProcessedResult.current = false;
                   const lines = urls
                     .split("\n")
                     .map((u) => u.trim())
                     .filter((u) => u !== "");
 
-                  startProviderResolveTransition(async () => {
-                    await resolveLinesAndSubmit(lines);
-                  });
+                  providerWorkflow.submit(lines);
                 }}
               >
                 <div className="grid w-full gap-2">
@@ -577,26 +300,26 @@ export function RepositoryForm({
                     disabled={
                       !isExpanded ||
                       isPending ||
-                      isResolvingProviders ||
+                      providerWorkflow.isResolving ||
                       !!jobId ||
-                      providerDialogOpen
+                      providerWorkflow.dialogOpen
                     }
                   />
                   <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:gap-2">
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={handleImportClick}
+                      onClick={importWorkflow.selectFile}
                       className="mt-2 w-full sm:mt-0 sm:w-auto"
                       disabled={
                         !isExpanded ||
                         isPending ||
-                        isImporting ||
+                        importWorkflow.isImporting ||
                         !!jobId ||
                         !isOnline
                       }
                     >
-                      {isImporting ? (
+                      {importWorkflow.isImporting ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Upload className="mr-2 h-4 w-4" />
@@ -608,10 +331,12 @@ export function RepositoryForm({
                         !isExpanded ||
                         !urls.trim() ||
                         !isOnline ||
-                        isResolvingProviders ||
-                        providerDialogOpen
+                        providerWorkflow.isResolving ||
+                        providerWorkflow.dialogOpen
                       }
-                      isPending={isPending || !!jobId || isResolvingProviders}
+                      isPending={
+                        isPending || !!jobId || providerWorkflow.isResolving
+                      }
                     />
                   </div>
                 </div>
@@ -622,34 +347,29 @@ export function RepositoryForm({
       </Card>
 
       <AlertDialog
-        open={providerDialogOpen}
-        onOpenChange={(open) => {
-          setProviderDialogOpen(open);
-          if (!open) {
-            setProviderDialogRepo(null);
-            setProviderDialogCandidates([]);
-            setProviderDialogPendingState(null);
-          }
-        }}
+        open={providerWorkflow.dialogOpen}
+        onOpenChange={providerWorkflow.setOpen}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("provider_select_title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {providerDialogRepo
-                ? t("provider_select_description", { repo: providerDialogRepo })
+              {providerWorkflow.dialogRepo
+                ? t("provider_select_description", {
+                    repo: providerWorkflow.dialogRepo,
+                  })
                 : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between sm:space-x-0">
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-start">
-              {orderedProviderCandidates.map((candidate) => (
+              {providerWorkflow.dialogCandidates.map((candidate) => (
                 <AlertDialogAction
                   key={`${candidate.provider}-${candidate.canonicalRepoUrl}`}
                   onClick={() =>
-                    handleChooseProvider(candidate.canonicalRepoUrl)
+                    providerWorkflow.chooseProvider(candidate.canonicalRepoUrl)
                   }
-                  disabled={isResolvingProviders || isPending}
+                  disabled={providerWorkflow.isResolving || isPending}
                 >
                   {candidate.provider === "codeberg"
                     ? t("provider_select_codeberg")
@@ -663,40 +383,47 @@ export function RepositoryForm({
                 </AlertDialogAction>
               ))}
             </div>
-            <AlertDialogCancel disabled={isResolvingProviders || isPending}>
+            <AlertDialogCancel
+              disabled={providerWorkflow.isResolving || isPending}
+            >
               {t("cancel_button")}
             </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={isDialogVisible} onOpenChange={setIsDialogVisible}>
+      <AlertDialog
+        open={importWorkflow.dialogVisible}
+        onOpenChange={importWorkflow.setDialogVisible}
+      >
         <AlertDialogContent className="max-w-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle>{t("import_dialog_title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {importStats &&
+              {importWorkflow.stats &&
                 t("import_dialog_description", {
-                  newCount: importStats.newCount,
-                  existingCount: importStats.existingCount,
+                  newCount: importWorkflow.stats.newCount,
+                  existingCount: importWorkflow.stats.existingCount,
                 })}
-              {importStats?.skippedImages ? (
+              {importWorkflow.stats?.skippedImages ? (
                 <span className="mt-2 block">
                   {t("import_dialog_compose_skipped", {
-                    count: importStats.skippedImages,
+                    count: importWorkflow.stats.skippedImages,
                   })}
                 </span>
               ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {reposToImport?.length ? (
+          {importWorkflow.repositories?.length ? (
             <div className="max-h-72 overflow-y-auto rounded-md border">
               <div className="sticky top-0 border-b bg-background px-3 py-2 text-sm font-medium">
                 {t("import_dialog_repo_list_title")}
               </div>
               <ul className="divide-y">
-                {reposToImport.map((repo) => {
-                  const isExisting = currentRepositoryIds.has(repo.id);
+                {importWorkflow.repositories.map((repo) => {
+                  const isExisting = importWorkflow.currentRepositoryIds.has(
+                    repo.id,
+                  );
                   const providerName = getRepositoryProviderName(repo);
 
                   return (
@@ -734,14 +461,14 @@ export function RepositoryForm({
             </div>
           ) : null}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isImporting}>
+            <AlertDialogCancel disabled={importWorkflow.isImporting}>
               {t("cancel_button")}
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleConfirmImport}
-              disabled={isImporting}
+              onClick={importWorkflow.confirmImport}
+              disabled={importWorkflow.isImporting}
             >
-              {isImporting ? (
+              {importWorkflow.isImporting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
               {t("import_dialog_confirm_button")}
