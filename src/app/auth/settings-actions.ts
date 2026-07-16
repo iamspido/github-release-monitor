@@ -9,7 +9,6 @@ import {
   hasCredentialPasswordAccount,
   isAuthEmailVerificationEnabled,
 } from "@/lib/auth";
-import { normalizeSafeRelativePath } from "@/lib/auth/client-flow-utils";
 import {
   AUTH_EMAIL_DELIVERY_TRACKING_HEADER,
   beginAuthEmailDeliveryTracking,
@@ -23,6 +22,7 @@ import {
 import type { SocialLoginProvider } from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
 import { isPasswordPolicyValid } from "@/lib/password-policy";
+import { normalizeSafeRelativePath } from "@/lib/safe-redirect";
 
 type UpdateEmailInput = {
   newEmail: string;

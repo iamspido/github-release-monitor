@@ -1,6 +1,7 @@
 import { FlaskConical, Home, Settings } from "lucide-react";
 import { pathnames } from "@/i18n/routing";
 import type { AuthAccess } from "@/lib/auth/mode";
+import { stripLocalePrefix } from "@/lib/localized-path";
 
 export type NavPage = "home" | "settings" | "test";
 
@@ -59,16 +60,7 @@ export function normalizeLocalizedPath(
     return "/";
   }
 
-  const localePrefix = `/${locale}`;
-  let normalized = path;
-
-  if (normalized === localePrefix) {
-    return "/";
-  }
-
-  if (normalized.startsWith(`${localePrefix}/`)) {
-    normalized = normalized.slice(localePrefix.length);
-  }
+  let normalized = stripLocalePrefix(path, locale);
 
   if (!normalized.startsWith("/")) {
     normalized = `/${normalized}`;

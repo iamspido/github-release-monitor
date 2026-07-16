@@ -9,7 +9,6 @@ import {
   ensureAuthDatabaseReady,
   findRegistrationConflict,
 } from "@/lib/auth";
-import { normalizeLocalizedRedirectPath } from "@/lib/auth/client-flow-utils";
 import { isAuthSignupEnabled } from "@/lib/auth/config";
 import { authenticatePassword } from "@/lib/auth/password-login";
 import {
@@ -20,6 +19,7 @@ import {
 import { logger } from "@/lib/logger";
 import { isPasswordPolicyValid } from "@/lib/password-policy";
 import { redirectLocalized } from "@/lib/redirect-localized";
+import { normalizeLocalizedRedirectPath } from "@/lib/safe-redirect";
 import { isUsernamePolicyValid } from "@/lib/username-policy";
 
 export type LoginActionState = {

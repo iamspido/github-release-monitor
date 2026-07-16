@@ -2,6 +2,11 @@ import { readApiErrorCode } from "@/lib/auth/client-api";
 import { isUsernamePolicyValid } from "@/lib/username-policy";
 
 export { normalizeApiErrorCode, readApiErrorCode } from "@/lib/auth/client-api";
+export {
+  normalizeLocalizedRedirectPath,
+  normalizeOptionalSafeRelativePath,
+  normalizeSafeRelativePath,
+} from "@/lib/safe-redirect";
 
 export type AuthSocialProvider = "github" | "google";
 
@@ -33,70 +38,6 @@ export function isSocialErrorKey(errorKey: string | null) {
 
 export function isValidSocialUsername(value: string) {
   return isUsernamePolicyValid(value.trim());
-}
-
-function containsUnsafePathCharacter(value: string) {
-  return Array.from(value).some((character) => {
-    const codePoint = character.codePointAt(0) ?? 0;
-    return character === "\\" || codePoint <= 31 || codePoint === 127;
-  });
-}
-
-export function normalizeSafeRelativePath(
-  value: string | null | undefined,
-  fallback = "/",
-): string {
-  const trimmed = value?.trim();
-  if (!trimmed) return fallback;
-  if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return fallback;
-  if (containsUnsafePathCharacter(trimmed)) return fallback;
-
-  try {
-    // Inspect the decoded path before URL normalization. Otherwise encoded dot
-    // segments can disappear before the safety decision is made.
-    const rawPath = trimmed.split(/[?#]/, 1)[0];
-    const decodedPath = decodeURIComponent(rawPath);
-    if (
-      decodedPath.startsWith("//") ||
-      containsUnsafePathCharacter(decodedPath) ||
-      decodedPath.split("/").includes("..")
-    ) {
-      return fallback;
-    }
-
-    const trustedOrigin = "https://relative-path.invalid";
-    const parsed = new URL(trimmed, trustedOrigin);
-    if (parsed.origin !== trustedOrigin || !parsed.pathname.startsWith("/")) {
-      return fallback;
-    }
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-  } catch {
-    return fallback;
-  }
-}
-
-export function normalizeOptionalSafeRelativePath(
-  value: string | null | undefined,
-): string | undefined {
-  return normalizeSafeRelativePath(value, "") || undefined;
-}
-
-export function normalizeLocalizedRedirectPath(
-  value: string | null | undefined,
-  locale: string,
-): string {
-  const safePath = normalizeSafeRelativePath(value);
-  const localePrefix = `/${locale}`;
-  const hasLocalePrefix =
-    safePath === localePrefix || safePath.startsWith(`${localePrefix}/`);
-  const pathWithoutLocale = hasLocalePrefix
-    ? safePath.substring(`/${locale}`.length)
-    : safePath;
-  return (
-    (pathWithoutLocale.startsWith("/")
-      ? pathWithoutLocale
-      : `/${pathWithoutLocale}`) || "/"
-  );
 }
 
 export function mapSetupApiErrorToMessageKey(errorCode: string | null) {

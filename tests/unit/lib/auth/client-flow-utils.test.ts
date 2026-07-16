@@ -59,6 +59,12 @@ describe("auth/client-flow-utils", () => {
       "/settings",
     );
     expect(normalizeLocalizedRedirectPath("/en", "en")).toBe("/");
+    expect(normalizeLocalizedRedirectPath("/en?from=login", "en")).toBe(
+      "/?from=login",
+    );
+    expect(normalizeLocalizedRedirectPath("/en#section", "en")).toBe(
+      "/#section",
+    );
     expect(normalizeLocalizedRedirectPath("/enterprise", "en")).toBe(
       "/enterprise",
     );

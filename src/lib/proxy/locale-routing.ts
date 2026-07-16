@@ -1,8 +1,10 @@
 import type { NextRequest, NextResponse } from "next/server";
 import { locales, pathnames } from "@/i18n/routing";
+import {
+  getSupportedLocalePrefix,
+  stripLocalePrefix,
+} from "@/lib/localized-path";
 import type { ProxyLocale } from "@/lib/proxy/settings-locale";
-
-const localeSet = new Set<string>(locales as readonly string[]);
 
 export type ProxyRouteKey = keyof typeof pathnames;
 
@@ -53,16 +55,12 @@ export function splitLocaleFromPath(pathname: string): {
   locale: ProxyLocale | null;
   restPath: string;
 } {
-  const segments = pathname.split("/");
-  const candidate = segments[1];
+  const locale = getSupportedLocalePrefix(pathname);
 
-  if (candidate && localeSet.has(candidate)) {
-    const restSegments = segments.slice(2);
-    const restPath =
-      restSegments.length > 0 ? `/${restSegments.join("/")}` : "/";
+  if (locale) {
     return {
-      locale: candidate as ProxyLocale,
-      restPath: normalizedRestPath(restPath),
+      locale: locale as ProxyLocale,
+      restPath: normalizedRestPath(stripLocalePrefix(pathname, locale)),
     };
   }
 

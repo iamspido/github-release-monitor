@@ -1,9 +1,9 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
-import { normalizeLocalizedRedirectPath } from "@/lib/auth/client-flow-utils";
 import { authenticatePassword } from "@/lib/auth/password-login";
 import { readJsonPayload, toSafeString } from "@/lib/auth/request-context";
 import { logger } from "@/lib/logger";
+import { normalizeLocalizedRedirectPath } from "@/lib/safe-redirect";
 
 type LoginPayload = {
   identifier?: unknown;
