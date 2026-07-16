@@ -1,12 +1,14 @@
+import {
+  type LoginAttemptState,
+  loginRateLimitStore,
+} from "@/lib/auth/login-rate-limit-store";
 import { getLoginIdentifierLogLabel } from "@/lib/auth/request-context";
 import { logger } from "@/lib/logger";
 
-type LoginAttemptState = {
-  failures: number;
-  firstFailedAt: number;
-  lastFailedAt: number;
-  lockedUntil: number;
-};
+export {
+  MAX_LOGIN_RATE_LIMIT_ENTRIES,
+  MAX_LOGIN_RATE_LIMIT_OVERFLOW_ENTRIES,
+} from "@/lib/auth/login-rate-limit-store";
 
 export type FailedLoginAttemptResult = {
   lockoutTriggered: boolean;
@@ -18,32 +20,12 @@ export type FailedLoginAttemptResult = {
 export type FailedLoginAttemptReason = "invalid_input" | "invalid_credentials";
 export type LoginRateLimitKey = string | readonly string[];
 
-declare global {
-  var _authLoginAttempts: Map<string, LoginAttemptState> | undefined;
-  var _authLoginOverflowAttempts: Map<string, LoginAttemptState> | undefined;
-}
-
-global._authLoginAttempts ??= new Map<string, LoginAttemptState>();
-const failedLoginAttempts = global._authLoginAttempts as Map<
-  string,
-  LoginAttemptState
->;
-global._authLoginOverflowAttempts ??= new Map<string, LoginAttemptState>();
-const overflowLoginAttempts = global._authLoginOverflowAttempts as Map<
-  string,
-  LoginAttemptState
->;
-
 const DEFAULT_LOGIN_ATTEMPTS = 5;
 const DEFAULT_ATTEMPT_WINDOW_SECONDS = 15 * 60;
 const DEFAULT_LOCKOUT_SECONDS = 15 * 60;
 const LOGIN_STATE_PRUNE_INTERVAL_MS = 60_000;
-export const MAX_LOGIN_RATE_LIMIT_ENTRIES = 10_000;
-export const MAX_LOGIN_RATE_LIMIT_OVERFLOW_ENTRIES = 1_024;
-let lastLoginStatePruneAt: number | null = null;
-
 function getFailedLoginState(key: string): LoginAttemptState | undefined {
-  return failedLoginAttempts.get(key) ?? overflowLoginAttempts.get(key);
+  return loginRateLimitStore.get(key);
 }
 
 function parseBoundedIntegerEnv(
@@ -82,62 +64,15 @@ const loginLockoutMs =
   ) * 1_000;
 
 export function pruneFailedLoginState(now: number): void {
-  if (
-    lastLoginStatePruneAt !== null &&
-    now >= lastLoginStatePruneAt &&
-    now - lastLoginStatePruneAt < LOGIN_STATE_PRUNE_INTERVAL_MS
-  ) {
-    return;
-  }
-  lastLoginStatePruneAt = now;
-
-  for (const [key, state] of failedLoginAttempts.entries()) {
-    if (state.lockedUntil > now) continue;
-    if (now - state.lastFailedAt > loginAttemptWindowMs) {
-      failedLoginAttempts.delete(key);
-    }
-  }
-  for (const [key, state] of overflowLoginAttempts.entries()) {
-    if (state.lockedUntil > now) continue;
-    if (now - state.lastFailedAt > loginAttemptWindowMs) {
-      overflowLoginAttempts.delete(key);
-    }
-  }
+  loginRateLimitStore.prune(
+    now,
+    loginAttemptWindowMs,
+    LOGIN_STATE_PRUNE_INTERVAL_MS,
+  );
 }
 
 function setFailedLoginState(key: string, state: LoginAttemptState): void {
-  const alreadyTracked = failedLoginAttempts.delete(key);
-  if (alreadyTracked) {
-    failedLoginAttempts.set(key, state);
-    return;
-  }
-
-  const alreadyTrackedInOverflow = overflowLoginAttempts.delete(key);
-  if (alreadyTrackedInOverflow) {
-    overflowLoginAttempts.set(key, state);
-    return;
-  }
-
-  if (failedLoginAttempts.size >= MAX_LOGIN_RATE_LIMIT_ENTRIES) {
-    const evictableKey = failedLoginAttempts
-      .entries()
-      .find(
-        ([, candidate]) => candidate.lockedUntil <= state.lastFailedAt,
-      )?.[0];
-    if (evictableKey !== undefined) {
-      failedLoginAttempts.delete(evictableKey);
-    } else {
-      if (overflowLoginAttempts.size >= MAX_LOGIN_RATE_LIMIT_OVERFLOW_ENTRIES) {
-        const oldestOverflowKey = overflowLoginAttempts.keys().next().value;
-        if (oldestOverflowKey !== undefined) {
-          overflowLoginAttempts.delete(oldestOverflowKey);
-        }
-      }
-      overflowLoginAttempts.set(key, state);
-      return;
-    }
-  }
-  failedLoginAttempts.set(key, state);
+  loginRateLimitStore.set(key, state);
 }
 
 function normalizeKeys(key: LoginRateLimitKey): readonly string[] {
@@ -266,8 +201,7 @@ export function registerFailedLoginAttempt(
 
 export function clearFailedLoginAttempts(key: LoginRateLimitKey): void {
   for (const candidate of normalizeKeys(key)) {
-    failedLoginAttempts.delete(candidate);
-    overflowLoginAttempts.delete(candidate);
+    loginRateLimitStore.delete(candidate);
   }
 }
 
