@@ -13,9 +13,6 @@ x-extra:
   nested:
     image: docker.io/example/worker:1
 `),
-    ).toEqual([
-      "ghcr.io/example/app:latest",
-      "docker.io/example/worker:1",
-    ]);
+    ).toEqual(["ghcr.io/example/app:latest", "docker.io/example/worker:1"]);
   });
 });

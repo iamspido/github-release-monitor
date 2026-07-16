@@ -30,13 +30,13 @@ describe("settings update command", () => {
   it("returns validation keys without producing a persistence command", () => {
     const current = createDefaultSettings();
 
-    expect(
-      prepareSettingsUpdate({ includeRegex: "[" }, current, true),
-    ).toEqual({
-      ok: false,
-      errorKey: "regex_error_invalid",
-      locale: "en",
-    });
+    expect(prepareSettingsUpdate({ includeRegex: "[" }, current, true)).toEqual(
+      {
+        ok: false,
+        errorKey: "regex_error_invalid",
+        locale: "en",
+      },
+    );
     expect(
       prepareSettingsUpdate(
         { backgroundCheckCron: "not a cron" },

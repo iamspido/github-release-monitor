@@ -110,9 +110,7 @@ describe("auth/setup-lock", () => {
     expect(lock.status).toBe("acquired");
     expect(fsMock.writeFile).toHaveBeenCalledWith(
       expect.stringContaining("auth-setup-bootstrap.lock"),
-      expect.stringMatching(
-        /"ownerId": "[^"]+"[\s\S]*"source": "signup"/,
-      ),
+      expect.stringMatching(/"ownerId": "[^"]+"[\s\S]*"source": "signup"/),
       expect.objectContaining({ encoding: "utf8", flag: "wx" }),
     );
 
@@ -193,9 +191,7 @@ describe("auth/setup-lock", () => {
 
     expect(lock.status).toBe("acquired");
     expect(fsMock.rmdir).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "auth-setup-bootstrap.gate/claim-stale-owner",
-      ),
+      expect.stringContaining("auth-setup-bootstrap.gate/claim-stale-owner"),
     );
     expect(fsMock.rmdir).not.toHaveBeenCalledWith(
       expect.stringMatching(/auth-setup-bootstrap\.gate$/),
@@ -232,14 +228,10 @@ describe("auth/setup-lock", () => {
 
     expect(lock.status).toBe("busy");
     expect(fsMock.rmdir).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "auth-setup-bootstrap.gate/claim-stale-owner",
-      ),
+      expect.stringContaining("auth-setup-bootstrap.gate/claim-stale-owner"),
     );
     expect(fsMock.rmdir).not.toHaveBeenCalledWith(
-      expect.stringContaining(
-        `auth-setup-bootstrap.gate/${newerClaimName}`,
-      ),
+      expect.stringContaining(`auth-setup-bootstrap.gate/${newerClaimName}`),
     );
     expect(fsMock.writeFile).not.toHaveBeenCalled();
   });

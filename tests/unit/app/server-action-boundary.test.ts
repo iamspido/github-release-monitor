@@ -28,30 +28,18 @@ describe("server action boundary", () => {
   it("keeps auth guards on exposed helper actions in src/app/actions.ts", () => {
     const source = readSource("src/app/actions.ts");
     const guardedExports = new Map([
-      [
-        "getLatestReleasesForRepos",
-        "runExposedRestrictedActionWithFallback",
-      ],
+      ["getLatestReleasesForRepos", "runExposedRestrictedActionWithFallback"],
       [
         "refreshMultipleRepositoriesAction",
         "runExposedRestrictedActionWithFallback",
       ],
       ["checkForNewReleases", "runExposedRestrictedActionOrThrow"],
-      [
-        "getUpdateNotificationState",
-        "runExposedRestrictedActionWithFallback",
-      ],
+      ["getUpdateNotificationState", "runExposedRestrictedActionWithFallback"],
       ["getGitHubRateLimit", "runExposedRestrictedActionWithFallback"],
       ["getGitlabTokenCheck", "runExposedRestrictedActionWithFallback"],
       ["getCodebergTokenCheck", "runExposedRestrictedActionWithFallback"],
-      [
-        "getRepositoriesForExport",
-        "runExposedRestrictedActionWithFallback",
-      ],
-      [
-        "revalidateReleasesAction",
-        "runExposedRestrictedActionWithFallback",
-      ],
+      ["getRepositoriesForExport", "runExposedRestrictedActionWithFallback"],
+      ["revalidateReleasesAction", "runExposedRestrictedActionWithFallback"],
       ["getJobStatusAction", "runExposedRestrictedActionWithFallback"],
     ]);
 

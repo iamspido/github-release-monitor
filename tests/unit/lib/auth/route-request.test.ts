@@ -22,16 +22,22 @@ describe("auth route request parsing", () => {
   });
 
   it("reads social providers from supported request bodies", async () => {
-    const jsonRequest = new Request("http://localhost/api/auth/sign-in/social", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ provider: " GitHub " }),
-    });
-    const formRequest = new Request("http://localhost/api/auth/sign-in/social", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: "provider=Google",
-    });
+    const jsonRequest = new Request(
+      "http://localhost/api/auth/sign-in/social",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: " GitHub " }),
+      },
+    );
+    const formRequest = new Request(
+      "http://localhost/api/auth/sign-in/social",
+      {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: "provider=Google",
+      },
+    );
 
     expect(await getSocialProviderFromSignInRequest(jsonRequest)).toBe(
       "github",

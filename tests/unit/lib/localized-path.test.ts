@@ -14,9 +14,7 @@ describe("localized-path", () => {
   it("strips only the requested full locale prefix", () => {
     expect(stripLocalePrefix("/en/settings", "en")).toBe("/settings");
     expect(stripLocalePrefix("/en", "en")).toBe("/");
-    expect(stripLocalePrefix("/en?source=login", "en")).toBe(
-      "/?source=login",
-    );
+    expect(stripLocalePrefix("/en?source=login", "en")).toBe("/?source=login");
     expect(stripLocalePrefix("/enterprise", "en")).toBe("/enterprise");
     expect(stripLocalePrefix("/de/settings", "en")).toBe("/de/settings");
   });
