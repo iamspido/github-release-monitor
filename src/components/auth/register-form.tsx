@@ -8,7 +8,7 @@ import * as React from "react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { register } from "@/app/auth/actions";
-import { PasswordVisibilityButton } from "@/components/auth/password-visibility-button";
+import { NewPasswordField } from "@/components/auth/new-password-field";
 import { SocialProviderList } from "@/components/auth/social-provider-list";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -31,11 +31,6 @@ import {
   normalizeApiErrorCode,
   readApiErrorCode,
 } from "@/lib/auth/client-flow-utils";
-import {
-  isPasswordPolicyValid,
-  keepPasswordInputWhitespaceFree,
-  PASSWORD_MIN_LENGTH,
-} from "@/lib/password-policy";
 
 type SocialProvider = AuthSocialProvider;
 
@@ -67,8 +62,6 @@ export function RegisterForm({
   const [state, formAction] = useActionState(register, undefined);
   const formRef = React.useRef<HTMLFormElement>(null);
   const [username, setUsername] = React.useState("");
-  const [password, setPassword] = React.useState("");
-  const [showPassword, setShowPassword] = React.useState(false);
   const [socialPendingProvider, setSocialPendingProvider] =
     React.useState<SocialProvider | null>(null);
   const [clientErrorKey, setClientErrorKey] = React.useState<string | null>(
@@ -87,28 +80,6 @@ export function RegisterForm({
   const emailId = React.useId();
   const passwordId = React.useId();
 
-  const passwordTouched = password.length > 0;
-  const passwordPolicyMet = isPasswordPolicyValid(password);
-  const passwordInputClass = [
-    "pr-10",
-    passwordTouched
-      ? passwordPolicyMet
-        ? "border-emerald-500 focus-visible:ring-emerald-500"
-        : "border-destructive focus-visible:ring-destructive"
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const policyHintClass = [
-    "text-xs",
-    passwordTouched
-      ? passwordPolicyMet
-        ? "text-emerald-600 dark:text-emerald-400"
-        : "text-destructive"
-      : "text-muted-foreground",
-  ]
-    .filter(Boolean)
-    .join(" ");
   const hasUsernameForSocial = isValidSocialUsername(username);
   const providerLabel: Record<SocialProvider, string> = {
     github: tLogin("social_provider_github"),
@@ -237,39 +208,14 @@ export function RegisterForm({
               required
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor={passwordId}>{t("password_label")}</Label>
-            <div className="relative">
-              <Input
-                id={passwordId}
-                name="password"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(event) =>
-                  setPassword((currentValue) =>
-                    keepPasswordInputWhitespaceFree(
-                      currentValue,
-                      event.target.value,
-                    ),
-                  )
-                }
-                placeholder={t("password_placeholder")}
-                autoComplete="new-password"
-                minLength={PASSWORD_MIN_LENGTH}
-                className={passwordInputClass}
-                required
-              />
-              <PasswordVisibilityButton
-                visible={showPassword}
-                showLabel={t("show_password")}
-                hideLabel={t("hide_password")}
-                onToggle={() => setShowPassword((prev) => !prev)}
-              />
-            </div>
-            <p className={policyHintClass} aria-live="polite">
-              {t("password_requirements")}
-            </p>
-          </div>
+          <NewPasswordField
+            id={passwordId}
+            label={t("password_label")}
+            placeholder={t("password_placeholder")}
+            requirements={t("password_requirements")}
+            showLabel={t("show_password")}
+            hideLabel={t("hide_password")}
+          />
           {errorMessage && (
             <Alert variant="destructive">
               <AlertDescription>{errorMessage}</AlertDescription>

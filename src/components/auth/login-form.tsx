@@ -8,6 +8,7 @@ import * as React from "react";
 import { InitialSetupForm } from "@/components/auth/initial-setup-form";
 import { PasswordVisibilityButton } from "@/components/auth/password-visibility-button";
 import { SocialProviderList } from "@/components/auth/social-provider-list";
+import { useSetupRequirement } from "@/components/auth/use-setup-requirement";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +24,6 @@ import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
 import {
   type AuthSocialProvider,
-  checkSetupRequired,
   isSocialErrorKey,
   isValidSocialUsername,
   mapOauthErrorToMessageKey,
@@ -76,8 +76,8 @@ export function LoginForm({
 }: LoginFormProps) {
   const [passwordLoginState, setPasswordLoginState] =
     React.useState<PasswordLoginState | null>(null);
-  const [setupRequired, setSetupRequired] = React.useState(false);
-  const [setupLoading, setSetupLoading] = React.useState(true);
+  const { setupLoading, setupRequired, setSetupRequired } =
+    useSetupRequirement();
   const [setupErrorKey, setSetupErrorKey] = React.useState<string | null>(null);
   const [setupCompleted, setSetupCompleted] = React.useState(false);
   const [loginIdentifier, setLoginIdentifier] = React.useState("");
@@ -112,24 +112,6 @@ export function LoginForm({
   const passwordId = React.useId();
   const socialIdentifierId = React.useId();
   const twoFactorCodeId = React.useId();
-
-  React.useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const isSetupRequired = await checkSetupRequired();
-        if (!active) return;
-        setSetupRequired(isSetupRequired);
-      } finally {
-        if (active) {
-          setSetupLoading(false);
-        }
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
 
   React.useEffect(() => {
     if (passwordLoginState?.errorKey) {
