@@ -50,6 +50,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  type AutosaveStatus,
+  useDebouncedAutosave,
+} from "@/hooks/use-debounced-autosave";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
@@ -89,13 +93,6 @@ import type {
 import { allPreReleaseTypes } from "@/types";
 import { Input } from "./ui/input";
 
-type SaveStatus =
-  | "idle"
-  | "waiting"
-  | "saving"
-  | "success"
-  | "error"
-  | "paused";
 type ReleasesPerPageError = RangeValidationError;
 type IntervalValidationError = RangeValidationError;
 type AutomationMode = "global" | "interval" | "cron";
@@ -108,7 +105,7 @@ function getAutomationMode(
   return "global";
 }
 
-function SaveStatusIndicator({ status }: { status: SaveStatus }) {
+function SaveStatusIndicator({ status }: { status: AutosaveStatus }) {
   const t = useTranslations("RepoSettingsDialog");
   const tLong = useTranslations("SettingsForm");
 
@@ -117,7 +114,7 @@ function SaveStatusIndicator({ status }: { status: SaveStatus }) {
   }
 
   const messages: Record<
-    SaveStatus,
+    AutosaveStatus,
     { text: React.ReactNode; icon: React.ReactNode; className: string }
   > = {
     idle: { text: "", icon: null, className: "" },
@@ -288,8 +285,12 @@ export function RepoSettingsDialog({
     currentRepoSettings?.appriseFormat ?? "",
   );
 
-  const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
-  const saveRevisionRef = React.useRef(0);
+  const {
+    status: saveStatus,
+    setStatus: setSaveStatus,
+    cancel: cancelAutosave,
+    schedule: scheduleAutosave,
+  } = useDebouncedAutosave();
   const dialogSessionRef = React.useRef(0);
   const reconciliationRevisionRef = React.useRef(0);
   const [reconciliationRevision, setReconciliationRevision] = React.useState(0);
@@ -332,12 +333,12 @@ export function RepoSettingsDialog({
     const wasOpen = prevIsOpenRef.current;
 
     if (wasOpen && !isOpen) {
-      saveRevisionRef.current += 1;
+      cancelAutosave();
     }
 
     // transition: closed -> open
     if (!wasOpen && isOpen) {
-      saveRevisionRef.current += 1;
+      cancelAutosave();
       dialogSessionRef.current += 1;
       const initialSettings = {
         releaseChannels: currentRepoSettings?.releaseChannels ?? [],
@@ -391,7 +392,7 @@ export function RepoSettingsDialog({
     }
 
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, currentRepoSettings]);
+  }, [isOpen, currentRepoSettings, cancelAutosave, setSaveStatus]);
 
   React.useEffect(() => {
     if (!isOpen) refreshAfterClosedSave();
@@ -571,8 +572,7 @@ export function RepoSettingsDialog({
     if (!isOpen) return;
 
     if (!isOnline) {
-      saveRevisionRef.current += 1;
-      setSaveStatus("paused");
+      cancelAutosave("paused");
       return;
     }
 
@@ -586,7 +586,6 @@ export function RepoSettingsDialog({
       return;
     }
 
-    const saveRevision = ++saveRevisionRef.current;
     const saveDialogSession = dialogSessionRef.current;
 
     if (
@@ -597,16 +596,13 @@ export function RepoSettingsDialog({
       includeRegexError ||
       excludeRegexError
     ) {
-      setSaveStatus("idle");
+      cancelAutosave("idle");
       return;
     }
 
-    setSaveStatus("waiting");
-
-    const handler = setTimeout(async () => {
+    return scheduleAutosave(async ({ isCurrent, setStatus }) => {
       if (reconciliationRevision !== reconciliationRevisionRef.current) return;
-      if (saveRevision !== saveRevisionRef.current) return;
-      if (mountedRef.current) setSaveStatus("saving");
+      if (!isCurrent()) return;
 
       try {
         lastSubmittedSettingsRef.current = newSettings;
@@ -615,7 +611,7 @@ export function RepoSettingsDialog({
           newSettings,
         );
 
-        if (saveRevision !== saveRevisionRef.current) {
+        if (!isCurrent()) {
           // The UI state has moved on, but the serialized server action still
           // persisted this snapshot. If the dialog closed meanwhile, perform
           // the same cache refresh the successful save would normally trigger.
@@ -649,7 +645,7 @@ export function RepoSettingsDialog({
 
         if (result.success) {
           if (mountedRef.current) {
-            setSaveStatus("success");
+            setStatus("success");
 
             if (
               hasRefreshSensitiveRepoSettingChanges(
@@ -669,7 +665,7 @@ export function RepoSettingsDialog({
           }
         } else {
           if (mountedRef.current) {
-            setSaveStatus("error");
+            setStatus("error");
             toast({
               title: t("toast_error_title"),
               description: result.error,
@@ -678,12 +674,12 @@ export function RepoSettingsDialog({
           }
         }
       } catch (error: unknown) {
-        if (saveRevision !== saveRevisionRef.current) return;
+        if (!isCurrent()) return;
         if (reloadIfServerActionStale(error)) {
           return;
         }
         if (mountedRef.current) {
-          setSaveStatus("error");
+          setStatus("error");
           toast({
             title: t("toast_error_title"),
             description: String(error),
@@ -691,9 +687,7 @@ export function RepoSettingsDialog({
           });
         }
       }
-    }, 1500);
-
-    return () => clearTimeout(handler);
+    });
   }, [
     newSettings,
     repoId,
@@ -709,6 +703,8 @@ export function RepoSettingsDialog({
     isOnline,
     reconciliationRevision,
     refreshAfterClosedSave,
+    cancelAutosave,
+    scheduleAutosave,
   ]);
 
   const handleChannelChange = (channel: ReleaseChannel) => {

@@ -46,6 +46,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  type AutosaveStatus,
+  useDebouncedAutosave,
+} from "@/hooks/use-debounced-autosave";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { usePathname, useRouter } from "@/i18n/navigation";
@@ -101,13 +105,6 @@ import { allPreReleaseTypes, defaultProviderSortOrder } from "@/types";
 
 type GlobalAutomationMode = "interval" | "cron";
 
-type SaveStatus =
-  | "idle"
-  | "waiting"
-  | "saving"
-  | "success"
-  | "error"
-  | "paused";
 type IntervalValidationError = RangeValidationError;
 type ReleasesPerPageError = RangeValidationError;
 type ParallelRepoFetchError = RangeValidationError;
@@ -173,7 +170,7 @@ function deserializeProviderSortOrder(value: string): ReleaseProviderSortKey[] {
   return selected ?? defaultProviderSortOrder;
 }
 
-function FloatingSaveIndicator({ status }: { status: SaveStatus }) {
+function FloatingSaveIndicator({ status }: { status: AutosaveStatus }) {
   const t = useTranslations("SettingsForm");
 
   if (status === "idle") {
@@ -181,7 +178,7 @@ function FloatingSaveIndicator({ status }: { status: SaveStatus }) {
   }
 
   const messages: Record<
-    SaveStatus,
+    AutosaveStatus,
     { text: React.ReactNode; icon: React.ReactNode; className: string }
   > = {
     idle: { text: "", icon: null, className: "" },
@@ -407,11 +404,15 @@ export function SettingsForm({
     String(minutesToDhms(currentSettings.cacheInterval).m),
   );
 
-  const [saveStatus, setSaveStatus] = React.useState<SaveStatus>("idle");
+  const {
+    status: saveStatus,
+    setStatus: setSaveStatus,
+    cancel: cancelAutosave,
+    schedule: scheduleAutosave,
+  } = useDebouncedAutosave();
   const isInitialMount = React.useRef(true);
   const lastSavedSettingsRef = React.useRef(currentSettings);
   const lastSubmittedSettingsRef = React.useRef(currentSettings);
-  const saveRevisionRef = React.useRef(0);
 
   // Check for saved state after locale change
   React.useEffect(() => {
@@ -424,7 +425,7 @@ export function SettingsForm({
       // Auto-hide success message after 3 seconds
       setTimeout(() => setSaveStatus("idle"), 3000);
     }
-  }, []);
+  }, [setSaveStatus]);
 
   const newSettings: AppSettings = React.useMemo(() => {
     const d = parseInt(days, 10) || 0;
@@ -607,8 +608,7 @@ export function SettingsForm({
     }
 
     if (!isOnline) {
-      saveRevisionRef.current += 1;
-      setSaveStatus("paused");
+      cancelAutosave("paused");
       return;
     }
 
@@ -621,8 +621,6 @@ export function SettingsForm({
     ) {
       return;
     }
-
-    const saveRevision = ++saveRevisionRef.current;
 
     const hasEmptyIntervalFields =
       automationMode === "interval" &&
@@ -657,15 +655,11 @@ export function SettingsForm({
       customSecurityPatternsError ||
       cronError
     ) {
-      setSaveStatus("idle");
+      cancelAutosave("idle");
       return;
     }
 
-    setSaveStatus("waiting");
-
-    const handler = setTimeout(async () => {
-      if (saveRevision !== saveRevisionRef.current) return;
-      setSaveStatus("saving");
+    return scheduleAutosave(async ({ isCurrent, setStatus }) => {
       try {
         const settingsPatch = getSettingsReconciliationPatch(
           lastSavedSettingsRef.current,
@@ -675,7 +669,7 @@ export function SettingsForm({
         lastSubmittedSettingsRef.current = newSettings;
         const result = await updateSettingsPatchAction(settingsPatch);
 
-        if (saveRevision !== saveRevisionRef.current) return;
+        if (!isCurrent()) return;
 
         if (result.success) {
           lastSavedSettingsRef.current = newSettings;
@@ -688,14 +682,12 @@ export function SettingsForm({
           }
 
           // Normal save: show success status and auto-hide after 3 seconds
-          setSaveStatus("success");
+          setStatus("success");
           setTimeout(() => {
-            if (saveRevision === saveRevisionRef.current) {
-              setSaveStatus("idle");
-            }
+            setStatus("idle");
           }, 3000);
         } else {
-          setSaveStatus("error");
+          setStatus("error");
           // Toast only on error
           toast({
             title: result.message.title,
@@ -704,11 +696,11 @@ export function SettingsForm({
           });
         }
       } catch (error: unknown) {
-        if (saveRevision !== saveRevisionRef.current) return;
+        if (!isCurrent()) return;
         if (reloadIfServerActionStale(error)) {
           return;
         }
-        setSaveStatus("error");
+        setStatus("error");
         // Toast only on error
         toast({
           title: t("toast_error_title"),
@@ -716,11 +708,7 @@ export function SettingsForm({
           variant: "destructive",
         });
       }
-    }, 1500);
-
-    return () => {
-      clearTimeout(handler);
-    };
+    });
   }, [
     newSettings,
     days,
@@ -748,6 +736,8 @@ export function SettingsForm({
     appriseMaxCharacters,
     isOnline,
     currentSettings.locale,
+    cancelAutosave,
+    scheduleAutosave,
   ]);
 
   const handleChannelChange = (channel: ReleaseChannel) => {
