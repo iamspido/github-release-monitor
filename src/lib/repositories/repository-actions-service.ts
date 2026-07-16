@@ -6,6 +6,7 @@ import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
 import { toPublicRepository } from "@/lib/repositories/public-repository";
 import { applyReleaseFetchResultToRepository } from "@/lib/repositories/release-cache-update";
+import { parseImportedRepository } from "@/lib/repositories/repository-import";
 import { isValidRepoId } from "@/lib/repositories/validation";
 import { trackBackgroundTask } from "@/lib/runtime/background-tasks";
 import {
@@ -171,20 +172,10 @@ export async function importRepositoriesAction(
       const currentRepoIds = new Set(currentRepos.map((repo) => repo.id));
       const currentReposMap = new Map(currentRepos.map((r) => [r.id, r]));
 
-      const validImportedRepos: Repository[] = [];
-      for (const repo of importedData) {
-        if (!repo.url) continue;
-        const parsed = parseSupportedRepoUrl(repo.url);
-        if (!parsed) continue;
-
-        // Normalize id/url on import so GitHub/Codeberg repos remain stable even if
-        // the exported data contained variations (trailing paths, `.git`, etc).
-        validImportedRepos.push({
-          ...toPublicRepository(repo),
-          id: parsed.id,
-          url: parsed.canonicalRepoUrl,
-        });
-      }
+      const validImportedRepos = importedData.flatMap((repo) => {
+        const parsed = parseImportedRepository(repo);
+        return parsed ? [parsed] : [];
+      });
 
       let addedCount = 0;
       let updatedCount = 0;

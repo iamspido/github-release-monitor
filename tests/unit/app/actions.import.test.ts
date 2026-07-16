@@ -78,6 +78,7 @@ describe("importRepositoriesAction idempotency", () => {
         id: "owner2/repo2",
         url: "https://github.com/owner2/repo2",
         pendingNotifications: [{ id: "injected-delivery" }],
+        injectedField: "must-not-persist",
       },
     ] as unknown as Repository[];
 
@@ -87,5 +88,38 @@ describe("importRepositoriesAction idempotency", () => {
     expect(
       mem.repos.find((repo) => repo.id === "github:owner2/repo2"),
     ).not.toHaveProperty("pendingNotifications");
+    expect(
+      mem.repos.find((repo) => repo.id === "github:owner2/repo2"),
+    ).not.toHaveProperty("injectedField");
+  });
+
+  it("keeps supported v2 export fields while normalizing the repository", async () => {
+    const actions = await import("@/app/actions");
+    const imported = [
+      {
+        id: "legacy-id-is-ignored",
+        url: "https://github.com/Owner/Repo.git",
+        isNew: true,
+        etag: '"etag"',
+        releaseChannels: ["stable"],
+        refreshInterval: 30,
+        appriseFormat: "markdown",
+      },
+    ] as Repository[];
+
+    const result = await actions.importRepositoriesAction(imported);
+
+    expect(result.success).toBe(true);
+    expect(mem.repos).toContainEqual(
+      expect.objectContaining({
+        id: "github:owner/repo",
+        url: "https://github.com/Owner/Repo",
+        isNew: true,
+        etag: '"etag"',
+        releaseChannels: ["stable"],
+        refreshInterval: 30,
+        appriseFormat: "markdown",
+      }),
+    );
   });
 });
