@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { ensureAuthDatabaseReady, hasAnyAuthUser } from "@/lib/auth";
 import {
   getAuthSetupToken,
-  isAuthSetupTokenConfigured,
   isSocialProviderConfigured,
 } from "@/lib/auth/config";
 import {
@@ -12,7 +10,7 @@ import {
   toSafeString,
 } from "@/lib/auth/request-context";
 import { secretsEqual } from "@/lib/auth/secret";
-import { isAuthSetupLocked } from "@/lib/auth/setup-lock";
+import { getAuthSetupAvailability } from "@/lib/auth/setup-route-guard";
 import {
   buildSetupSocialContextSetCookieHeader,
   buildSetupSocialContextValue,
@@ -41,37 +39,36 @@ function setupStateUnknownResponse() {
   return NextResponse.json({ error: "setup_state_unknown" }, { status: 503 });
 }
 
-export async function POST(request: Request) {
-  const clientIp = getClientIpFromRequest(request);
-  log.info(`Initial social setup context requested from ip='${clientIp}'.`);
-
-  await ensureAuthDatabaseReady();
-
-  if (!isAuthSetupTokenConfigured()) {
-    log.warn(
-      `Rejected initial social setup context from ip='${clientIp}' because AUTH_SETUP_TOKEN is invalid.`,
-    );
-    return disabledResponse();
-  }
-  if (await isAuthSetupLocked()) {
-    log.warn(
-      `Rejected initial social setup context from ip='${clientIp}' because setup is locked.`,
-    );
-    return disabledResponse();
-  }
-  const authUserState = hasAnyAuthUser();
-  if (authUserState === "unknown") {
+async function guardSocialSetupAvailability(
+  clientIp: string,
+): Promise<Response | null> {
+  const availability = await getAuthSetupAvailability();
+  if (availability === "available") return null;
+  if (availability === "state_unknown") {
     log.error(
       `Rejected initial social setup context from ip='${clientIp}' because auth user existence could not be determined.`,
     );
     return setupStateUnknownResponse();
   }
-  if (authUserState === "has_user") {
-    log.warn(
-      `Rejected initial social setup context from ip='${clientIp}' because at least one auth user already exists.`,
-    );
-    return disabledResponse();
-  }
+
+  const reason =
+    availability === "token_invalid"
+      ? "AUTH_SETUP_TOKEN is invalid"
+      : availability === "locked"
+        ? "setup is locked"
+        : "at least one auth user already exists";
+  log.warn(
+    `Rejected initial social setup context from ip='${clientIp}' because ${reason}.`,
+  );
+  return disabledResponse();
+}
+
+export async function POST(request: Request) {
+  const clientIp = getClientIpFromRequest(request);
+  log.info(`Initial social setup context requested from ip='${clientIp}'.`);
+
+  const rejection = await guardSocialSetupAvailability(clientIp);
+  if (rejection) return rejection;
 
   const jsonResult = await readJsonPayload<SetupSocialPayload>(request);
   if (!jsonResult.ok) {

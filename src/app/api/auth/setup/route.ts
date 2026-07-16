@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureAuthDatabaseReady, hasAnyAuthUser, setupAuth } from "@/lib/auth";
+import { hasAnyAuthUser, setupAuth } from "@/lib/auth";
 import {
   getClientIpFromRequest,
   isLikelyEmail,
@@ -13,6 +13,7 @@ import {
   isAuthSetupLocked,
   writeAuthSetupLock,
 } from "@/lib/auth/setup-lock";
+import { getAuthSetupAvailability } from "@/lib/auth/setup-route-guard";
 import { logger } from "@/lib/logger";
 import { isPasswordPolicyValid } from "@/lib/password-policy";
 import { isUsernamePolicyValid } from "@/lib/username-policy";
@@ -37,11 +38,6 @@ type SetupErrorBody = {
   error?: unknown;
   code?: unknown;
 };
-
-function isSetupEnabledByEnv() {
-  const token = process.env.AUTH_SETUP_TOKEN;
-  return typeof token === "string" && token.length >= 32;
-}
 
 function logMissingSetupTokenOnce() {
   if (global._authSetupTokenWarningLogged) {
@@ -176,38 +172,48 @@ async function disableSetupAfterSuccessfulBootstrap(email: string) {
   }
 }
 
+async function guardSetupAvailability(
+  clientIp: string,
+  operation: "status check" | "attempt",
+): Promise<Response | null> {
+  const availability = await getAuthSetupAvailability();
+  if (availability === "available") return null;
+
+  if (availability === "token_invalid") {
+    logMissingSetupTokenOnce();
+    log.warn(
+      `Rejected setup ${operation} from ip='${clientIp}' because AUTH_SETUP_TOKEN is not valid.`,
+    );
+    return disabledResponse();
+  }
+  if (availability === "locked") {
+    const writeLog = operation === "status check" ? log.info : log.warn;
+    writeLog(
+      `Rejected setup ${operation} from ip='${clientIp}' because setup is locked.`,
+    );
+    return disabledResponse();
+  }
+  if (availability === "state_unknown") {
+    log.error(
+      `Rejected setup ${operation} from ip='${clientIp}' because auth user existence could not be determined.`,
+    );
+    return setupStateUnknownResponse();
+  }
+
+  await backfillSetupLockForExistingUsers();
+  const writeLog = operation === "status check" ? log.info : log.warn;
+  writeLog(
+    `Rejected setup ${operation} from ip='${clientIp}' because at least one auth user already exists.`,
+  );
+  return disabledResponse();
+}
+
 export async function GET(request?: Request) {
   const clientIp = getClientIpFromRequest(request);
   log.info(`Auth setup status check requested from ip='${clientIp}'.`);
 
-  await ensureAuthDatabaseReady();
-  if (!isSetupEnabledByEnv()) {
-    logMissingSetupTokenOnce();
-    log.warn(
-      `Rejected setup status check from ip='${clientIp}' because AUTH_SETUP_TOKEN is not valid.`,
-    );
-    return disabledResponse();
-  }
-  if (await isAuthSetupLocked()) {
-    log.info(
-      `Rejected setup status check from ip='${clientIp}' because setup is locked.`,
-    );
-    return disabledResponse();
-  }
-  const authUserState = hasAnyAuthUser();
-  if (authUserState === "unknown") {
-    log.error(
-      `Rejected setup status check from ip='${clientIp}' because auth user existence could not be determined.`,
-    );
-    return setupStateUnknownResponse();
-  }
-  if (authUserState === "has_user") {
-    await backfillSetupLockForExistingUsers();
-    log.info(
-      `Rejected setup status check from ip='${clientIp}' because at least one auth user already exists.`,
-    );
-    return disabledResponse();
-  }
+  const rejection = await guardSetupAvailability(clientIp, "status check");
+  if (rejection) return rejection;
   log.info(`Setup is available for ip='${clientIp}'.`);
   return NextResponse.json({ setupRequired: true }, { status: 200 });
 }
@@ -216,34 +222,8 @@ export async function POST(request: Request) {
   const clientIp = getClientIpFromRequest(request);
   log.info(`Initial setup attempt received from ip='${clientIp}'.`);
 
-  await ensureAuthDatabaseReady();
-  if (!isSetupEnabledByEnv()) {
-    logMissingSetupTokenOnce();
-    log.warn(
-      `Rejected setup attempt from ip='${clientIp}' because AUTH_SETUP_TOKEN is not valid.`,
-    );
-    return disabledResponse();
-  }
-  if (await isAuthSetupLocked()) {
-    log.warn(
-      `Rejected setup attempt from ip='${clientIp}' because setup is locked.`,
-    );
-    return disabledResponse();
-  }
-  const authUserState = hasAnyAuthUser();
-  if (authUserState === "unknown") {
-    log.error(
-      `Rejected setup attempt from ip='${clientIp}' because auth user existence could not be determined.`,
-    );
-    return setupStateUnknownResponse();
-  }
-  if (authUserState === "has_user") {
-    await backfillSetupLockForExistingUsers();
-    log.warn(
-      `Rejected setup attempt from ip='${clientIp}' because at least one auth user already exists.`,
-    );
-    return disabledResponse();
-  }
+  const rejection = await guardSetupAvailability(clientIp, "attempt");
+  if (rejection) return rejection;
 
   const jsonResult = await readJsonPayload<SetupPayload>(request);
   if (!jsonResult.ok) {
