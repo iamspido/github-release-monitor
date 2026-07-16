@@ -11,7 +11,11 @@ import {
   tryFetchGitlabCommitMetadataViaGitTransport,
 } from "@/lib/releases/gitlab-git-transport";
 import {
+  applyCommitMetadata,
+  buildFallbackMarkdown,
   notModifiedResult,
+  releaseErrorResult,
+  releaseSuccessResult,
   resolvePageCount,
   resolvePageSize,
   selectLatestMatchingRelease,
@@ -464,11 +468,17 @@ export async function fetchLatestReleaseFromGitLab(
           const commitMessage =
             typeof tag.commit?.message === "string" ? tag.commit.message : null;
           const bodyContent = tagMessage
-            ? `### ${t("tag_message_fallback_title")}\n\n---\n\n${tagMessage}`
+            ? buildFallbackMarkdown(t("tag_message_fallback_title"), tagMessage)
             : releaseDescription
-              ? `### ${t("tag_message_fallback_title")}\n\n---\n\n${releaseDescription}`
+              ? buildFallbackMarkdown(
+                  t("tag_message_fallback_title"),
+                  releaseDescription,
+                )
               : commitMessage
-                ? `### ${t("commit_message_fallback_title")}\n\n---\n\n${commitMessage}`
+                ? buildFallbackMarkdown(
+                    t("commit_message_fallback_title"),
+                    commitMessage,
+                  )
                 : "";
           const commitDate = extractGitlabCommitDate(tag.commit);
           const publicationDate = commitDate || fetchedAtTimestamp;
@@ -496,11 +506,7 @@ export async function fetchLatestReleaseFromGitLab(
     });
 
     if (!latestRelease) {
-      return {
-        release: null,
-        error: { type: "no_matching_releases" },
-        newEtag,
-      };
+      return releaseErrorResult("no_matching_releases", newEtag);
     }
 
     if (
@@ -516,15 +522,13 @@ export async function fetchLatestReleaseFromGitLab(
           gitlabAuth.deployToken,
           commitSha,
         );
-        if (metadata?.message) {
-          const t = await getTranslations({ locale, namespace: "Actions" });
-          latestRelease.body = `### ${t("commit_message_fallback_title")}\n\n---\n\n${metadata.message}`;
-        }
-        if (metadata?.date) {
-          latestRelease.created_at = metadata.date;
-          latestRelease.published_at = metadata.date;
-          latestRelease.published_at_unknown = false;
-        }
+        const t = await getTranslations({ locale, namespace: "Actions" });
+        applyCommitMetadata(
+          latestRelease,
+          metadata,
+          t("commit_message_fallback_title"),
+          { replaceBody: true },
+        );
       }
     }
 
@@ -540,27 +544,15 @@ export async function fetchLatestReleaseFromGitLab(
         apiCommitRefsByTag.get(latestRelease.tag_name) ??
           latestRelease.tag_name,
       );
-      if (
-        commit?.message &&
-        (!latestRelease.body || latestRelease.body.trim() === "")
-      ) {
-        const t = await getTranslations({ locale, namespace: "Actions" });
-        latestRelease.body = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commit.message}`;
-      }
-      if (commit?.date) {
-        if (latestRelease.published_at_unknown) {
-          latestRelease.created_at = commit.date;
-          latestRelease.published_at = commit.date;
-          latestRelease.published_at_unknown = false;
-        } else {
-          latestRelease.published_at =
-            latestRelease.published_at ?? commit.date;
-        }
-      }
+      const t = await getTranslations({ locale, namespace: "Actions" });
+      applyCommitMetadata(
+        latestRelease,
+        commit,
+        t("commit_message_fallback_title"),
+      );
     }
 
-    latestRelease.fetched_at = fetchedAtTimestamp;
-    return { release: latestRelease, error: null, newEtag };
+    return releaseSuccessResult(latestRelease, newEtag, fetchedAtTimestamp);
   } catch (error) {
     log.error(`Failed to fetch GitLab releases for ${projectPath}:`, error);
     return { release: null, error: { type: "api_error" } };

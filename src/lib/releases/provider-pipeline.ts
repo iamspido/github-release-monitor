@@ -4,7 +4,12 @@ import {
 } from "@/lib/releases/filters";
 import type { LatestReleaseFetchResult } from "@/lib/releases/types";
 import { log } from "@/lib/server-action-helpers";
-import type { GithubRelease } from "@/types";
+import type { FetchError, GithubRelease } from "@/types";
+
+type CommitMetadata = {
+  message?: string;
+  date?: string;
+};
 
 export function resolvePageCount(
   totalItemsToFetch: number,
@@ -34,6 +39,50 @@ export function notModifiedResult(
     error: { type: "not_modified" },
     newEtag: etag,
   };
+}
+
+export function releaseErrorResult(
+  type: FetchError["type"],
+  newEtag?: string | null,
+): LatestReleaseFetchResult {
+  return { release: null, error: { type }, newEtag };
+}
+
+export function releaseSuccessResult(
+  release: GithubRelease,
+  newEtag: string | null | undefined,
+  fetchedAt: string,
+): LatestReleaseFetchResult {
+  release.fetched_at = fetchedAt;
+  return { release, error: null, newEtag };
+}
+
+export function buildFallbackMarkdown(title: string, message: string): string {
+  return `### ${title}\n\n---\n\n${message}`;
+}
+
+export function applyCommitMetadata(
+  release: GithubRelease,
+  metadata: CommitMetadata | null,
+  fallbackTitle: string,
+  options: { replaceBody?: boolean } = {},
+): void {
+  if (
+    metadata?.message &&
+    (options.replaceBody || !release.body || release.body.trim() === "")
+  ) {
+    release.body = buildFallbackMarkdown(fallbackTitle, metadata.message);
+  }
+
+  if (!metadata?.date) return;
+  if (release.published_at_unknown) {
+    release.created_at = metadata.date;
+    release.published_at = metadata.date;
+    release.published_at_unknown = false;
+    return;
+  }
+
+  release.published_at = release.published_at ?? metadata.date;
 }
 
 export function selectFirstMatchingRelease<

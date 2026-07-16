@@ -4,7 +4,11 @@ import { buildCodebergAuthChain } from "@/lib/releases/auth-chains";
 import { fetchJsonResponseWithRetryAuthChain } from "@/lib/releases/fetch";
 import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
 import {
+  applyCommitMetadata,
+  buildFallbackMarkdown,
   notModifiedResult,
+  releaseErrorResult,
+  releaseSuccessResult,
   resolvePageCount,
   resolvePageSize,
   selectLatestMatchingRelease,
@@ -391,7 +395,10 @@ export async function fetchLatestReleaseFromCodeberg(
           name: `Tag: ${tag.name}`,
           body:
             typeof tag.message === "string"
-              ? `### ${t("tag_message_fallback_title")}\n\n---\n\n${tag.message}`
+              ? buildFallbackMarkdown(
+                  t("tag_message_fallback_title"),
+                  tag.message,
+                )
               : "",
           created_at: fetchedAtTimestamp,
           published_at: fetchedAtTimestamp,
@@ -409,11 +416,7 @@ export async function fetchLatestReleaseFromCodeberg(
     });
 
     if (!latestRelease) {
-      return {
-        release: null,
-        error: { type: "no_matching_releases" },
-        newEtag,
-      };
+      return releaseErrorResult("no_matching_releases", newEtag);
     }
 
     if (
@@ -427,27 +430,15 @@ export async function fetchLatestReleaseFromCodeberg(
         codebergToken,
         commitRefsByTag.get(latestRelease.tag_name) ?? latestRelease.tag_name,
       );
-      if (
-        commit?.message &&
-        (!latestRelease.body || latestRelease.body.trim() === "")
-      ) {
-        const t = await getTranslations({ locale, namespace: "Actions" });
-        latestRelease.body = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commit.message}`;
-      }
-      if (commit?.date) {
-        if (latestRelease.published_at_unknown) {
-          latestRelease.created_at = commit.date;
-          latestRelease.published_at = commit.date;
-          latestRelease.published_at_unknown = false;
-        } else {
-          latestRelease.published_at =
-            latestRelease.published_at ?? commit.date;
-        }
-      }
+      const t = await getTranslations({ locale, namespace: "Actions" });
+      applyCommitMetadata(
+        latestRelease,
+        commit,
+        t("commit_message_fallback_title"),
+      );
     }
 
-    latestRelease.fetched_at = fetchedAtTimestamp;
-    return { release: latestRelease, error: null, newEtag };
+    return releaseSuccessResult(latestRelease, newEtag, fetchedAtTimestamp);
   } catch (error) {
     log.error(`Failed to fetch Codeberg releases for ${owner}/${repo}:`, error);
     return { release: null, error: { type: "api_error" } };

@@ -14,7 +14,10 @@ import {
 } from "@/lib/releases/filters";
 import { parseGithubTagsPage } from "@/lib/releases/github-tags-page";
 import {
+  buildFallbackMarkdown,
   notModifiedResult,
+  releaseErrorResult,
+  releaseSuccessResult,
   resolvePageCount,
   resolvePageSize,
   selectFirstMatchingRelease,
@@ -363,7 +366,10 @@ export async function fetchLatestReleaseFromGitHub(
               );
             if (annotatedTagResponse.ok && annotatedTagData) {
               if (annotatedTagData.message) {
-                bodyContent = `### ${t("tag_message_fallback_title")}\n\n---\n\n${annotatedTagData.message}`;
+                bodyContent = buildFallbackMarkdown(
+                  t("tag_message_fallback_title"),
+                  annotatedTagData.message,
+                );
               }
               publicationDate =
                 annotatedTagData.tagger?.date || publicationDate;
@@ -388,7 +394,10 @@ export async function fetchLatestReleaseFromGitHub(
               },
             );
           if (commitResponse.ok && commitData) {
-            bodyContent = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commitData.commit.message}`;
+            bodyContent = buildFallbackMarkdown(
+              t("commit_message_fallback_title"),
+              commitData.commit.message,
+            );
             publicationDate = commitData.commit.committer.date;
           } else {
             await discardResponseWithTimeout(commitResponse);
@@ -419,11 +428,7 @@ export async function fetchLatestReleaseFromGitHub(
     });
 
     if (!latestRelease) {
-      return {
-        release: null,
-        error: { type: "no_matching_releases" },
-        newEtag,
-      };
+      return releaseErrorResult("no_matching_releases", newEtag);
     }
 
     // This check is for formal releases that have an empty body.
@@ -449,7 +454,10 @@ export async function fetchLatestReleaseFromGitHub(
           );
         if (commitResponse.ok && commitData?.commit?.message) {
           const t = await getTranslations({ locale, namespace: "Actions" });
-          latestRelease.body = `### ${t("commit_message_fallback_title")}\n\n---\n\n${commitData.commit.message}`;
+          latestRelease.body = buildFallbackMarkdown(
+            t("commit_message_fallback_title"),
+            commitData.commit.message,
+          );
           log.info(
             `Successfully fetched commit message for ${owner}/${repo} tag ${latestRelease.tag_name}.`,
           );
@@ -471,11 +479,11 @@ export async function fetchLatestReleaseFromGitHub(
       }
     }
 
-    if (latestRelease) {
-      latestRelease.fetched_at = new Date().toISOString();
-    }
-
-    return { release: latestRelease, error: null, newEtag };
+    return releaseSuccessResult(
+      latestRelease,
+      newEtag,
+      new Date().toISOString(),
+    );
   } catch (error) {
     log.error(`Failed to fetch releases for ${owner}/${repo}:`, error);
     return { release: null, error: { type: "api_error" } };
