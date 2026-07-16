@@ -8,6 +8,12 @@ import type {
 } from "@/types";
 import { allPreReleaseTypes } from "@/types";
 
+const preReleaseMatcherCache = new Map<
+  string,
+  ReturnType<typeof createPreReleaseMatcher>
+>();
+const maxCachedPreReleaseMatchers = 100;
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -23,17 +29,17 @@ export function isPreReleaseByTagName(
     return false;
   }
 
-  // This regex looks for a non-letter boundary, then one of the keywords.
-  // The (?=[^a-zA-Z]|$) lookahead asserts the next character is NOT a letter
-  // (or the end of the string), preventing matches like `beta` in `betamax`.
-  // This matches `-b3`, `v1.0-beta`, `v1.0rc1`, and `release_candidate_1.0rc2`.
-  const preReleaseRegex = new RegExp(
-    `(?:^|[^a-zA-Z])(${preReleaseSubChannels
-      .map(escapeRegExp)
-      .join("|")})(?=[^a-zA-Z]|$)`,
-    "i",
-  );
-  return preReleaseRegex.test(tagName);
+  const cacheKey = preReleaseSubChannels.join("\0");
+  let matcher = preReleaseMatcherCache.get(cacheKey);
+  if (!matcher) {
+    matcher = createPreReleaseMatcher(preReleaseSubChannels);
+    if (preReleaseMatcherCache.size >= maxCachedPreReleaseMatchers) {
+      const oldestKey = preReleaseMatcherCache.keys().next().value;
+      if (oldestKey !== undefined) preReleaseMatcherCache.delete(oldestKey);
+    }
+    preReleaseMatcherCache.set(cacheKey, matcher);
+  }
+  return matcher(tagName);
 }
 
 export function toCachedRelease(release: GithubRelease): CachedRelease {
@@ -161,51 +167,102 @@ export type EffectiveRepoFilters = ReturnType<
   typeof resolveEffectiveRepoFilters
 >;
 
+type ReleaseMatcher = (release: GithubRelease) => boolean;
+
+function compileOptionalRegex(pattern: string | undefined): {
+  regex?: RegExp;
+  error?: unknown;
+} {
+  if (!pattern) return {};
+
+  try {
+    return { regex: new RegExp(pattern, "i") };
+  } catch (error) {
+    return { error };
+  }
+}
+
+function createPreReleaseMatcher(
+  preReleaseSubChannels: PreReleaseChannelType[],
+): (tagName: string) => boolean {
+  if (preReleaseSubChannels.length === 0) return () => false;
+
+  // The lookahead prevents partial word matches such as `beta` in `betamax`.
+  const regex = new RegExp(
+    `(?:^|[^a-zA-Z])(${preReleaseSubChannels
+      .map(escapeRegExp)
+      .join("|")})(?=[^a-zA-Z]|$)`,
+    "i",
+  );
+  return (tagName) => regex.test(tagName);
+}
+
+export function createEffectiveReleaseMatcher(
+  filters: EffectiveRepoFilters,
+  repoIdForLog: string,
+): ReleaseMatcher {
+  const exclude = compileOptionalRegex(filters.effectiveExcludeRegex);
+  const include = compileOptionalRegex(filters.effectiveIncludeRegex);
+  const matchesAnyPreReleaseChannel =
+    createPreReleaseMatcher(allPreReleaseTypes);
+  const matchesSelectedPreReleaseChannel = createPreReleaseMatcher(
+    filters.effectivePreReleaseSubChannels,
+  );
+  const loggedRegexErrors = new Set<unknown>();
+
+  const logRegexErrorOnce = (error: unknown) => {
+    if (loggedRegexErrors.has(error)) return;
+    loggedRegexErrors.add(error);
+    log.error(
+      `Invalid regex for repo ${repoIdForLog}. Regex filters will be ignored. Error:`,
+      error,
+    );
+  };
+
+  return (release) => {
+    if (exclude.error) {
+      logRegexErrorOnce(exclude.error);
+    } else if (exclude.regex?.test(release.tag_name)) {
+      return false;
+    }
+
+    if (!exclude.error) {
+      if (include.error) {
+        logRegexErrorOnce(include.error);
+      } else if (include.regex) {
+        return include.regex.test(release.tag_name);
+      }
+    }
+
+    if (release.draft) {
+      return filters.effectiveReleaseChannels.includes("draft");
+    }
+
+    const isTagMarkedPreRelease = matchesAnyPreReleaseChannel(release.tag_name);
+    const isConsideredPreRelease = release.prerelease || isTagMarkedPreRelease;
+
+    if (isConsideredPreRelease) {
+      if (!filters.effectiveReleaseChannels.includes("prerelease")) {
+        return false;
+      }
+
+      // If the tag explicitly includes a pre-release marker (e.g. -beta/-rc),
+      // apply the configured sub-channel filter. Otherwise, fall back to the API flag.
+      if (isTagMarkedPreRelease) {
+        return matchesSelectedPreReleaseChannel(release.tag_name);
+      }
+
+      return true;
+    }
+
+    return filters.effectiveReleaseChannels.includes("stable");
+  };
+}
+
 export function releaseMatchesEffectiveFilters(
   release: GithubRelease,
   filters: EffectiveRepoFilters,
   repoIdForLog: string,
 ): boolean {
-  try {
-    if (filters.effectiveExcludeRegex) {
-      const exclude = new RegExp(filters.effectiveExcludeRegex, "i");
-      if (exclude.test(release.tag_name)) return false;
-    }
-    if (filters.effectiveIncludeRegex) {
-      const include = new RegExp(filters.effectiveIncludeRegex, "i");
-      return include.test(release.tag_name);
-    }
-  } catch (error) {
-    log.error(
-      `Invalid regex for repo ${repoIdForLog}. Regex filters will be ignored. Error:`,
-      error,
-    );
-  }
-
-  if (release.draft) {
-    return filters.effectiveReleaseChannels.includes("draft");
-  }
-
-  const isTagMarkedPreRelease = isPreReleaseByTagName(
-    release.tag_name,
-    allPreReleaseTypes,
-  );
-  const isConsideredPreRelease = release.prerelease || isTagMarkedPreRelease;
-
-  if (isConsideredPreRelease) {
-    if (!filters.effectiveReleaseChannels.includes("prerelease")) return false;
-
-    // If the tag explicitly includes a pre-release marker (e.g. -beta/-rc),
-    // apply the configured sub-channel filter. Otherwise, fall back to the API flag.
-    if (isTagMarkedPreRelease) {
-      return isPreReleaseByTagName(
-        release.tag_name,
-        filters.effectivePreReleaseSubChannels,
-      );
-    }
-
-    return true;
-  }
-
-  return filters.effectiveReleaseChannels.includes("stable");
+  return createEffectiveReleaseMatcher(filters, repoIdForLog)(release);
 }

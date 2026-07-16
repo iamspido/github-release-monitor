@@ -1,6 +1,6 @@
 import {
+  createEffectiveReleaseMatcher,
   type EffectiveRepoFilters,
-  releaseMatchesEffectiveFilters,
 } from "@/lib/releases/filters";
 import type { LatestReleaseFetchResult } from "@/lib/releases/types";
 import { log } from "@/lib/server-action-helpers";
@@ -88,9 +88,8 @@ export function applyCommitMetadata(
 export function selectFirstMatchingRelease<
   T extends { release: GithubRelease },
 >(candidates: T[], filters: EffectiveRepoFilters, repoIdForLog: string) {
-  return candidates.find(({ release }) =>
-    releaseMatchesEffectiveFilters(release, filters, repoIdForLog),
-  );
+  const matchesRelease = createEffectiveReleaseMatcher(filters, repoIdForLog);
+  return candidates.find(({ release }) => matchesRelease(release));
 }
 
 export function selectLatestMatchingRelease(args: {
@@ -98,9 +97,11 @@ export function selectLatestMatchingRelease(args: {
   filters: EffectiveRepoFilters;
   repoIdForLog: string;
 }) {
-  const filteredReleases = args.releases.filter((release) =>
-    releaseMatchesEffectiveFilters(release, args.filters, args.repoIdForLog),
+  const matchesRelease = createEffectiveReleaseMatcher(
+    args.filters,
+    args.repoIdForLog,
   );
+  const filteredReleases = args.releases.filter(matchesRelease);
 
   if (filteredReleases.length === 0) {
     return null;

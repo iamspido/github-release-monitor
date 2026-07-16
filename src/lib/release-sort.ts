@@ -1,5 +1,5 @@
 import {
-  isSecurityRelease,
+  createSecurityReleaseMatcher,
   type SecurityReleaseDetectionOptions,
 } from "@/lib/security-release";
 import type {
@@ -132,15 +132,16 @@ export function sortEnrichedReleases(
   securityReleaseOptions: SecurityReleaseDetectionOptions = {},
 ): EnrichedRelease[] {
   const normalizedSortOrder = normalizeReleaseSortOrder(sortOrder);
+  const matchesSecurityRelease = prioritizeNewSecurityReleases
+    ? createSecurityReleaseMatcher(securityReleaseOptions)
+    : null;
 
   return [...releases].sort((a, b) => {
-    if (prioritizeNewSecurityReleases) {
+    if (matchesSecurityRelease) {
       const aIsNewSecurityRelease =
-        Boolean(a.isNew) &&
-        isSecurityRelease(a.release, securityReleaseOptions);
+        Boolean(a.isNew) && matchesSecurityRelease(a.release);
       const bIsNewSecurityRelease =
-        Boolean(b.isNew) &&
-        isSecurityRelease(b.release, securityReleaseOptions);
+        Boolean(b.isNew) && matchesSecurityRelease(b.release);
 
       if (aIsNewSecurityRelease !== bIsNewSecurityRelease) {
         return aIsNewSecurityRelease ? -1 : 1;

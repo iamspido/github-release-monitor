@@ -28,6 +28,11 @@ const securityReleasePatterns = [
   /\bsicherheits(?:fix|patch|release|update)?\b/i,
   /\bsicherheitsl(?:ue|\u00fc)cke(?:n)?\b/i,
 ];
+const securityMatcherCache = new Map<
+  string,
+  ReturnType<typeof createSecurityReleaseMatcher>
+>();
+const maxCachedSecurityMatchers = 100;
 
 const hexColorPattern = /^#[0-9a-f]{6}$/i;
 
@@ -87,6 +92,31 @@ function getCustomSecurityReleasePatterns(
   });
 }
 
+export function createSecurityReleaseMatcher(
+  options: SecurityReleaseDetectionOptions = {},
+): (release: SecurityReleaseInput) => boolean {
+  const patterns =
+    options.includeDefaultSecurityPatterns === false
+      ? []
+      : [...securityReleasePatterns];
+  patterns.push(
+    ...getCustomSecurityReleasePatterns(options.customSecurityPatterns),
+  );
+
+  return (release) => {
+    if (!release) return false;
+
+    const searchableText = [release.name, release.tag_name, release.body]
+      .filter(Boolean)
+      .join("\n");
+
+    return patterns.some((pattern) => {
+      pattern.lastIndex = 0;
+      return pattern.test(searchableText);
+    });
+  };
+}
+
 export function normalizeSecurityHighlightColorPreset(
   value: unknown,
 ): SecurityHighlightColorPreset {
@@ -111,22 +141,18 @@ export function isSecurityRelease(
   release: SecurityReleaseInput,
   options: SecurityReleaseDetectionOptions = {},
 ): boolean {
-  if (!release) return false;
-
-  const searchableText = [release.name, release.tag_name, release.body]
-    .filter(Boolean)
-    .join("\n");
-
-  const patterns =
-    options.includeDefaultSecurityPatterns === false
-      ? []
-      : [...securityReleasePatterns];
-  patterns.push(
-    ...getCustomSecurityReleasePatterns(options.customSecurityPatterns),
-  );
-
-  return patterns.some((pattern) => {
-    pattern.lastIndex = 0;
-    return pattern.test(searchableText);
-  });
+  const cacheKey = JSON.stringify([
+    options.includeDefaultSecurityPatterns !== false,
+    options.customSecurityPatterns ?? "",
+  ]);
+  let matcher = securityMatcherCache.get(cacheKey);
+  if (!matcher) {
+    matcher = createSecurityReleaseMatcher(options);
+    if (securityMatcherCache.size >= maxCachedSecurityMatchers) {
+      const oldestKey = securityMatcherCache.keys().next().value;
+      if (oldestKey !== undefined) securityMatcherCache.delete(oldestKey);
+    }
+    securityMatcherCache.set(cacheKey, matcher);
+  }
+  return matcher(release);
 }
