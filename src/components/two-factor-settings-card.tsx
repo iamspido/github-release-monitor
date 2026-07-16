@@ -24,49 +24,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
-
-type TwoFactorEnableData = {
-  totpURI: string | null;
-  backupCodes: string[];
-};
-
-function normalizeEnableResponse(payload: unknown): TwoFactorEnableData {
-  const data = (payload as { data?: unknown } | null)?.data;
-  const source =
-    data && typeof data === "object"
-      ? (data as Record<string, unknown>)
-      : payload && typeof payload === "object"
-        ? (payload as Record<string, unknown>)
-        : {};
-
-  const rawTotp =
-    source.totpURI ??
-    source.totpUri ??
-    source.totp_url ??
-    source.uri ??
-    source.otpauthURL;
-  const totpURI =
-    typeof rawTotp === "string" && rawTotp.trim() ? rawTotp.trim() : null;
-
-  const rawCodes = source.backupCodes;
-  const backupCodes = Array.isArray(rawCodes)
-    ? rawCodes
-        .map((value) => (typeof value === "string" ? value.trim() : ""))
-        .filter(Boolean)
-    : [];
-
-  return { totpURI, backupCodes };
-}
+import {
+  disableTwoFactor,
+  enableTwoFactor,
+  readAuthSessionSnapshot,
+  verifyTwoFactor,
+} from "@/lib/auth/client-adapters";
 
 export function TwoFactorSettingsCard() {
   const t = useTranslations("SettingsPage");
   const sessionState = authClient.useSession();
-  const sessionData = (sessionState as { data?: unknown }).data as
-    | { user?: { twoFactorEnabled?: unknown } }
-    | undefined;
-  const sessionLoading = Boolean(
-    (sessionState as { isPending?: unknown }).isPending,
-  );
+  const session = readAuthSessionSnapshot(sessionState);
+  const sessionLoading = session.isPending;
 
   const [enabledOverride, setEnabledOverride] = React.useState<boolean | null>(
     null,
@@ -91,7 +60,7 @@ export function TwoFactorSettingsCard() {
   const verifyCodeId = React.useId();
   const disablePasswordId = React.useId();
 
-  const sessionEnabled = Boolean(sessionData?.user?.twoFactorEnabled);
+  const sessionEnabled = session.twoFactorEnabled;
   const twoFactorEnabled =
     enabledOverride === null ? sessionEnabled : enabledOverride;
   const inSetupFlow = Boolean(pendingTotpUri);
@@ -147,16 +116,8 @@ export function TwoFactorSettingsCard() {
     setErrorKey(null);
     setCopied(false);
     try {
-      const result = await authClient.twoFactor.enable({
-        password: enablePassword,
-      });
-      if (result.error) {
-        setErrorKey("two_factor_error_enable");
-        return;
-      }
-
-      const normalized = normalizeEnableResponse(result);
-      if (!normalized.totpURI) {
+      const normalized = await enableTwoFactor(enablePassword);
+      if (!normalized?.totpURI) {
         setErrorKey("two_factor_error_enable");
         return;
       }
@@ -175,11 +136,7 @@ export function TwoFactorSettingsCard() {
     setVerifying(true);
     setErrorKey(null);
     try {
-      const result = await authClient.twoFactor.verifyTotp({
-        code: verifyCode.trim(),
-        trustDevice: true,
-      });
-      if (result.error) {
+      if (!(await verifyTwoFactor(verifyCode.trim(), true))) {
         setErrorKey("two_factor_error_verify");
         return;
       }
@@ -201,10 +158,7 @@ export function TwoFactorSettingsCard() {
     setDisabling(true);
     setErrorKey(null);
     try {
-      const result = await authClient.twoFactor.disable({
-        password: disablePassword,
-      });
-      if (result.error) {
+      if (!(await disableTwoFactor(disablePassword))) {
         setErrorKey("two_factor_error_disable");
         return;
       }

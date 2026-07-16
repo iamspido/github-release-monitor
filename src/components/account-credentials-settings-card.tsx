@@ -30,6 +30,10 @@ import { useNetworkStatus } from "@/hooks/use-network";
 import { authClient } from "@/lib/auth/client";
 import { hasCredentialProvider } from "@/lib/auth/client-accounts";
 import {
+  listAuthAccounts,
+  readAuthSessionSnapshot,
+} from "@/lib/auth/client-adapters";
+import {
   isPasswordPolicyValid,
   keepPasswordInputWhitespaceFree,
   PASSWORD_MIN_LENGTH,
@@ -43,16 +47,8 @@ export function AccountCredentialsSettingsCard() {
   const t = useTranslations("SettingsPage");
   const { isOnline } = useNetworkStatus();
   const sessionState = authClient.useSession();
-  const sessionData = (sessionState as { data?: unknown }).data as
-    | {
-        user?: {
-          email?: string | null;
-        };
-      }
-    | undefined;
-  const sessionLoading = Boolean(
-    (sessionState as { isPending?: unknown }).isPending,
-  );
+  const session = readAuthSessionSnapshot(sessionState);
+  const sessionLoading = session.isPending;
 
   const [emailInput, setEmailInput] = React.useState("");
   const [emailPending, setEmailPending] = React.useState(false);
@@ -81,8 +77,7 @@ export function AccountCredentialsSettingsCard() {
   const newPasswordId = React.useId();
   const confirmPasswordId = React.useId();
 
-  const currentEmailFromSession =
-    typeof sessionData?.user?.email === "string" ? sessionData.user.email : "";
+  const currentEmailFromSession = session.email;
   const passwordInputType = showPasswords ? "text" : "password";
   const passwordToggleLabel = showPasswords
     ? t("hide_password")
@@ -158,7 +153,7 @@ export function AccountCredentialsSettingsCard() {
     let active = true;
     (async () => {
       try {
-        const response = await authClient.listAccounts();
+        const response = await listAuthAccounts();
         if (!active) return;
         setHasPassword(hasCredentialProvider(response));
       } catch {

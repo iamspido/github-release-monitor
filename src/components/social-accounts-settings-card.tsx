@@ -22,6 +22,7 @@ import {
   type LinkedSocialAccountMap,
   type LinkedSocialProvider,
 } from "@/lib/auth/client-accounts";
+import { listAuthAccounts } from "@/lib/auth/client-adapters";
 
 type SocialProvider = LinkedSocialProvider;
 
@@ -50,7 +51,7 @@ export function SocialAccountsSettingsCard({
     let active = true;
     (async () => {
       try {
-        const result = await authClient.listAccounts();
+        const result = await listAuthAccounts();
         if (!active) return;
         setLinkedAccounts(extractLinkedAccounts(result));
       } catch {
