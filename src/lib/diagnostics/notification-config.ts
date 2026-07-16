@@ -5,6 +5,33 @@ import type { NotificationConfig } from "@/types";
 const MASKED_VALUE = "••••••••";
 const HIDDEN_SEGMENT = "<hidden>";
 
+type NotificationVariableKey =
+  | "MAIL_HOST"
+  | "MAIL_PORT"
+  | "MAIL_USERNAME"
+  | "MAIL_PASSWORD"
+  | "MAIL_FROM_ADDRESS"
+  | "MAIL_FROM_NAME"
+  | "MAIL_TO_ADDRESS"
+  | "APPRISE_URL";
+
+type NotificationVariableSpec = {
+  key: NotificationVariableKey;
+  isRequired: boolean;
+  isSensitive?: boolean;
+};
+
+const NOTIFICATION_VARIABLE_SPECS: readonly NotificationVariableSpec[] = [
+  { key: "MAIL_HOST", isRequired: true },
+  { key: "MAIL_PORT", isRequired: true },
+  { key: "MAIL_USERNAME", isRequired: false },
+  { key: "MAIL_PASSWORD", isRequired: false, isSensitive: true },
+  { key: "MAIL_FROM_ADDRESS", isRequired: true },
+  { key: "MAIL_FROM_NAME", isRequired: false },
+  { key: "MAIL_TO_ADDRESS", isRequired: true },
+  { key: "APPRISE_URL", isRequired: false, isSensitive: true },
+];
+
 function hasValue(value: string | undefined): boolean {
   return Boolean(value?.trim());
 }
@@ -64,75 +91,36 @@ export function buildNotificationConfig(
       : "password_confirm"
     : "none";
 
+  const displayOverrides: Partial<
+    Record<NotificationVariableKey, string | null>
+  > = {
+    MAIL_PASSWORD: mailPasswordSet ? MASKED_VALUE : null,
+    APPRISE_URL: sanitizedAppriseUrl,
+  };
+  const revealModes: Partial<
+    Record<
+      NotificationVariableKey,
+      "none" | "external_click" | "password_confirm"
+    >
+  > = {
+    MAIL_PASSWORD: mailPasswordRevealMode,
+    APPRISE_URL: appriseUrlRevealMode,
+  };
+
   return {
     isSmtpConfigured,
     isAppriseConfigured,
-    variables: [
-      {
-        key: "MAIL_HOST",
-        displayValue: env.MAIL_HOST || null,
-        isSet: hasValue(env.MAIL_HOST),
-        isRequired: true,
-        isSensitive: false,
-        revealMode: "none",
-      },
-      {
-        key: "MAIL_PORT",
-        displayValue: env.MAIL_PORT || null,
-        isSet: hasValue(env.MAIL_PORT),
-        isRequired: true,
-        isSensitive: false,
-        revealMode: "none",
-      },
-      {
-        key: "MAIL_USERNAME",
-        displayValue: env.MAIL_USERNAME || null,
-        isSet: hasValue(env.MAIL_USERNAME),
-        isRequired: false,
-        isSensitive: false,
-        revealMode: "none",
-      },
-      {
-        key: "MAIL_PASSWORD",
-        displayValue: mailPasswordSet ? MASKED_VALUE : null,
-        isSet: mailPasswordSet,
-        isRequired: false,
-        isSensitive: true,
-        revealMode: mailPasswordRevealMode,
-      },
-      {
-        key: "MAIL_FROM_ADDRESS",
-        displayValue: env.MAIL_FROM_ADDRESS || null,
-        isSet: hasValue(env.MAIL_FROM_ADDRESS),
-        isRequired: true,
-        isSensitive: false,
-        revealMode: "none",
-      },
-      {
-        key: "MAIL_FROM_NAME",
-        displayValue: env.MAIL_FROM_NAME || null,
-        isSet: hasValue(env.MAIL_FROM_NAME),
-        isRequired: false,
-        isSensitive: false,
-        revealMode: "none",
-      },
-      {
-        key: "MAIL_TO_ADDRESS",
-        displayValue: env.MAIL_TO_ADDRESS || null,
-        isSet: hasValue(env.MAIL_TO_ADDRESS),
-        isRequired: true,
-        isSensitive: false,
-        revealMode: "none",
-      },
-      {
-        key: "APPRISE_URL",
-        displayValue: sanitizedAppriseUrl,
-        isSet: appriseUrlSet,
-        isRequired: false,
-        isSensitive: true,
-        revealMode: appriseUrlRevealMode,
-      },
-    ],
+    variables: NOTIFICATION_VARIABLE_SPECS.map((spec) => ({
+      key: spec.key,
+      displayValue:
+        spec.key in displayOverrides
+          ? (displayOverrides[spec.key] ?? null)
+          : env[spec.key] || null,
+      isSet: hasValue(env[spec.key]),
+      isRequired: spec.isRequired,
+      isSensitive: spec.isSensitive ?? false,
+      revealMode: revealModes[spec.key] ?? "none",
+    })),
   };
 }
 
