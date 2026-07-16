@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -7,7 +8,13 @@ const authSetupBootstrapLockPath = path.join(
   dataDirPath,
   "auth-setup-bootstrap.lock",
 );
+const authSetupBootstrapGatePath = path.join(
+  dataDirPath,
+  "auth-setup-bootstrap.gate",
+);
 const authSetupBootstrapLockStaleMs = 10 * 60 * 1_000;
+const authSetupBootstrapGateRetryMs = 10;
+const authSetupBootstrapGateMaxWaitMs = 5_000;
 
 type AuthSetupLockReason = "setup_completed" | "user_exists";
 
@@ -20,6 +27,7 @@ type AuthSetupLockPayload = {
 
 type AuthSetupBootstrapLockPayload = {
   createdAt: string;
+  ownerId?: string;
   source: string;
 };
 
@@ -84,6 +92,41 @@ async function removeAuthSetupBootstrapLock() {
   }
 }
 
+async function releaseAuthSetupBootstrapGate() {
+  try {
+    await fs.rmdir(authSetupBootstrapGatePath);
+  } catch (error) {
+    if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function tryAcquireAuthSetupBootstrapGate() {
+  try {
+    await fs.mkdir(authSetupBootstrapGatePath);
+    return true;
+  } catch (error) {
+    if (isNodeErrorWithCode(error) && error.code === "EEXIST") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function acquireAuthSetupBootstrapGateWithWait() {
+  const deadline = Date.now() + authSetupBootstrapGateMaxWaitMs;
+  while (!(await tryAcquireAuthSetupBootstrapGate())) {
+    if (Date.now() >= deadline) {
+      throw new Error("Timed out waiting for auth setup bootstrap lock gate.");
+    }
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, authSetupBootstrapGateRetryMs),
+    );
+  }
+}
+
 async function isExistingBootstrapLockStale() {
   try {
     const raw = await fs.readFile(authSetupBootstrapLockPath, "utf8");
@@ -101,9 +144,10 @@ async function isExistingBootstrapLockStale() {
   }
 }
 
-async function tryWriteAuthSetupBootstrapLock(source: string) {
+async function tryWriteAuthSetupBootstrapLock(source: string, ownerId: string) {
   const lockData: AuthSetupBootstrapLockPayload = {
     createdAt: new Date().toISOString(),
+    ownerId,
     source,
   };
 
@@ -125,15 +169,51 @@ async function tryWriteAuthSetupBootstrapLock(source: string) {
   }
 }
 
+async function releaseOwnedAuthSetupBootstrapLock(ownerId: string) {
+  await acquireAuthSetupBootstrapGateWithWait();
+  try {
+    let currentLock: Partial<AuthSetupBootstrapLockPayload> | null = null;
+    try {
+      const raw = await fs.readFile(authSetupBootstrapLockPath, "utf8");
+      currentLock = JSON.parse(raw) as Partial<AuthSetupBootstrapLockPayload>;
+    } catch (error) {
+      if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+        return;
+      }
+      throw error;
+    }
+
+    if (currentLock.ownerId === ownerId) {
+      await removeAuthSetupBootstrapLock();
+    }
+  } finally {
+    await releaseAuthSetupBootstrapGate();
+  }
+}
+
 export async function acquireAuthSetupBootstrapLock(payload?: {
   source?: string;
 }) {
   await fs.mkdir(dataDirPath, { recursive: true });
   const source = payload?.source || "unknown";
-  let acquired = await tryWriteAuthSetupBootstrapLock(source);
-  if (!acquired && (await isExistingBootstrapLockStale())) {
-    await removeAuthSetupBootstrapLock();
-    acquired = await tryWriteAuthSetupBootstrapLock(source);
+  const ownerId = randomUUID();
+  const gateAcquired = await tryAcquireAuthSetupBootstrapGate();
+  if (!gateAcquired) {
+    return {
+      status: "busy" as const,
+      release: async () => undefined,
+    };
+  }
+
+  let acquired = false;
+  try {
+    acquired = await tryWriteAuthSetupBootstrapLock(source, ownerId);
+    if (!acquired && (await isExistingBootstrapLockStale())) {
+      await removeAuthSetupBootstrapLock();
+      acquired = await tryWriteAuthSetupBootstrapLock(source, ownerId);
+    }
+  } finally {
+    await releaseAuthSetupBootstrapGate();
   }
 
   if (!acquired) {
@@ -145,7 +225,7 @@ export async function acquireAuthSetupBootstrapLock(payload?: {
 
   return {
     status: "acquired" as const,
-    release: removeAuthSetupBootstrapLock,
+    release: () => releaseOwnedAuthSetupBootstrapLock(ownerId),
   };
 }
 

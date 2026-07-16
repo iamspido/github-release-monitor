@@ -4,6 +4,7 @@ const fsMock = vi.hoisted(() => ({
   access: vi.fn(),
   mkdir: vi.fn(),
   readFile: vi.fn(),
+  rmdir: vi.fn(),
   unlink: vi.fn(),
   writeFile: vi.fn(),
 }));
@@ -29,6 +30,7 @@ describe("auth/setup-lock", () => {
         source: "test",
       }),
     );
+    fsMock.rmdir.mockResolvedValue(undefined);
     fsMock.unlink.mockResolvedValue(undefined);
     fsMock.writeFile.mockResolvedValue(undefined);
   });
@@ -88,9 +90,18 @@ describe("auth/setup-lock", () => {
     expect(lock.status).toBe("acquired");
     expect(fsMock.writeFile).toHaveBeenCalledWith(
       expect.stringContaining("auth-setup-bootstrap.lock"),
-      expect.stringContaining('"source": "signup"'),
+      expect.stringMatching(
+        /"ownerId": "[^"]+"[\s\S]*"source": "signup"/,
+      ),
       expect.objectContaining({ encoding: "utf8", flag: "wx" }),
     );
+
+    const lockPayload = JSON.parse(
+      fsMock.writeFile.mock.calls.find(([filePath]) =>
+        String(filePath).includes("auth-setup-bootstrap.lock"),
+      )?.[1] as string,
+    ) as { ownerId: string };
+    fsMock.readFile.mockResolvedValueOnce(JSON.stringify(lockPayload));
 
     await lock.release();
 
@@ -132,5 +143,23 @@ describe("auth/setup-lock", () => {
       expect.stringContaining("auth-setup-bootstrap.lock"),
     );
     expect(fsMock.writeFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not release a bootstrap lock owned by another process", async () => {
+    const { acquireAuthSetupBootstrapLock } = await import(
+      "@/lib/auth/setup-lock"
+    );
+    const lock = await acquireAuthSetupBootstrapLock({ source: "owner-a" });
+    fsMock.readFile.mockResolvedValueOnce(
+      JSON.stringify({
+        createdAt: "2024-01-01T12:00:00.000Z",
+        ownerId: "owner-b",
+        source: "owner-b",
+      }),
+    );
+
+    await lock.release();
+
+    expect(fsMock.unlink).not.toHaveBeenCalled();
   });
 });
