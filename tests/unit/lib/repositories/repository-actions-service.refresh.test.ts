@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   getSettings: vi.fn(),
   saveRepositories: vi.fn(),
   setJobStatus: vi.fn(),
+  isRestrictedActionAllowed: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -36,7 +37,7 @@ vi.mock("@/lib/runtime/background-tasks", () => ({
 }));
 vi.mock("@/lib/server-action-helpers", () => ({
   getRestrictedActionError: vi.fn(),
-  isRestrictedActionAllowed: vi.fn(),
+  isRestrictedActionAllowed: mocks.isRestrictedActionAllowed,
   log: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
   updateReleaseCacheTags: vi.fn(),
 }));
@@ -45,6 +46,59 @@ describe("repository-actions-service background refresh commit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getSettings.mockResolvedValue(createSettings());
+    mocks.isRestrictedActionAllowed.mockResolvedValue(true);
+  });
+
+  it("commits a single refresh into a fresh repository snapshot", async () => {
+    const repository: Repository = {
+      id: "github:owner/repo",
+      url: "https://github.com/owner/repo",
+    };
+    const currentRepository = {
+      ...repository,
+      appriseTags: "preserve-this-setting",
+    };
+    mocks.getRepositories
+      .mockResolvedValueOnce(structuredClone([repository]))
+      .mockResolvedValueOnce(structuredClone([currentRepository]));
+    mocks.getLatestReleasesForRepos.mockResolvedValue([
+      releaseResult(repository.id, "v2"),
+    ]);
+    const { refreshSingleRepositoryAction } = await import(
+      "@/lib/repositories/repository-actions-service"
+    );
+
+    await refreshSingleRepositoryAction(repository.id);
+
+    expect(mocks.saveRepositories).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: repository.id,
+        appriseTags: "preserve-this-setting",
+        latestRelease: expect.objectContaining({ tag_name: "v2" }),
+      }),
+    ]);
+  });
+
+  it("does not commit a stale single refresh result", async () => {
+    const repository: Repository = {
+      id: "github:owner/repo",
+      url: "https://github.com/owner/repo",
+    };
+    mocks.getRepositories
+      .mockResolvedValueOnce(structuredClone([repository]))
+      .mockResolvedValueOnce(
+        structuredClone([{ ...repository, includeRegex: "^v2$" }]),
+      );
+    mocks.getLatestReleasesForRepos.mockResolvedValue([
+      releaseResult(repository.id, "v1"),
+    ]);
+    const { refreshSingleRepositoryAction } = await import(
+      "@/lib/repositories/repository-actions-service"
+    );
+
+    await refreshSingleRepositoryAction(repository.id);
+
+    expect(mocks.saveRepositories).not.toHaveBeenCalled();
   });
 
   it("merges fetched release data into a fresh repository snapshot", async () => {

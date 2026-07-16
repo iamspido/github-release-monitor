@@ -234,48 +234,73 @@ export async function importRepositoriesAction(
 }
 
 export async function refreshSingleRepositoryAction(repoId: string) {
-  return scheduleTask(`refreshSingleRepositoryAction: ${repoId}`, async () => {
-    if (!(await isRestrictedActionAllowed())) {
+  const snapshot = await scheduleTask(
+    `refreshSingleRepositoryAction: ${repoId}`,
+    async () => {
+      if (!(await isRestrictedActionAllowed())) {
+        return;
+      }
+
+      if (!isValidRepoId(repoId)) {
+        log.error("Invalid repoId format for refresh:", repoId);
+        return;
+      }
+
+      log.info(`Refreshing single repository: ${repoId}`);
+
+      const settings = await getSettings();
+      const allRepos = await getRepositories();
+      const repository = allRepos.find((repo) => repo.id === repoId);
+
+      if (!repository) {
+        log.error(`Repository ${repoId} not found for refresh.`);
+        return;
+      }
+
+      return {
+        repository,
+        settings,
+        fingerprint: createReleaseFetchFingerprint(repository, settings),
+      };
+    },
+  );
+
+  if (!snapshot) return;
+
+  const enrichedReleases = await getLatestReleasesForRepos(
+    [snapshot.repository],
+    snapshot.settings,
+    snapshot.settings.locale,
+    { skipCache: true },
+  );
+  const enrichedRelease = enrichedReleases[0];
+  if (!enrichedRelease) {
+    log.error(`Failed to get release for ${repoId} during single refresh.`);
+    return;
+  }
+
+  return scheduleTask(`commitRefreshSingleRepository: ${repoId}`, async () => {
+    const [allRepos, currentSettings] = await Promise.all([
+      getRepositories(),
+      getSettings(),
+    ]);
+    const repoIndex = allRepos.findIndex((repo) => repo.id === repoId);
+    if (repoIndex === -1) return;
+
+    if (
+      snapshot.fingerprint !==
+      createReleaseFetchFingerprint(allRepos[repoIndex], currentSettings)
+    ) {
+      log.info(
+        `Skipped stale single refresh result for ${repoId} because its effective fetch inputs changed.`,
+      );
       return;
     }
-
-    if (!isValidRepoId(repoId)) {
-      log.error("Invalid repoId format for refresh:", repoId);
-      return;
-    }
-
-    log.info(`Refreshing single repository: ${repoId}`);
-
-    const settings = await getSettings();
-    const locale = settings.locale;
-    const allRepos = await getRepositories();
-    const repoToRefresh = allRepos.find((r) => r.id === repoId);
-
-    if (!repoToRefresh) {
-      log.error(`Repository ${repoId} not found for refresh.`);
-      return;
-    }
-
-    const enrichedReleases = await getLatestReleasesForRepos(
-      [repoToRefresh],
-      settings,
-      locale,
-      { skipCache: true },
-    );
-
-    const enrichedRelease = enrichedReleases[0];
-    if (!enrichedRelease) {
-      log.error(`Failed to get release for ${repoId} during single refresh.`);
-      return;
-    }
-
-    const repoIndex = allRepos.findIndex((r) => r.id === repoId);
-    if (repoIndex === -1) return; // Should not happen
 
     applyReleaseFetchResultToRepository(allRepos[repoIndex], enrichedRelease);
 
     await saveRepositories(allRepos);
-    revalidatePath("/"); // Revalidate the home page to show the new data
+    revalidatePath("/");
   });
 }
 
