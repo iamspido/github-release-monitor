@@ -1,9 +1,10 @@
 "use client";
 
-import { formatDistanceToNowStrict } from "date-fns";
+import { formatDistanceStrict } from "date-fns";
 import { de } from "date-fns/locale";
 import * as React from "react";
 
+import { useSharedMinuteTicker } from "@/hooks/use-shared-minute-ticker";
 import type { GithubRelease } from "@/types";
 
 type ReleaseTimeInput =
@@ -21,42 +22,34 @@ export function useReleaseRelativeTimes(
   const [timeAgo, setTimeAgo] = React.useState("");
   const [checkedAgo, setCheckedAgo] = React.useState("");
   const isReleaseTimeUnknown = Boolean(release?.published_at_unknown);
+  const currentTime = useSharedMinuteTicker();
 
   React.useEffect(() => {
-    let intervalId: ReturnType<typeof setInterval>;
+    const referenceTime = new Date(currentTime || Date.now());
 
-    const updateTimes = () => {
-      if (release?.created_at && !isReleaseTimeUnknown) {
-        const dateToUse = release.published_at || release.created_at;
-        setTimeAgo(
-          formatDistanceToNowStrict(new Date(dateToUse), {
-            addSuffix: true,
-            locale: locale === "de" ? de : undefined,
-          }),
-        );
-      } else {
-        setTimeAgo("");
-      }
+    if (release?.created_at && !isReleaseTimeUnknown) {
+      const dateToUse = release.published_at || release.created_at;
+      setTimeAgo(
+        formatDistanceStrict(new Date(dateToUse), referenceTime, {
+          addSuffix: true,
+          locale: locale === "de" ? de : undefined,
+        }),
+      );
+    } else {
+      setTimeAgo("");
+    }
 
-      if (release?.fetched_at) {
-        setCheckedAgo(
-          formatDistanceToNowStrict(new Date(release.fetched_at), {
-            addSuffix: true,
-            locale: locale === "de" ? de : undefined,
-          }),
-        );
-      } else {
-        setCheckedAgo("");
-      }
-    };
-
-    updateTimes();
-    intervalId = setInterval(updateTimes, 60000);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [release, locale, isReleaseTimeUnknown]);
+    if (release?.fetched_at) {
+      setCheckedAgo(
+        formatDistanceStrict(new Date(release.fetched_at), referenceTime, {
+          addSuffix: true,
+          locale: locale === "de" ? de : undefined,
+        }),
+      );
+    } else {
+      setCheckedAgo("");
+    }
+  }, [release, locale, isReleaseTimeUnknown, currentTime]);
 
   return { checkedAgo, isReleaseTimeUnknown, timeAgo };
 }
