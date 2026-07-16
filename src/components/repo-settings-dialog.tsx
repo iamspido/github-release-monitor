@@ -76,6 +76,9 @@ import {
 import {
   buildCronExpression,
   type CronPreset,
+  cronPresetOptions,
+  cronWeekdayOptions,
+  defaultCronExpression,
   inferCronParts,
   MAX_INTERVAL_MINUTES,
   MINUTES_IN_DAY,
@@ -1210,18 +1213,11 @@ export function RepoSettingsDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="daily">
-                        {t("cron_preset_daily")}
-                      </SelectItem>
-                      <SelectItem value="weekdays">
-                        {t("cron_preset_weekdays")}
-                      </SelectItem>
-                      <SelectItem value="weekly">
-                        {t("cron_preset_weekly")}
-                      </SelectItem>
-                      <SelectItem value="custom">
-                        {t("cron_preset_custom")}
-                      </SelectItem>
+                      {cronPresetOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {t(option.labelKey)}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1263,27 +1259,14 @@ export function RepoSettingsDialog({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="1">
-                              {t("cron_weekday_monday")}
-                            </SelectItem>
-                            <SelectItem value="2">
-                              {t("cron_weekday_tuesday")}
-                            </SelectItem>
-                            <SelectItem value="3">
-                              {t("cron_weekday_wednesday")}
-                            </SelectItem>
-                            <SelectItem value="4">
-                              {t("cron_weekday_thursday")}
-                            </SelectItem>
-                            <SelectItem value="5">
-                              {t("cron_weekday_friday")}
-                            </SelectItem>
-                            <SelectItem value="6">
-                              {t("cron_weekday_saturday")}
-                            </SelectItem>
-                            <SelectItem value="0">
-                              {t("cron_weekday_sunday")}
-                            </SelectItem>
+                            {cronWeekdayOptions.map((weekday) => (
+                              <SelectItem
+                                key={weekday.value}
+                                value={weekday.value}
+                              >
+                                {t(weekday.labelKey)}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1300,7 +1283,7 @@ export function RepoSettingsDialog({
                       id={cronExpressionId}
                       value={cronExpression}
                       onChange={(e) => setCronExpression(e.target.value)}
-                      placeholder="0 8 * * *"
+                      placeholder={defaultCronExpression}
                       disabled={!isOnline}
                       className={cn(
                         !!cronError &&

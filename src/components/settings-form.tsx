@@ -79,6 +79,8 @@ import {
 import {
   buildCronExpression,
   type CronPreset,
+  cronPresetOptions,
+  cronWeekdayOptions,
   defaultCronExpression,
   inferCronParts,
   inferCronPresetValue,
@@ -87,7 +89,6 @@ import {
   MINUTES_IN_DAY,
   MINUTES_IN_HOUR,
   minutesToDhms,
-  weekdays,
 } from "@/lib/settings/schedule-fields";
 import { cn } from "@/lib/utils";
 import type {
@@ -1557,18 +1558,11 @@ export function SettingsForm({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="daily">
-                        {t("cron_preset_daily")}
-                      </SelectItem>
-                      <SelectItem value="weekdays">
-                        {t("cron_preset_weekdays")}
-                      </SelectItem>
-                      <SelectItem value="weekly">
-                        {t("cron_preset_weekly")}
-                      </SelectItem>
-                      <SelectItem value="custom">
-                        {t("cron_preset_custom")}
-                      </SelectItem>
+                      {cronPresetOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {t(option.labelKey)}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1610,7 +1604,7 @@ export function SettingsForm({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {weekdays.map((weekday) => (
+                            {cronWeekdayOptions.map((weekday) => (
                               <SelectItem
                                 key={weekday.value}
                                 value={weekday.value}

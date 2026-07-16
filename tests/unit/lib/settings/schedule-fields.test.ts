@@ -1,10 +1,30 @@
 import {
   buildCronExpression,
+  cronPresetOptions,
+  cronWeekdayOptions,
   inferCronParts,
   isValidFiveFieldCron,
 } from "@/lib/settings/schedule-fields";
 
 describe("settings/schedule-fields", () => {
+  it("provides shared preset and weekday metadata in display order", () => {
+    expect(cronPresetOptions.map((option) => option.value)).toEqual([
+      "daily",
+      "weekdays",
+      "weekly",
+      "custom",
+    ]);
+    expect(cronWeekdayOptions.map((option) => option.value)).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "0",
+    ]);
+  });
+
   it("keeps the time from custom cron expressions when switching presets", () => {
     const parts = inferCronParts("30 9 */2 * *");
 

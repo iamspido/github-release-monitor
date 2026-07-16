@@ -7,7 +7,17 @@ export const defaultCronExpression = "0 8 * * *";
 
 export type CronPreset = "daily" | "weekdays" | "weekly" | "custom";
 
-export const weekdays = [
+export const cronPresetOptions = [
+  { value: "daily", labelKey: "cron_preset_daily" },
+  { value: "weekdays", labelKey: "cron_preset_weekdays" },
+  { value: "weekly", labelKey: "cron_preset_weekly" },
+  { value: "custom", labelKey: "cron_preset_custom" },
+] as const satisfies ReadonlyArray<{
+  value: CronPreset;
+  labelKey: string;
+}>;
+
+export const cronWeekdayOptions = [
   { value: "1", labelKey: "cron_weekday_monday" },
   { value: "2", labelKey: "cron_weekday_tuesday" },
   { value: "3", labelKey: "cron_weekday_wednesday" },
@@ -16,6 +26,9 @@ export const weekdays = [
   { value: "6", labelKey: "cron_weekday_saturday" },
   { value: "0", labelKey: "cron_weekday_sunday" },
 ] as const;
+
+// Keep the existing export for callers outside the application source.
+export const weekdays = cronWeekdayOptions;
 
 export function minutesToDhms(totalMinutes: number) {
   const d = Math.floor(totalMinutes / MINUTES_IN_DAY);
