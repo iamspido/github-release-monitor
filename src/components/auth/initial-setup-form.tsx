@@ -18,13 +18,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { authClient } from "@/lib/auth/client";
 import {
   type AuthSocialProvider,
   isValidSocialUsername,
   submitSetup,
-  submitSetupSocialContext,
 } from "@/lib/auth/client-flow-utils";
+import { startSetupSocialFlow } from "@/lib/auth/client-social-flow";
 
 interface InitialSetupFormProps {
   enabledSocialProviders: AuthSocialProvider[];
@@ -130,32 +129,19 @@ export function InitialSetupForm({
     setErrorKey(null);
     setSocialPendingProvider(provider);
     try {
-      const contextResult = await submitSetupSocialContext({
+      const result = await startSetupSocialFlow({
         token: token || "",
         provider,
         username: submittedUsername,
         name: name || "",
+        callbackURL: safeNext,
       });
-
-      if (contextResult === "unavailable") {
+      if (result.status === "unavailable") {
         onUnavailable("error_setup_unavailable");
         return;
       }
-      if (contextResult === "invalid_token") {
-        setErrorKey("error_invalid_setup_token");
-        return;
-      }
-      if (contextResult !== "success") {
-        setErrorKey(contextResult.errorKey);
-        return;
-      }
-
-      const result = await authClient.signIn.social({
-        provider,
-        ...(safeNext ? { callbackURL: safeNext } : {}),
-      });
-      if (result?.error) {
-        setErrorKey("error_social_login_failed");
+      if (result.status === "error") {
+        setErrorKey(result.errorKey);
       }
     } catch {
       setErrorKey("error_setup_failed");

@@ -1,4 +1,7 @@
+import { readApiErrorCode } from "@/lib/auth/client-api";
 import { isUsernamePolicyValid } from "@/lib/username-policy";
+
+export { normalizeApiErrorCode, readApiErrorCode } from "@/lib/auth/client-api";
 
 export type AuthSocialProvider = "github" | "google";
 
@@ -94,28 +97,6 @@ export function normalizeLocalizedRedirectPath(
       ? pathWithoutLocale
       : `/${pathWithoutLocale}`) || "/"
   );
-}
-
-export function normalizeApiErrorCode(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().toLowerCase();
-  return normalized || null;
-}
-
-export async function readApiErrorCode(
-  response: Response,
-): Promise<string | null> {
-  try {
-    const data = (await response.clone().json()) as {
-      error?: unknown;
-      code?: unknown;
-    };
-    return (
-      normalizeApiErrorCode(data.error) || normalizeApiErrorCode(data.code)
-    );
-  } catch {
-    return null;
-  }
 }
 
 export function mapSetupApiErrorToMessageKey(errorCode: string | null) {

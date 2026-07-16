@@ -22,15 +22,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { authClient } from "@/lib/auth/client";
 import {
   type AuthSocialProvider,
   isValidSocialUsername,
   mapOauthErrorToMessageKey,
-  mapRegisterSocialPrecheckErrorToMessageKey,
-  normalizeApiErrorCode,
-  readApiErrorCode,
 } from "@/lib/auth/client-flow-utils";
+import { startRegistrationSocialFlow } from "@/lib/auth/client-social-flow";
 
 type SocialProvider = AuthSocialProvider;
 
@@ -110,51 +107,13 @@ export function RegisterForm({
       const email = String(formData.get("email") || "")
         .trim()
         .toLowerCase();
-      if (!isValidSocialUsername(username)) {
-        setClientErrorKey("error_setup_invalid_username");
-        return;
-      }
-
-      const precheckResponse = await fetch(
-        "/api/auth/register/social-precheck",
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            provider,
-            username,
-            email,
-          }),
-        },
-      );
-
-      if (!precheckResponse.ok) {
-        const errorCode = await readApiErrorCode(precheckResponse);
-        setClientErrorKey(
-          mapRegisterSocialPrecheckErrorToMessageKey(errorCode),
-        );
-        return;
-      }
-
-      const precheckData = (await precheckResponse.json()) as {
-        canProceed?: unknown;
-        error?: unknown;
-      };
-      if (precheckData.canProceed !== true) {
-        const errorCode = normalizeApiErrorCode(precheckData.error);
-        setClientErrorKey(
-          mapRegisterSocialPrecheckErrorToMessageKey(errorCode),
-        );
-        return;
-      }
-
-      const result = await authClient.signIn.social({
+      const result = await startRegistrationSocialFlow({
         provider,
+        username,
+        email,
       });
-      if (result?.error) {
-        setClientErrorKey("error_social_login_failed");
+      if (result.status === "error") {
+        setClientErrorKey(result.errorKey);
       }
     } catch {
       setClientErrorKey("error_social_login_failed");

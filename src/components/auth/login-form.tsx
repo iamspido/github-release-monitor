@@ -28,9 +28,9 @@ import {
   isValidSocialUsername,
   mapOauthErrorToMessageKey,
   normalizeOptionalSafeRelativePath,
-  precheckSocialLogin,
   submitPasswordLogin,
 } from "@/lib/auth/client-flow-utils";
+import { startLoginSocialFlow } from "@/lib/auth/client-social-flow";
 
 type SocialProvider = AuthSocialProvider;
 
@@ -194,40 +194,17 @@ export function LoginForm({
     setSocialPendingProvider(provider);
 
     try {
-      const normalizedIdentifier = socialIdentifier.trim();
-      if (!normalizedIdentifier) {
-        setClientErrorKey("error_social_identifier_required");
-        return;
-      }
-      if (!isValidSocialUsername(normalizedIdentifier)) {
-        setClientErrorKey("error_social_identifier_invalid");
-        return;
-      }
-
-      const precheck = await precheckSocialLogin({
-        identifier: normalizedIdentifier,
+      const result = await startLoginSocialFlow({
+        identifier: socialIdentifier,
         provider,
+        callbackURL: safeNext,
       });
-
-      if (precheck === "invalid_input") {
-        setClientErrorKey("error_social_identifier_required");
-        return;
-      }
-      if (precheck === "failed") {
-        setClientErrorKey("error_social_login_failed");
-        return;
-      }
-      if (precheck !== "allowed") {
+      if (result.status === "unavailable") {
         setClientErrorKey("error_social_login_unavailable");
         return;
       }
-
-      const result = await authClient.signIn.social({
-        provider,
-        ...(safeNext ? { callbackURL: safeNext } : {}),
-      });
-      if (result?.error) {
-        setClientErrorKey("error_social_login_failed");
+      if (result.status === "error") {
+        setClientErrorKey(result.errorKey);
       }
     } catch {
       setClientErrorKey("error_social_login_failed");
