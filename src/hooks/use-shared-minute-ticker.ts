@@ -13,6 +13,11 @@ function emitTick() {
 }
 
 function subscribe(listener: () => void) {
+  if (listeners.size === 0) {
+    // The interval is stopped while unused, so refresh a potentially stale
+    // snapshot before the first returning subscriber reads it.
+    currentTime = Date.now();
+  }
   listeners.add(listener);
 
   if (intervalId === undefined) {
