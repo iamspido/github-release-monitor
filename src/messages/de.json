@@ -148,6 +148,7 @@
     "social_accounts_loading": "Verknüpfte Konten werden geprüft...",
     "social_accounts_link_error": "Die Verknüpfung des Social-Accounts konnte nicht gestartet werden. Bitte erneut versuchen.",
     "social_accounts_unlink_error": "Die Verknüpfung des Social-Accounts konnte nicht aufgehoben werden. Bitte erneut versuchen.",
+    "social_accounts_unlink_session_not_fresh": "Bitte melden Sie sich aus Sicherheitsgründen ab und erneut an, bevor Sie die Verknüpfung aufheben.",
     "social_accounts_status_error": "Verknüpfte Social-Accounts konnten nicht geladen werden.",
     "passkeys_title": "Passkeys",
     "passkeys_description": "Verwalten Sie hardwaregestützte Passkeys für passwortloses Anmelden.",

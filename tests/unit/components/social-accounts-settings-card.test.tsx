@@ -20,6 +20,7 @@ vi.mock("next-intl", () => ({
       social_accounts_loading: "Loading linked accounts...",
       social_accounts_link_error: "LINK_ERROR",
       social_accounts_unlink_error: "UNLINK_ERROR",
+      social_accounts_unlink_session_not_fresh: "SESSION_NOT_FRESH",
       social_accounts_status_error: "STATUS_ERROR",
       social_accounts_unlink_button: "Unlink account",
       social_accounts_connect_button: `Link ${values?.provider ?? ""}`.trim(),
@@ -185,6 +186,27 @@ describe("SocialAccountsSettingsCard", () => {
     });
 
     expect(container.textContent).toContain("UNLINK_ERROR");
+  });
+
+  it("shows the server-provided error when unlinking needs a fresh session", async () => {
+    listAccountsMock.mockResolvedValueOnce({
+      data: [{ providerId: "google" }],
+    });
+    unlinkSocialAccountActionMock.mockResolvedValueOnce({
+      ok: false,
+      errorKey: "social_accounts_unlink_session_not_fresh",
+    });
+    await renderCard(["google"]);
+    const button = Array.from(container.querySelectorAll("button")).find((el) =>
+      el.textContent?.includes("Unlink account"),
+    ) as HTMLButtonElement | undefined;
+
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("SESSION_NOT_FRESH");
   });
 
   it("shows error message when linkSocial returns error", async () => {

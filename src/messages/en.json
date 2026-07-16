@@ -148,6 +148,7 @@
     "social_accounts_loading": "Checking linked accounts...",
     "social_accounts_link_error": "Could not start social account linking. Please try again.",
     "social_accounts_unlink_error": "Could not unlink social account. Please try again.",
+    "social_accounts_unlink_session_not_fresh": "For security, please sign out and sign in again before unlinking the account.",
     "social_accounts_status_error": "Could not load linked social accounts.",
     "passkeys_title": "Passkeys",
     "passkeys_description": "Manage hardware-backed passkeys for passwordless sign-in.",

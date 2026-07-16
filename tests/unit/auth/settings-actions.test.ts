@@ -33,6 +33,9 @@ type UnlinkAccountInput = { body: { providerId: string } };
 const unlinkAccountMock = vi.fn<
   (input: UnlinkAccountInput) => Promise<{ ok: boolean; status: number }>
 >(async () => ({ ok: true, status: 200 }));
+const authLoggerErrorMock = vi.fn();
+const authLoggerInfoMock = vi.fn();
+const authLoggerWarnMock = vi.fn();
 
 vi.mock("next/cache", () => ({
   revalidatePath: (...args: unknown[]) => revalidatePathMock(...args),
@@ -69,9 +72,9 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/lib/logger", () => ({
   logger: {
     withScope: () => ({
-      error: vi.fn(),
-      warn: vi.fn(),
-      info: vi.fn(),
+      error: authLoggerErrorMock,
+      warn: authLoggerWarnMock,
+      info: authLoggerInfoMock,
       debug: vi.fn(),
       withScope: vi.fn(),
     }),
@@ -400,6 +403,35 @@ describe("auth settings actions", () => {
         body: { providerId: "github" },
         asResponse: true,
       }),
+    );
+  });
+
+  it("logs a rejected unlink and explains when the session is not fresh", async () => {
+    canUnlinkSocialProviderForUserMock.mockReturnValue(true);
+    unlinkAccountMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          code: "SESSION_NOT_FRESH",
+          message: "Session is not fresh",
+        }),
+        {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+    const { unlinkSocialAccountAction } = await import(
+      "@/app/auth/settings-actions"
+    );
+
+    await expect(unlinkSocialAccountAction("github")).resolves.toEqual({
+      ok: false,
+      errorKey: "social_accounts_unlink_session_not_fresh",
+    });
+    expect(authLoggerWarnMock).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "provider='github' for user='user-1' with status=403",
+      ),
     );
   });
 

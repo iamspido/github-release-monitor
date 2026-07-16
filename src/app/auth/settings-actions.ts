@@ -48,7 +48,9 @@ export type UpdateAccountPasswordResult = {
 
 export type UnlinkSocialAccountResult = {
   ok: boolean;
-  errorKey?: "social_accounts_unlink_error";
+  errorKey?:
+    | "social_accounts_unlink_error"
+    | "social_accounts_unlink_session_not_fresh";
 };
 
 async function getAuthenticatedUserId(headerStore: Headers) {
@@ -332,8 +334,30 @@ export async function unlinkSocialAccountAction(
         asResponse: true,
       });
       if (!response.ok) {
+        const errorText = await readErrorCodeFromResponse(response);
+        const errorSummary =
+          errorText.replace(/[\r\n']/g, " ").slice(0, 200) || "unknown";
+        logger
+          .withScope("Auth")
+          .warn(
+            `Failed to unlink social account provider='${provider}' for user='${userId}' with status=${response.status} error='${errorSummary}'.`,
+          );
+        if (
+          errorText.includes("session_not_fresh") ||
+          errorText.includes("session is not fresh")
+        ) {
+          return {
+            ok: false,
+            errorKey: "social_accounts_unlink_session_not_fresh",
+          };
+        }
         return { ok: false, errorKey: "social_accounts_unlink_error" };
       }
+      logger
+        .withScope("Auth")
+        .info(
+          `Unlinked social account provider='${provider}' for user='${userId}'.`,
+        );
       return { ok: true };
     } catch (error) {
       logger

@@ -101,7 +101,7 @@ export function SocialAccountsSettingsCard({
     try {
       const result = await unlinkSocialAccountAction(provider);
       if (!result.ok) {
-        setErrorKey("social_accounts_unlink_error");
+        setErrorKey(result.errorKey ?? "social_accounts_unlink_error");
         return;
       }
       setLinkedAccounts((previous) => {
