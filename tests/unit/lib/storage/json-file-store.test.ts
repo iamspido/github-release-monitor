@@ -1,4 +1,11 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { JsonFileStore } from "@/lib/storage/json-file-store";
@@ -69,5 +76,16 @@ describe("storage/JsonFileStore", () => {
     ).rejects.toThrow("write failed");
 
     await expect(store.read()).resolves.toEqual({ value: "existing" });
+  });
+
+  it("removes the temporary file when the atomic rename fails", async () => {
+    await mkdir(filePath);
+    const store = createStore();
+
+    await expect(store.write({ value: "next" })).rejects.toThrow(
+      "write failed",
+    );
+
+    await expect(readdir(tempDir)).resolves.toEqual(["store.json"]);
   });
 });

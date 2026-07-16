@@ -113,8 +113,20 @@ export class JsonFileStore<T> {
       await fs.writeFile(this.options.filePath, fileContent, "utf8");
       return;
     }
-    await fs.writeFile(tempPath, fileContent, "utf8");
-    await fs.rename(tempPath, this.options.filePath);
+    try {
+      await fs.writeFile(tempPath, fileContent, "utf8");
+      await fs.rename(tempPath, this.options.filePath);
+    } catch (error) {
+      try {
+        await fs.rm(tempPath, { force: true });
+      } catch (cleanupError) {
+        this.log.warn(
+          `Failed to remove temporary data file at ${tempPath}:`,
+          cleanupError,
+        );
+      }
+      throw error;
+    }
   }
 
   private get fileName(): string {
