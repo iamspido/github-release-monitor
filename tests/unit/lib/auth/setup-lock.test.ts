@@ -5,6 +5,7 @@ const fsMock = vi.hoisted(() => ({
   mkdir: vi.fn(),
   readFile: vi.fn(),
   rmdir: vi.fn(),
+  stat: vi.fn(),
   unlink: vi.fn(),
   writeFile: vi.fn(),
 }));
@@ -31,6 +32,9 @@ describe("auth/setup-lock", () => {
       }),
     );
     fsMock.rmdir.mockResolvedValue(undefined);
+    fsMock.stat.mockResolvedValue({
+      mtimeMs: new Date("2024-01-01T12:00:00.000Z").getTime(),
+    });
     fsMock.unlink.mockResolvedValue(undefined);
     fsMock.writeFile.mockResolvedValue(undefined);
   });
@@ -143,6 +147,26 @@ describe("auth/setup-lock", () => {
       expect.stringContaining("auth-setup-bootstrap.lock"),
     );
     expect(fsMock.writeFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("recovers a gate left behind by a terminated process", async () => {
+    fsMock.mkdir
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(nodeError("EEXIST"))
+      .mockResolvedValueOnce(undefined);
+    fsMock.stat.mockResolvedValueOnce({
+      mtimeMs: new Date("2024-01-01T11:00:00.000Z").getTime(),
+    });
+    const { acquireAuthSetupBootstrapLock } = await import(
+      "@/lib/auth/setup-lock"
+    );
+
+    const lock = await acquireAuthSetupBootstrapLock({ source: "recovery" });
+
+    expect(lock.status).toBe("acquired");
+    expect(fsMock.rmdir).toHaveBeenCalledWith(
+      expect.stringContaining("auth-setup-bootstrap.gate"),
+    );
   });
 
   it("does not release a bootstrap lock owned by another process", async () => {

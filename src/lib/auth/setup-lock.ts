@@ -13,6 +13,7 @@ const authSetupBootstrapGatePath = path.join(
   "auth-setup-bootstrap.gate",
 );
 const authSetupBootstrapLockStaleMs = 10 * 60 * 1_000;
+const authSetupBootstrapGateStaleMs = authSetupBootstrapLockStaleMs;
 const authSetupBootstrapGateRetryMs = 10;
 const authSetupBootstrapGateMaxWaitMs = 5_000;
 
@@ -104,15 +105,41 @@ async function releaseAuthSetupBootstrapGate() {
 }
 
 async function tryAcquireAuthSetupBootstrapGate() {
-  try {
-    await fs.mkdir(authSetupBootstrapGatePath);
-    return true;
-  } catch (error) {
-    if (isNodeErrorWithCode(error) && error.code === "EEXIST") {
-      return false;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await fs.mkdir(authSetupBootstrapGatePath);
+      return true;
+    } catch (error) {
+      if (!isNodeErrorWithCode(error) || error.code !== "EEXIST") {
+        throw error;
+      }
     }
-    throw error;
+
+    if (attempt > 0) return false;
+
+    try {
+      const stats = await fs.stat(authSetupBootstrapGatePath);
+      if (Date.now() - stats.mtimeMs <= authSetupBootstrapGateStaleMs) {
+        return false;
+      }
+    } catch (error) {
+      if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+
+    try {
+      await fs.rmdir(authSetupBootstrapGatePath);
+    } catch (error) {
+      if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
   }
+
+  return false;
 }
 
 async function acquireAuthSetupBootstrapGateWithWait() {
