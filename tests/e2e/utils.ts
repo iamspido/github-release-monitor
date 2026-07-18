@@ -131,6 +131,33 @@ export async function ensureRepositoryFormExpanded(page: Page) {
   ).toBeVisible();
 }
 
+export async function removeRepositoriesIfPresent(
+  page: Page,
+  repositoryIds: readonly string[],
+) {
+  await page.goto("/en");
+
+  for (const repositoryId of repositoryIds) {
+    const repositoryLink = page.locator("a", { hasText: repositoryId }).first();
+    if ((await repositoryLink.count()) === 0) continue;
+
+    const repositoryCard = repositoryLink.locator(
+      "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' rounded-lg ')][1]",
+    );
+    await repositoryCard
+      .getByRole("button", { name: /^(Remove|Entfernen)$/ })
+      .click();
+
+    const confirmationDialog = page.getByRole("alertdialog");
+    await expect(confirmationDialog).toBeVisible();
+    await confirmationDialog
+      .getByRole("button", { name: /^(Confirm|Bestätigen)$/ })
+      .click();
+    await expect(confirmationDialog).toHaveCount(0);
+    await expect(repositoryLink).toHaveCount(0);
+  }
+}
+
 export async function assertNotVisibleFor(locator: Locator, waitMs = 1600) {
   await locator.page().waitForTimeout(waitMs);
   await expect(locator).toHaveCount(0);

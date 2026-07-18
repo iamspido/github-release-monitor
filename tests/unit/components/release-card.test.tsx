@@ -34,6 +34,7 @@ const translationMap: Record<string, Record<string, string>> = {
     error_title: "Repository error",
     custom_settings_badge: "[Custom settings]",
     custom_settings_tooltip: "Overrides applied",
+    repository_tags_more_aria: "{count} more repository tags: {tags}",
     security_release_badge: "Security",
     settings_button_aria: "Open repository settings",
     toast_error_title: "Something went wrong",
@@ -71,7 +72,9 @@ function interpolate(template: string, values?: Record<string, unknown>) {
   if (!values) return template;
   return template.replace(/\{(\w+)\}/g, (_, token) => {
     const replacement = values[token];
-    return typeof replacement === "string" ? replacement : "";
+    return typeof replacement === "string" || typeof replacement === "number"
+      ? String(replacement)
+      : "";
   });
 }
 
@@ -321,6 +324,35 @@ function getButtonBySpanText(text: string) {
 }
 
 describe("ReleaseCard component", () => {
+  it("renders repository tags on a release card", () => {
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={makeRelease()}
+        repositoryTags={["infra", "media"]}
+        settings={baseSettings}
+      />,
+    );
+
+    expect(container?.textContent).toContain("infra");
+    expect(container?.textContent).toContain("media");
+  });
+
+  it("exposes hidden repository tags through a labelled keyboard trigger", () => {
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={makeRelease()}
+        repositoryTags={["one", "two", "three", "four", "five"]}
+        settings={baseSettings}
+      />,
+    );
+
+    const moreTagsButton = container?.querySelector<HTMLButtonElement>(
+      'button[aria-label="2 more repository tags: four, five"]',
+    );
+    expect(moreTagsButton).not.toBeNull();
+    expect(moreTagsButton?.type).toBe("button");
+  });
+
   it("shows remove button even when release data is missing", async () => {
     const enrichedRelease: EnrichedRelease = {
       repoId: "owner/repo",
@@ -395,6 +427,37 @@ describe("ReleaseCard component", () => {
     await act(async () => vi.advanceTimersByTime(0));
 
     expect(document.activeElement).toBe(settingsButton);
+  });
+
+  it("clears the reported settings state when an open card unmounts", async () => {
+    const onSettingsOpenChange = vi.fn();
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={makeRelease()}
+        settings={baseSettings}
+        onSettingsOpenChange={onSettingsOpenChange}
+      />,
+    );
+
+    const settingsButton = container?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Open repository settings"]',
+    );
+    await act(async () => {
+      settingsButton?.click();
+    });
+    expect(onSettingsOpenChange).toHaveBeenCalledTimes(1);
+    expect(onSettingsOpenChange).toHaveBeenLastCalledWith(true);
+
+    await act(async () => {
+      root?.unmount();
+    });
+    root = null;
+    container?.remove();
+    container = null;
+
+    expect(onSettingsOpenChange).toHaveBeenCalledTimes(2);
+    expect(onSettingsOpenChange).toHaveBeenLastCalledWith(false);
   });
 
   it("disables key actions when offline", async () => {

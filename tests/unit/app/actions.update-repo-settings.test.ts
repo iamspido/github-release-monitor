@@ -92,6 +92,26 @@ describe("updateRepositorySettingsAction", () => {
     expect(mem.repos[0].etag).toBe('W/"keep"');
   });
 
+  it("normalizes repository tags without clearing the ETag", async () => {
+    mem.repos = [
+      {
+        id: "o/r",
+        url: "https://github.com/o/r",
+        etag: 'W/"keep"',
+        tags: ["old"],
+      },
+    ];
+
+    const { updateRepositorySettingsAction } = await import("@/app/actions");
+    const result = await updateRepositorySettingsAction("o/r", {
+      tags: [" Infra ", "INFRA", "Media"],
+    });
+
+    expect(result.success).toBe(true);
+    expect(mem.repos[0].tags).toEqual(["infra", "media"]);
+    expect(mem.repos[0].etag).toBe('W/"keep"');
+  });
+
   it("rejects invalid release regexes before persisting repository settings", async () => {
     mem.repos = [
       {

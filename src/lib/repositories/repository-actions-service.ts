@@ -7,6 +7,7 @@ import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
 import { toPublicRepository } from "@/lib/repositories/public-repository";
 import { applyReleaseFetchResultToRepository } from "@/lib/repositories/release-cache-update";
 import { parseImportedRepository } from "@/lib/repositories/repository-import";
+import { normalizeRepositoryTags } from "@/lib/repositories/tags";
 import { isValidRepoId } from "@/lib/repositories/validation";
 import { trackBackgroundTask } from "@/lib/runtime/background-tasks";
 import {
@@ -75,6 +76,13 @@ export async function addRepositoriesAction(
       };
     }
 
+    const normalizedTags = normalizeRepositoryTags(formData.getAll("tags"));
+    if (!normalizedTags.success) {
+      return { success: false, error: t("tags_error_invalid") };
+    }
+    const selectedTags =
+      normalizedTags.tags.length > 0 ? normalizedTags.tags : undefined;
+
     const urlList = urls.split("\n").filter((u) => u.trim() !== "");
     const newRepos: Repository[] = [];
     let failedCount = 0;
@@ -85,6 +93,7 @@ export async function addRepositoriesAction(
         newRepos.push({
           id: parsed.id,
           url: parsed.canonicalRepoUrl,
+          tags: selectedTags,
         });
       } else {
         failedCount++;
@@ -154,6 +163,7 @@ export async function addRepositoriesAction(
 
 export async function importRepositoriesAction(
   importedData: Repository[],
+  selectedTags: readonly string[] = [],
 ): Promise<{
   success: boolean;
   message: string;
@@ -168,6 +178,11 @@ export async function importRepositoriesAction(
     const settings = await getSettings();
 
     try {
+      const normalizedSelectedTags = normalizeRepositoryTags(selectedTags);
+      if (!normalizedSelectedTags.success) {
+        return { success: false, message: t("tags_error_invalid") };
+      }
+
       const currentRepos = await getRepositories();
       const currentRepoIds = new Set(currentRepos.map((repo) => repo.id));
       const currentReposMap = new Map(currentRepos.map((r) => [r.id, r]));
@@ -181,7 +196,21 @@ export async function importRepositoriesAction(
       let updatedCount = 0;
       const reposToFetch: Repository[] = [];
 
-      for (const importedRepo of validImportedRepos) {
+      for (const parsedImportedRepo of validImportedRepos) {
+        let importedRepo = parsedImportedRepo;
+        if (normalizedSelectedTags.tags.length > 0) {
+          const currentTags = currentReposMap.get(importedRepo.id)?.tags ?? [];
+          const mergedTags = normalizeRepositoryTags([
+            ...currentTags,
+            ...(importedRepo.tags ?? []),
+            ...normalizedSelectedTags.tags,
+          ]);
+          if (!mergedTags.success) {
+            return { success: false, message: t("tags_error_invalid") };
+          }
+          importedRepo = { ...importedRepo, tags: mergedTags.tags };
+        }
+
         if (currentRepoIds.has(importedRepo.id)) {
           updatedCount++;
         } else {
@@ -479,6 +508,7 @@ export async function updateRepositorySettingsAction(
     | "backgroundCheckCron"
     | "includeRegex"
     | "excludeRegex"
+    | "tags"
     | "appriseTags"
     | "appriseFormat"
   >,
@@ -507,6 +537,16 @@ export async function updateRepositorySettingsAction(
       }
 
       const existing = currentRepos[repoIndex];
+
+      let newTags = existing.tags;
+      if (settings.tags !== undefined) {
+        const normalizedTags = normalizeRepositoryTags(settings.tags);
+        if (!normalizedTags.success) {
+          return { success: false, error: t("tags_error_invalid") };
+        }
+        newTags =
+          normalizedTags.tags.length > 0 ? normalizedTags.tags : undefined;
+      }
 
       const newInclude = (settings.includeRegex ?? "").trim() || undefined;
       const newExclude = (settings.excludeRegex ?? "").trim() || undefined;
@@ -540,11 +580,15 @@ export async function updateRepositorySettingsAction(
       const backgroundCheckCronChanged =
         (existing.backgroundCheckCron ?? undefined) !== newBackgroundCheckCron;
 
-      const changes = buildRepositorySettingsChangeLog(existing, settings, {
-        refreshInterval: newRefreshInterval,
-        cacheInterval: newCacheInterval,
-        backgroundCheckCron: newBackgroundCheckCron,
-      });
+      const changes = buildRepositorySettingsChangeLog(
+        existing,
+        { ...settings, tags: newTags },
+        {
+          refreshInterval: newRefreshInterval,
+          cacheInterval: newCacheInterval,
+          backgroundCheckCron: newBackgroundCheckCron,
+        },
+      );
 
       const etagInvalidated = shouldInvalidateReleaseCache(
         releaseCacheInvalidation,
@@ -563,6 +607,7 @@ export async function updateRepositorySettingsAction(
           : existing.lastBackgroundCheckAt,
         includeRegex: newInclude,
         excludeRegex: newExclude,
+        tags: newTags,
         appriseTags: settings.appriseTags,
         appriseFormat: settings.appriseFormat,
         // Invalidate ETag when filters/pagination that affect visible latest release change

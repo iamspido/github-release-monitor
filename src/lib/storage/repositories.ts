@@ -1,5 +1,6 @@
 import path from "node:path";
 import { logger } from "@/lib/logger";
+import { normalizeRepositoryTags } from "@/lib/repositories/tags";
 import { JsonFileStore } from "@/lib/storage/json-file-store";
 import {
   assertJsonObject,
@@ -168,6 +169,13 @@ function parseRepository(value: unknown, index: number): Repository {
   if (repository.latestRelease !== undefined) {
     parseCachedRelease(repository.latestRelease, `${path}.latestRelease`);
   }
+  if (repository.tags !== undefined) {
+    const normalizedTags = normalizeRepositoryTags(repository.tags);
+    if (!normalizedTags.success) {
+      throw new Error(`${path}.tags contains invalid repository tags.`);
+    }
+    repository.tags = normalizedTags.tags;
+  }
   assertOptionalField(
     repository,
     "releaseChannels",
@@ -274,6 +282,7 @@ function mergeRepositoriesPreferFirst(
     isNew: preferDefined(base.isNew, incoming.isNew),
     etag: preferDefined(base.etag, incoming.etag),
     latestRelease: preferDefined(base.latestRelease, incoming.latestRelease),
+    tags: preferDefined(base.tags, incoming.tags),
     releaseChannels: preferDefined(
       base.releaseChannels,
       incoming.releaseChannels,

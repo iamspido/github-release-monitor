@@ -35,6 +35,7 @@ describe("storage/repositories", () => {
         id: "owner2/repo2",
         url: "https://github.com/owner2/repo2",
         isNew: true,
+        tags: [" Infra ", "MEDIA", "infra"],
       },
     ];
     await saveRepositories(list);
@@ -46,6 +47,7 @@ describe("storage/repositories", () => {
         id: "github:owner2/repo2",
         url: "https://github.com/owner2/repo2",
         isNew: true,
+        tags: ["infra", "media"],
       },
     ]);
   });
@@ -100,6 +102,27 @@ describe("storage/repositories", () => {
 
     await expect(getRepositories()).rejects.toThrow(
       "releaseChannels must be an array of release channels",
+    );
+  });
+
+  it("rejects invalid persisted repository tags", async () => {
+    const dataDir = path.join(tmpDir, "data");
+    await fs.mkdir(dataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(dataDir, "repositories.json"),
+      JSON.stringify([
+        {
+          id: "github:owner/repo",
+          url: "https://github.com/owner/repo",
+          tags: ["bad,tag"],
+        },
+      ]),
+      "utf8",
+    );
+    const { getRepositories } = await import("@/lib/storage/repositories");
+
+    await expect(getRepositories()).rejects.toThrow(
+      "tags contains invalid repository tags",
     );
   });
 

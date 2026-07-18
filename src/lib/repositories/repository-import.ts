@@ -1,4 +1,5 @@
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
+import { normalizeRepositoryTags } from "@/lib/repositories/tags";
 import type {
   AppriseFormat,
   CachedRelease,
@@ -118,6 +119,11 @@ export function parseImportedRepository(value: unknown): Repository | null {
   if (etag !== undefined) repository.etag = etag;
   const latestRelease = parseCachedRelease(value.latestRelease);
   if (latestRelease) repository.latestRelease = latestRelease;
+
+  if (value.tags !== undefined) {
+    const importedTags = normalizeRepositoryTags(value.tags);
+    if (importedTags.success) repository.tags = importedTags.tags;
+  }
 
   const importedReleaseChannels = readEnumArray(
     value.releaseChannels,

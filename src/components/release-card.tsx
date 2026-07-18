@@ -29,7 +29,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
+import { Badge, badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -64,6 +64,10 @@ import { RepoSettingsDialog } from "./repo-settings-dialog";
 interface ReleaseCardProps {
   enrichedRelease: EnrichedRelease;
   settings: AppSettings;
+  availableRepositoryTags?: string[];
+  repositoryTags?: string[];
+  onRepositoryTagsChange?: (tags: string[]) => void;
+  onSettingsOpenChange?: (open: boolean) => void;
   canMutate?: boolean;
   isAppriseConfigured?: boolean;
 }
@@ -84,6 +88,52 @@ function CustomSettingsBadge() {
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  );
+}
+
+function RepositoryTagBadges({ tags }: { tags: readonly string[] }) {
+  const t = useTranslations("ReleaseCard");
+  if (tags.length === 0) return null;
+
+  const visibleTags = tags.slice(0, 3);
+  const remainingTags = tags.slice(3);
+
+  return (
+    <div className="flex flex-wrap gap-1 pt-1">
+      {visibleTags.map((tag) => (
+        <Badge
+          key={tag}
+          variant="outline"
+          className="max-w-36 truncate text-xs"
+        >
+          {tag}
+        </Badge>
+      ))}
+      {remainingTags.length > 0 && (
+        <TooltipProvider delayDuration={100}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  badgeVariants({ variant: "outline" }),
+                  "cursor-help text-xs",
+                )}
+                aria-label={t("repository_tags_more_aria", {
+                  count: remainingTags.length,
+                  tags: remainingTags.join(", "),
+                })}
+              >
+                +{remainingTags.length}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <p>{remainingTags.join(", ")}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+    </div>
   );
 }
 
@@ -191,6 +241,10 @@ function RemoveRepositoryButton({
 export function ReleaseCard({
   enrichedRelease,
   settings,
+  availableRepositoryTags = [],
+  repositoryTags = [],
+  onRepositoryTagsChange,
+  onSettingsOpenChange,
   canMutate = true,
   isAppriseConfigured = false,
 }: ReleaseCardProps) {
@@ -216,7 +270,35 @@ export function ReleaseCard({
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const settingsButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const prevIsSettingsOpenRef = React.useRef(false);
+  const reportedSettingsOpenRef = React.useRef(isSettingsOpen);
+  const settingsOpenRef = React.useRef(isSettingsOpen);
+  const onSettingsOpenChangeRef = React.useRef(onSettingsOpenChange);
   const isTagLink = Boolean(release?.html_url?.includes("/src/tag/"));
+
+  const handleSettingsOpenChange = (open: boolean) => {
+    setIsSettingsOpen(open);
+  };
+
+  React.useEffect(() => {
+    onSettingsOpenChangeRef.current = onSettingsOpenChange;
+  }, [onSettingsOpenChange]);
+
+  React.useEffect(() => {
+    settingsOpenRef.current = isSettingsOpen;
+    if (reportedSettingsOpenRef.current === isSettingsOpen) return;
+
+    reportedSettingsOpenRef.current = isSettingsOpen;
+    onSettingsOpenChangeRef.current?.(isSettingsOpen);
+  }, [isSettingsOpen]);
+
+  React.useEffect(
+    () => () => {
+      if (settingsOpenRef.current) {
+        onSettingsOpenChangeRef.current?.(false);
+      }
+    },
+    [],
+  );
 
   React.useEffect(() => {
     // When the settings dialog transitions from open -> closed, return focus to the trigger button.
@@ -310,9 +392,12 @@ export function ReleaseCard({
         {canMutate && (
           <RepoSettingsDialog
             isOpen={isSettingsOpen}
-            setIsOpen={setIsSettingsOpen}
+            setIsOpen={handleSettingsOpenChange}
             repoId={repoId}
             currentRepoSettings={repoSettings}
+            availableRepositoryTags={availableRepositoryTags}
+            currentRepositoryTags={repositoryTags}
+            onRepositoryTagsChange={onRepositoryTagsChange}
             globalSettings={settings}
             isAppriseConfigured={isAppriseConfigured}
           />
@@ -334,6 +419,7 @@ export function ReleaseCard({
                 <CardDescription className="text-red-400/80">
                   {t("error_title")}
                 </CardDescription>
+                <RepositoryTagBadges tags={repositoryTags} />
               </div>
               <div className="flex items-center gap-2">
                 {repoHasCustomSettings && <CustomSettingsBadge />}
@@ -341,7 +427,7 @@ export function ReleaseCard({
                   <RepoSettingsTrigger
                     buttonRef={settingsButtonRef}
                     className="size-8 shrink-0 text-red-400/80 hover:bg-red-400/10 hover:text-red-400"
-                    onOpen={() => setIsSettingsOpen(true)}
+                    onOpen={() => handleSettingsOpenChange(true)}
                   />
                 )}
               </div>
@@ -377,9 +463,12 @@ export function ReleaseCard({
         {canMutate && (
           <RepoSettingsDialog
             isOpen={isSettingsOpen}
-            setIsOpen={setIsSettingsOpen}
+            setIsOpen={handleSettingsOpenChange}
             repoId={repoId}
             currentRepoSettings={repoSettings}
+            availableRepositoryTags={availableRepositoryTags}
+            currentRepositoryTags={repositoryTags}
+            onRepositoryTagsChange={onRepositoryTagsChange}
             globalSettings={settings}
             isAppriseConfigured={isAppriseConfigured}
           />
@@ -397,13 +486,14 @@ export function ReleaseCard({
                 >
                   {displayRepoId}
                 </a>
+                <RepositoryTagBadges tags={repositoryTags} />
               </div>
               <div className="flex items-center gap-2">
                 {repoHasCustomSettings && <CustomSettingsBadge />}
                 {canMutate && (
                   <RepoSettingsTrigger
                     buttonRef={settingsButtonRef}
-                    onOpen={() => setIsSettingsOpen(true)}
+                    onOpen={() => handleSettingsOpenChange(true)}
                   />
                 )}
               </div>
@@ -447,9 +537,12 @@ export function ReleaseCard({
       {canMutate && (
         <RepoSettingsDialog
           isOpen={isSettingsOpen}
-          setIsOpen={setIsSettingsOpen}
+          setIsOpen={handleSettingsOpenChange}
           repoId={repoId}
           currentRepoSettings={repoSettings}
+          availableRepositoryTags={availableRepositoryTags}
+          currentRepositoryTags={repositoryTags}
+          onRepositoryTagsChange={onRepositoryTagsChange}
           globalSettings={settings}
           isAppriseConfigured={isAppriseConfigured}
         />
@@ -486,6 +579,7 @@ export function ReleaseCard({
               >
                 {displayRepoId}
               </a>
+              <RepositoryTagBadges tags={repositoryTags} />
             </div>
             <div className="flex flex-col items-end gap-1.5 shrink-0">
               <Badge variant="secondary" className="px-3 py-1 text-base">
@@ -505,7 +599,7 @@ export function ReleaseCard({
                 {canMutate && (
                   <RepoSettingsTrigger
                     buttonRef={settingsButtonRef}
-                    onOpen={() => setIsSettingsOpen(true)}
+                    onOpen={() => handleSettingsOpenChange(true)}
                   />
                 )}
               </div>

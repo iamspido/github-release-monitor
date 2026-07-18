@@ -39,6 +39,7 @@ type PendingProviderChoice = {
 export function useRepositoryProviderWorkflow(
   formAction: (payload: FormData) => void,
   hasProcessedResult: { current: boolean },
+  selectedTags: readonly string[],
 ) {
   const [isResolving, startTransition] = React.useTransition();
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -59,9 +60,10 @@ export function useRepositoryProviderWorkflow(
     (lines: string[]) => {
       const formData = new FormData();
       formData.set("urls", lines.join("\n"));
+      for (const tag of selectedTags) formData.append("tags", tag);
       formAction(formData);
     },
-    [formAction],
+    [formAction, selectedTags],
   );
 
   const processResolvedLines = React.useCallback(
@@ -192,9 +194,13 @@ export function useRepositoryProviderWorkflow(
 export function useRepositoryImportWorkflow({
   currentRepositories,
   onJobStarted,
+  onImportSuccess,
+  selectedTags,
 }: {
   currentRepositories: Repository[];
   onJobStarted: (jobId: string) => void;
+  onImportSuccess: () => void;
+  selectedTags: readonly string[];
 }) {
   const t = useTranslations("RepositoryForm");
   const { toast } = useToast();
@@ -305,8 +311,12 @@ export function useRepositoryImportWorkflow({
     if (!repositories) return;
 
     startImportTransition(async () => {
+      let importSucceeded = false;
       try {
-        const result = await importRepositoriesAction(repositories);
+        const result = await importRepositoriesAction(
+          repositories,
+          selectedTags,
+        );
         toast({
           title: result.success
             ? t("toast_import_success_title")
@@ -314,7 +324,11 @@ export function useRepositoryImportWorkflow({
           description: result.message,
           ...(result.success ? {} : { variant: "destructive" as const }),
         });
-        if (result.success && result.jobId) onJobStarted(result.jobId);
+        if (result.success) {
+          importSucceeded = true;
+          onImportSuccess();
+          if (result.jobId) onJobStarted(result.jobId);
+        }
       } catch (error: unknown) {
         if (reloadIfServerActionStale(error)) return;
         toast({
@@ -323,12 +337,14 @@ export function useRepositoryImportWorkflow({
           variant: "destructive",
         });
       } finally {
-        setDialogVisible(false);
-        setRepositories(null);
-        setStats(null);
+        if (importSucceeded) {
+          setDialogVisible(false);
+          setRepositories(null);
+          setStats(null);
+        }
       }
     });
-  }, [onJobStarted, repositories, t, toast]);
+  }, [onImportSuccess, onJobStarted, repositories, selectedTags, t, toast]);
 
   return {
     confirmImport,

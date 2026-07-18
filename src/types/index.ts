@@ -8,6 +8,8 @@ export type Repository = {
   isNew?: boolean;
   etag?: string;
   latestRelease?: CachedRelease;
+  // User-defined labels used to organize and filter monitored repositories.
+  tags?: string[];
   // New: Per-repository settings override
   // Empty arrays/undefined mean "use global setting"
   releaseChannels?: ReleaseChannel[];

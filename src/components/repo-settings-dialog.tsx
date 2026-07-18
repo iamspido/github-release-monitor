@@ -3,18 +3,23 @@
 import {
   AlertCircle,
   CheckCircle,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
   RotateCcw,
   Save,
   WifiOff,
+  X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
+import { createPortal } from "react-dom";
 import {
   refreshSingleRepositoryAction,
   updateRepositorySettingsAction,
 } from "@/app/actions";
 import { CronTimeSelect } from "@/components/cron-time-select";
+import { RepositoryTagPicker } from "@/components/repository-tag-picker";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +31,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -57,6 +63,13 @@ import {
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
+import {
+  MAX_REPOSITORY_TAG_LENGTH,
+  MAX_REPOSITORY_TAGS,
+  moveRepositoryTag,
+  normalizeRepositoryTags,
+  type RepositoryTagsValidationError,
+} from "@/lib/repositories/tags";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import {
   hasRefreshSensitiveRepoSettingChanges,
@@ -99,6 +112,26 @@ import { Input } from "./ui/input";
 type ReleasesPerPageError = RangeValidationError;
 type IntervalValidationError = RangeValidationError;
 type AutomationMode = "global" | "interval" | "cron";
+
+interface RepositoryTagPointerDrag {
+  pointerId: number;
+  fromIndex: number;
+  tag: string;
+  startX: number;
+  startY: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+  hasMoved: boolean;
+}
+
+interface RepositoryTagDragPreview {
+  tag: string;
+  fromIndex: number;
+  left: number;
+  top: number;
+}
 
 function getAutomationMode(
   settings?: Pick<Repository, "refreshInterval" | "backgroundCheckCron">,
@@ -172,6 +205,9 @@ interface RepoSettingsDialogProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
   repoId: string;
+  availableRepositoryTags?: string[];
+  currentRepositoryTags?: string[];
+  onRepositoryTagsChange?: (tags: string[]) => void;
   currentRepoSettings?: Pick<
     Repository,
     | "releaseChannels"
@@ -193,6 +229,9 @@ export function RepoSettingsDialog({
   isOpen,
   setIsOpen,
   repoId,
+  availableRepositoryTags = [],
+  currentRepositoryTags = [],
+  onRepositoryTagsChange,
   currentRepoSettings,
   globalSettings,
   isAppriseConfigured = false,
@@ -207,6 +246,7 @@ export function RepoSettingsDialog({
 
   // Generate unique IDs for form elements
   const stableId = React.useId();
+  const repositoryTagsId = React.useId();
   const prereleaseId = React.useId();
   const draftId = React.useId();
   const includeRegexId = React.useId();
@@ -233,6 +273,36 @@ export function RepoSettingsDialog({
   const [channels, setChannels] = React.useState<ReleaseChannel[]>(
     currentRepoSettings?.releaseChannels ?? [],
   );
+  const [repositoryTags, setRepositoryTags] = React.useState<string[]>(
+    currentRepositoryTags,
+  );
+  const [repositoryTagInput, setRepositoryTagInput] = React.useState("");
+  const [repositoryTagError, setRepositoryTagError] =
+    React.useState<RepositoryTagsValidationError | null>(null);
+  const [draggedRepositoryTagIndex, setDraggedRepositoryTagIndex] =
+    React.useState<number | null>(null);
+  const [repositoryTagDropIndex, setRepositoryTagDropIndex] = React.useState<
+    number | null
+  >(null);
+  const [repositoryTagDragSize, setRepositoryTagDragSize] = React.useState({
+    width: 0,
+    height: 0,
+  });
+  const [repositoryTagDragPreview, setRepositoryTagDragPreview] =
+    React.useState<RepositoryTagDragPreview | null>(null);
+  const [repositoryTagOrderAnnouncement, setRepositoryTagOrderAnnouncement] =
+    React.useState("");
+  const repositoryTagPointerDragRef =
+    React.useRef<RepositoryTagPointerDrag | null>(null);
+  const repositoryTagListRef = React.useRef<HTMLUListElement>(null);
+  const repositoryTagDragPreviewRef = React.useRef<HTMLDivElement>(null);
+  const finishRepositoryTagDrag = React.useCallback(() => {
+    repositoryTagPointerDragRef.current = null;
+    setDraggedRepositoryTagIndex(null);
+    setRepositoryTagDropIndex(null);
+    setRepositoryTagDragSize({ width: 0, height: 0 });
+    setRepositoryTagDragPreview(null);
+  }, []);
   const [preReleaseSubChannels, setPreReleaseSubChannels] = React.useState<
     PreReleaseChannelType[] | undefined
   >(currentRepoSettings?.preReleaseSubChannels);
@@ -301,11 +371,31 @@ export function RepoSettingsDialog({
 
   const savedThisSessionRef = React.useRef(false);
   const filterSettingsChangedRef = React.useRef(false);
+  const pendingRepositoryTagsChangeRef = React.useRef<string[] | null>(null);
   const isOpenRef = React.useRef(isOpen);
 
   React.useEffect(() => {
     isOpenRef.current = isOpen;
   }, [isOpen]);
+
+  const publishRepositoryTagsChange = React.useCallback(
+    (tags: string[]) => {
+      pendingRepositoryTagsChangeRef.current = tags;
+      if (isOpenRef.current) return;
+
+      onRepositoryTagsChange?.(tags);
+      pendingRepositoryTagsChangeRef.current = null;
+    },
+    [onRepositoryTagsChange],
+  );
+
+  const flushRepositoryTagsChange = React.useCallback(() => {
+    const pendingTags = pendingRepositoryTagsChangeRef.current;
+    if (!pendingTags) return;
+
+    onRepositoryTagsChange?.(pendingTags);
+    pendingRepositoryTagsChangeRef.current = null;
+  }, [onRepositoryTagsChange]);
 
   const refreshAfterClosedSave = React.useCallback(() => {
     if (!savedThisSessionRef.current) return;
@@ -337,6 +427,7 @@ export function RepoSettingsDialog({
 
     if (wasOpen && !isOpen) {
       cancelAutosave();
+      finishRepositoryTagDrag();
     }
 
     // transition: closed -> open
@@ -344,6 +435,7 @@ export function RepoSettingsDialog({
       cancelAutosave();
       dialogSessionRef.current += 1;
       const initialSettings = {
+        tags: currentRepositoryTags,
         releaseChannels: currentRepoSettings?.releaseChannels ?? [],
         preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels,
         releasesPerPage: currentRepoSettings?.releasesPerPage ?? null,
@@ -358,6 +450,11 @@ export function RepoSettingsDialog({
       };
 
       setChannels(initialSettings.releaseChannels);
+      setRepositoryTags(initialSettings.tags);
+      setRepositoryTagInput("");
+      setRepositoryTagError(null);
+      finishRepositoryTagDrag();
+      setRepositoryTagOrderAnnouncement("");
       setPreReleaseSubChannels(initialSettings.preReleaseSubChannels);
       setReleasesPerPage(initialSettings.releasesPerPage ?? "");
       setAutomationMode(getAutomationMode(initialSettings));
@@ -395,11 +492,21 @@ export function RepoSettingsDialog({
     }
 
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, currentRepoSettings, cancelAutosave, setSaveStatus]);
+  }, [
+    isOpen,
+    currentRepoSettings,
+    currentRepositoryTags,
+    cancelAutosave,
+    finishRepositoryTagDrag,
+    setSaveStatus,
+  ]);
 
   React.useEffect(() => {
-    if (!isOpen) refreshAfterClosedSave();
-  }, [isOpen, refreshAfterClosedSave]);
+    if (!isOpen) {
+      flushRepositoryTagsChange();
+      refreshAfterClosedSave();
+    }
+  }, [isOpen, flushRepositoryTagsChange, refreshAfterClosedSave]);
 
   const useGlobalChannels = channels.length === 0;
   const useGlobalSubChannels = preReleaseSubChannels === undefined;
@@ -422,6 +529,7 @@ export function RepoSettingsDialog({
 
   const newSettings: Pick<
     Repository,
+    | "tags"
     | "releaseChannels"
     | "preReleaseSubChannels"
     | "releasesPerPage"
@@ -468,6 +576,7 @@ export function RepoSettingsDialog({
         : undefined;
 
     return {
+      tags: repositoryTags,
       releaseChannels: channels,
       preReleaseSubChannels,
       releasesPerPage: finalReleasesPerPage,
@@ -480,6 +589,7 @@ export function RepoSettingsDialog({
       appriseFormat: appriseFormat || undefined,
     };
   }, [
+    repositoryTags,
     channels,
     preReleaseSubChannels,
     releasesPerPage,
@@ -619,6 +729,7 @@ export function RepoSettingsDialog({
           // persisted this snapshot. If the dialog closed meanwhile, perform
           // the same cache refresh the successful save would normally trigger.
           if (result.success) {
+            publishRepositoryTagsChange(newSettings.tags ?? []);
             if (
               isOpenRef.current &&
               saveDialogSession !== dialogSessionRef.current
@@ -662,6 +773,7 @@ export function RepoSettingsDialog({
             prevSettingsRef.current = newSettings;
             lastSubmittedSettingsRef.current = newSettings;
             savedThisSessionRef.current = true;
+            publishRepositoryTagsChange(newSettings.tags ?? []);
             if (!isOpenRef.current) refreshAfterClosedSave();
           } else {
             savedThisSessionRef.current = true;
@@ -708,6 +820,7 @@ export function RepoSettingsDialog({
     refreshAfterClosedSave,
     cancelAutosave,
     scheduleAutosave,
+    publishRepositoryTagsChange,
   ]);
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -739,6 +852,216 @@ export function RepoSettingsDialog({
       );
     }
   };
+
+  const addRepositoryTags = (values: string[]) => {
+    if (!isOnline) return false;
+    const result = normalizeRepositoryTags([...repositoryTags, ...values]);
+    if (!result.success) {
+      setRepositoryTagError(result.error);
+      return false;
+    }
+
+    setRepositoryTags(result.tags);
+    setRepositoryTagError(null);
+    return true;
+  };
+
+  const commitRepositoryTagInput = () => {
+    if (!repositoryTagInput.trim()) return false;
+    if (!addRepositoryTags([repositoryTagInput])) return false;
+    setRepositoryTagInput("");
+    return true;
+  };
+
+  const removeRepositoryTag = (tag: string) => {
+    if (!isOnline) return;
+    setRepositoryTags((current) => current.filter((entry) => entry !== tag));
+    setRepositoryTagError(null);
+  };
+
+  const reorderRepositoryTag = (fromIndex: number, toIndex: number) => {
+    if (!isOnline) return;
+
+    const reorderedTags = moveRepositoryTag(repositoryTags, fromIndex, toIndex);
+    if (reorderedTags === repositoryTags) return;
+
+    const movedTag = repositoryTags[fromIndex];
+    setRepositoryTags(reorderedTags);
+    setRepositoryTagError(null);
+    setRepositoryTagOrderAnnouncement(
+      t("tags_reordered_announcement", {
+        tag: movedTag,
+        position: toIndex + 1,
+        total: repositoryTags.length,
+      }),
+    );
+  };
+
+  const getRepositoryTagInsertionIndex = (
+    list: HTMLUListElement,
+    clientX: number,
+    clientY: number,
+  ) => {
+    const tagElements = Array.from(
+      list.querySelectorAll<HTMLElement>(
+        '[data-repository-tag-index]:not([data-repository-tag-dragging="true"])',
+      ),
+    );
+    if (tagElements.length === 0) return 0;
+
+    const rows: Array<
+      Array<{ index: number; bounds: DOMRect; centerY: number }>
+    > = [];
+    for (const element of tagElements) {
+      const index = Number(element.dataset.repositoryTagIndex);
+      const bounds = element.getBoundingClientRect();
+      const centerY = bounds.top + bounds.height / 2;
+      const currentRow = rows.at(-1);
+      if (
+        !currentRow ||
+        Math.abs(centerY - currentRow[0].centerY) >
+          Math.max(4, bounds.height / 2)
+      ) {
+        rows.push([{ index, bounds, centerY }]);
+      } else {
+        currentRow.push({ index, bounds, centerY });
+      }
+    }
+
+    const closestRow = rows.reduce((closest, row) => {
+      const closestDistance = Math.abs(clientY - closest[0].centerY);
+      const rowDistance = Math.abs(clientY - row[0].centerY);
+      return rowDistance < closestDistance ? row : closest;
+    });
+
+    for (const item of closestRow) {
+      if (clientX < item.bounds.left + item.bounds.width / 2) {
+        return item.index;
+      }
+    }
+    return closestRow[closestRow.length - 1].index + 1;
+  };
+
+  const handleRepositoryTagPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+    fromIndex: number,
+    tag: string,
+  ) => {
+    if (
+      !isOnline ||
+      repositoryTags.length < 2 ||
+      event.button !== 0 ||
+      (event.target as HTMLElement).closest("button")
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    repositoryTagPointerDragRef.current = {
+      pointerId: event.pointerId,
+      fromIndex,
+      tag,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: event.clientX - bounds.left,
+      offsetY: event.clientY - bounds.top,
+      width: bounds.width,
+      height: bounds.height,
+      hasMoved: false,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleRepositoryTagPointerMove = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    const drag = repositoryTagPointerDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const distance = Math.hypot(
+      event.clientX - drag.startX,
+      event.clientY - drag.startY,
+    );
+    if (!drag.hasMoved && distance < 4) return;
+
+    event.preventDefault();
+    const left = event.clientX - drag.offsetX;
+    const top = event.clientY - drag.offsetY;
+
+    if (!drag.hasMoved) {
+      drag.hasMoved = true;
+      setDraggedRepositoryTagIndex(drag.fromIndex);
+      setRepositoryTagDropIndex(drag.fromIndex);
+      setRepositoryTagDragSize({ width: drag.width, height: drag.height });
+      setRepositoryTagDragPreview({
+        tag: drag.tag,
+        fromIndex: drag.fromIndex,
+        left,
+        top,
+      });
+    } else if (repositoryTagDragPreviewRef.current) {
+      repositoryTagDragPreviewRef.current.style.left = `${left}px`;
+      repositoryTagDragPreviewRef.current.style.top = `${top}px`;
+    }
+
+    const tagList = repositoryTagListRef.current;
+    if (tagList) {
+      setRepositoryTagDropIndex(
+        getRepositoryTagInsertionIndex(tagList, event.clientX, event.clientY),
+      );
+    }
+  };
+
+  const handleRepositoryTagPointerEnd = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    const drag = repositoryTagPointerDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    if (drag.hasMoved && repositoryTagListRef.current) {
+      const insertionIndex = getRepositoryTagInsertionIndex(
+        repositoryTagListRef.current,
+        event.clientX,
+        event.clientY,
+      );
+      const toIndex =
+        insertionIndex > drag.fromIndex ? insertionIndex - 1 : insertionIndex;
+      reorderRepositoryTag(drag.fromIndex, toIndex);
+    }
+
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    finishRepositoryTagDrag();
+  };
+
+  const handleRepositoryTagPointerCancel = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    const drag = repositoryTagPointerDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    finishRepositoryTagDrag();
+  };
+
+  const handleRepositoryTagLostPointerCapture = (
+    event: React.PointerEvent<HTMLDivElement>,
+  ) => {
+    const drag = repositoryTagPointerDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    finishRepositoryTagDrag();
+  };
+
+  const repositoryTagErrorMessage = repositoryTagError
+    ? t(`tags_error_${repositoryTagError}`)
+    : null;
+  const repositoryTagSuggestions = availableRepositoryTags.filter(
+    (tag) => !repositoryTags.includes(tag),
+  );
 
   const handlePreReleaseSubChannelChange = (
     subChannel: PreReleaseChannelType,
@@ -829,704 +1152,225 @@ export function RepoSettingsDialog({
     : preReleaseSubChannels || [];
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className="sm:max-w-lg"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
-        <DialogHeader>
-          <DialogTitle>{t("title")}</DialogTitle>
-          <DialogDescription>
-            {t.rich("description_flexible", {
-              repoId: () => (
-                <span className="font-semibold text-foreground">
-                  {displayRepoId}
-                </span>
-              ),
-            })}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+        <DialogContent
+          className="sm:max-w-lg"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>{t("title")}</DialogTitle>
+            <DialogDescription>
+              {t.rich("description_flexible", {
+                repoId: () => (
+                  <span className="font-semibold text-foreground">
+                    {displayRepoId}
+                  </span>
+                ),
+              })}
+            </DialogDescription>
+          </DialogHeader>
 
-        {!isOnline && (
-          <div className="mb-3 mt-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-300">
-            {tGlobal("offline_notice")}
-          </div>
-        )}
-
-        <div className="space-y-6 pt-2 max-h-[60vh] overflow-y-auto pr-2 -mr-4 pb-4">
-          <div className="space-y-4 p-4 border rounded-md">
-            <div className="flex justify-between items-center">
-              <h4 className="font-semibold text-base">
-                {tGlobal("release_channel_title")}
-              </h4>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleResetFilters}
-                      className="size-8 shrink-0"
-                      disabled={!isOnline}
-                      aria-disabled={!isOnline}
-                    >
-                      <RotateCcw className="size-4" />
-                      <span className="sr-only">
-                        {t("reset_to_global_button")}
-                      </span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{t("reset_to_global_tooltip")}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+          {!isOnline && (
+            <div className="mb-3 mt-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-300">
+              {tGlobal("offline_notice")}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {useGlobalChannels
-                ? t("channels_hint_global")
-                : t("channels_hint_individual")}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {tGlobal("release_channel_description_repo")}
-            </p>
+          )}
 
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id={stableId}
-                checked={isStableChecked}
-                onCheckedChange={() => handleChannelChange("stable")}
-                disabled={!isOnline}
-              />
-              <Label htmlFor={stableId} className="font-normal cursor-pointer">
-                {tGlobal("release_channel_stable")}
-              </Label>
-            </div>
-
-            <div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id={prereleaseId}
-                  checked={isPreReleaseChecked}
-                  onCheckedChange={() => handleChannelChange("prerelease")}
-                  disabled={!isOnline}
-                />
-                <Label
-                  htmlFor={prereleaseId}
-                  className="font-normal cursor-pointer"
-                >
-                  {tGlobal("release_channel_prerelease")}
-                </Label>
-              </div>
-
-              <div
-                className={cn(
-                  "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
-                  isPreReleaseChecked
-                    ? "mt-4 max-h-[600px] opacity-100"
-                    : "max-h-0 opacity-0",
-                )}
-              >
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    {tGlobal("prerelease_subtype_description")}
-                  </p>
-                  <div className="flex gap-2 mb-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSelectAllPreRelease}
-                      disabled={
-                        !isPreReleaseChecked ||
-                        saveStatus === "saving" ||
-                        !isOnline
-                      }
-                    >
-                      {tGlobal("prerelease_select_all")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleDeselectAllPreRelease}
-                      disabled={
-                        !isPreReleaseChecked ||
-                        saveStatus === "saving" ||
-                        !isOnline
-                      }
-                    >
-                      {tGlobal("prerelease_deselect_all")}
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
-                    {allPreReleaseTypes.map((subType) => {
-                      const subChannelId = `${prereleaseSubChannelBaseId}-${subType}`;
-                      return (
-                        <div
-                          key={subType}
-                          className="flex items-center space-x-2"
-                        >
-                          <Checkbox
-                            id={subChannelId}
-                            checked={effectivePreReleaseSubChannels.includes(
-                              subType,
-                            )}
-                            onCheckedChange={() =>
-                              handlePreReleaseSubChannelChange(subType)
-                            }
-                            disabled={!isPreReleaseChecked || !isOnline}
-                          />
-                          <Label
-                            htmlFor={subChannelId}
-                            className="font-normal cursor-pointer text-sm"
-                          >
-                            {subType}
-                          </Label>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id={draftId}
-                checked={isDraftChecked}
-                onCheckedChange={() => handleChannelChange("draft")}
-                disabled={!isOnline}
-              />
-              <Label htmlFor={draftId} className="font-normal cursor-pointer">
-                {tGlobal("release_channel_draft")}
-              </Label>
-            </div>
-
-            <div className="space-y-2 pt-4">
-              <h4 className="font-medium text-base">
-                {tGlobal("regex_filter_title")}
-              </h4>
-              <p className="text-xs text-muted-foreground">
-                {tGlobal("regex_filter_description_repo")}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={includeRegexId}>
-                {tGlobal("include_regex_label")}
-              </Label>
-              <Input
-                id={includeRegexId}
-                value={includeRegex}
-                onChange={(e) => setIncludeRegex(e.target.value)}
-                placeholder={
-                  globalSettings.includeRegex || tGlobal("regex_placeholder")
-                }
-                className={cn(
-                  !!includeRegexError &&
-                    "border-destructive focus-visible:ring-destructive",
-                )}
-                disabled={!isOnline}
-              />
-              {includeRegexError && (
-                <p className="text-sm text-destructive">
-                  {tGlobal("regex_error_invalid")}
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={excludeRegexId}>
-                {tGlobal("exclude_regex_label")}
-              </Label>
-              <Input
-                id={excludeRegexId}
-                value={excludeRegex}
-                onChange={(e) => setExcludeRegex(e.target.value)}
-                placeholder={
-                  globalSettings.excludeRegex || tGlobal("regex_placeholder")
-                }
-                className={cn(
-                  !!excludeRegexError &&
-                    "border-destructive focus-visible:ring-destructive",
-                )}
-                disabled={!isOnline}
-              />
-              {excludeRegexError && (
-                <p className="text-sm text-destructive">
-                  {tGlobal("regex_error_invalid")}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-4 p-4 border rounded-md">
-            <div className="flex justify-between items-center">
-              <h4 className="font-semibold text-base">
-                {t("automation_title")}
-              </h4>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleResetAutomation}
-                      className="size-8 shrink-0"
-                      disabled={!isOnline}
-                      aria-disabled={!isOnline}
-                    >
-                      <RotateCcw className="size-4" />
-                      <span className="sr-only">
-                        {t("reset_to_global_button")}
-                      </span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{t("reset_to_global_tooltip")}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t("automation_description")}
-            </p>
-
-            <div className="space-y-2">
-              <Label htmlFor={refreshModeId}>
-                {t("automation_mode_label")}
-              </Label>
-              <Select
-                value={automationMode}
-                onValueChange={(value: AutomationMode) =>
-                  setAutomationMode(value)
-                }
-                disabled={!isOnline}
-              >
-                <SelectTrigger id={refreshModeId}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="global">
-                    {globalSettings.backgroundCheckCron
-                      ? t("automation_mode_global_cron", {
-                          cron: globalSettings.backgroundCheckCron,
-                        })
-                      : t("automation_mode_global", {
-                          count: globalSettings.refreshInterval,
-                        })}
-                  </SelectItem>
-                  <SelectItem value="interval">
-                    {t("automation_mode_interval")}
-                  </SelectItem>
-                  <SelectItem value="cron">
-                    {t("automation_mode_cron")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {automationMode === "interval" && (
+          <div className="space-y-6 pt-2 max-h-[60vh] overflow-y-auto pr-2 -mr-4 pb-4">
+            <div className="space-y-4 p-4 border rounded-md">
               <div>
-                <Label>{t("custom_refresh_interval_label")}</Label>
-                <div className="grid grid-cols-3 gap-3 mt-2">
-                  <div className="space-y-2">
-                    <Label htmlFor={intervalMinutesId}>
-                      {tGlobal("refresh_interval_minutes_label")}
-                    </Label>
-                    <Input
-                      id={intervalMinutesId}
-                      type="number"
-                      value={intervalMinutes}
-                      onChange={(e) => setIntervalMinutes(e.target.value)}
-                      min={0}
-                      max={59}
-                      disabled={!isOnline}
-                      className={cn(
-                        !!intervalError &&
-                          "border-destructive focus-visible:ring-destructive",
-                      )}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={intervalHoursId}>
-                      {tGlobal("refresh_interval_hours_label")}
-                    </Label>
-                    <Input
-                      id={intervalHoursId}
-                      type="number"
-                      value={intervalHours}
-                      onChange={(e) => setIntervalHours(e.target.value)}
-                      min={0}
-                      max={23}
-                      disabled={!isOnline}
-                      className={cn(
-                        !!intervalError &&
-                          "border-destructive focus-visible:ring-destructive",
-                      )}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={intervalDaysId}>
-                      {tGlobal("refresh_interval_days_label")}
-                    </Label>
-                    <Input
-                      id={intervalDaysId}
-                      type="number"
-                      value={intervalDays}
-                      onChange={(e) => setIntervalDays(e.target.value)}
-                      min={0}
-                      max={3650}
-                      disabled={!isOnline}
-                      className={cn(
-                        !!intervalError &&
-                          "border-destructive focus-visible:ring-destructive",
-                      )}
-                    />
-                  </div>
-                </div>
-                {intervalError === "too_low" ? (
-                  <p className="mt-2 text-sm text-destructive">
-                    {tGlobal("refresh_interval_error_min")}
-                  </p>
-                ) : intervalError === "too_high" ? (
-                  <p className="mt-2 text-sm text-destructive">
-                    {tGlobal("refresh_interval_error_max")}
-                  </p>
-                ) : (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {tGlobal("refresh_interval_hint")}
-                  </p>
-                )}
+                <h4 className="font-semibold text-base">
+                  {t("tags_section_title")}
+                </h4>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("tags_section_description", {
+                    maxTags: MAX_REPOSITORY_TAGS,
+                    maxLength: MAX_REPOSITORY_TAG_LENGTH,
+                  })}
+                </p>
               </div>
-            )}
-
-            {automationMode === "cron" && (
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor={cronPresetId}>{t("cron_preset_label")}</Label>
-                  <Select
-                    value={cronPreset}
-                    onValueChange={(value: CronPreset) => setCronPreset(value)}
-                    disabled={!isOnline}
-                  >
-                    <SelectTrigger id={cronPresetId}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cronPresetOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {t(option.labelKey)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {cronPreset !== "custom" && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label>{t("cron_time_label")}</Label>
-                      <CronTimeSelect
-                        ids={{
-                          hour: cronHourId,
-                          minute: cronMinuteId,
-                          period: cronPeriodId,
-                        }}
-                        labels={{
-                          hour: tGlobal("cron_time_hour_label"),
-                          minute: tGlobal("cron_time_minute_label"),
-                          period: tGlobal("cron_time_period_label"),
-                          am: tGlobal("cron_time_am"),
-                          pm: tGlobal("cron_time_pm"),
-                        }}
-                        value={cronTime}
-                        onChange={setCronTime}
-                        timeFormat={globalSettings.timeFormat}
-                        disabled={!isOnline}
-                      />
-                    </div>
-                    {cronPreset === "weekly" && (
-                      <div className="space-y-2">
-                        <Label htmlFor={cronWeekdayId}>
-                          {t("cron_weekday_label")}
-                        </Label>
-                        <Select
-                          value={cronWeekday}
-                          onValueChange={setCronWeekday}
-                          disabled={!isOnline}
-                        >
-                          <SelectTrigger id={cronWeekdayId}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {cronWeekdayOptions.map((weekday) => (
-                              <SelectItem
-                                key={weekday.value}
-                                value={weekday.value}
+              <div className="space-y-2">
+                <Label htmlFor={repositoryTagsId} className="block">
+                  {t("tags_label")}
+                </Label>
+                {repositoryTags.length > 0 && (
+                  <>
+                    <ul
+                      ref={repositoryTagListRef}
+                      className="relative m-0 flex list-none flex-wrap items-center gap-2 p-0"
+                      aria-label={t("tags_reorder_list_aria")}
+                    >
+                      {repositoryTags.map((tag, index) => (
+                        <React.Fragment key={tag}>
+                          {repositoryTagDropIndex === index && (
+                            <li
+                              aria-hidden="true"
+                              data-tag-drop-placeholder="true"
+                              className="rounded-full border-2 border-dashed border-primary/70 bg-primary/5"
+                              style={repositoryTagDragSize}
+                            />
+                          )}
+                          <li
+                            data-repository-tag-index={index}
+                            data-repository-tag-dragging={
+                              draggedRepositoryTagIndex === index
+                                ? "true"
+                                : undefined
+                            }
+                            aria-hidden={
+                              draggedRepositoryTagIndex === index
+                                ? true
+                                : undefined
+                            }
+                            className={cn(
+                              draggedRepositoryTagIndex === index &&
+                                "absolute opacity-0",
+                            )}
+                          >
+                            <Badge
+                              variant="secondary"
+                              onPointerDown={(event) =>
+                                handleRepositoryTagPointerDown(
+                                  event,
+                                  index,
+                                  tag,
+                                )
+                              }
+                              onPointerMove={handleRepositoryTagPointerMove}
+                              onPointerUp={handleRepositoryTagPointerEnd}
+                              onPointerCancel={handleRepositoryTagPointerCancel}
+                              onLostPointerCapture={
+                                handleRepositoryTagLostPointerCapture
+                              }
+                              title={t("tags_drag_aria", { tag })}
+                              className={cn(
+                                "gap-0 py-1 pl-1 pr-1 select-none",
+                                isOnline &&
+                                  repositoryTags.length > 1 &&
+                                  "cursor-grab touch-none active:cursor-grabbing",
+                                draggedRepositoryTagIndex === index &&
+                                  "ring-2 ring-primary/40",
+                              )}
+                            >
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  reorderRepositoryTag(index, index - 1)
+                                }
+                                disabled={!isOnline || index === 0}
+                                className="rounded-sm p-0.5 hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30"
+                                aria-label={t("tags_move_left_aria", { tag })}
                               >
-                                {t(weekday.labelKey)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {cronPreset === "custom" && (
-                  <div className="space-y-2">
-                    <Label htmlFor={cronExpressionId}>
-                      {t("cron_expression_label")}
-                    </Label>
-                    <Input
-                      id={cronExpressionId}
-                      value={cronExpression}
-                      onChange={(e) => setCronExpression(e.target.value)}
-                      placeholder={defaultCronExpression}
-                      disabled={!isOnline}
-                      className={cn(
-                        !!cronError &&
-                          "border-destructive focus-visible:ring-destructive",
+                                <ChevronLeft className="size-3" />
+                              </button>
+                              <span className="max-w-64 truncate px-1">
+                                {tag}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  reorderRepositoryTag(index, index + 1)
+                                }
+                                disabled={
+                                  !isOnline ||
+                                  index === repositoryTags.length - 1
+                                }
+                                className="rounded-sm p-0.5 hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30"
+                                aria-label={t("tags_move_right_aria", { tag })}
+                              >
+                                <ChevronRight className="size-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeRepositoryTag(tag)}
+                                disabled={!isOnline}
+                                className="rounded-sm p-0.5 hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                                aria-label={t("tags_remove_aria", { tag })}
+                              >
+                                <X className="size-3" />
+                              </button>
+                            </Badge>
+                          </li>
+                        </React.Fragment>
+                      ))}
+                      {repositoryTagDropIndex === repositoryTags.length && (
+                        <li
+                          aria-hidden="true"
+                          data-tag-drop-placeholder="true"
+                          className="rounded-full border-2 border-dashed border-primary/70 bg-primary/5"
+                          style={repositoryTagDragSize}
+                        />
                       )}
-                    />
-                  </div>
+                    </ul>
+                    <p className="text-xs text-muted-foreground">
+                      {t("tags_reorder_hint")}
+                    </p>
+                    <p className="sr-only" aria-live="polite">
+                      {repositoryTagOrderAnnouncement}
+                    </p>
+                  </>
                 )}
+                <RepositoryTagPicker
+                  id={repositoryTagsId}
+                  options={repositoryTagSuggestions}
+                  selectedTags={repositoryTags}
+                  value={repositoryTagInput}
+                  onValueChange={(value) => {
+                    const parts = value.split(",");
+                    if (parts.length === 1) {
+                      setRepositoryTagInput(value);
+                      setRepositoryTagError(null);
+                      return;
+                    }
 
-                {cronError ? (
+                    const pendingInput = parts.pop() ?? "";
+                    if (addRepositoryTags(parts)) {
+                      setRepositoryTagInput(pendingInput);
+                    }
+                  }}
+                  onTagSelect={(tag) => addRepositoryTags([tag])}
+                  onCreateTag={(tag) => {
+                    if (!addRepositoryTags([tag])) return false;
+                    setRepositoryTagInput("");
+                    return true;
+                  }}
+                  onInputBlur={commitRepositoryTagInput}
+                  placeholder={t("tags_placeholder")}
+                  listboxLabel={t("tags_existing_label")}
+                  createOptionLabel={(tag) => t("tags_create_option", { tag })}
+                  disabled={
+                    !isOnline || repositoryTags.length >= MAX_REPOSITORY_TAGS
+                  }
+                  invalid={Boolean(repositoryTagErrorMessage)}
+                />
+                {repositoryTagErrorMessage ? (
                   <p className="text-sm text-destructive">
-                    {t("cron_error_invalid")}
+                    {repositoryTagErrorMessage}
                   </p>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    {t("cron_hint")}
+                    {t("tags_input_hint")}
                   </p>
                 )}
               </div>
-            )}
-
-            <div className="flex items-start space-x-3 border-t pt-4">
-              <Checkbox
-                id={cacheOverrideId}
-                checked={useCustomCache}
-                onCheckedChange={(checked) =>
-                  setUseCustomCache(Boolean(checked))
-                }
-                disabled={!isOnline}
-                className="mt-1"
-              />
-              <div className="grid gap-1.5 leading-none">
-                <Label
-                  htmlFor={cacheOverrideId}
-                  className="font-medium cursor-pointer"
-                >
-                  {t("custom_cache_label")}
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {t("custom_cache_description", {
-                    count: globalSettings.cacheInterval,
-                  })}
-                </p>
-              </div>
             </div>
 
-            {useCustomCache && (
-              <div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor={cacheMinutesId}>
-                      {tGlobal("refresh_interval_minutes_label")}
-                    </Label>
-                    <Input
-                      id={cacheMinutesId}
-                      type="number"
-                      value={cacheMinutes}
-                      onChange={(e) => setCacheMinutes(e.target.value)}
-                      min={0}
-                      max={59}
-                      disabled={!isOnline}
-                      className={cn(
-                        isCacheInvalid &&
-                          "border-destructive focus-visible:ring-destructive",
-                      )}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={cacheHoursId}>
-                      {tGlobal("refresh_interval_hours_label")}
-                    </Label>
-                    <Input
-                      id={cacheHoursId}
-                      type="number"
-                      value={cacheHours}
-                      onChange={(e) => setCacheHours(e.target.value)}
-                      min={0}
-                      max={23}
-                      disabled={!isOnline}
-                      className={cn(
-                        isCacheInvalid &&
-                          "border-destructive focus-visible:ring-destructive",
-                      )}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor={cacheDaysId}>
-                      {tGlobal("refresh_interval_days_label")}
-                    </Label>
-                    <Input
-                      id={cacheDaysId}
-                      type="number"
-                      value={cacheDays}
-                      onChange={(e) => setCacheDays(e.target.value)}
-                      min={0}
-                      max={3650}
-                      disabled={!isOnline}
-                      className={cn(
-                        isCacheInvalid &&
-                          "border-destructive focus-visible:ring-destructive",
-                      )}
-                    />
-                  </div>
-                </div>
-                {isCacheInvalid ? (
-                  <p className="mt-2 text-sm text-destructive">
-                    {tGlobal("cache_validation_error")}
-                  </p>
-                ) : (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {t("custom_cache_hint")}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-4 p-4 border rounded-md">
-            <div className="flex justify-between items-center">
-              <h4 className="font-semibold text-base">
-                {t("releases_per_page_label_repo")}
-              </h4>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {useGlobalReleasesPerPage
-                ? t("releases_per_page_hint_global")
-                : t("releases_per_page_hint_individual")}
-            </p>
-            <div className="flex items-center gap-2">
-              <Input
-                id={releasesPerPageId}
-                type="number"
-                value={releasesPerPage}
-                onChange={(e) => setReleasesPerPage(e.target.value)}
-                min={1}
-                max={1000}
-                placeholder={t("releases_per_page_placeholder", {
-                  count: globalSettings.releasesPerPage,
-                })}
-                className={cn(
-                  !!releasesPerPageError &&
-                    "border-destructive focus-visible:ring-destructive",
-                )}
-                disabled={!isOnline}
-              />
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setReleasesPerPage("")}
-                      className="size-8 shrink-0"
-                      disabled={!isOnline}
-                    >
-                      <RotateCcw className="size-4" />
-                      <span className="sr-only">
-                        {t("reset_to_global_button")}
-                      </span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{t("reset_to_global_tooltip")}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            {releasesPerPageError === "too_low" ? (
-              <p className="mt-2 text-sm text-destructive">
-                {tGlobal("releases_per_page_error_min")}
-              </p>
-            ) : releasesPerPageError === "too_high" ? (
-              <p className="mt-2 text-sm text-destructive">
-                {tGlobal("releases_per_page_error_max_1000")}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {tGlobal("releases_per_page_hint_1000")}
-              </p>
-            )}
-            <p className="mt-2 text-xs text-muted-foreground">
-              {tGlobal("releases_per_page_api_call_hint")}
-            </p>
-          </div>
-
-          <div className="space-y-4 p-4 border rounded-md">
-            <div className="flex justify-between items-center">
-              <h4 className="font-semibold text-base">
-                {tGlobal("apprise_settings_title")}
-              </h4>
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              {useGlobalAppriseTags && useGlobalAppriseFormat
-                ? t("apprise_settings_hint_global")
-                : t("apprise_settings_hint_individual")}
-            </p>
-
-            <div className="space-y-2">
-              <Label htmlFor={appriseFormatId}>
-                {tGlobal("apprise_format_label")}
-              </Label>
-              <div className="flex items-center gap-2">
-                <Select
-                  value={appriseFormat}
-                  onValueChange={(value: AppriseFormat | "global") =>
-                    setAppriseFormat(value === "global" ? "" : value)
-                  }
-                  disabled={!isAppriseConfigured || !isOnline}
-                >
-                  <SelectTrigger id={appriseFormatId}>
-                    <SelectValue
-                      placeholder={t("apprise_format_placeholder", {
-                        format: globalSettings.appriseFormat || "text",
-                      })}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="global">
-                      {t("apprise_format_option_global", {
-                        format: globalSettings.appriseFormat || "text",
-                      })}
-                    </SelectItem>
-                    <SelectItem value="text">
-                      {tGlobal("apprise_format_text")}
-                    </SelectItem>
-                    <SelectItem value="markdown">
-                      {tGlobal("apprise_format_markdown")}
-                    </SelectItem>
-                    <SelectItem value="html">
-                      {tGlobal("apprise_format_html")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="space-y-4 p-4 border rounded-md">
+              <div className="flex justify-between items-center">
+                <h4 className="font-semibold text-base">
+                  {tGlobal("release_channel_title")}
+                </h4>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => setAppriseFormat("")}
+                        onClick={handleResetFilters}
                         className="size-8 shrink-0"
                         disabled={!isOnline}
+                        aria-disabled={!isOnline}
                       >
                         <RotateCcw className="size-4" />
                         <span className="sr-only">
@@ -1540,25 +1384,559 @@ export function RepoSettingsDialog({
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              {!isAppriseConfigured && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {tGlobal("apprise_format_disabled_hint")}
+              <p className="text-xs text-muted-foreground">
+                {useGlobalChannels
+                  ? t("channels_hint_global")
+                  : t("channels_hint_individual")}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {tGlobal("release_channel_description_repo")}
+              </p>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id={stableId}
+                  checked={isStableChecked}
+                  onCheckedChange={() => handleChannelChange("stable")}
+                  disabled={!isOnline}
+                />
+                <Label
+                  htmlFor={stableId}
+                  className="font-normal cursor-pointer"
+                >
+                  {tGlobal("release_channel_stable")}
+                </Label>
+              </div>
+
+              <div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id={prereleaseId}
+                    checked={isPreReleaseChecked}
+                    onCheckedChange={() => handleChannelChange("prerelease")}
+                    disabled={!isOnline}
+                  />
+                  <Label
+                    htmlFor={prereleaseId}
+                    className="font-normal cursor-pointer"
+                  >
+                    {tGlobal("release_channel_prerelease")}
+                  </Label>
+                </div>
+
+                <div
+                  className={cn(
+                    "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
+                    isPreReleaseChecked
+                      ? "mt-4 max-h-[600px] opacity-100"
+                      : "max-h-0 opacity-0",
+                  )}
+                >
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      {tGlobal("prerelease_subtype_description")}
+                    </p>
+                    <div className="flex gap-2 mb-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSelectAllPreRelease}
+                        disabled={
+                          !isPreReleaseChecked ||
+                          saveStatus === "saving" ||
+                          !isOnline
+                        }
+                      >
+                        {tGlobal("prerelease_select_all")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleDeselectAllPreRelease}
+                        disabled={
+                          !isPreReleaseChecked ||
+                          saveStatus === "saving" ||
+                          !isOnline
+                        }
+                      >
+                        {tGlobal("prerelease_deselect_all")}
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
+                      {allPreReleaseTypes.map((subType) => {
+                        const subChannelId = `${prereleaseSubChannelBaseId}-${subType}`;
+                        return (
+                          <div
+                            key={subType}
+                            className="flex items-center space-x-2"
+                          >
+                            <Checkbox
+                              id={subChannelId}
+                              checked={effectivePreReleaseSubChannels.includes(
+                                subType,
+                              )}
+                              onCheckedChange={() =>
+                                handlePreReleaseSubChannelChange(subType)
+                              }
+                              disabled={!isPreReleaseChecked || !isOnline}
+                            />
+                            <Label
+                              htmlFor={subChannelId}
+                              className="font-normal cursor-pointer text-sm"
+                            >
+                              {subType}
+                            </Label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id={draftId}
+                  checked={isDraftChecked}
+                  onCheckedChange={() => handleChannelChange("draft")}
+                  disabled={!isOnline}
+                />
+                <Label htmlFor={draftId} className="font-normal cursor-pointer">
+                  {tGlobal("release_channel_draft")}
+                </Label>
+              </div>
+
+              <div className="space-y-2 pt-4">
+                <h4 className="font-medium text-base">
+                  {tGlobal("regex_filter_title")}
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  {tGlobal("regex_filter_description_repo")}
                 </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={includeRegexId}>
+                  {tGlobal("include_regex_label")}
+                </Label>
+                <Input
+                  id={includeRegexId}
+                  value={includeRegex}
+                  onChange={(e) => setIncludeRegex(e.target.value)}
+                  placeholder={
+                    globalSettings.includeRegex || tGlobal("regex_placeholder")
+                  }
+                  className={cn(
+                    !!includeRegexError &&
+                      "border-destructive focus-visible:ring-destructive",
+                  )}
+                  disabled={!isOnline}
+                />
+                {includeRegexError && (
+                  <p className="text-sm text-destructive">
+                    {tGlobal("regex_error_invalid")}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={excludeRegexId}>
+                  {tGlobal("exclude_regex_label")}
+                </Label>
+                <Input
+                  id={excludeRegexId}
+                  value={excludeRegex}
+                  onChange={(e) => setExcludeRegex(e.target.value)}
+                  placeholder={
+                    globalSettings.excludeRegex || tGlobal("regex_placeholder")
+                  }
+                  className={cn(
+                    !!excludeRegexError &&
+                      "border-destructive focus-visible:ring-destructive",
+                  )}
+                  disabled={!isOnline}
+                />
+                {excludeRegexError && (
+                  <p className="text-sm text-destructive">
+                    {tGlobal("regex_error_invalid")}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-4 p-4 border rounded-md">
+              <div className="flex justify-between items-center">
+                <h4 className="font-semibold text-base">
+                  {t("automation_title")}
+                </h4>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleResetAutomation}
+                        className="size-8 shrink-0"
+                        disabled={!isOnline}
+                        aria-disabled={!isOnline}
+                      >
+                        <RotateCcw className="size-4" />
+                        <span className="sr-only">
+                          {t("reset_to_global_button")}
+                        </span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{t("reset_to_global_tooltip")}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("automation_description")}
+              </p>
+
+              <div className="space-y-2">
+                <Label htmlFor={refreshModeId}>
+                  {t("automation_mode_label")}
+                </Label>
+                <Select
+                  value={automationMode}
+                  onValueChange={(value: AutomationMode) =>
+                    setAutomationMode(value)
+                  }
+                  disabled={!isOnline}
+                >
+                  <SelectTrigger id={refreshModeId}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="global">
+                      {globalSettings.backgroundCheckCron
+                        ? t("automation_mode_global_cron", {
+                            cron: globalSettings.backgroundCheckCron,
+                          })
+                        : t("automation_mode_global", {
+                            count: globalSettings.refreshInterval,
+                          })}
+                    </SelectItem>
+                    <SelectItem value="interval">
+                      {t("automation_mode_interval")}
+                    </SelectItem>
+                    <SelectItem value="cron">
+                      {t("automation_mode_cron")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {automationMode === "interval" && (
+                <div>
+                  <Label>{t("custom_refresh_interval_label")}</Label>
+                  <div className="grid grid-cols-3 gap-3 mt-2">
+                    <div className="space-y-2">
+                      <Label htmlFor={intervalMinutesId}>
+                        {tGlobal("refresh_interval_minutes_label")}
+                      </Label>
+                      <Input
+                        id={intervalMinutesId}
+                        type="number"
+                        value={intervalMinutes}
+                        onChange={(e) => setIntervalMinutes(e.target.value)}
+                        min={0}
+                        max={59}
+                        disabled={!isOnline}
+                        className={cn(
+                          !!intervalError &&
+                            "border-destructive focus-visible:ring-destructive",
+                        )}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={intervalHoursId}>
+                        {tGlobal("refresh_interval_hours_label")}
+                      </Label>
+                      <Input
+                        id={intervalHoursId}
+                        type="number"
+                        value={intervalHours}
+                        onChange={(e) => setIntervalHours(e.target.value)}
+                        min={0}
+                        max={23}
+                        disabled={!isOnline}
+                        className={cn(
+                          !!intervalError &&
+                            "border-destructive focus-visible:ring-destructive",
+                        )}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={intervalDaysId}>
+                        {tGlobal("refresh_interval_days_label")}
+                      </Label>
+                      <Input
+                        id={intervalDaysId}
+                        type="number"
+                        value={intervalDays}
+                        onChange={(e) => setIntervalDays(e.target.value)}
+                        min={0}
+                        max={3650}
+                        disabled={!isOnline}
+                        className={cn(
+                          !!intervalError &&
+                            "border-destructive focus-visible:ring-destructive",
+                        )}
+                      />
+                    </div>
+                  </div>
+                  {intervalError === "too_low" ? (
+                    <p className="mt-2 text-sm text-destructive">
+                      {tGlobal("refresh_interval_error_min")}
+                    </p>
+                  ) : intervalError === "too_high" ? (
+                    <p className="mt-2 text-sm text-destructive">
+                      {tGlobal("refresh_interval_error_max")}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {tGlobal("refresh_interval_hint")}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {automationMode === "cron" && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor={cronPresetId}>
+                      {t("cron_preset_label")}
+                    </Label>
+                    <Select
+                      value={cronPreset}
+                      onValueChange={(value: CronPreset) =>
+                        setCronPreset(value)
+                      }
+                      disabled={!isOnline}
+                    >
+                      <SelectTrigger id={cronPresetId}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cronPresetOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {t(option.labelKey)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {cronPreset !== "custom" && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label>{t("cron_time_label")}</Label>
+                        <CronTimeSelect
+                          ids={{
+                            hour: cronHourId,
+                            minute: cronMinuteId,
+                            period: cronPeriodId,
+                          }}
+                          labels={{
+                            hour: tGlobal("cron_time_hour_label"),
+                            minute: tGlobal("cron_time_minute_label"),
+                            period: tGlobal("cron_time_period_label"),
+                            am: tGlobal("cron_time_am"),
+                            pm: tGlobal("cron_time_pm"),
+                          }}
+                          value={cronTime}
+                          onChange={setCronTime}
+                          timeFormat={globalSettings.timeFormat}
+                          disabled={!isOnline}
+                        />
+                      </div>
+                      {cronPreset === "weekly" && (
+                        <div className="space-y-2">
+                          <Label htmlFor={cronWeekdayId}>
+                            {t("cron_weekday_label")}
+                          </Label>
+                          <Select
+                            value={cronWeekday}
+                            onValueChange={setCronWeekday}
+                            disabled={!isOnline}
+                          >
+                            <SelectTrigger id={cronWeekdayId}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {cronWeekdayOptions.map((weekday) => (
+                                <SelectItem
+                                  key={weekday.value}
+                                  value={weekday.value}
+                                >
+                                  {t(weekday.labelKey)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {cronPreset === "custom" && (
+                    <div className="space-y-2">
+                      <Label htmlFor={cronExpressionId}>
+                        {t("cron_expression_label")}
+                      </Label>
+                      <Input
+                        id={cronExpressionId}
+                        value={cronExpression}
+                        onChange={(e) => setCronExpression(e.target.value)}
+                        placeholder={defaultCronExpression}
+                        disabled={!isOnline}
+                        className={cn(
+                          !!cronError &&
+                            "border-destructive focus-visible:ring-destructive",
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  {cronError ? (
+                    <p className="text-sm text-destructive">
+                      {t("cron_error_invalid")}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {t("cron_hint")}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-start space-x-3 border-t pt-4">
+                <Checkbox
+                  id={cacheOverrideId}
+                  checked={useCustomCache}
+                  onCheckedChange={(checked) =>
+                    setUseCustomCache(Boolean(checked))
+                  }
+                  disabled={!isOnline}
+                  className="mt-1"
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label
+                    htmlFor={cacheOverrideId}
+                    className="font-medium cursor-pointer"
+                  >
+                    {t("custom_cache_label")}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("custom_cache_description", {
+                      count: globalSettings.cacheInterval,
+                    })}
+                  </p>
+                </div>
+              </div>
+
+              {useCustomCache && (
+                <div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor={cacheMinutesId}>
+                        {tGlobal("refresh_interval_minutes_label")}
+                      </Label>
+                      <Input
+                        id={cacheMinutesId}
+                        type="number"
+                        value={cacheMinutes}
+                        onChange={(e) => setCacheMinutes(e.target.value)}
+                        min={0}
+                        max={59}
+                        disabled={!isOnline}
+                        className={cn(
+                          isCacheInvalid &&
+                            "border-destructive focus-visible:ring-destructive",
+                        )}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={cacheHoursId}>
+                        {tGlobal("refresh_interval_hours_label")}
+                      </Label>
+                      <Input
+                        id={cacheHoursId}
+                        type="number"
+                        value={cacheHours}
+                        onChange={(e) => setCacheHours(e.target.value)}
+                        min={0}
+                        max={23}
+                        disabled={!isOnline}
+                        className={cn(
+                          isCacheInvalid &&
+                            "border-destructive focus-visible:ring-destructive",
+                        )}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={cacheDaysId}>
+                        {tGlobal("refresh_interval_days_label")}
+                      </Label>
+                      <Input
+                        id={cacheDaysId}
+                        type="number"
+                        value={cacheDays}
+                        onChange={(e) => setCacheDays(e.target.value)}
+                        min={0}
+                        max={3650}
+                        disabled={!isOnline}
+                        className={cn(
+                          isCacheInvalid &&
+                            "border-destructive focus-visible:ring-destructive",
+                        )}
+                      />
+                    </div>
+                  </div>
+                  {isCacheInvalid ? (
+                    <p className="mt-2 text-sm text-destructive">
+                      {tGlobal("cache_validation_error")}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {t("custom_cache_hint")}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor={appriseTagsId}>{t("apprise_tags_label")}</Label>
+            <div className="space-y-4 p-4 border rounded-md">
+              <div className="flex justify-between items-center">
+                <h4 className="font-semibold text-base">
+                  {t("releases_per_page_label_repo")}
+                </h4>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {useGlobalReleasesPerPage
+                  ? t("releases_per_page_hint_global")
+                  : t("releases_per_page_hint_individual")}
+              </p>
               <div className="flex items-center gap-2">
                 <Input
-                  id={appriseTagsId}
-                  type="text"
-                  value={appriseTags}
-                  onChange={(e) => setAppriseTags(e.target.value)}
-                  placeholder={t("apprise_tags_placeholder", {
-                    tags: globalSettings.appriseTags || "...",
+                  id={releasesPerPageId}
+                  type="number"
+                  value={releasesPerPage}
+                  onChange={(e) => setReleasesPerPage(e.target.value)}
+                  min={1}
+                  max={1000}
+                  placeholder={t("releases_per_page_placeholder", {
+                    count: globalSettings.releasesPerPage,
                   })}
-                  disabled={!isAppriseConfigured || !isOnline}
+                  className={cn(
+                    !!releasesPerPageError &&
+                      "border-destructive focus-visible:ring-destructive",
+                  )}
+                  disabled={!isOnline}
                 />
                 <TooltipProvider>
                   <Tooltip>
@@ -1566,7 +1944,7 @@ export function RepoSettingsDialog({
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => setAppriseTags("")}
+                        onClick={() => setReleasesPerPage("")}
                         className="size-8 shrink-0"
                         disabled={!isOnline}
                       >
@@ -1582,52 +1960,223 @@ export function RepoSettingsDialog({
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              {!isAppriseConfigured && (
+              {releasesPerPageError === "too_low" ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {tGlobal("releases_per_page_error_min")}
+                </p>
+              ) : releasesPerPageError === "too_high" ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {tGlobal("releases_per_page_error_max_1000")}
+                </p>
+              ) : (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  {tGlobal("apprise_tags_disabled_hint")}
+                  {tGlobal("releases_per_page_hint_1000")}
                 </p>
               )}
+              <p className="mt-2 text-xs text-muted-foreground">
+                {tGlobal("releases_per_page_api_call_hint")}
+              </p>
+            </div>
+
+            <div className="space-y-4 p-4 border rounded-md">
+              <div className="flex justify-between items-center">
+                <h4 className="font-semibold text-base">
+                  {tGlobal("apprise_settings_title")}
+                </h4>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                {useGlobalAppriseTags && useGlobalAppriseFormat
+                  ? t("apprise_settings_hint_global")
+                  : t("apprise_settings_hint_individual")}
+              </p>
+
+              <div className="space-y-2">
+                <Label htmlFor={appriseFormatId}>
+                  {tGlobal("apprise_format_label")}
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={appriseFormat}
+                    onValueChange={(value: AppriseFormat | "global") =>
+                      setAppriseFormat(value === "global" ? "" : value)
+                    }
+                    disabled={!isAppriseConfigured || !isOnline}
+                  >
+                    <SelectTrigger id={appriseFormatId}>
+                      <SelectValue
+                        placeholder={t("apprise_format_placeholder", {
+                          format: globalSettings.appriseFormat || "text",
+                        })}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="global">
+                        {t("apprise_format_option_global", {
+                          format: globalSettings.appriseFormat || "text",
+                        })}
+                      </SelectItem>
+                      <SelectItem value="text">
+                        {tGlobal("apprise_format_text")}
+                      </SelectItem>
+                      <SelectItem value="markdown">
+                        {tGlobal("apprise_format_markdown")}
+                      </SelectItem>
+                      <SelectItem value="html">
+                        {tGlobal("apprise_format_html")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setAppriseFormat("")}
+                          className="size-8 shrink-0"
+                          disabled={!isOnline}
+                        >
+                          <RotateCcw className="size-4" />
+                          <span className="sr-only">
+                            {t("reset_to_global_button")}
+                          </span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{t("reset_to_global_tooltip")}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                {!isAppriseConfigured && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {tGlobal("apprise_format_disabled_hint")}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor={appriseTagsId}>{t("apprise_tags_label")}</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id={appriseTagsId}
+                    type="text"
+                    value={appriseTags}
+                    onChange={(e) => setAppriseTags(e.target.value)}
+                    placeholder={t("apprise_tags_placeholder", {
+                      tags: globalSettings.appriseTags || "...",
+                    })}
+                    disabled={!isAppriseConfigured || !isOnline}
+                  />
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setAppriseTags("")}
+                          className="size-8 shrink-0"
+                          disabled={!isOnline}
+                        >
+                          <RotateCcw className="size-4" />
+                          <span className="sr-only">
+                            {t("reset_to_global_button")}
+                          </span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{t("reset_to_global_tooltip")}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                {!isAppriseConfigured && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {tGlobal("apprise_tags_disabled_hint")}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    disabled={isUsingAllGlobalSettings || !isOnline}
+                  >
+                    <RotateCcw className="mr-2 size-4" />
+                    {t("reset_all_button_text")}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      {t("reset_all_dialog_title")}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {t("reset_all_dialog_description")}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>
+                      {tGlobal("cancel_button")}
+                    </AlertDialogCancel>
+                    <AlertDialogAction onClick={handleResetAll}>
+                      {t("reset_all_confirm_button")}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
 
-          <div className="pt-2">
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  disabled={isUsingAllGlobalSettings || !isOnline}
-                >
-                  <RotateCcw className="mr-2 size-4" />
-                  {t("reset_all_button_text")}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    {t("reset_all_dialog_title")}
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {t("reset_all_dialog_description")}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>
-                    {tGlobal("cancel_button")}
-                  </AlertDialogCancel>
-                  <AlertDialogAction onClick={handleResetAll}>
-                    {t("reset_all_confirm_button")}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-        </div>
-
-        <DialogFooter className="pt-4">
-          <SaveStatusIndicator status={saveStatus} />
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter className="pt-4">
+            <SaveStatusIndicator status={saveStatus} />
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {repositoryTagDragPreview &&
+        createPortal(
+          <div
+            ref={repositoryTagDragPreviewRef}
+            aria-hidden="true"
+            data-tag-drag-preview="true"
+            className="pointer-events-none fixed z-100"
+            style={{
+              left: repositoryTagDragPreview.left,
+              top: repositoryTagDragPreview.top,
+              width: repositoryTagDragSize.width,
+              height: repositoryTagDragSize.height,
+            }}
+          >
+            <Badge
+              variant="secondary"
+              className="h-full w-full gap-0 py-1 pl-1 pr-1 opacity-95 shadow-xl ring-2 ring-primary/50"
+            >
+              <ChevronLeft
+                className={cn(
+                  "size-3",
+                  repositoryTagDragPreview.fromIndex === 0 && "opacity-30",
+                )}
+              />
+              <span className="max-w-64 truncate px-1">
+                {repositoryTagDragPreview.tag}
+              </span>
+              <ChevronRight
+                className={cn(
+                  "size-3",
+                  repositoryTagDragPreview.fromIndex ===
+                    repositoryTags.length - 1 && "opacity-30",
+                )}
+              />
+              <X className="size-3" />
+            </Badge>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }

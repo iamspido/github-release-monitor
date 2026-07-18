@@ -8,6 +8,8 @@ import { ExportButton } from "@/components/export-button";
 import { RefreshButton } from "@/components/refresh-button";
 import { ReleaseCard } from "@/components/release-card";
 import { RepositoryForm } from "@/components/repository-form";
+import { RepositoryTagFilter } from "@/components/repository-tag-filter";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -20,6 +22,7 @@ import {
   normalizeReleaseSortOrder,
   sortEnrichedReleases,
 } from "@/lib/release-sort";
+import { repositoryMatchesTagFilter } from "@/lib/repositories/tags";
 import { isSecurityRelease } from "@/lib/security-release";
 import type {
   AppSettings,
@@ -73,6 +76,22 @@ export function HomePageClient({
   const tActions = useTranslations("Actions");
 
   const [formattedLastUpdated, setFormattedLastUpdated] = React.useState("");
+  const [repositoryTagsById, setRepositoryTagsById] = React.useState(
+    () =>
+      new Map(
+        repositories.map((repository) => [
+          repository.id,
+          repository.tags ?? [],
+        ]),
+      ),
+  );
+  const [selectedTags, setSelectedTags] = React.useState<Set<string>>(
+    () => new Set(),
+  );
+  const [includeUntagged, setIncludeUntagged] = React.useState(false);
+  const [openRepositorySettings, setOpenRepositorySettings] = React.useState<
+    Set<string>
+  >(() => new Set());
   const sortSetting = useOptimisticSettingsPatch<ReleaseSortOrder>({
     canMutate,
     serverValue: normalizeReleaseSortOrder(settings.releaseSortOrder),
@@ -102,6 +121,17 @@ export function HomePageClient({
     );
   }, [lastUpdated, locale, settings.timeFormat]);
 
+  React.useEffect(() => {
+    setRepositoryTagsById(
+      new Map(
+        repositories.map((repository) => [
+          repository.id,
+          repository.tags ?? [],
+        ]),
+      ),
+    );
+  }, [repositories]);
+
   const handleSortOrderChange = (value: ReleaseSortOrder) => {
     sortSetting.update(value);
   };
@@ -121,21 +151,111 @@ export function HomePageClient({
       ),
     [releases, sortSetting.value, settings],
   );
+  const tagFilterOptions = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    let untaggedCount = 0;
+
+    for (const repository of repositories) {
+      const tags = repositoryTagsById.get(repository.id) ?? [];
+      if (tags.length === 0) untaggedCount += 1;
+      for (const tag of tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+
+    return {
+      options: Array.from(counts, ([tag, count]) => ({ tag, count })).sort(
+        (left, right) => left.tag.localeCompare(right.tag, locale),
+      ),
+      untaggedCount,
+    };
+  }, [repositories, repositoryTagsById, locale]);
+  React.useEffect(() => {
+    const availableTags = new Set(
+      tagFilterOptions.options.map(({ tag }) => tag),
+    );
+
+    setSelectedTags((current) => {
+      const next = new Set(
+        Array.from(current).filter((tag) => availableTags.has(tag)),
+      );
+      return next.size === current.size ? current : next;
+    });
+
+    if (tagFilterOptions.untaggedCount === 0) {
+      setIncludeUntagged(false);
+    }
+  }, [tagFilterOptions]);
+  const visibleReleases = React.useMemo(
+    () =>
+      sortedReleases.filter(
+        (release) =>
+          openRepositorySettings.has(release.repoId) ||
+          repositoryMatchesTagFilter(
+            repositoryTagsById.get(release.repoId) ?? [],
+            selectedTags,
+            includeUntagged,
+          ),
+      ),
+    [
+      sortedReleases,
+      repositoryTagsById,
+      selectedTags,
+      includeUntagged,
+      openRepositorySettings,
+    ],
+  );
+  const isTagFilterActive = selectedTags.size > 0 || includeUntagged;
   const repositoryStats = React.useMemo(() => {
-    const newCount = releases.filter((item) => Boolean(item.isNew)).length;
-    const securityCount = releases.filter(
+    const newCount = visibleReleases.filter((item) =>
+      Boolean(item.isNew),
+    ).length;
+    const securityCount = visibleReleases.filter(
       (item) =>
         Boolean(item.isNew) && isSecurityRelease(item.release, settings),
     ).length;
 
     return { newCount, securityCount };
-  }, [releases, settings]);
+  }, [visibleReleases, settings]);
+
+  const handleTagToggle = (tag: string) => {
+    setSelectedTags((current) => {
+      const next = new Set(current);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  };
+
+  const clearTagFilter = () => {
+    setSelectedTags(new Set());
+    setIncludeUntagged(false);
+  };
+
+  const handleRepositoryTagsChange = (repoId: string, tags: string[]) => {
+    setRepositoryTagsById((current) => {
+      const next = new Map(current);
+      next.set(repoId, tags);
+      return next;
+    });
+  };
+
+  const handleRepositorySettingsOpenChange = (
+    repoId: string,
+    open: boolean,
+  ) => {
+    setOpenRepositorySettings((current) => {
+      const next = new Set(current);
+      if (open) next.add(repoId);
+      else next.delete(repoId);
+      return next;
+    });
+  };
 
   return (
     <>
       {canMutate && (
         <RepositoryForm
           currentRepositories={repositories}
+          availableTags={tagFilterOptions.options.map((option) => option.tag)}
           isExpanded={repositoryFormSetting.value}
           isExpansionSaving={repositoryFormSetting.isSaving}
           onToggleExpanded={handleRepositoryFormToggle}
@@ -150,7 +270,12 @@ export function HomePageClient({
             </h2>
             <span className="shrink-0 text-sm text-muted-foreground sm:text-right">
               {[
-                t("repo_count", { count: repositories.length }),
+                isTagFilterActive
+                  ? t("filtered_repo_count", {
+                      visible: visibleReleases.length,
+                      total: repositories.length,
+                    })
+                  : t("repo_count", { count: repositories.length }),
                 t("new_repo_count", { count: repositoryStats.newCount }),
                 t("security_repo_count", {
                   count: repositoryStats.securityCount,
@@ -165,6 +290,15 @@ export function HomePageClient({
               <ExportButton />
               {canMutate && <RefreshButton />}
             </div>
+            <RepositoryTagFilter
+              options={tagFilterOptions.options}
+              untaggedCount={tagFilterOptions.untaggedCount}
+              selectedTags={selectedTags}
+              includeUntagged={includeUntagged}
+              onTagToggle={handleTagToggle}
+              onUntaggedToggle={() => setIncludeUntagged((current) => !current)}
+              onClear={clearTagFilter}
+            />
             <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
               <label
                 htmlFor="release-sort-order"
@@ -239,12 +373,39 @@ export function HomePageClient({
 
         {repositories.length === 0 ? (
           <EmptyState canMutate={canMutate} />
+        ) : visibleReleases.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-8 text-center">
+            <p className="text-muted-foreground">{t("tag_filter_empty")}</p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4"
+              onClick={clearTagFilter}
+            >
+              {t("tag_filter_clear")}
+            </Button>
+          </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {sortedReleases.map((enrichedRelease) => (
+            {visibleReleases.map((enrichedRelease) => (
               <ReleaseCard
                 key={enrichedRelease.repoId}
                 enrichedRelease={enrichedRelease}
+                availableRepositoryTags={tagFilterOptions.options.map(
+                  (option) => option.tag,
+                )}
+                repositoryTags={
+                  repositoryTagsById.get(enrichedRelease.repoId) ?? []
+                }
+                onRepositoryTagsChange={(tags) =>
+                  handleRepositoryTagsChange(enrichedRelease.repoId, tags)
+                }
+                onSettingsOpenChange={(open) =>
+                  handleRepositorySettingsOpenChange(
+                    enrichedRelease.repoId,
+                    open,
+                  )
+                }
                 settings={settings}
                 canMutate={canMutate}
                 isAppriseConfigured={isAppriseConfigured}

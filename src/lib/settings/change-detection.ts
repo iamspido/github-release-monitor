@@ -70,6 +70,33 @@ export function pushArrayChange<T>(
   }
 }
 
+function pushOrderedArrayChange<T>(
+  changes: string[],
+  label: string,
+  previous: T[] | null | undefined,
+  next: T[] | null | undefined,
+  options: ArrayCompareOptions = {},
+): void {
+  const normalizedPrevious =
+    !previous || previous.length === 0
+      ? options.emptyAsUndefined
+        ? undefined
+        : []
+      : previous;
+  const normalizedNext =
+    !next || next.length === 0
+      ? options.emptyAsUndefined
+        ? undefined
+        : []
+      : next;
+
+  if (JSON.stringify(normalizedPrevious) !== JSON.stringify(normalizedNext)) {
+    changes.push(
+      `${label}: ${formatChangeValue(previous)} -> ${formatChangeValue(next)}`,
+    );
+  }
+}
+
 export function getReleaseCacheInvalidationReasons(
   changes: ReleaseCacheInvalidationChanges,
   options: { filtersReason?: string } = {},
@@ -290,6 +317,7 @@ export function buildGlobalSettingsChangeLog(
 
 export type RepositorySettingsUpdate = Pick<
   Repository,
+  | "tags"
   | "releaseChannels"
   | "preReleaseSubChannels"
   | "releasesPerPage"
@@ -343,6 +371,10 @@ export function buildRepositorySettingsChangeLog(
   const nextExclude = normalizeOptionalText(next.excludeRegex);
   const previousInclude = normalizeOptionalText(previous.includeRegex);
   const previousExclude = normalizeOptionalText(previous.excludeRegex);
+
+  pushOrderedArrayChange(changes, "tags", previous.tags, next.tags, {
+    emptyAsUndefined: true,
+  });
 
   pushArrayChange(
     changes,

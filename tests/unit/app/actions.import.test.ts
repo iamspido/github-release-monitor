@@ -122,4 +122,52 @@ describe("importRepositoriesAction idempotency", () => {
       }),
     );
   });
+
+  it("adds batch tags without replacing tags on an existing repository", async () => {
+    mem.repos[0].tags = ["existing", "shared"];
+    const actions = await import("@/app/actions");
+
+    const result = await actions.importRepositoriesAction(
+      [
+        {
+          id: "owner1/repo1",
+          url: "https://github.com/owner1/repo1",
+          tags: ["file-tag", "shared"],
+        },
+      ],
+      ["batch-tag", "shared"],
+    );
+
+    expect(result.success).toBe(true);
+    expect(mem.repos[0].tags).toEqual([
+      "existing",
+      "shared",
+      "file-tag",
+      "batch-tag",
+    ]);
+  });
+
+  it("rejects batch tags when the merged repository exceeds the tag limit", async () => {
+    mem.repos[0].tags = Array.from(
+      { length: 20 },
+      (_, index) => `tag-${index}`,
+    );
+    const actions = await import("@/app/actions");
+
+    const result = await actions.importRepositoriesAction(
+      [
+        {
+          id: "owner1/repo1",
+          url: "https://github.com/owner1/repo1",
+        },
+      ],
+      ["one-more"],
+    );
+
+    expect(result).toEqual({
+      success: false,
+      message: "tags_error_invalid",
+    });
+    expect(mem.repos[0].tags).toHaveLength(20);
+  });
 });

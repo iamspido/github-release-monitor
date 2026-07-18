@@ -1,12 +1,13 @@
 "use client";
 
-import { ChevronDown, Loader2, Plus, Upload } from "lucide-react";
+import { ChevronDown, Loader2, Plus, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { useActionState } from "react";
 
 import { addRepositoriesAction } from "@/app/actions";
+import { RepositoryTagPicker } from "@/components/repository-tag-picker";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +31,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { useJobPolling } from "@/hooks/use-job-polling";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import {
+  MAX_REPOSITORY_TAGS,
+  normalizeRepositoryTags,
+} from "@/lib/repositories/tags";
 import { cn } from "@/lib/utils";
 import type { Repository } from "@/types";
 import {
@@ -69,6 +74,7 @@ function SubmitButton({
 
 interface RepositoryFormProps {
   currentRepositories: Repository[];
+  availableTags: string[];
   isExpanded: boolean;
   isExpansionSaving: boolean;
   onToggleExpanded: () => void;
@@ -76,13 +82,18 @@ interface RepositoryFormProps {
 
 export function RepositoryForm({
   currentRepositories,
+  availableTags,
   isExpanded,
   isExpansionSaving,
   onToggleExpanded,
 }: RepositoryFormProps) {
   const t = useTranslations("RepositoryForm");
   const contentId = React.useId();
+  const tagsInputId = React.useId();
   const [urls, setUrls] = React.useState("");
+  const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
+  const [tagInput, setTagInput] = React.useState("");
+  const [tagError, setTagError] = React.useState(false);
   const { toast } = useToast();
   const router = useRouter();
   const { isOnline } = useNetworkStatus();
@@ -96,10 +107,17 @@ export function RepositoryForm({
   const providerWorkflow = useRepositoryProviderWorkflow(
     formAction,
     hasProcessedResult,
+    selectedTags,
   );
   const importWorkflow = useRepositoryImportWorkflow({
     currentRepositories,
     onJobStarted: setJobId,
+    onImportSuccess: () => {
+      setSelectedTags([]);
+      setTagInput("");
+      setTagError(false);
+    },
+    selectedTags,
   });
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -127,11 +145,33 @@ export function RepositoryForm({
     if (state.success && !hasProcessedResult.current) {
       hasProcessedResult.current = true;
       setUrls("");
+      setSelectedTags([]);
+      setTagInput("");
+      setTagError(false);
       if (state.jobId) {
         setJobId(state.jobId);
       }
     }
   }, [state, t, toast]);
+
+  const addSelectedTag = (tag: string) => {
+    const result = normalizeRepositoryTags([...selectedTags, tag]);
+    if (!result.success) {
+      setTagError(true);
+      return false;
+    }
+
+    setSelectedTags(result.tags);
+    setTagError(false);
+    return true;
+  };
+
+  const commitTagInput = () => {
+    if (!tagInput.trim()) return;
+    if (addSelectedTag(tagInput)) setTagInput("");
+  };
+
+  const tagOptions = availableTags.filter((tag) => !selectedTags.includes(tag));
 
   const handleJobComplete = React.useCallback(() => {
     toast({
@@ -305,6 +345,73 @@ export function RepositoryForm({
                       providerWorkflow.dialogOpen
                     }
                   />
+                  <fieldset className="mt-2 rounded-md border p-3">
+                    <legend className="px-1 text-sm font-medium">
+                      {t("existing_tags_label")}
+                    </legend>
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      {t("existing_tags_hint")}
+                    </p>
+                    {selectedTags.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-2">
+                        {selectedTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary py-1 pl-3 pr-1 text-sm text-secondary-foreground"
+                          >
+                            <span className="truncate">{tag}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedTags((current) =>
+                                  current.filter((entry) => entry !== tag),
+                                );
+                                setTagError(false);
+                              }}
+                              className="rounded-full p-0.5 hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                              aria-label={t("tags_remove_aria", { tag })}
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <RepositoryTagPicker
+                      id={tagsInputId}
+                      options={tagOptions}
+                      selectedTags={selectedTags}
+                      value={tagInput}
+                      onValueChange={(value) => {
+                        setTagInput(value);
+                        setTagError(false);
+                      }}
+                      onTagSelect={addSelectedTag}
+                      onCreateTag={addSelectedTag}
+                      onInputBlur={commitTagInput}
+                      placeholder={t("tags_input_placeholder")}
+                      listboxLabel={t("tags_existing_label")}
+                      createOptionLabel={(tag) =>
+                        t("tags_create_option", { tag })
+                      }
+                      ariaLabel={t("tags_input_aria")}
+                      disabled={
+                        !isExpanded ||
+                        isPending ||
+                        providerWorkflow.isResolving ||
+                        providerWorkflow.dialogOpen ||
+                        !!jobId ||
+                        !isOnline ||
+                        selectedTags.length >= MAX_REPOSITORY_TAGS
+                      }
+                      invalid={tagError}
+                    />
+                    {tagError && (
+                      <p className="mt-2 text-sm text-destructive">
+                        {t("tags_error_invalid")}
+                      </p>
+                    )}
+                  </fieldset>
                   <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:gap-2">
                     <Button
                       type="button"

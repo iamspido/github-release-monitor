@@ -1,5 +1,9 @@
 # Agent Notes
 
+## Git Commits
+
+Always use an English commit title and an English commit description for Git commits. Do not create title-only commits.
+
 ## Build / Lint / Test (Docker)
 
 Prefer Docker for lint/typecheck/tests. Avoid running `node`/`npm` directly on the host unless explicitly requested (some environments may have snap/permission issues).
@@ -8,8 +12,14 @@ Prefer Docker for lint/typecheck/tests. Avoid running `node`/`npm` directly on t
 - `docker build -f ./docker/Dockerfile --target typecheck --progress=plain .`
 - `docker build -f ./docker/Dockerfile --target tester --progress=plain .`
 - `docker build -f ./docker/Dockerfile --target coverage -t grm-coverage --progress=plain .`
-- `docker build -f ./docker/Dockerfile --target e2e -t grm-e2e --progress=plain .`
 - `docker build -f ./docker/Dockerfile --target runner -t github-release-monitor:dev --progress=plain .`
+
+### E2E Tests
+
+Never run the complete E2E test suite unless the user explicitly requests it. By default, always select only the smallest set of Playwright spec files or individual tests relevant to the current change. In particular, do not build the `e2e` target without setting `PW_TESTS` unless a complete E2E run was explicitly requested.
+
+- Targeted spec example: `docker build -f ./docker/Dockerfile --target e2e --build-arg PW_TESTS="tests/e2e/relevant-feature.spec.ts" -t grm-e2e --progress=plain .`
+- Multiple relevant specs may be passed through `PW_TESTS`, but unrelated E2E specs must not be included.
 
 ## Dependencies / Lockfile (Docker)
 
