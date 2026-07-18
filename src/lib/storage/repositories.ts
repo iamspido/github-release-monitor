@@ -174,6 +174,7 @@ function parseRepository(value: unknown, index: number): Repository {
 
   assertOptionalField(repository, "lastSeenReleaseTag", isString, "a string");
   assertOptionalField(repository, "isNew", isBoolean, "a boolean");
+  assertOptionalField(repository, "isPinned", isBoolean, "a boolean");
   assertOptionalField(repository, "etag", isString, "a string");
   if (repository.latestRelease !== undefined) {
     parseCachedRelease(repository.latestRelease, `${path}.latestRelease`);
@@ -292,6 +293,7 @@ function mergeRepositoriesPreferFirst(
     isNew: preferDefined(base.isNew, incoming.isNew),
     etag: preferDefined(base.etag, incoming.etag),
     latestRelease: preferDefined(base.latestRelease, incoming.latestRelease),
+    isPinned: preferDefined(base.isPinned, incoming.isPinned),
     tags: preferDefined(base.tags, incoming.tags),
     releaseChannels: preferDefined(
       base.releaseChannels,

@@ -502,6 +502,7 @@ export async function updateRepositorySettingsAction(
   settings: Pick<
     Repository,
     | "displayName"
+    | "isPinned"
     | "releaseChannels"
     | "preReleaseSubChannels"
     | "releasesPerPage"
@@ -558,6 +559,12 @@ export async function updateRepositorySettingsAction(
           normalizedTags.tags.length > 0 ? normalizedTags.tags : undefined;
       }
 
+      const newIsPinned = Object.hasOwn(settings, "isPinned")
+        ? settings.isPinned === true
+          ? true
+          : undefined
+        : existing.isPinned;
+
       const newInclude = (settings.includeRegex ?? "").trim() || undefined;
       const newExclude = (settings.excludeRegex ?? "").trim() || undefined;
       if (
@@ -595,6 +602,7 @@ export async function updateRepositorySettingsAction(
         {
           ...settings,
           displayName: normalizedDisplayName.displayName,
+          isPinned: newIsPinned,
           tags: newTags,
         },
         {
@@ -611,6 +619,7 @@ export async function updateRepositorySettingsAction(
       currentRepos[repoIndex] = {
         ...existing,
         displayName: normalizedDisplayName.displayName,
+        isPinned: newIsPinned,
         releaseChannels: settings.releaseChannels,
         preReleaseSubChannels: settings.preReleaseSubChannels,
         releasesPerPage: settings.releasesPerPage,

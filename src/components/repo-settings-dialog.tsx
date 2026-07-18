@@ -212,10 +212,12 @@ interface RepoSettingsDialogProps {
   availableRepositoryTags?: string[];
   currentRepositoryTags?: string[];
   onRepositoryTagsChange?: (tags: string[]) => void;
+  onPinnedChange?: (isPinned: boolean) => void;
   onDisplayNameChange?: (displayName: string | undefined) => void;
   currentRepoSettings?: Pick<
     Repository,
     | "displayName"
+    | "isPinned"
     | "releaseChannels"
     | "preReleaseSubChannels"
     | "releasesPerPage"
@@ -238,6 +240,7 @@ export function RepoSettingsDialog({
   availableRepositoryTags = [],
   currentRepositoryTags = [],
   onRepositoryTagsChange,
+  onPinnedChange,
   onDisplayNameChange,
   currentRepoSettings,
   globalSettings,
@@ -254,6 +257,7 @@ export function RepoSettingsDialog({
   // Generate unique IDs for form elements
   const stableId = React.useId();
   const displayNameId = React.useId();
+  const isPinnedId = React.useId();
   const repositoryTagsId = React.useId();
   const prereleaseId = React.useId();
   const draftId = React.useId();
@@ -283,6 +287,9 @@ export function RepoSettingsDialog({
   );
   const [displayName, setDisplayName] = React.useState(
     currentRepoSettings?.displayName ?? "",
+  );
+  const [isPinned, setIsPinned] = React.useState(
+    currentRepoSettings?.isPinned === true,
   );
   const [repositoryTags, setRepositoryTags] = React.useState<string[]>(
     currentRepositoryTags,
@@ -386,6 +393,7 @@ export function RepoSettingsDialog({
   const pendingDisplayNameChangeRef = React.useRef<{
     displayName: string | undefined;
   } | null>(null);
+  const pendingPinnedChangeRef = React.useRef<boolean | null>(null);
   const isOpenRef = React.useRef(isOpen);
 
   React.useEffect(() => {
@@ -432,6 +440,25 @@ export function RepoSettingsDialog({
     pendingDisplayNameChangeRef.current = null;
   }, [onDisplayNameChange]);
 
+  const publishPinnedChange = React.useCallback(
+    (nextIsPinned: boolean) => {
+      pendingPinnedChangeRef.current = nextIsPinned;
+      if (isOpenRef.current) return;
+
+      onPinnedChange?.(nextIsPinned);
+      pendingPinnedChangeRef.current = null;
+    },
+    [onPinnedChange],
+  );
+
+  const flushPinnedChange = React.useCallback(() => {
+    const pendingIsPinned = pendingPinnedChangeRef.current;
+    if (pendingIsPinned === null) return;
+
+    onPinnedChange?.(pendingIsPinned);
+    pendingPinnedChangeRef.current = null;
+  }, [onPinnedChange]);
+
   const refreshAfterClosedSave = React.useCallback(() => {
     if (!savedThisSessionRef.current) return;
 
@@ -471,6 +498,7 @@ export function RepoSettingsDialog({
       dialogSessionRef.current += 1;
       const initialSettings = {
         displayName: currentRepoSettings?.displayName ?? undefined,
+        isPinned: currentRepoSettings?.isPinned === true,
         tags: currentRepositoryTags,
         releaseChannels: currentRepoSettings?.releaseChannels ?? [],
         preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels,
@@ -487,6 +515,7 @@ export function RepoSettingsDialog({
 
       setChannels(initialSettings.releaseChannels);
       setDisplayName(initialSettings.displayName ?? "");
+      setIsPinned(initialSettings.isPinned);
       setRepositoryTags(initialSettings.tags);
       setRepositoryTagInput("");
       setRepositoryTagError(null);
@@ -542,12 +571,14 @@ export function RepoSettingsDialog({
     if (!isOpen) {
       flushRepositoryTagsChange();
       flushDisplayNameChange();
+      flushPinnedChange();
       refreshAfterClosedSave();
     }
   }, [
     isOpen,
     flushRepositoryTagsChange,
     flushDisplayNameChange,
+    flushPinnedChange,
     refreshAfterClosedSave,
   ]);
 
@@ -562,6 +593,7 @@ export function RepoSettingsDialog({
   const useGlobalAppriseFormat = appriseFormat === "";
 
   const isUsingAllGlobalSettings =
+    !isPinned &&
     useAutomaticDisplayName &&
     useGlobalChannels &&
     useGlobalSubChannels &&
@@ -575,6 +607,7 @@ export function RepoSettingsDialog({
   const newSettings: Pick<
     Repository,
     | "displayName"
+    | "isPinned"
     | "tags"
     | "releaseChannels"
     | "preReleaseSubChannels"
@@ -623,6 +656,7 @@ export function RepoSettingsDialog({
 
     return {
       displayName: displayName.trim() || undefined,
+      isPinned,
       tags: repositoryTags,
       releaseChannels: channels,
       preReleaseSubChannels,
@@ -637,6 +671,7 @@ export function RepoSettingsDialog({
     };
   }, [
     displayName,
+    isPinned,
     repositoryTags,
     channels,
     preReleaseSubChannels,
@@ -779,6 +814,7 @@ export function RepoSettingsDialog({
           if (result.success) {
             publishRepositoryTagsChange(newSettings.tags ?? []);
             publishDisplayNameChange(newSettings.displayName);
+            publishPinnedChange(newSettings.isPinned === true);
             if (
               isOpenRef.current &&
               saveDialogSession !== dialogSessionRef.current
@@ -824,6 +860,7 @@ export function RepoSettingsDialog({
             savedThisSessionRef.current = true;
             publishRepositoryTagsChange(newSettings.tags ?? []);
             publishDisplayNameChange(newSettings.displayName);
+            publishPinnedChange(newSettings.isPinned === true);
             if (!isOpenRef.current) refreshAfterClosedSave();
           } else {
             savedThisSessionRef.current = true;
@@ -872,6 +909,7 @@ export function RepoSettingsDialog({
     scheduleAutosave,
     publishRepositoryTagsChange,
     publishDisplayNameChange,
+    publishPinnedChange,
   ]);
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -1164,6 +1202,7 @@ export function RepoSettingsDialog({
   const handleResetAll = () => {
     if (!isOnline) return;
     setDisplayName("");
+    setIsPinned(false);
     setChannels([]);
     setPreReleaseSubChannels(undefined);
     setReleasesPerPage("");
@@ -1252,6 +1291,20 @@ export function RepoSettingsDialog({
                 <p className="text-xs text-muted-foreground">
                   {t("display_name_hint")}
                 </p>
+              </div>
+              <div className="flex items-start space-x-2">
+                <Checkbox
+                  id={isPinnedId}
+                  checked={isPinned}
+                  onCheckedChange={(checked) => setIsPinned(checked === true)}
+                  disabled={!isOnline}
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label htmlFor={isPinnedId}>{t("pin_to_top_label")}</Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("pin_to_top_description")}
+                  </p>
+                </div>
               </div>
             </div>
 

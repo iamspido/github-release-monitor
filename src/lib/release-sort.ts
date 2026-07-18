@@ -137,6 +137,13 @@ export function sortEnrichedReleases(
     : null;
 
   return [...releases].sort((a, b) => {
+    const aIsPinned = a.repoSettings?.isPinned === true;
+    const bIsPinned = b.repoSettings?.isPinned === true;
+
+    if (aIsPinned !== bIsPinned) {
+      return aIsPinned ? -1 : 1;
+    }
+
     if (matchesSecurityRelease) {
       const aIsNewSecurityRelease =
         Boolean(a.isNew) && matchesSecurityRelease(a.release);

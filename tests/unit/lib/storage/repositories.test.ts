@@ -36,6 +36,7 @@ describe("storage/repositories", () => {
         url: "https://github.com/owner2/repo2",
         displayName: "  Media Stack  ",
         isNew: true,
+        isPinned: true,
         tags: [" Infra ", "MEDIA", "infra"],
       },
     ];
@@ -49,6 +50,7 @@ describe("storage/repositories", () => {
         url: "https://github.com/owner2/repo2",
         displayName: "Media Stack",
         isNew: true,
+        isPinned: true,
         tags: ["infra", "media"],
       },
     ]);
@@ -146,6 +148,27 @@ describe("storage/repositories", () => {
 
     await expect(getRepositories()).rejects.toThrow(
       "displayName must be a valid display name",
+    );
+  });
+
+  it("rejects a non-boolean pinned state", async () => {
+    const dataDir = path.join(tmpDir, "data");
+    await fs.mkdir(dataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(dataDir, "repositories.json"),
+      JSON.stringify([
+        {
+          id: "github:owner/repo",
+          url: "https://github.com/owner/repo",
+          isPinned: "true",
+        },
+      ]),
+      "utf8",
+    );
+    const { getRepositories } = await import("@/lib/storage/repositories");
+
+    await expect(getRepositories()).rejects.toThrow(
+      "isPinned must be a boolean",
     );
   });
 

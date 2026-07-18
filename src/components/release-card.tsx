@@ -6,6 +6,7 @@ import {
   CheckSquare,
   ExternalLink,
   Loader2,
+  Pin,
   Settings,
   Trash2,
 } from "lucide-react";
@@ -68,6 +69,7 @@ interface ReleaseCardProps {
   availableRepositoryTags?: string[];
   repositoryTags?: string[];
   onRepositoryTagsChange?: (tags: string[]) => void;
+  onPinnedChange?: (isPinned: boolean) => void;
   onSettingsOpenChange?: (open: boolean) => void;
   canMutate?: boolean;
   isAppriseConfigured?: boolean;
@@ -86,6 +88,31 @@ function CustomSettingsBadge() {
         </TooltipTrigger>
         <TooltipContent>
           <p>{t("custom_settings_tooltip")}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function PinnedRepositoryBadge() {
+  const t = useTranslations("ReleaseCard");
+
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge
+            variant="outline"
+            className="px-2 text-muted-foreground"
+            tabIndex={0}
+            aria-label={t("pinned_tooltip")}
+          >
+            <Pin className="size-3.5" aria-hidden="true" />
+            <span className="sr-only">{t("pinned_badge")}</span>
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{t("pinned_tooltip")}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -245,6 +272,7 @@ export function ReleaseCard({
   availableRepositoryTags = [],
   repositoryTags = [],
   onRepositoryTagsChange,
+  onPinnedChange,
   onSettingsOpenChange,
   canMutate = true,
   isAppriseConfigured = false,
@@ -271,6 +299,7 @@ export function ReleaseCard({
     [repoSettings, savedDisplayName],
   );
   const customDisplayName = savedDisplayName?.trim();
+  const isPinned = effectiveRepoSettings.isPinned === true;
 
   const [isRemoving, startRemoveTransition] = React.useTransition();
   const [isAcknowledging, startAcknowledgeTransition] = React.useTransition();
@@ -411,6 +440,7 @@ export function ReleaseCard({
             availableRepositoryTags={availableRepositoryTags}
             currentRepositoryTags={repositoryTags}
             onRepositoryTagsChange={onRepositoryTagsChange}
+            onPinnedChange={onPinnedChange}
             globalSettings={settings}
             isAppriseConfigured={isAppriseConfigured}
           />
@@ -445,6 +475,7 @@ export function ReleaseCard({
                 <RepositoryTagBadges tags={repositoryTags} />
               </div>
               <div className="flex items-center gap-2">
+                {isPinned && <PinnedRepositoryBadge />}
                 {repoHasCustomSettings && <CustomSettingsBadge />}
                 {canMutate && (
                   <RepoSettingsTrigger
@@ -493,6 +524,7 @@ export function ReleaseCard({
             availableRepositoryTags={availableRepositoryTags}
             currentRepositoryTags={repositoryTags}
             onRepositoryTagsChange={onRepositoryTagsChange}
+            onPinnedChange={onPinnedChange}
             globalSettings={settings}
             isAppriseConfigured={isAppriseConfigured}
           />
@@ -526,6 +558,7 @@ export function ReleaseCard({
                 <RepositoryTagBadges tags={repositoryTags} />
               </div>
               <div className="flex items-center gap-2">
+                {isPinned && <PinnedRepositoryBadge />}
                 {repoHasCustomSettings && <CustomSettingsBadge />}
                 {canMutate && (
                   <RepoSettingsTrigger
@@ -587,6 +620,7 @@ export function ReleaseCard({
           availableRepositoryTags={availableRepositoryTags}
           currentRepositoryTags={repositoryTags}
           onRepositoryTagsChange={onRepositoryTagsChange}
+          onPinnedChange={onPinnedChange}
           globalSettings={settings}
           isAppriseConfigured={isAppriseConfigured}
         />
@@ -630,6 +664,7 @@ export function ReleaseCard({
                 {release.tag_name}
               </Badge>
               <div className="flex items-center gap-2">
+                {isPinned && <PinnedRepositoryBadge />}
                 {isNewSecurityRelease && (
                   <Badge
                     variant="outline"

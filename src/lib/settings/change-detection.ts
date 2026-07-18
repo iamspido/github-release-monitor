@@ -318,6 +318,7 @@ export function buildGlobalSettingsChangeLog(
 export type RepositorySettingsUpdate = Pick<
   Repository,
   | "displayName"
+  | "isPinned"
   | "tags"
   | "releaseChannels"
   | "preReleaseSubChannels"
@@ -378,6 +379,12 @@ export function buildRepositorySettingsChangeLog(
     "displayName",
     normalizeOptionalText(previous.displayName),
     normalizeOptionalText(next.displayName),
+  );
+  pushValueChange(
+    changes,
+    "isPinned",
+    previous.isPinned === true,
+    next.isPinned === true,
   );
 
   pushOrderedArrayChange(changes, "tags", previous.tags, next.tags, {

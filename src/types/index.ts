@@ -10,6 +10,8 @@ export type Repository = {
   isNew?: boolean;
   etag?: string;
   latestRelease?: CachedRelease;
+  // User-controlled priority that keeps the repository above unpinned ones.
+  isPinned?: boolean;
   // User-defined labels used to organize and filter monitored repositories.
   tags?: string[];
   // New: Per-repository settings override
@@ -94,6 +96,7 @@ export type EnrichedRelease = {
   newEtag?: string | null;
   repoSettings?: {
     displayName?: string;
+    isPinned?: boolean;
     releaseChannels?: ReleaseChannel[];
     preReleaseSubChannels?: PreReleaseChannelType[];
     releasesPerPage?: number | null;

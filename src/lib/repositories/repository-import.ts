@@ -121,6 +121,9 @@ export function parseImportedRepository(value: unknown): Repository | null {
     repository.lastSeenReleaseTag = lastSeenReleaseTag;
   }
   if (typeof value.isNew === "boolean") repository.isNew = value.isNew;
+  if (typeof value.isPinned === "boolean") {
+    repository.isPinned = value.isPinned;
+  }
   const etag = readOptionalString(value, "etag");
   if (etag !== undefined) repository.etag = etag;
   const latestRelease = parseCachedRelease(value.latestRelease);

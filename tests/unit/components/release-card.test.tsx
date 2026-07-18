@@ -34,6 +34,8 @@ const translationMap: Record<string, Record<string, string>> = {
     error_title: "Repository error",
     custom_settings_badge: "[Custom settings]",
     custom_settings_tooltip: "Overrides applied",
+    pinned_badge: "Pinned",
+    pinned_tooltip: "Pinned to top",
     repository_tags_more_aria: "{count} more repository tags: {tags}",
     security_release_badge: "Security",
     settings_button_aria: "Open repository settings",
@@ -351,6 +353,24 @@ describe("ReleaseCard component", () => {
     );
 
     expect(container?.querySelector("h3")?.textContent).toBe("repo");
+  });
+
+  it("shows a separate pinned marker without a custom-settings badge", () => {
+    const enrichedRelease = makeRelease();
+    enrichedRelease.repoSettings = { isPinned: true };
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={baseSettings}
+      />,
+    );
+
+    expect(container?.textContent).toContain("Pinned");
+    expect(container?.textContent).not.toContain("[Custom settings]");
+    const pinnedBadge = container?.querySelector(".sr-only")?.parentElement;
+    expect(pinnedBadge?.getAttribute("aria-label")).toBe("Pinned to top");
+    expect(pinnedBadge?.tabIndex).toBe(0);
   });
 
   it("keeps the display name visible when release fetching fails", () => {

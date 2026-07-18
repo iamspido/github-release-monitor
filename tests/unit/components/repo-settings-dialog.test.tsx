@@ -33,6 +33,8 @@ const translationMap: Record<string, Record<string, string>> = {
     display_section_description: "Customize display",
     display_name_label: "Display name (optional)",
     display_name_hint: "Overrides the automatic heading",
+    pin_to_top_label: "Pin to top",
+    pin_to_top_description: "Show before unpinned repositories",
     autosave_waiting: "Waiting to save…",
     autosave_saving: "Saving…",
     autosave_success_short: "Saved",
@@ -505,6 +507,37 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     renderDialog({ isOpen: false, onDisplayNameChange });
     await flushEffects();
     expect(onDisplayNameChange).toHaveBeenCalledWith("Production Monitor");
+  });
+
+  it("autosaves pinning and publishes it after the dialog closes", async () => {
+    const onPinnedChange = vi.fn();
+    renderDialog({ onPinnedChange });
+    await flushEffects();
+
+    const pinLabel = Array.from(container.querySelectorAll("label")).find(
+      (label) => label.textContent === "Pin to top",
+    );
+    const checkbox = pinLabel?.htmlFor
+      ? document.getElementById(pinLabel.htmlFor)
+      : null;
+    expect(checkbox?.getAttribute("role")).toBe("checkbox");
+
+    await act(async () => {
+      (checkbox as HTMLButtonElement | null)?.click();
+    });
+    await advanceAutosaveDelay();
+
+    await expectEventually(() => {
+      expect(updateSettingsMock).toHaveBeenCalledWith(
+        "owner/repo",
+        expect.objectContaining({ isPinned: true }),
+      );
+    });
+    expect(onPinnedChange).not.toHaveBeenCalled();
+
+    renderDialog({ isOpen: false, onPinnedChange });
+    await flushEffects();
+    expect(onPinnedChange).toHaveBeenCalledWith(true);
   });
 
   it("reorders repository tags with controls and autosaves their order", async () => {

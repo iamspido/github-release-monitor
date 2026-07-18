@@ -8,11 +8,12 @@ describe("toCachedEnrichedRelease", () => {
         id: "github:owner/repo",
         url: "https://github.com/owner/repo",
         displayName: "Production Monitor",
+        isPinned: true,
         etag: 'W/"keep"',
       }),
     ).toMatchObject({
       repoId: "github:owner/repo",
-      repoSettings: { displayName: "Production Monitor" },
+      repoSettings: { displayName: "Production Monitor", isPinned: true },
       newEtag: 'W/"keep"',
     });
   });

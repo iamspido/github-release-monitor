@@ -7,11 +7,13 @@ function release(
   date: string | null,
   isNew = false,
   body: string | null = null,
+  isPinned = false,
 ): EnrichedRelease {
   return {
     repoId,
     repoUrl: `https://example.com/${repoId}`,
     isNew,
+    repoSettings: { isPinned },
     release: date
       ? ({
           id: 1,
@@ -95,6 +97,41 @@ describe("sortEnrichedReleases", () => {
       "github:owner/seen-security",
       "github:owner/newer-regular",
       "github:owner/older-security",
+    ]);
+  });
+
+  it("keeps pinned repositories above security priority and the selected sort order", () => {
+    const input = [
+      release(
+        "github:owner/new-security",
+        "2024-03-01T00:00:00.000Z",
+        true,
+        "Security update for CVE-2024-12345.",
+      ),
+      release(
+        "github:owner/pinned-old",
+        "2024-01-01T00:00:00.000Z",
+        false,
+        null,
+        true,
+      ),
+      release(
+        "github:owner/pinned-new",
+        "2024-02-01T00:00:00.000Z",
+        false,
+        null,
+        true,
+      ),
+      release("github:owner/regular-new", "2024-04-01T00:00:00.000Z"),
+    ];
+
+    expect(
+      ids(sortEnrichedReleases(input, "latest_first", undefined, true)),
+    ).toEqual([
+      "github:owner/pinned-new",
+      "github:owner/pinned-old",
+      "github:owner/new-security",
+      "github:owner/regular-new",
     ]);
   });
 

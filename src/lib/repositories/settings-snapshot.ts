@@ -5,6 +5,7 @@ export function toRepositorySettingsSnapshot(
 ): NonNullable<EnrichedRelease["repoSettings"]> {
   return {
     displayName: repository.displayName,
+    isPinned: repository.isPinned,
     releaseChannels: repository.releaseChannels,
     preReleaseSubChannels: repository.preReleaseSubChannels,
     releasesPerPage: repository.releasesPerPage,

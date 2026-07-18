@@ -30,4 +30,20 @@ describe("repository import metadata", () => {
       }),
     ).not.toHaveProperty("tags");
   });
+
+  it("imports a valid pinned state and ignores invalid values", () => {
+    expect(
+      parseImportedRepository({
+        url: "https://github.com/owner/pinned",
+        isPinned: true,
+      }),
+    ).toMatchObject({ isPinned: true });
+
+    expect(
+      parseImportedRepository({
+        url: "https://github.com/owner/invalid",
+        isPinned: "true",
+      }),
+    ).not.toHaveProperty("isPinned");
+  });
 });

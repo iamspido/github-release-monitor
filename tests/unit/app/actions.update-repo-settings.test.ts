@@ -129,6 +129,38 @@ describe("updateRepositorySettingsAction", () => {
     expect(mem.repos[0].displayName).toBe("Production Monitor");
   });
 
+  it("pins and unpins without invalidating release data", async () => {
+    mem.repos = [
+      {
+        id: "o/r",
+        url: "https://github.com/o/r",
+        etag: 'W/"keep"',
+      },
+    ];
+
+    const { updateRepositorySettingsAction } = await import("@/app/actions");
+    const pinResult = await updateRepositorySettingsAction("o/r", {
+      isPinned: true,
+    });
+
+    expect(pinResult.success).toBe(true);
+    expect(mem.repos[0].isPinned).toBe(true);
+    expect(mem.repos[0].etag).toBe('W/"keep"');
+
+    const partialResult = await updateRepositorySettingsAction("o/r", {
+      tags: ["infra"],
+    });
+    expect(partialResult.success).toBe(true);
+    expect(mem.repos[0].isPinned).toBe(true);
+
+    const unpinResult = await updateRepositorySettingsAction("o/r", {
+      isPinned: false,
+    });
+    expect(unpinResult.success).toBe(true);
+    expect(mem.repos[0].isPinned).toBeUndefined();
+    expect(mem.repos[0].etag).toBe('W/"keep"');
+  });
+
   it("clears an explicitly unset display name", async () => {
     mem.repos = [
       {

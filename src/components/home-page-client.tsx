@@ -85,6 +85,15 @@ export function HomePageClient({
         ]),
       ),
   );
+  const [repositoryPinnedById, setRepositoryPinnedById] = React.useState(
+    () =>
+      new Map(
+        repositories.map((repository) => [
+          repository.id,
+          repository.isPinned === true,
+        ]),
+      ),
+  );
   const [selectedTags, setSelectedTags] = React.useState<Set<string>>(
     () => new Set(),
   );
@@ -130,6 +139,14 @@ export function HomePageClient({
         ]),
       ),
     );
+    setRepositoryPinnedById(
+      new Map(
+        repositories.map((repository) => [
+          repository.id,
+          repository.isPinned === true,
+        ]),
+      ),
+    );
   }, [repositories]);
 
   const handleSortOrderChange = (value: ReleaseSortOrder) => {
@@ -143,13 +160,21 @@ export function HomePageClient({
   const sortedReleases = React.useMemo(
     () =>
       sortEnrichedReleases(
-        releases,
+        releases.map((release) => ({
+          ...release,
+          repoSettings: {
+            ...release.repoSettings,
+            isPinned:
+              repositoryPinnedById.get(release.repoId) ??
+              release.repoSettings?.isPinned,
+          },
+        })),
         sortSetting.value,
         settings.providerSortOrder,
         settings.prioritizeNewSecurityReleases,
         settings,
       ),
-    [releases, sortSetting.value, settings],
+    [releases, repositoryPinnedById, sortSetting.value, settings],
   );
   const tagFilterOptions = React.useMemo(() => {
     const counts = new Map<string, number>();
@@ -234,6 +259,14 @@ export function HomePageClient({
     setRepositoryTagsById((current) => {
       const next = new Map(current);
       next.set(repoId, tags);
+      return next;
+    });
+  };
+
+  const handleRepositoryPinnedChange = (repoId: string, isPinned: boolean) => {
+    setRepositoryPinnedById((current) => {
+      const next = new Map(current);
+      next.set(repoId, isPinned);
       return next;
     });
   };
@@ -399,6 +432,9 @@ export function HomePageClient({
                 }
                 onRepositoryTagsChange={(tags) =>
                   handleRepositoryTagsChange(enrichedRelease.repoId, tags)
+                }
+                onPinnedChange={(isPinned) =>
+                  handleRepositoryPinnedChange(enrichedRelease.repoId, isPinned)
                 }
                 onSettingsOpenChange={(open) =>
                   handleRepositorySettingsOpenChange(
