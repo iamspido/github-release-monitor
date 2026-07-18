@@ -55,9 +55,7 @@ test("new and existing tags can be selected while adding repositories", async ({
   await tagInput.focus();
   const infraOption = page.getByRole("option", { name: "infra" });
   await expect(infraOption).toBeVisible();
-  await expect(
-    infraOption.locator('[data-tag-add-icon="true"]'),
-  ).toBeVisible();
+  await expect(infraOption.locator('[data-tag-add-icon="true"]')).toBeVisible();
   await tagInput.fill("med");
   await page.getByRole("option", { name: "media" }).click();
   await expect(
@@ -88,7 +86,9 @@ test("new and existing tags can be selected while adding repositories", async ({
   const repositoryCard = repoLink.locator(
     "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' rounded-lg ')][1]",
   );
-  await expect(repositoryCard.getByText("media", { exact: true })).toBeVisible();
+  await expect(
+    repositoryCard.getByText("media", { exact: true }),
+  ).toBeVisible();
   await expect(
     repositoryCard.getByText("new-tag", { exact: true }),
   ).toBeVisible();
@@ -100,21 +100,19 @@ test("new and existing tags can be selected while adding repositories", async ({
   await importTagInput.fill("batch-tag");
   await importTagInput.press("Enter");
 
-  await page
-    .locator('input[type="file"][accept*=".json"]')
-    .setInputFiles({
-      name: "tagged-repository-import.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(
-        JSON.stringify([
-          {
-            id: "add-tag-import/repository",
-            url: "https://github.com/add-tag-import/repository",
-            tags: ["file-tag"],
-          },
-        ]),
-      ),
-    });
+  await page.locator('input[type="file"][accept*=".json"]').setInputFiles({
+    name: "tagged-repository-import.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify([
+        {
+          id: "add-tag-import/repository",
+          url: "https://github.com/add-tag-import/repository",
+          tags: ["file-tag"],
+        },
+      ]),
+    ),
+  });
   const taggedImportDialog = page.getByRole("alertdialog");
   await expect(taggedImportDialog).toBeVisible();
   await taggedImportDialog.getByRole("button", { name: "Import" }).click();
@@ -176,15 +174,13 @@ test("keeps the import preview open when selected tags exceed the limit", async 
   await tagInput.fill("overflow-tag");
   await tagInput.press("Enter");
 
-  await page
-    .locator('input[type="file"][accept*=".json"]')
-    .setInputFiles({
-      name: "repository-tag-limit-update.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(
-        JSON.stringify([{ id: repositoryId, url: repositoryUrl }]),
-      ),
-    });
+  await page.locator('input[type="file"][accept*=".json"]').setInputFiles({
+    name: "repository-tag-limit-update.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify([{ id: repositoryId, url: repositoryUrl }]),
+    ),
+  });
 
   const failedImportDialog = page.getByRole("alertdialog");
   await expect(failedImportDialog).toBeVisible();

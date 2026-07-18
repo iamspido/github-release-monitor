@@ -27,35 +27,33 @@ test("repository tags filter cards with search, OR semantics, and untagged suppo
   await ensureTestRepo(page);
   await page.goto("/en");
 
-  await page
-    .locator('input[type="file"][accept*=".json"]')
-    .setInputFiles({
-      name: "repository-tag-filter.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(
-        JSON.stringify([
-          {
-            id: "filter-infra/repository",
-            url: "https://github.com/filter-infra/repository",
-            tags: ["infra"],
-          },
-          {
-            id: "filter-media/repository",
-            url: "https://github.com/filter-media/repository",
-            tags: ["media"],
-          },
-          {
-            id: "filter-both/repository",
-            url: "https://github.com/filter-both/repository",
-            tags: ["infra", "media"],
-          },
-          {
-            id: "filter-none/repository",
-            url: "https://github.com/filter-none/repository",
-          },
-        ]),
-      ),
-    });
+  await page.locator('input[type="file"][accept*=".json"]').setInputFiles({
+    name: "repository-tag-filter.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify([
+        {
+          id: "filter-infra/repository",
+          url: "https://github.com/filter-infra/repository",
+          tags: ["infra"],
+        },
+        {
+          id: "filter-media/repository",
+          url: "https://github.com/filter-media/repository",
+          tags: ["media"],
+        },
+        {
+          id: "filter-both/repository",
+          url: "https://github.com/filter-both/repository",
+          tags: ["infra", "media"],
+        },
+        {
+          id: "filter-none/repository",
+          url: "https://github.com/filter-none/repository",
+        },
+      ]),
+    ),
+  });
   const importDialog = page.getByRole("alertdialog");
   await expect(importDialog).toBeVisible();
   await importDialog.getByRole("button", { name: "Import" }).click();
@@ -83,9 +81,7 @@ test("repository tags filter cards with search, OR semantics, and untagged suppo
     name: "Search repository tags",
   });
   await reopenedSearch.fill("");
-  await page
-    .getByRole("menuitemcheckbox", { name: /^media\b/ })
-    .click();
+  await page.getByRole("menuitemcheckbox", { name: /^media\b/ }).click();
   await page.keyboard.press("Escape");
 
   await expect(
@@ -121,9 +117,7 @@ test("repository tags filter cards with search, OR semantics, and untagged suppo
   await expect(mediaLink).toHaveCount(0);
 
   await page.getByRole("button", { name: "Tags (1)", exact: true }).click();
-  await page
-    .getByRole("menuitemcheckbox", { name: /^infra\b/ })
-    .click();
+  await page.getByRole("menuitemcheckbox", { name: /^infra\b/ }).click();
   await page.keyboard.press("Escape");
   await expect(
     page.locator("a", { hasText: "filter-infra/repository" }),
@@ -133,9 +127,7 @@ test("repository tags filter cards with search, OR semantics, and untagged suppo
   ).toHaveCount(0);
 
   await page.getByRole("button", { name: "Tags (2)", exact: true }).click();
-  await page
-    .getByRole("menuitemcheckbox", { name: /^Without tags\b/ })
-    .click();
+  await page.getByRole("menuitemcheckbox", { name: /^Without tags\b/ }).click();
   await page.keyboard.press("Escape");
   await expect(
     page.locator("a", { hasText: "filter-none/repository" }),
@@ -157,21 +149,19 @@ test("clears a tag filter after its last matching tag is removed", async ({
   await login(page);
   await page.goto("/en");
 
-  await page
-    .locator('input[type="file"][accept*=".json"]')
-    .setInputFiles({
-      name: "repository-last-tag-filter.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(
-        JSON.stringify([
-          {
-            id: "filter-last-tag/repository",
-            url: "https://github.com/filter-last-tag/repository",
-            tags: ["last-tag"],
-          },
-        ]),
-      ),
-    });
+  await page.locator('input[type="file"][accept*=".json"]').setInputFiles({
+    name: "repository-last-tag-filter.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify([
+        {
+          id: "filter-last-tag/repository",
+          url: "https://github.com/filter-last-tag/repository",
+          tags: ["last-tag"],
+        },
+      ]),
+    ),
+  });
   const importDialog = page.getByRole("alertdialog");
   await expect(importDialog).toBeVisible();
   await importDialog.getByRole("button", { name: "Import" }).click();
@@ -189,9 +179,7 @@ test("clears a tag filter after its last matching tag is removed", async ({
   );
 
   await page.getByRole("button", { name: "Tags", exact: true }).click();
-  await page
-    .getByRole("menuitemcheckbox", { name: /^last-tag\b/ })
-    .click();
+  await page.getByRole("menuitemcheckbox", { name: /^last-tag\b/ }).click();
   await page.keyboard.press("Escape");
 
   await repositoryCard

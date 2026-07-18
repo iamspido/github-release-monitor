@@ -132,8 +132,6 @@ test("existing repository tags can be searched and added from a compact picker",
     page.getByRole("dialog").getByText("media", { exact: true }),
   ).toBeVisible();
   await expect(
-    page
-      .getByRole("dialog")
-      .getByText("settings-new-tag", { exact: true }),
+    page.getByRole("dialog").getByText("settings-new-tag", { exact: true }),
   ).toBeVisible();
 });

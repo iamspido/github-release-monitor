@@ -264,10 +264,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     );
   }
 
-  function createPointerEvent(
-    type: string,
-    { clientX = 0, clientY = 0 } = {},
-  ) {
+  function createPointerEvent(type: string, { clientX = 0, clientY = 0 } = {}) {
     const event = new Event(type, {
       bubbles: true,
       cancelable: true,

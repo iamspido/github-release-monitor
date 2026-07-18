@@ -84,16 +84,8 @@ describe("repository tags", () => {
   it("moves tags while preserving all other positions", () => {
     const tags = ["infra", "media", "retro"];
 
-    expect(moveRepositoryTag(tags, 0, 2)).toEqual([
-      "media",
-      "retro",
-      "infra",
-    ]);
-    expect(moveRepositoryTag(tags, 2, 1)).toEqual([
-      "infra",
-      "retro",
-      "media",
-    ]);
+    expect(moveRepositoryTag(tags, 0, 2)).toEqual(["media", "retro", "infra"]);
+    expect(moveRepositoryTag(tags, 2, 1)).toEqual(["infra", "retro", "media"]);
     expect(moveRepositoryTag(tags, 1, 1)).toBe(tags);
     expect(moveRepositoryTag(tags, -1, 1)).toBe(tags);
   });

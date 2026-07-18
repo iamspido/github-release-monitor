@@ -26,8 +26,6 @@ describe("repository settings change detection", () => {
       {},
     );
 
-    expect(changes).toContain(
-      'tags: ["infra","media"] -> ["media","infra"]',
-    );
+    expect(changes).toContain('tags: ["infra","media"] -> ["media","infra"]');
   });
 });
