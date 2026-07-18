@@ -324,6 +324,56 @@ function getButtonBySpanText(text: string) {
 }
 
 describe("ReleaseCard component", () => {
+  it("uses the custom display name as the release card heading", () => {
+    const enrichedRelease = makeRelease();
+    enrichedRelease.repoSettings = { displayName: "Production Monitor" };
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={baseSettings}
+      />,
+    );
+
+    expect(container?.querySelector("h3")?.textContent).toBe(
+      "Production Monitor",
+    );
+    expect(container?.textContent).toContain("v1.0.0");
+    expect(container?.textContent).toContain("owner/repo");
+  });
+
+  it("uses the repository name when the release title repeats the tag", () => {
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={makeRelease()}
+        settings={baseSettings}
+      />,
+    );
+
+    expect(container?.querySelector("h3")?.textContent).toBe("repo");
+  });
+
+  it("keeps the display name visible when release fetching fails", () => {
+    const enrichedRelease: EnrichedRelease = {
+      repoId: "owner/repo",
+      repoUrl: "https://github.com/owner/repo",
+      error: { type: "api_error" },
+      repoSettings: { displayName: "Production Monitor" },
+    };
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={baseSettings}
+      />,
+    );
+
+    expect(container?.querySelector("h3")?.textContent).toBe(
+      "Production Monitor",
+    );
+    expect(container?.textContent).toContain("owner/repo");
+  });
+
   it("renders repository tags on a release card", () => {
     render(
       <ReleaseCardComponent

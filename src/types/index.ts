@@ -4,6 +4,8 @@ export type Repository = {
   // `gitlab:<host>/owner/repo` for GitLab.
   id: string;
   url: string;
+  // Optional user-defined label used as the repository card heading.
+  displayName?: string;
   lastSeenReleaseTag?: string;
   isNew?: boolean;
   etag?: string;
@@ -91,6 +93,7 @@ export type EnrichedRelease = {
   isNew?: boolean;
   newEtag?: string | null;
   repoSettings?: {
+    displayName?: string;
     releaseChannels?: ReleaseChannel[];
     preReleaseSubChannels?: PreReleaseChannelType[];
     releasesPerPage?: number | null;

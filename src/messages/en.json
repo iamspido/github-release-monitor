@@ -404,6 +404,11 @@
   "RepoSettingsDialog": {
     "title": "Repository Settings",
     "description_flexible": "Customize settings for <repoId></repoId>. Untouched or empty sections will use the global defaults.",
+    "display_section_title": "Display",
+    "display_section_description": "Customize how this repository is identified in the overview.",
+    "display_name_label": "Display name (optional)",
+    "display_name_hint": "When set, this name is always used as the heading. Otherwise, the release title or repository name is selected automatically.",
+    "display_name_error_invalid": "Enter a valid display name with no more than 100 characters.",
     "tags_section_title": "Organization",
     "tags_section_description": "Add up to {maxTags} tags with at most {maxLength} characters each.",
     "tags_label": "Repository tags",

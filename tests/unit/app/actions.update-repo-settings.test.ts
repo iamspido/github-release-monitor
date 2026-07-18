@@ -92,6 +92,82 @@ describe("updateRepositorySettingsAction", () => {
     expect(mem.repos[0].etag).toBe('W/"keep"');
   });
 
+  it("normalizes the display name without clearing the ETag", async () => {
+    mem.repos = [
+      {
+        id: "o/r",
+        url: "https://github.com/o/r",
+        etag: 'W/"keep"',
+      },
+    ];
+
+    const { updateRepositorySettingsAction } = await import("@/app/actions");
+    const result = await updateRepositorySettingsAction("o/r", {
+      displayName: "  Production Monitor  ",
+    });
+
+    expect(result.success).toBe(true);
+    expect(mem.repos[0].displayName).toBe("Production Monitor");
+    expect(mem.repos[0].etag).toBe('W/"keep"');
+  });
+
+  it("preserves the display name for partial updates that omit it", async () => {
+    mem.repos = [
+      {
+        id: "o/r",
+        url: "https://github.com/o/r",
+        displayName: "Production Monitor",
+      },
+    ];
+
+    const { updateRepositorySettingsAction } = await import("@/app/actions");
+    const result = await updateRepositorySettingsAction("o/r", {
+      tags: ["infra"],
+    });
+
+    expect(result.success).toBe(true);
+    expect(mem.repos[0].displayName).toBe("Production Monitor");
+  });
+
+  it("clears an explicitly unset display name", async () => {
+    mem.repos = [
+      {
+        id: "o/r",
+        url: "https://github.com/o/r",
+        displayName: "Production Monitor",
+      },
+    ];
+
+    const { updateRepositorySettingsAction } = await import("@/app/actions");
+    const result = await updateRepositorySettingsAction("o/r", {
+      displayName: undefined,
+    });
+
+    expect(result.success).toBe(true);
+    expect(mem.repos[0].displayName).toBeUndefined();
+  });
+
+  it("rejects invalid display names before persisting", async () => {
+    mem.repos = [
+      {
+        id: "o/r",
+        url: "https://github.com/o/r",
+        displayName: "Existing",
+      },
+    ];
+
+    const { updateRepositorySettingsAction } = await import("@/app/actions");
+    const result = await updateRepositorySettingsAction("o/r", {
+      displayName: "x".repeat(101),
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "display_name_error_invalid",
+    });
+    expect(mem.repos[0].displayName).toBe("Existing");
+  });
+
   it("normalizes repository tags without clearing the ETag", async () => {
     mem.repos = [
       {

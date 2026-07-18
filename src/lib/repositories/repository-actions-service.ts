@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { getLatestReleasesForRepos } from "@/lib/releases";
 import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
+import { normalizeRepositoryDisplayName } from "@/lib/repositories/display-name";
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
 import { toPublicRepository } from "@/lib/repositories/public-repository";
 import { applyReleaseFetchResultToRepository } from "@/lib/repositories/release-cache-update";
@@ -500,6 +501,7 @@ export async function updateRepositorySettingsAction(
   repoId: string,
   settings: Pick<
     Repository,
+    | "displayName"
     | "releaseChannels"
     | "preReleaseSubChannels"
     | "releasesPerPage"
@@ -537,6 +539,14 @@ export async function updateRepositorySettingsAction(
       }
 
       const existing = currentRepos[repoIndex];
+
+      const hasDisplayNameUpdate = Object.hasOwn(settings, "displayName");
+      const normalizedDisplayName = normalizeRepositoryDisplayName(
+        hasDisplayNameUpdate ? settings.displayName : existing.displayName,
+      );
+      if (!normalizedDisplayName.success) {
+        return { success: false, error: t("display_name_error_invalid") };
+      }
 
       let newTags = existing.tags;
       if (settings.tags !== undefined) {
@@ -582,7 +592,11 @@ export async function updateRepositorySettingsAction(
 
       const changes = buildRepositorySettingsChangeLog(
         existing,
-        { ...settings, tags: newTags },
+        {
+          ...settings,
+          displayName: normalizedDisplayName.displayName,
+          tags: newTags,
+        },
         {
           refreshInterval: newRefreshInterval,
           cacheInterval: newCacheInterval,
@@ -596,6 +610,7 @@ export async function updateRepositorySettingsAction(
 
       currentRepos[repoIndex] = {
         ...existing,
+        displayName: normalizedDisplayName.displayName,
         releaseChannels: settings.releaseChannels,
         preReleaseSubChannels: settings.preReleaseSubChannels,
         releasesPerPage: settings.releasesPerPage,

@@ -20,6 +20,7 @@ describe("getRepositoriesForExport", () => {
         {
           id: "o/r",
           url: "https://github.com/o/r",
+          displayName: "Production Monitor",
           pendingNotifications: [{ id: "internal-delivery" }],
         },
       ],
@@ -28,6 +29,7 @@ describe("getRepositoriesForExport", () => {
     const res = await getRepositoriesForExport();
     expect(res.success).toBe(true);
     expect(res.data?.length).toBe(1);
+    expect(res.data?.[0]?.displayName).toBe("Production Monitor");
     expect(res.data?.[0]).not.toHaveProperty("pendingNotifications");
   });
 

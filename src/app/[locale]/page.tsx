@@ -6,7 +6,7 @@ import { HomePageClient } from "@/components/home-page-client";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
 import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
-import { toGithubReleaseFromCache } from "@/lib/releases/filters";
+import { toCachedEnrichedRelease } from "@/lib/releases/cached-enriched-release";
 import { toPublicRepository } from "@/lib/repositories/public-repository";
 import { getUpdateNotificationStateOrFallback } from "@/lib/runtime/app-update-notice";
 import { getRepositories } from "@/lib/storage/repositories";
@@ -46,28 +46,7 @@ export default async function HomePage({
       getRepositories(),
     ]);
     if (repositories.length > 0) {
-      releases = repositories.map((repo) => {
-        return {
-          repoId: repo.id,
-          repoUrl: repo.url,
-          release: toGithubReleaseFromCache(repo.latestRelease),
-          isNew: repo.isNew,
-          repoSettings: {
-            releaseChannels: repo.releaseChannels,
-            preReleaseSubChannels: repo.preReleaseSubChannels,
-            releasesPerPage: repo.releasesPerPage,
-            refreshInterval: repo.refreshInterval,
-            cacheInterval: repo.cacheInterval,
-            backgroundCheckCron: repo.backgroundCheckCron,
-            includeRegex: repo.includeRegex,
-            excludeRegex: repo.excludeRegex,
-            appriseTags: repo.appriseTags,
-            appriseFormat: repo.appriseFormat,
-          },
-          // No fetch, so no newEtag and no error
-          newEtag: repo.etag,
-        };
-      });
+      releases = repositories.map(toCachedEnrichedRelease);
       repositories = repositories.map(toPublicRepository);
     }
   } catch (error: unknown) {

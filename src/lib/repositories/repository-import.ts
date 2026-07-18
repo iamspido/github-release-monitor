@@ -1,3 +1,4 @@
+import { normalizeRepositoryDisplayName } from "@/lib/repositories/display-name";
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
 import { normalizeRepositoryTags } from "@/lib/repositories/tags";
 import type {
@@ -109,6 +110,11 @@ export function parseImportedRepository(value: unknown): Repository | null {
     id: parsedUrl.id,
     url: parsedUrl.canonicalRepoUrl,
   };
+
+  const importedDisplayName = normalizeRepositoryDisplayName(value.displayName);
+  if (importedDisplayName.success && importedDisplayName.displayName) {
+    repository.displayName = importedDisplayName.displayName;
+  }
 
   const lastSeenReleaseTag = readOptionalString(value, "lastSeenReleaseTag");
   if (lastSeenReleaseTag !== undefined) {

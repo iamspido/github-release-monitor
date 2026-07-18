@@ -404,6 +404,11 @@
   "RepoSettingsDialog": {
     "title": "Repository-Einstellungen",
     "description_flexible": "Passen Sie die Einstellungen für <repoId></repoId> an. Leere oder unberührte Bereiche verwenden die globalen Standardeinstellungen.",
+    "display_section_title": "Darstellung",
+    "display_section_description": "Passen Sie an, wie dieses Repository in der Übersicht bezeichnet wird.",
+    "display_name_label": "Anzeigename (optional)",
+    "display_name_hint": "Wenn gesetzt, wird dieser Name immer als Überschrift verwendet. Andernfalls wird automatisch der Release-Titel oder Repository-Name gewählt.",
+    "display_name_error_invalid": "Geben Sie einen gültigen Anzeigenamen mit höchstens 100 Zeichen ein.",
     "tags_section_title": "Organisation",
     "tags_section_description": "Fügen Sie bis zu {maxTags} Tags mit jeweils höchstens {maxLength} Zeichen hinzu.",
     "tags_label": "Repository-Tags",

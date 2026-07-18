@@ -34,6 +34,7 @@ describe("storage/repositories", () => {
       {
         id: "owner2/repo2",
         url: "https://github.com/owner2/repo2",
+        displayName: "  Media Stack  ",
         isNew: true,
         tags: [" Infra ", "MEDIA", "infra"],
       },
@@ -46,6 +47,7 @@ describe("storage/repositories", () => {
       {
         id: "github:owner2/repo2",
         url: "https://github.com/owner2/repo2",
+        displayName: "Media Stack",
         isNew: true,
         tags: ["infra", "media"],
       },
@@ -123,6 +125,27 @@ describe("storage/repositories", () => {
 
     await expect(getRepositories()).rejects.toThrow(
       "tags contains invalid repository tags",
+    );
+  });
+
+  it("rejects invalid persisted repository display names", async () => {
+    const dataDir = path.join(tmpDir, "data");
+    await fs.mkdir(dataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(dataDir, "repositories.json"),
+      JSON.stringify([
+        {
+          id: "github:owner/repo",
+          url: "https://github.com/owner/repo",
+          displayName: "x".repeat(101),
+        },
+      ]),
+      "utf8",
+    );
+    const { getRepositories } = await import("@/lib/storage/repositories");
+
+    await expect(getRepositories()).rejects.toThrow(
+      "displayName must be a valid display name",
     );
   });
 

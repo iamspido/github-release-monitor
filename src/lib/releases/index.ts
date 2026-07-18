@@ -8,6 +8,7 @@ import {
   hasAnyGitlabTokenForAllowedHosts,
   parseSupportedRepoUrl,
 } from "@/lib/repositories/providers";
+import { toRepositorySettingsSnapshot } from "@/lib/repositories/settings-snapshot";
 import { log } from "@/lib/server-action-helpers";
 import type { AppSettings, EnrichedRelease, Repository } from "@/types";
 
@@ -33,6 +34,14 @@ export async function getLatestReleasesForRepos(
   const buildEnrichedRelease = async (
     repo: Repository,
   ): Promise<EnrichedRelease> => {
+    const repoSettings = toRepositorySettingsSnapshot(repo);
+    const { displayName: _displayName, ...fetchOverrides } = repoSettings;
+    const fetchRepoSettings = {
+      ...fetchOverrides,
+      etag: repo.etag,
+      latestRelease: repo.latestRelease,
+    };
+
     const parsed = parseSupportedRepoUrl(repo.url);
     if (!parsed) {
       log.warn(`Skipping invalid repository URL for repoId=${repo.id}`);
@@ -41,23 +50,9 @@ export async function getLatestReleasesForRepos(
         repoUrl: repo.url,
         error: { type: "invalid_url" },
         isNew: repo.isNew,
+        repoSettings,
       };
     }
-
-    const repoSettings = {
-      releaseChannels: repo.releaseChannels,
-      preReleaseSubChannels: repo.preReleaseSubChannels,
-      releasesPerPage: repo.releasesPerPage,
-      refreshInterval: repo.refreshInterval,
-      cacheInterval: repo.cacheInterval,
-      backgroundCheckCron: repo.backgroundCheckCron,
-      includeRegex: repo.includeRegex,
-      excludeRegex: repo.excludeRegex,
-      appriseTags: repo.appriseTags,
-      appriseFormat: repo.appriseFormat,
-      etag: repo.etag,
-      latestRelease: repo.latestRelease,
-    };
 
     const {
       release: latestRelease,
@@ -68,7 +63,7 @@ export async function getLatestReleasesForRepos(
       parsed.providerHost,
       parsed.owner,
       parsed.repo,
-      repoSettings,
+      fetchRepoSettings,
       settings,
       locale,
       options,

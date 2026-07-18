@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
+import {
+  formatRepoIdForDisplay,
+  getRepositoryNameFromId,
+} from "@/lib/repo-id-display";
 
 describe("formatRepoIdForDisplay", () => {
   it("returns non-prefixed ids unchanged", () => {
@@ -38,5 +41,15 @@ describe("formatRepoIdForDisplay", () => {
         showProviderDomain: false,
       }),
     ).toBe("gitlab:owner/repo");
+  });
+});
+
+describe("getRepositoryNameFromId", () => {
+  it("extracts the repository name from prefixed and unprefixed ids", () => {
+    expect(getRepositoryNameFromId("github:owner/repo")).toBe("repo");
+    expect(getRepositoryNameFromId("owner/repo")).toBe("repo");
+    expect(
+      getRepositoryNameFromId("gitlab:gitlab.example.com/group/sub/repo"),
+    ).toBe("repo");
   });
 });

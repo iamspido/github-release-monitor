@@ -1,5 +1,6 @@
 import path from "node:path";
 import { logger } from "@/lib/logger";
+import { normalizeRepositoryDisplayName } from "@/lib/repositories/display-name";
 import { normalizeRepositoryTags } from "@/lib/repositories/tags";
 import { JsonFileStore } from "@/lib/storage/json-file-store";
 import {
@@ -163,6 +164,14 @@ function parseRepository(value: unknown, index: number): Repository {
     throw new Error(`${path}.url must be a non-empty string.`);
   }
 
+  const normalizedDisplayName = normalizeRepositoryDisplayName(
+    repository.displayName,
+  );
+  if (!normalizedDisplayName.success) {
+    throw new Error(`${path}.displayName must be a valid display name.`);
+  }
+  repository.displayName = normalizedDisplayName.displayName;
+
   assertOptionalField(repository, "lastSeenReleaseTag", isString, "a string");
   assertOptionalField(repository, "isNew", isBoolean, "a boolean");
   assertOptionalField(repository, "etag", isString, "a string");
@@ -275,6 +284,7 @@ function mergeRepositoriesPreferFirst(
   return {
     id: base.id,
     url: preferDefined(base.url, incoming.url),
+    displayName: preferDefined(base.displayName, incoming.displayName),
     lastSeenReleaseTag: preferDefined(
       base.lastSeenReleaseTag,
       incoming.lastSeenReleaseTag,

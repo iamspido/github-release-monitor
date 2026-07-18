@@ -33,3 +33,9 @@ export function formatRepoIdForDisplay(
 
   return `${provider}:${displayPath}`;
 }
+
+export function getRepositoryNameFromId(repoId: string): string {
+  const path = repoId.replace(/^[^:]+:/u, "");
+  const segments = path.split("/").filter(Boolean);
+  return segments.at(-1) ?? repoId;
+}

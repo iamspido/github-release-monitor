@@ -1,5 +1,6 @@
 import type React from "react";
 import { defaultSchema } from "rehype-sanitize";
+import { getRepositoryNameFromId } from "@/lib/repo-id-display";
 import {
   defaultSecurityHighlightCustomColor,
   normalizeSecurityHighlightColorPreset,
@@ -40,7 +41,9 @@ export function hasCustomRepoSettings(
   if (!repoSettings) return false;
 
   return Boolean(
-    (repoSettings.releaseChannels && repoSettings.releaseChannels.length > 0) ||
+    repoSettings.displayName ||
+      (repoSettings.releaseChannels &&
+        repoSettings.releaseChannels.length > 0) ||
       (repoSettings.preReleaseSubChannels &&
         repoSettings.preReleaseSubChannels.length > 0) ||
       (repoSettings.releasesPerPage !== null &&
@@ -55,6 +58,35 @@ export function hasCustomRepoSettings(
       repoSettings.appriseTags ||
       repoSettings.appriseFormat,
   );
+}
+
+export function getReleaseCardHeading({
+  displayName,
+  releaseName,
+  releaseTag,
+  repoId,
+}: {
+  displayName?: string;
+  releaseName?: string | null;
+  releaseTag: string;
+  repoId: string;
+}): string {
+  const normalizedDisplayName = displayName?.trim();
+  if (normalizedDisplayName) return normalizedDisplayName;
+
+  const normalizedReleaseName = releaseName?.trim();
+  const normalizedReleaseTag = releaseTag.trim().toLowerCase();
+  const normalizedReleaseNameForComparison =
+    normalizedReleaseName?.toLowerCase();
+  if (
+    normalizedReleaseName &&
+    normalizedReleaseNameForComparison !== normalizedReleaseTag &&
+    normalizedReleaseNameForComparison !== `tag: ${normalizedReleaseTag}`
+  ) {
+    return normalizedReleaseName;
+  }
+
+  return getRepositoryNameFromId(repoId);
 }
 
 type SecurityHighlightStyle = {

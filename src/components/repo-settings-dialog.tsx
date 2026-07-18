@@ -62,7 +62,11 @@ import {
 } from "@/hooks/use-debounced-autosave";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
-import { formatRepoIdForDisplay } from "@/lib/repo-id-display";
+import {
+  formatRepoIdForDisplay,
+  getRepositoryNameFromId,
+} from "@/lib/repo-id-display";
+import { MAX_REPOSITORY_DISPLAY_NAME_LENGTH } from "@/lib/repositories/display-name";
 import {
   MAX_REPOSITORY_TAG_LENGTH,
   MAX_REPOSITORY_TAGS,
@@ -208,8 +212,10 @@ interface RepoSettingsDialogProps {
   availableRepositoryTags?: string[];
   currentRepositoryTags?: string[];
   onRepositoryTagsChange?: (tags: string[]) => void;
+  onDisplayNameChange?: (displayName: string | undefined) => void;
   currentRepoSettings?: Pick<
     Repository,
+    | "displayName"
     | "releaseChannels"
     | "preReleaseSubChannels"
     | "releasesPerPage"
@@ -232,6 +238,7 @@ export function RepoSettingsDialog({
   availableRepositoryTags = [],
   currentRepositoryTags = [],
   onRepositoryTagsChange,
+  onDisplayNameChange,
   currentRepoSettings,
   globalSettings,
   isAppriseConfigured = false,
@@ -246,6 +253,7 @@ export function RepoSettingsDialog({
 
   // Generate unique IDs for form elements
   const stableId = React.useId();
+  const displayNameId = React.useId();
   const repositoryTagsId = React.useId();
   const prereleaseId = React.useId();
   const draftId = React.useId();
@@ -272,6 +280,9 @@ export function RepoSettingsDialog({
 
   const [channels, setChannels] = React.useState<ReleaseChannel[]>(
     currentRepoSettings?.releaseChannels ?? [],
+  );
+  const [displayName, setDisplayName] = React.useState(
+    currentRepoSettings?.displayName ?? "",
   );
   const [repositoryTags, setRepositoryTags] = React.useState<string[]>(
     currentRepositoryTags,
@@ -372,6 +383,9 @@ export function RepoSettingsDialog({
   const savedThisSessionRef = React.useRef(false);
   const filterSettingsChangedRef = React.useRef(false);
   const pendingRepositoryTagsChangeRef = React.useRef<string[] | null>(null);
+  const pendingDisplayNameChangeRef = React.useRef<{
+    displayName: string | undefined;
+  } | null>(null);
   const isOpenRef = React.useRef(isOpen);
 
   React.useEffect(() => {
@@ -396,6 +410,27 @@ export function RepoSettingsDialog({
     onRepositoryTagsChange?.(pendingTags);
     pendingRepositoryTagsChangeRef.current = null;
   }, [onRepositoryTagsChange]);
+
+  const publishDisplayNameChange = React.useCallback(
+    (nextDisplayName: string | undefined) => {
+      pendingDisplayNameChangeRef.current = {
+        displayName: nextDisplayName,
+      };
+      if (isOpenRef.current) return;
+
+      onDisplayNameChange?.(nextDisplayName);
+      pendingDisplayNameChangeRef.current = null;
+    },
+    [onDisplayNameChange],
+  );
+
+  const flushDisplayNameChange = React.useCallback(() => {
+    const pendingChange = pendingDisplayNameChangeRef.current;
+    if (!pendingChange) return;
+
+    onDisplayNameChange?.(pendingChange.displayName);
+    pendingDisplayNameChangeRef.current = null;
+  }, [onDisplayNameChange]);
 
   const refreshAfterClosedSave = React.useCallback(() => {
     if (!savedThisSessionRef.current) return;
@@ -435,6 +470,7 @@ export function RepoSettingsDialog({
       cancelAutosave();
       dialogSessionRef.current += 1;
       const initialSettings = {
+        displayName: currentRepoSettings?.displayName ?? undefined,
         tags: currentRepositoryTags,
         releaseChannels: currentRepoSettings?.releaseChannels ?? [],
         preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels,
@@ -450,6 +486,7 @@ export function RepoSettingsDialog({
       };
 
       setChannels(initialSettings.releaseChannels);
+      setDisplayName(initialSettings.displayName ?? "");
       setRepositoryTags(initialSettings.tags);
       setRepositoryTagInput("");
       setRepositoryTagError(null);
@@ -504,11 +541,18 @@ export function RepoSettingsDialog({
   React.useEffect(() => {
     if (!isOpen) {
       flushRepositoryTagsChange();
+      flushDisplayNameChange();
       refreshAfterClosedSave();
     }
-  }, [isOpen, flushRepositoryTagsChange, refreshAfterClosedSave]);
+  }, [
+    isOpen,
+    flushRepositoryTagsChange,
+    flushDisplayNameChange,
+    refreshAfterClosedSave,
+  ]);
 
   const useGlobalChannels = channels.length === 0;
+  const useAutomaticDisplayName = displayName.trim() === "";
   const useGlobalSubChannels = preReleaseSubChannels === undefined;
   const useGlobalReleasesPerPage = String(releasesPerPage).trim() === "";
   const useGlobalAutomation = automationMode === "global" && !useCustomCache;
@@ -518,6 +562,7 @@ export function RepoSettingsDialog({
   const useGlobalAppriseFormat = appriseFormat === "";
 
   const isUsingAllGlobalSettings =
+    useAutomaticDisplayName &&
     useGlobalChannels &&
     useGlobalSubChannels &&
     useGlobalReleasesPerPage &&
@@ -529,6 +574,7 @@ export function RepoSettingsDialog({
 
   const newSettings: Pick<
     Repository,
+    | "displayName"
     | "tags"
     | "releaseChannels"
     | "preReleaseSubChannels"
@@ -576,6 +622,7 @@ export function RepoSettingsDialog({
         : undefined;
 
     return {
+      displayName: displayName.trim() || undefined,
       tags: repositoryTags,
       releaseChannels: channels,
       preReleaseSubChannels,
@@ -589,6 +636,7 @@ export function RepoSettingsDialog({
       appriseFormat: appriseFormat || undefined,
     };
   }, [
+    displayName,
     repositoryTags,
     channels,
     preReleaseSubChannels,
@@ -730,6 +778,7 @@ export function RepoSettingsDialog({
           // the same cache refresh the successful save would normally trigger.
           if (result.success) {
             publishRepositoryTagsChange(newSettings.tags ?? []);
+            publishDisplayNameChange(newSettings.displayName);
             if (
               isOpenRef.current &&
               saveDialogSession !== dialogSessionRef.current
@@ -774,6 +823,7 @@ export function RepoSettingsDialog({
             lastSubmittedSettingsRef.current = newSettings;
             savedThisSessionRef.current = true;
             publishRepositoryTagsChange(newSettings.tags ?? []);
+            publishDisplayNameChange(newSettings.displayName);
             if (!isOpenRef.current) refreshAfterClosedSave();
           } else {
             savedThisSessionRef.current = true;
@@ -821,6 +871,7 @@ export function RepoSettingsDialog({
     cancelAutosave,
     scheduleAutosave,
     publishRepositoryTagsChange,
+    publishDisplayNameChange,
   ]);
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -1112,6 +1163,7 @@ export function RepoSettingsDialog({
 
   const handleResetAll = () => {
     if (!isOnline) return;
+    setDisplayName("");
     setChannels([]);
     setPreReleaseSubChannels(undefined);
     setReleasesPerPage("");
@@ -1178,6 +1230,31 @@ export function RepoSettingsDialog({
           )}
 
           <div className="space-y-6 pt-2 max-h-[60vh] overflow-y-auto pr-2 -mr-4 pb-4">
+            <div className="space-y-4 p-4 border rounded-md">
+              <div>
+                <h4 className="font-semibold text-base">
+                  {t("display_section_title")}
+                </h4>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("display_section_description")}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={displayNameId}>{t("display_name_label")}</Label>
+                <Input
+                  id={displayNameId}
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  maxLength={MAX_REPOSITORY_DISPLAY_NAME_LENGTH}
+                  placeholder={getRepositoryNameFromId(repoId)}
+                  disabled={!isOnline}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("display_name_hint")}
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-4 p-4 border rounded-md">
               <div>
                 <h4 className="font-semibold text-base">

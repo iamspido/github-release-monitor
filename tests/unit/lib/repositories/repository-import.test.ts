@@ -1,6 +1,15 @@
 import { parseImportedRepository } from "@/lib/repositories/repository-import";
 
-describe("repository import tags", () => {
+describe("repository import metadata", () => {
+  it("imports and normalizes a valid repository display name", () => {
+    expect(
+      parseImportedRepository({
+        url: "https://github.com/owner/repo",
+        displayName: "  Production Monitor  ",
+      }),
+    ).toMatchObject({ displayName: "Production Monitor" });
+  });
+
   it("imports and normalizes valid repository tags", () => {
     expect(
       parseImportedRepository({

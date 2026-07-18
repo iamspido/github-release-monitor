@@ -29,6 +29,10 @@ type UpdateRepositorySettingsAction =
 const translationMap: Record<string, Record<string, string>> = {
   RepoSettingsDialog: {
     title: "Repository settings",
+    display_section_title: "Display",
+    display_section_description: "Customize display",
+    display_name_label: "Display name (optional)",
+    display_name_hint: "Overrides the automatic heading",
     autosave_waiting: "Waiting to save…",
     autosave_saving: "Saving…",
     autosave_success_short: "Saved",
@@ -471,6 +475,39 @@ describe("RepoSettingsDialog autosave behaviour", () => {
       });
     });
     expect(toastSpy).not.toHaveBeenCalled();
+  });
+
+  it("shows the display section first and autosaves the display name", async () => {
+    const onDisplayNameChange = vi.fn();
+    renderDialog({ onDisplayNameChange });
+    await flushEffects();
+
+    const sectionHeadings = Array.from(container.querySelectorAll("h4"));
+    expect(sectionHeadings[0]?.textContent).toBe("Display");
+
+    const input = container.querySelector<HTMLInputElement>(
+      'input[maxlength="100"]',
+    );
+    expect(input).not.toBeNull();
+    expect(input?.placeholder).toBe("repo");
+
+    await act(async () => {
+      if (input) setInputValue(input, "Production Monitor");
+    });
+    await flushEffects();
+    await advanceAutosaveDelay();
+
+    await expectEventually(() => {
+      expect(updateSettingsMock).toHaveBeenCalledWith(
+        "owner/repo",
+        expect.objectContaining({ displayName: "Production Monitor" }),
+      );
+    });
+    expect(onDisplayNameChange).not.toHaveBeenCalled();
+
+    renderDialog({ isOpen: false, onDisplayNameChange });
+    await flushEffects();
+    expect(onDisplayNameChange).toHaveBeenCalledWith("Production Monitor");
   });
 
   it("reorders repository tags with controls and autosaves their order", async () => {

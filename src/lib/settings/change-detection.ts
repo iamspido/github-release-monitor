@@ -317,6 +317,7 @@ export function buildGlobalSettingsChangeLog(
 
 export type RepositorySettingsUpdate = Pick<
   Repository,
+  | "displayName"
   | "tags"
   | "releaseChannels"
   | "preReleaseSubChannels"
@@ -371,6 +372,13 @@ export function buildRepositorySettingsChangeLog(
   const nextExclude = normalizeOptionalText(next.excludeRegex);
   const previousInclude = normalizeOptionalText(previous.includeRegex);
   const previousExclude = normalizeOptionalText(previous.excludeRegex);
+
+  pushValueChange(
+    changes,
+    "displayName",
+    normalizeOptionalText(previous.displayName),
+    normalizeOptionalText(next.displayName),
+  );
 
   pushOrderedArrayChange(changes, "tags", previous.tags, next.tags, {
     emptyAsUndefined: true,

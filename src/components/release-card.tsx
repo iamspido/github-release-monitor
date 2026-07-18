@@ -54,6 +54,7 @@ import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type { AppSettings, EnrichedRelease } from "@/types";
 import {
+  getReleaseCardHeading,
   getReleaseErrorMessage,
   getSecurityHighlightStyle,
   hasCustomRepoSettings,
@@ -259,6 +260,17 @@ export function ReleaseCard({
     showProviderPrefix: settings.showProviderPrefixInRepoId ?? true,
     showProviderDomain: settings.showProviderDomainInRepoId ?? true,
   });
+  const [savedDisplayName, setSavedDisplayName] = React.useState(
+    repoSettings?.displayName,
+  );
+  React.useEffect(() => {
+    setSavedDisplayName(repoSettings?.displayName);
+  }, [repoSettings?.displayName]);
+  const effectiveRepoSettings = React.useMemo(
+    () => ({ ...repoSettings, displayName: savedDisplayName }),
+    [repoSettings, savedDisplayName],
+  );
+  const customDisplayName = savedDisplayName?.trim();
 
   const [isRemoving, startRemoveTransition] = React.useTransition();
   const [isAcknowledging, startAcknowledgeTransition] = React.useTransition();
@@ -383,7 +395,7 @@ export function ReleaseCard({
     });
   };
 
-  const repoHasCustomSettings = hasCustomRepoSettings(repoSettings);
+  const repoHasCustomSettings = hasCustomRepoSettings(effectiveRepoSettings);
 
   if (error && error.type !== "not_modified") {
     const errorMessage = getReleaseErrorMessage(error, tActions);
@@ -394,7 +406,8 @@ export function ReleaseCard({
             isOpen={isSettingsOpen}
             setIsOpen={handleSettingsOpenChange}
             repoId={repoId}
-            currentRepoSettings={repoSettings}
+            currentRepoSettings={effectiveRepoSettings}
+            onDisplayNameChange={setSavedDisplayName}
             availableRepositoryTags={availableRepositoryTags}
             currentRepositoryTags={repositoryTags}
             onRepositoryTagsChange={onRepositoryTagsChange}
@@ -413,9 +426,19 @@ export function ReleaseCard({
                     rel="noopener noreferrer"
                     className="hover:underline"
                   >
-                    {displayRepoId}
+                    {customDisplayName || displayRepoId}
                   </a>
                 </CardTitle>
+                {customDisplayName && (
+                  <a
+                    href={repoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-red-400/80 hover:underline break-all"
+                  >
+                    {displayRepoId}
+                  </a>
+                )}
                 <CardDescription className="text-red-400/80">
                   {t("error_title")}
                 </CardDescription>
@@ -465,7 +488,8 @@ export function ReleaseCard({
             isOpen={isSettingsOpen}
             setIsOpen={handleSettingsOpenChange}
             repoId={repoId}
-            currentRepoSettings={repoSettings}
+            currentRepoSettings={effectiveRepoSettings}
+            onDisplayNameChange={setSavedDisplayName}
             availableRepositoryTags={availableRepositoryTags}
             currentRepositoryTags={repositoryTags}
             onRepositoryTagsChange={onRepositoryTagsChange}
@@ -477,7 +501,20 @@ export function ReleaseCard({
           <CardHeader>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <Skeleton className="h-6 w-3/4" />
+                {customDisplayName ? (
+                  <CardTitle className="break-words font-semibold text-xl">
+                    <a
+                      href={repoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:underline"
+                    >
+                      {customDisplayName}
+                    </a>
+                  </CardTitle>
+                ) : (
+                  <Skeleton className="h-6 w-3/4" />
+                )}
                 <a
                   href={repoUrl}
                   target="_blank"
@@ -531,6 +568,12 @@ export function ReleaseCard({
   const securityHighlightStyle = getSecurityHighlightStyle(settings);
   const shouldConfirmSecurityAcknowledge =
     isNewSecurityRelease && settings.confirmSecurityAcknowledge === true;
+  const cardHeading = getReleaseCardHeading({
+    displayName: savedDisplayName,
+    releaseName: release.name,
+    releaseTag: release.tag_name,
+    repoId,
+  });
 
   return (
     <>
@@ -539,7 +582,8 @@ export function ReleaseCard({
           isOpen={isSettingsOpen}
           setIsOpen={handleSettingsOpenChange}
           repoId={repoId}
-          currentRepoSettings={repoSettings}
+          currentRepoSettings={effectiveRepoSettings}
+          onDisplayNameChange={setSavedDisplayName}
           availableRepositoryTags={availableRepositoryTags}
           currentRepositoryTags={repositoryTags}
           onRepositoryTagsChange={onRepositoryTagsChange}
@@ -568,7 +612,7 @@ export function ReleaseCard({
                   rel="noopener noreferrer"
                   className="hover:underline"
                 >
-                  {release.name || release.tag_name}
+                  {cardHeading}
                 </a>
               </CardTitle>
               <a
