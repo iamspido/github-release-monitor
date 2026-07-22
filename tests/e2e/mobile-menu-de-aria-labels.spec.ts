@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureAppLocale } from "./utils/locale";
 
 test("mobile menu entries are localized in DE", async ({ page }) => {

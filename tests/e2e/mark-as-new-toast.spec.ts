@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureTestRepo, login } from "./utils";
 
 test("mark as new shows toast and persists after reload", async ({ page }) => {

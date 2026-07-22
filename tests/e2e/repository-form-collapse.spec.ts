@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { login, waitForAutosave } from "./utils";
 
 test("add repositories form collapse state persists and can be restored from settings", async ({

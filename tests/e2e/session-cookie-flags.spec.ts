@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 test("session cookie flags after login", async ({ page, context }) => {
   const username =

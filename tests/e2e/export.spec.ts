@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureTestRepo, login, waitForRepoLink } from "./utils";
 
 test("export repositories initiates download with content", async ({

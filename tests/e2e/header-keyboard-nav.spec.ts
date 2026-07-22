@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { login } from "./utils";
 
 test("header active state follows route", async ({ page }) => {

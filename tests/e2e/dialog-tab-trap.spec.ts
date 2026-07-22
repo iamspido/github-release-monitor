@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureTestRepo, login } from "./utils";
 
 test("repo dialog traps focus with Tab/Shift+Tab", async ({ page }) => {

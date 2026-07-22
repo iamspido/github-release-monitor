@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 test("invalid path returns 404 when logged in", async ({ page }) => {
   const username =

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 test("session persists across reload and new tab; login page redirects when logged in", async ({
   page,

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 test("HSTS absent on HTTP, CORP optional", async ({ request, baseURL }) => {
   for (const path of ["/en", "/en/login", "/en/settings"]) {

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 test("visiting login with next while logged in redirects to home (loop prevention)", async ({
   page,

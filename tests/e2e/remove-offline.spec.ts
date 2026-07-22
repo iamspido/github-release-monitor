@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureTestRepo, goOffline, goOnline, login } from "./utils";
 
 test.describe("Remove dialog offline behavior", () => {

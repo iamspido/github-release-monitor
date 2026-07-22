@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures/test";
 import { ensureAppLocale } from "./utils/locale";
 
 const settingsPathsLocale: Record<"en" | "de", string> = {

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 test("mobile menu a11y attributes and roles", async ({ page }) => {
   const username =

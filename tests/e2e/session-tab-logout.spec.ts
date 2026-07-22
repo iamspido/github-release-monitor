@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 test("logout in one tab protects the other tab", async ({ context, page }) => {
   const u =

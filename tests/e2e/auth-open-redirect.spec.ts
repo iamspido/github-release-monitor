@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 test("open redirect is prevented and lands on app root", async ({
   page,
@@ -9,7 +9,9 @@ test("open redirect is prevented and lands on app root", async ({
   await page
     .getByLabel(/email|e-mail/i)
     .fill(
-      process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test",
+      process.env.AUTH_EMAIL ||
+        process.env.AUTH_USERNAME ||
+        "test@example.test",
     );
   await page
     .locator('input[name="password"]')

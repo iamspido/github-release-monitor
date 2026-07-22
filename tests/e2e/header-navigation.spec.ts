@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { login } from "./utils";
 
 test("header navigation: Home, Settings, Test routes work", async ({

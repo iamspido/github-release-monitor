@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureAppLocale } from "./utils/locale";
 
 test("settings locale overrides NEXT_LOCALE cookie", async ({
@@ -20,4 +20,6 @@ test("settings locale overrides NEXT_LOCALE cookie", async ({
   await ensureAppLocale(page, "de");
   await page.goto("/");
   await expect(page).toHaveURL(/\/de(\/|$)/);
+
+  await ensureAppLocale(page, "en");
 });

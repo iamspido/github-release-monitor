@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureTestRepo, login, waitForRepoLink } from "./utils";
 
 test("remove flow keeps focus on cancel and shows EmptyState on last removal", async ({

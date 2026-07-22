@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 test("setup endpoint stays disabled after bootstrap", async ({ page }) => {
   const response = await page.request.get("/api/auth/setup", {

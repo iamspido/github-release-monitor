@@ -1,10 +1,11 @@
-import { expect, test } from "@playwright/test";
-import { ensureTestRepo, login, waitForRepoLink } from "./utils";
+import { expect, test } from "./fixtures/test";
+import { ensureTestRepo, waitForRepoLink } from "./utils";
+import { ensureAppLocale } from "./utils/locale";
 
 test("mark as new disables button during action and shows toast", async ({
   page,
 }) => {
-  await login(page);
+  await ensureAppLocale(page, "en");
   await ensureTestRepo(page);
   await page.goto("/en");
   await waitForRepoLink(page);

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 test("invalid locale path falls back to cookie locale and preserves cookie", async ({
   page,

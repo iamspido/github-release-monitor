@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureTestRepo, login } from "./utils";
 
 test("delete-all cancel keeps repositories and shows no success toast", async ({

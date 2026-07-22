@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 test("pages contain header and main landmarks", async ({ page }) => {
   const username =

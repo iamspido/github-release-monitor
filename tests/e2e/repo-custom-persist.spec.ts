@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureTestRepo, login, waitForAutosave } from "./utils";
 
 test("repo custom settings persist and show badge", async ({ page }) => {

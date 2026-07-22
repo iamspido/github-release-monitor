@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 async function login(page) {
   const username =

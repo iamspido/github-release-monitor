@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 test("can login with valid credentials", async ({ page }) => {
   const username =
@@ -16,11 +16,15 @@ test("can login with valid credentials", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("test page renders after login", async ({ page }) => {
+test("test page renders after login", async ({ page, context }) => {
   const username =
     process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
   const password = process.env.AUTH_PASSWORD || "TestPassword123";
 
+  await context.addCookies([
+    { name: "grm.locale", value: "en", domain: "localhost", path: "/" },
+    { name: "NEXT_LOCALE", value: "en", domain: "localhost", path: "/" },
+  ]);
   await page.goto("/en/login?next=/en/test");
   await page.getByLabel(/email|e-mail/i).fill(username);
   await page.locator('input[name="password"]').fill(password);

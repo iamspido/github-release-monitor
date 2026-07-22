@@ -1,10 +1,12 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
+import { ensureTestRepo } from "./utils";
 import { ensureAppLocale } from "./utils/locale";
 
 test("back-to-top appears after scroll and uses i18n label", async ({
   page,
 }) => {
   await ensureAppLocale(page, "en");
+  await ensureTestRepo(page);
   await page.goto("/en");
 
   await page.evaluate(() => window.scrollTo(0, 1000));

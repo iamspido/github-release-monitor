@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureTestRepo, login, waitForAutosave } from "./utils";
 
 test("repository version tag pattern persists with highest-version selection", async ({

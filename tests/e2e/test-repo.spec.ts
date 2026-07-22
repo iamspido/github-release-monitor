@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureTestRepo, login, waitForRepoLink } from "./utils";
 
 test("setup test repo on Test page and see it on Home", async ({ page }) => {

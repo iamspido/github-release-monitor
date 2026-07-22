@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureTestRepo, login, waitForRepoLink } from "./utils";
 
 test("release markdown renders table, code, links, and emojis", async ({

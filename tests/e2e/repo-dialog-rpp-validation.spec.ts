@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { assertNoAutosave, ensureTestRepo, login } from "./utils";
 
 test("repo dialog RPP > 1000 shows error and blocks autosave", async ({

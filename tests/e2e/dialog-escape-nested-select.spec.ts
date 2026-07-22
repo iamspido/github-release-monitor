@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureTestRepo, login } from "./utils";
 
 test("ESC closes nested Select first, then dialog; focus returns to trigger", async ({

@@ -1,47 +1,35 @@
-import { defineConfig, devices, type ReporterDescription } from '@playwright/test';
+import {
+  defineConfig,
+  devices,
+  type ReporterDescription,
+} from "@playwright/test";
 
-const reporters: ReporterDescription[] = [['list']];
+const reporters: ReporterDescription[] = [["list"]];
 if (process.env.CI) {
-  reporters.push(['html', { outputFolder: 'playwright-report', open: 'never' }]);
+  reporters.push([
+    "html",
+    { outputFolder: "playwright-report", open: "never" },
+  ]);
 }
 
 export default defineConfig({
-  testDir: 'tests/e2e',
-  globalSetup: './tests/e2e/global-setup.ts',
+  testDir: "tests/e2e",
   timeout: 30_000,
   retries: 0,
-  workers: 1,
-  outputDir: 'test-results',
+  // BASE_URL keeps the legacy single-server mode; local runs isolate four workers.
+  workers: process.env.BASE_URL ? 1 : 4,
+  outputDir: "test-results",
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    trace: "on-first-retry",
+    screenshot: "only-on-failure",
+    video: "retain-on-failure",
     headless: true,
   },
   reporter: reporters,
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: {
-    command: 'node server.js',
-    url: 'http://localhost:3000',
-    reuseExistingServer: false,
-    timeout: 60_000,
-    env: {
-      NEXT_TELEMETRY_DISABLED: '1',
-      NODE_ENV: 'production',
-      HTTPS: 'false',
-      BACKGROUND_POLLING_INITIALIZED: 'true',
-      BETTER_AUTH_SECRET: 'x'.repeat(64),
-      BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
-      AUTH_SETUP_TOKEN: process.env.AUTH_SETUP_TOKEN || 'y'.repeat(64),
-      AUTH_EMAIL: process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || 'test@example.test',
-      AUTH_PASSWORD: process.env.AUTH_PASSWORD || 'TestPassword123',
-      GITLAB_ADDITIONAL_HOSTS: process.env.GITLAB_ADDITIONAL_HOSTS || 'gitlab.self.test',
-    },
-  },
 });

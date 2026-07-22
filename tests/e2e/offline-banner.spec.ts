@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { goOffline, goOnline, login } from "./utils";
 import { ensureAppLocale } from "./utils/locale";
 

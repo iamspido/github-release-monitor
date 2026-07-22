@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { assertNoAutosave } from "./utils";
 
 async function login(page) {

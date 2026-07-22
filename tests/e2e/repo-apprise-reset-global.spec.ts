@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { ensureTestRepo, waitForAutosave } from "./utils";
 import { ensureAppLocale } from "./utils/locale";
 
