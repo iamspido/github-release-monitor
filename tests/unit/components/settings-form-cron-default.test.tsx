@@ -111,6 +111,13 @@ function setSelectValue(select: HTMLSelectElement, value: string) {
   select.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+async function flushEffects() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 describe("SettingsForm cron defaults", () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -143,7 +150,7 @@ describe("SettingsForm cron defaults", () => {
     });
   }
 
-  it("uses 08:00 when switching global automation to a schedule", () => {
+  it("uses 08:00 when switching global automation to a schedule", async () => {
     renderForm();
 
     const automationSelect = findSelectWithOptions(container, [
@@ -155,6 +162,7 @@ describe("SettingsForm cron defaults", () => {
     act(() => {
       setSelectValue(automationSelect as HTMLSelectElement, "cron");
     });
+    await flushEffects();
 
     const hourSelect = getSelects(container).find((select) => {
       const values = Array.from(select.options).map((option) => option.value);
@@ -169,7 +177,7 @@ describe("SettingsForm cron defaults", () => {
     expect(minuteSelect?.value).toBe("00");
   });
 
-  it("uses 0 8 * * * as the custom cron placeholder", () => {
+  it("uses 0 8 * * * as the custom cron placeholder", async () => {
     renderForm();
 
     const automationSelect = findSelectWithOptions(container, [
@@ -181,6 +189,7 @@ describe("SettingsForm cron defaults", () => {
     act(() => {
       setSelectValue(automationSelect as HTMLSelectElement, "cron");
     });
+    await flushEffects();
 
     const presetSelect = findSelectWithOptions(container, [
       "daily",
@@ -193,6 +202,7 @@ describe("SettingsForm cron defaults", () => {
     act(() => {
       setSelectValue(presetSelect as HTMLSelectElement, "custom");
     });
+    await flushEffects();
 
     const cronInput = Array.from(container.querySelectorAll("input")).find(
       (input) => input.placeholder === "0 8 * * *",

@@ -19,6 +19,23 @@ type PassthroughProps = HTMLAttributes<HTMLDivElement> & {
   children?: ReactNode;
 };
 
+type DialogProps = {
+  children?: ReactNode;
+  onOpenChange?: (open: boolean) => void;
+  open?: boolean;
+};
+
+type DialogContentProps = PassthroughProps & {
+  onOpenAutoFocus?: (event: Event) => void;
+};
+
+type SelectProps = {
+  children?: ReactNode;
+  disabled?: boolean;
+  onValueChange?: (value: string) => void;
+  value?: string;
+};
+
 type CheckboxProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
   "onChange" | "checked"
@@ -94,9 +111,15 @@ vi.mock("@/components/ui/dialog", () => {
   const passthrough = ({ children, ...rest }: PassthroughProps) => (
     <div {...rest}>{children}</div>
   );
+  const dialog = ({ children }: DialogProps) => <div>{children}</div>;
+  const dialogContent = ({
+    children,
+    onOpenAutoFocus: _onOpenAutoFocus,
+    ...rest
+  }: DialogContentProps) => <div {...rest}>{children}</div>;
   return {
-    Dialog: passthrough,
-    DialogContent: passthrough,
+    Dialog: dialog,
+    DialogContent: dialogContent,
     DialogHeader: passthrough,
     DialogTitle: passthrough,
     DialogDescription: passthrough,
@@ -124,8 +147,9 @@ vi.mock("@/components/ui/select", () => {
   const passthrough = ({ children, ...rest }: PassthroughProps) => (
     <div {...rest}>{children}</div>
   );
+  const select = ({ children }: SelectProps) => <div>{children}</div>;
   return {
-    Select: passthrough,
+    Select: select,
     SelectTrigger: passthrough,
     SelectContent: passthrough,
     SelectItem: passthrough,

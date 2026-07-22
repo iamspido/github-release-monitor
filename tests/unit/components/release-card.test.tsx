@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import type React from "react";
 import { act } from "react";
-import { flushSync } from "react-dom";
 import ReactDOM from "react-dom/client";
 import {
   afterEach,
@@ -281,7 +280,7 @@ beforeAll(async () => {
 afterEach(() => {
   vi.useRealTimers();
   if (root && container) {
-    flushSync(() => {
+    act(() => {
       root?.unmount();
     });
     container.remove();
@@ -307,7 +306,7 @@ beforeEach(async () => {
 
 function render(component: React.ReactElement) {
   if (!root) throw new Error("Root not initialized");
-  flushSync(() => {
+  act(() => {
     root?.render(component);
   });
 }
@@ -578,10 +577,11 @@ describe("ReleaseCard component", () => {
 
     const acknowledgeButton = getButtonBySpanText("Acknowledge release");
     expect(acknowledgeButton).toBeTruthy();
-    acknowledgeButton?.click();
-
-    await Promise.resolve();
-    await Promise.resolve();
+    await act(async () => {
+      acknowledgeButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(actions.acknowledgeNewReleaseAction).toHaveBeenCalledWith(
       "owner/repo",
     );
@@ -650,18 +650,21 @@ describe("ReleaseCard component", () => {
 
     const acknowledgeButton = getButtonBySpanText("Acknowledge release");
     expect(acknowledgeButton).toBeTruthy();
-    acknowledgeButton?.click();
-    await Promise.resolve();
+    await act(async () => {
+      acknowledgeButton?.click();
+      await Promise.resolve();
+    });
     expect(actions.acknowledgeNewReleaseAction).not.toHaveBeenCalled();
 
     const confirmButton = getElementByText("button", "Confirm security seen") as
       | HTMLButtonElement
       | undefined;
     expect(confirmButton).toBeTruthy();
-    confirmButton?.click();
-
-    await Promise.resolve();
-    await Promise.resolve();
+    await act(async () => {
+      confirmButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(actions.acknowledgeNewReleaseAction).toHaveBeenCalledWith(
       "owner/repo",
     );
@@ -709,10 +712,11 @@ describe("ReleaseCard component", () => {
     );
 
     const markButton = getButtonBySpanText("Mark as new");
-    markButton?.click();
-
-    await Promise.resolve();
-    await Promise.resolve();
+    await act(async () => {
+      markButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(actions.markAsNewAction).toHaveBeenCalledWith("owner/repo");
     expect(toastSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -744,10 +748,11 @@ describe("ReleaseCard component", () => {
     );
 
     const acknowledgeButton = getButtonBySpanText("Acknowledge release");
-    acknowledgeButton?.click();
-
-    await Promise.resolve();
-    await Promise.resolve();
+    await act(async () => {
+      acknowledgeButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(actions.acknowledgeNewReleaseAction).toHaveBeenCalledWith(
       "owner/repo",
     );
@@ -778,10 +783,11 @@ describe("ReleaseCard component", () => {
     );
 
     const acknowledgeButton = getButtonBySpanText("Acknowledge release");
-    acknowledgeButton?.click();
-
-    await Promise.resolve();
-    await Promise.resolve();
+    await act(async () => {
+      acknowledgeButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(actions.acknowledgeNewReleaseAction).toHaveBeenCalled();
     expect(toastSpy).toHaveBeenCalledWith(
       expect.objectContaining({
