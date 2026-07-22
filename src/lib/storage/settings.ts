@@ -5,6 +5,7 @@ import {
   normalizeProviderSortOrder,
   normalizeReleaseSortOrder,
 } from "@/lib/release-sort";
+import { normalizeReleaseSelectionStrategy } from "@/lib/releases/selection";
 import {
   defaultSecurityHighlightColorPreset,
   defaultSecurityHighlightCustomColor,
@@ -37,6 +38,7 @@ export function createDefaultSettings(
     parallelRepoFetches: env.GITHUB_ACCESS_TOKEN?.trim() ? 5 : 1,
     releaseChannels: ["stable"],
     preReleaseSubChannels: [...allPreReleaseTypes],
+    releaseSelectionStrategy: "newest",
     releaseSortOrder: "latest_first",
     providerSortOrder: [...defaultProviderSortOrder],
     prioritizeNewSecurityReleases: false,
@@ -74,6 +76,9 @@ function cloneSettings(settings: AppSettings): AppSettings {
       ? [...(settings.preReleaseSubChannels ?? [])]
       : undefined,
     releaseSortOrder: normalizeReleaseSortOrder(settings.releaseSortOrder),
+    releaseSelectionStrategy: normalizeReleaseSelectionStrategy(
+      settings.releaseSelectionStrategy,
+    ),
     providerSortOrder: normalizeProviderSortOrder(settings.providerSortOrder),
   };
 }
@@ -136,6 +141,7 @@ export function normalizeSettings(value: unknown): AppSettings {
   for (const key of [
     "backgroundCheckCron",
     "releaseSortOrder",
+    "releaseSelectionStrategy",
     "securityHighlightCustomColor",
     "customSecurityPatterns",
     "includeRegex",
@@ -195,6 +201,9 @@ export function normalizeSettings(value: unknown): AppSettings {
     ? merged.locale
     : defaultLocale;
   merged.releaseSortOrder = normalizeReleaseSortOrder(merged.releaseSortOrder);
+  merged.releaseSelectionStrategy = normalizeReleaseSelectionStrategy(
+    merged.releaseSelectionStrategy,
+  );
   merged.providerSortOrder = normalizeProviderSortOrder(
     merged.providerSortOrder,
   );

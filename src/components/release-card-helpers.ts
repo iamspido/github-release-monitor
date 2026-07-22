@@ -22,6 +22,8 @@ export function getReleaseErrorMessage(
       return t("error_rate_limit");
     case "no_matching_releases":
       return t("error_no_matching_releases");
+    case "no_matching_version_tags":
+      return t("error_no_matching_version_tags");
     case "repo_not_found":
       return t("error_repo_not_found");
     case "invalid_url":
@@ -46,6 +48,8 @@ export function hasCustomRepoSettings(
         repoSettings.releaseChannels.length > 0) ||
       (repoSettings.preReleaseSubChannels &&
         repoSettings.preReleaseSubChannels.length > 0) ||
+      repoSettings.releaseSelectionStrategy !== undefined ||
+      repoSettings.versionTagPattern !== undefined ||
       (repoSettings.releasesPerPage !== null &&
         typeof repoSettings.releasesPerPage === "number") ||
       (repoSettings.refreshInterval !== null &&

@@ -56,6 +56,7 @@ function getErrorTranslationKey(
     repo_not_found: "error_repo_not_found",
     no_releases_found: "error_no_releases_found",
     no_matching_releases: "error_no_matching_releases",
+    no_matching_version_tags: "error_no_matching_version_tags",
     invalid_url: "error_invalid_url",
     api_error: "error_generic_fetch",
     rate_limit: "error_rate_limit",

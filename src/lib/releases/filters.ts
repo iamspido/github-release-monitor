@@ -4,15 +4,18 @@ import type {
   CachedRelease,
   GithubRelease,
   PreReleaseChannelType,
+  ReleaseSelectionStrategy,
   Repository,
 } from "@/types";
-import { allPreReleaseTypes } from "@/types";
+import { allPreReleaseTypes, releaseSelectionStrategies } from "@/types";
 
 const preReleaseMatcherCache = new Map<
   string,
   ReturnType<typeof createPreReleaseMatcher>
 >();
 const maxCachedPreReleaseMatchers = 100;
+const semanticPreReleaseTagPattern =
+  /^[vV]?\d+\.\d+\.\d+(?:\.\d+)?-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -113,6 +116,8 @@ export function resolveEffectiveRepoFilters(
     Repository,
     | "releaseChannels"
     | "preReleaseSubChannels"
+    | "releaseSelectionStrategy"
+    | "versionTagPattern"
     | "releasesPerPage"
     | "includeRegex"
     | "excludeRegex"
@@ -122,6 +127,8 @@ export function resolveEffectiveRepoFilters(
 ): {
   effectiveReleaseChannels: AppSettings["releaseChannels"];
   effectivePreReleaseSubChannels: PreReleaseChannelType[];
+  effectiveReleaseSelectionStrategy: ReleaseSelectionStrategy;
+  versionTagPattern: string | undefined;
   totalReleasesToFetch: number;
   effectiveIncludeRegex: string | undefined;
   effectiveExcludeRegex: string | undefined;
@@ -149,6 +156,16 @@ export function resolveEffectiveRepoFilters(
       ? repoSettings.releasesPerPage
       : globalSettings.releasesPerPage;
 
+  const releaseSelectionCandidate =
+    repoSettings.releaseSelectionStrategy ??
+    globalSettings.releaseSelectionStrategy;
+  const effectiveReleaseSelectionStrategy = releaseSelectionStrategies.includes(
+    releaseSelectionCandidate as ReleaseSelectionStrategy,
+  )
+    ? (releaseSelectionCandidate as ReleaseSelectionStrategy)
+    : "newest";
+  const versionTagPattern = repoSettings.versionTagPattern?.trim() || undefined;
+
   const effectiveIncludeRegex =
     repoSettings.includeRegex ?? globalSettings.includeRegex;
   const effectiveExcludeRegex =
@@ -157,6 +174,8 @@ export function resolveEffectiveRepoFilters(
   return {
     effectiveReleaseChannels,
     effectivePreReleaseSubChannels,
+    effectiveReleaseSelectionStrategy,
+    versionTagPattern,
     totalReleasesToFetch,
     effectiveIncludeRegex,
     effectiveExcludeRegex,
@@ -208,6 +227,17 @@ export function createEffectiveReleaseMatcher(
   const matchesSelectedPreReleaseChannel = createPreReleaseMatcher(
     filters.effectivePreReleaseSubChannels,
   );
+  let versionTagPattern: RegExp | undefined;
+  if (
+    filters.effectiveReleaseSelectionStrategy === "highest_version" &&
+    filters.versionTagPattern
+  ) {
+    try {
+      versionTagPattern = new RegExp(filters.versionTagPattern);
+    } catch {
+      versionTagPattern = undefined;
+    }
+  }
   const loggedRegexErrors = new Set<unknown>();
 
   const logRegexErrorOnce = (error: unknown) => {
@@ -238,8 +268,19 @@ export function createEffectiveReleaseMatcher(
       return filters.effectiveReleaseChannels.includes("draft");
     }
 
-    const isTagMarkedPreRelease = matchesAnyPreReleaseChannel(release.tag_name);
-    const isConsideredPreRelease = release.prerelease || isTagMarkedPreRelease;
+    const extractedVersion = versionTagPattern?.exec(release.tag_name)?.groups
+      ?.version;
+    const versionForChannelClassification = (
+      extractedVersion ?? release.tag_name
+    ).trim();
+    const isTagMarkedPreRelease = matchesAnyPreReleaseChannel(
+      versionForChannelClassification,
+    );
+    const isSemanticPreRelease = semanticPreReleaseTagPattern.test(
+      versionForChannelClassification,
+    );
+    const isConsideredPreRelease =
+      release.prerelease || isTagMarkedPreRelease || isSemanticPreRelease;
 
     if (isConsideredPreRelease) {
       if (!filters.effectiveReleaseChannels.includes("prerelease")) {
@@ -249,7 +290,9 @@ export function createEffectiveReleaseMatcher(
       // If the tag explicitly includes a pre-release marker (e.g. -beta/-rc),
       // apply the configured sub-channel filter. Otherwise, fall back to the API flag.
       if (isTagMarkedPreRelease) {
-        return matchesSelectedPreReleaseChannel(release.tag_name);
+        return matchesSelectedPreReleaseChannel(
+          versionForChannelClassification,
+        );
       }
 
       return true;

@@ -2,7 +2,10 @@ import { getTranslations } from "next-intl/server";
 import { discardResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
 import { buildCodebergAuthChain } from "@/lib/releases/auth-chains";
 import { fetchJsonResponseWithRetryAuthChain } from "@/lib/releases/fetch";
-import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
+import {
+  isCachedTagFallbackRelease,
+  resolveEffectiveRepoFilters,
+} from "@/lib/releases/filters";
 import {
   applyCommitMetadata,
   buildFallbackMarkdown,
@@ -11,6 +14,7 @@ import {
   releaseSuccessResult,
   resolvePageCount,
   resolvePageSize,
+  resolveReleaseSelectionErrorType,
   selectLatestMatchingRelease,
 } from "@/lib/releases/provider-pipeline";
 import type {
@@ -18,7 +22,7 @@ import type {
   RepoSettingsForFetch,
 } from "@/lib/releases/types";
 import { log, normalizeEnvToken } from "@/lib/server-action-helpers";
-import type { AppSettings, GithubRelease } from "@/types";
+import type { AppSettings, FetchError, GithubRelease } from "@/types";
 
 type CodebergReleaseApi = {
   id: number;
@@ -56,6 +60,65 @@ type CodebergRepoApi = {
   has_releases?: boolean | null;
   release_counter?: number | null;
 };
+
+function mapCodebergRelease(
+  release: CodebergReleaseApi,
+  owner: string,
+  repo: string,
+): GithubRelease {
+  return {
+    id: release.id,
+    html_url:
+      release.html_url ??
+      `https://codeberg.org/${owner}/${repo}/releases/tag/${release.tag_name}`,
+    tag_name: release.tag_name,
+    name: release.name,
+    body: release.body,
+    created_at: release.created_at,
+    published_at: release.published_at,
+    prerelease: !!release.prerelease,
+    draft: !!release.draft,
+  };
+}
+
+async function fetchCodebergProviderLatestRelease(
+  apiBaseUrl: string,
+  headersWithoutAuth: Record<string, string>,
+  authToken: string | null,
+  owner: string,
+  repo: string,
+): Promise<{ release: GithubRelease | null; error: FetchError | null }> {
+  const chain = buildCodebergAuthChain(headersWithoutAuth, authToken);
+  const { response, data } =
+    await fetchJsonResponseWithRetryAuthChain<CodebergReleaseApi>(
+      `${apiBaseUrl}/releases/latest`,
+      chain,
+      { description: `Codeberg provider-latest release for ${owner}/${repo}` },
+    );
+
+  if (!response.ok) {
+    await discardResponseWithTimeout(response);
+    if (response.status === 404) {
+      return { release: null, error: null };
+    }
+    const error: FetchError = {
+      type:
+        response.status === 429 ||
+        (response.status === 403 && response.headers.get("retry-after"))
+          ? "rate_limit"
+          : "api_error",
+    };
+    log.warn(
+      `Codeberg provider-latest endpoint failed for ${owner}/${repo}: ${response.status} ${response.statusText}`,
+    );
+    return { release: null, error };
+  }
+
+  return {
+    release: data ? mapCodebergRelease(data, owner, repo) : null,
+    error: null,
+  };
+}
 
 function extractCodebergTagCommitSha(tag: CodebergTagApi): string | undefined {
   const commit = tag.commit;
@@ -175,13 +238,16 @@ export async function fetchLatestReleaseFromCodeberg(
   const fetchedAtTimestamp = new Date().toISOString();
 
   const filters = resolveEffectiveRepoFilters(repoSettings, globalSettings);
-  const { totalReleasesToFetch } = filters;
+  const { effectiveReleaseSelectionStrategy, totalReleasesToFetch } = filters;
 
   const CODEBERG_API_BASE_URL = `https://codeberg.org/api/v1/repos/${owner}/${repo}`;
   const MAX_PER_PAGE = 50;
   const pagesToFetch = resolvePageCount(totalReleasesToFetch, MAX_PER_PAGE);
+  const releasePagesToFetch =
+    effectiveReleaseSelectionStrategy === "provider_latest" ? 1 : pagesToFetch;
   let allReleases: GithubRelease[] = [];
-  let newEtag: string | undefined;
+  let newEtag: string | null | undefined;
+  let providerLatestRelease: GithubRelease | null | undefined;
   let tagFallbackReason: string | undefined;
   const commitRefsByTag = new Map<string, string>();
 
@@ -192,7 +258,30 @@ export async function fetchLatestReleaseFromCodeberg(
   const codebergToken = normalizeEnvToken(process.env.CODEBERG_ACCESS_TOKEN);
 
   try {
-    for (let page = 1; page <= pagesToFetch; page++) {
+    if (effectiveReleaseSelectionStrategy === "provider_latest") {
+      const providerLatestResult = await fetchCodebergProviderLatestRelease(
+        CODEBERG_API_BASE_URL,
+        headersWithoutAuth,
+        codebergToken,
+        owner,
+        repo,
+      );
+      if (providerLatestResult.error) {
+        return {
+          release: null,
+          error: providerLatestResult.error,
+          newEtag,
+        };
+      }
+      providerLatestRelease = providerLatestResult.release;
+      if (providerLatestRelease) allReleases = [providerLatestRelease];
+    }
+
+    for (
+      let page = 1;
+      !providerLatestRelease && page <= releasePagesToFetch;
+      page++
+    ) {
       const releasesOnThisPage = resolvePageSize({
         maxPerPage: MAX_PER_PAGE,
         totalItemsToFetch: totalReleasesToFetch,
@@ -203,7 +292,15 @@ export async function fetchLatestReleaseFromCodeberg(
       const url = `${CODEBERG_API_BASE_URL}/releases?limit=${releasesOnThisPage}&page=${page}`;
 
       const currentHeadersWithoutAuth = { ...headersWithoutAuth };
-      if (page === 1 && repoSettings.etag) {
+      // A page-one ETag cannot validate candidates from later pages.
+      if (
+        page === 1 &&
+        releasePagesToFetch === 1 &&
+        effectiveReleaseSelectionStrategy !== "provider_latest" &&
+        repoSettings.etag &&
+        repoSettings.latestRelease &&
+        !isCachedTagFallbackRelease(repoSettings.latestRelease)
+      ) {
         currentHeadersWithoutAuth["If-None-Match"] = repoSettings.etag;
       }
 
@@ -295,19 +392,9 @@ export async function fetchLatestReleaseFromCodeberg(
 
       allReleases = [
         ...allReleases,
-        ...pageReleases.map((r) => ({
-          id: r.id,
-          html_url:
-            r.html_url ??
-            `https://codeberg.org/${owner}/${repo}/releases/tag/${r.tag_name}`,
-          tag_name: r.tag_name,
-          name: r.name,
-          body: r.body,
-          created_at: r.created_at,
-          published_at: r.published_at,
-          prerelease: !!r.prerelease,
-          draft: !!r.draft,
-        })),
+        ...pageReleases.map((release) =>
+          mapCodebergRelease(release, owner, repo),
+        ),
       ];
 
       if (pageReleases.length < releasesOnThisPage) {
@@ -315,7 +402,11 @@ export async function fetchLatestReleaseFromCodeberg(
       }
     }
 
-    if (allReleases.length === 0) {
+    if (
+      allReleases.length === 0 &&
+      effectiveReleaseSelectionStrategy !== "provider_latest"
+    ) {
+      newEtag = null;
       const reason = tagFallbackReason ?? "no_formal_releases";
       log.info(
         `Codeberg releases unavailable for codeberg:${owner}/${repo} (reason=${reason}). Falling back to tags.`,
@@ -323,6 +414,7 @@ export async function fetchLatestReleaseFromCodeberg(
 
       let tagsResponse: Response | null = null;
       const tags: CodebergTagApi[] = [];
+      let tagPaginationFailed = false;
       const tagPagesToFetch = resolvePageCount(
         totalReleasesToFetch,
         MAX_PER_PAGE,
@@ -367,16 +459,27 @@ export async function fetchLatestReleaseFromCodeberg(
           }
         }
 
-        if (!pageTags) break;
+        if (!pageTags) {
+          tagPaginationFailed = true;
+          break;
+        }
         tags.push(...pageTags);
         if (pageTags.length < tagsOnThisPage) break;
       }
 
-      if (!tagsResponse?.ok) {
+      if (tagPaginationFailed) {
+        const errorType: FetchError["type"] =
+          tagsResponse?.status === 429 ||
+          (tagsResponse?.status === 403 &&
+            Boolean(tagsResponse.headers.get("retry-after")))
+            ? "rate_limit"
+            : "api_error";
         log.error(
-          `Failed to fetch tags for codeberg:${owner}/${repo} after failing to find releases.`,
+          tags.length > 0
+            ? `Codeberg tag pagination failed for ${owner}/${repo}. Refusing to select from partial results.`
+            : `Failed to fetch tags for codeberg:${owner}/${repo} after failing to find releases.`,
         );
-        return { release: null, error: { type: "no_releases_found" }, newEtag };
+        return { release: null, error: { type: errorType }, newEtag };
       }
 
       if (tags.length === 0) {
@@ -413,10 +516,19 @@ export async function fetchLatestReleaseFromCodeberg(
       releases: allReleases,
       filters,
       repoIdForLog: `codeberg:${owner}/${repo}`,
+      strategy: effectiveReleaseSelectionStrategy,
+      providerLatestRelease,
     });
 
     if (!latestRelease) {
-      return releaseErrorResult("no_matching_releases", newEtag);
+      return releaseErrorResult(
+        resolveReleaseSelectionErrorType({
+          releases: allReleases,
+          filters,
+          strategy: effectiveReleaseSelectionStrategy,
+        }),
+        null,
+      );
     }
 
     if (
@@ -441,6 +553,6 @@ export async function fetchLatestReleaseFromCodeberg(
     return releaseSuccessResult(latestRelease, newEtag, fetchedAtTimestamp);
   } catch (error) {
     log.error(`Failed to fetch Codeberg releases for ${owner}/${repo}:`, error);
-    return { release: null, error: { type: "api_error" } };
+    return { release: null, error: { type: "api_error" }, newEtag: null };
   }
 }

@@ -74,6 +74,7 @@ describe("repository-actions-service background refresh commit", () => {
       expect.objectContaining({
         id: repository.id,
         appriseTags: "preserve-this-setting",
+        lastSeenReleaseTag: "v2",
         latestRelease: expect.objectContaining({ tag_name: "v2" }),
       }),
     ]);
@@ -164,6 +165,36 @@ describe("repository-actions-service background refresh commit", () => {
 
     expect(mocks.saveRepositories).toHaveBeenCalledWith([currentRepo]);
     expect(mocks.setJobStatus).toHaveBeenLastCalledWith("job-2", "complete");
+  });
+
+  it("does not apply a result fetched with a stale version tag pattern", async () => {
+    const staleRepo: Repository = {
+      id: "github:owner/repo",
+      url: "https://github.com/owner/repo",
+      releaseSelectionStrategy: "highest_version",
+      versionTagPattern: "^old/(?<version>\\d+\\.\\d+\\.\\d+)$",
+    };
+    const currentRepo: Repository = {
+      ...staleRepo,
+      versionTagPattern: "^new/(?<version>\\d+\\.\\d+\\.\\d+)$",
+    };
+    mocks.getRepositories
+      .mockResolvedValueOnce(structuredClone([staleRepo]))
+      .mockResolvedValueOnce(structuredClone([currentRepo]));
+    mocks.getLatestReleasesForRepos.mockResolvedValue([
+      releaseResult(staleRepo.id, "old/1.0.0"),
+    ]);
+    const { refreshMultipleRepositoriesAction } = await import(
+      "@/lib/repositories/repository-actions-service"
+    );
+
+    await refreshMultipleRepositoriesAction([staleRepo.id], "job-pattern");
+
+    expect(mocks.saveRepositories).toHaveBeenCalledWith([currentRepo]);
+    expect(mocks.setJobStatus).toHaveBeenLastCalledWith(
+      "job-pattern",
+      "complete",
+    );
   });
 
   it("does not apply a result fetched with stale global settings", async () => {

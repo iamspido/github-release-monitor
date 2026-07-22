@@ -77,6 +77,215 @@ describe("actions fetcher scenarios", () => {
     expect(enriched[0].release?.tag_name).toBe("v1");
   });
 
+  it("clears the ETag when the response has no matching release", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "o/r",
+      url: "https://github.com/o/r",
+      etag: 'W/"old"',
+      latestRelease: {
+        html_url: "https://github.com/o/r/releases/tag/v1.0.0",
+        tag_name: "v1.0.0",
+        name: "v1.0.0",
+        body: "body",
+        created_at: "2024-01-01T00:00:00Z",
+        published_at: "2024-01-01T00:00:00Z",
+      },
+    };
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        headers: { etag: 'W/"prerelease-only"' },
+        json: [
+          {
+            id: 2,
+            html_url: "https://github.com/o/r/releases/tag/v2.0.0-beta.1",
+            tag_name: "v2.0.0-beta.1",
+            name: "v2.0.0-beta.1",
+            body: "body",
+            created_at: "2024-02-01T00:00:00Z",
+            published_at: "2024-02-01T00:00:00Z",
+            prerelease: true,
+            draft: false,
+          },
+        ],
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release).toBeUndefined();
+    expect(enriched[0].error?.type).toBe("no_matching_releases");
+    expect(enriched[0].newEtag).toBeNull();
+    expect(
+      headerRecord(fetchCallHeaders(vi.mocked(global.fetch).mock.calls[0]))[
+        "If-None-Match"
+      ],
+    ).toBe('W/"old"');
+  });
+
+  it("selects Coturn's Docker revision with a repository version tag pattern", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "coturn/coturn",
+      url: "https://github.com/coturn/coturn",
+      releaseSelectionStrategy: "highest_version",
+      versionTagPattern:
+        "^docker/(?<version>\\d+(?:\\.\\d+){2,3})-r(?<revision>\\d+)$",
+    };
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            id: 1,
+            html_url: "https://github.com/coturn/coturn/releases/tag/4.15.0",
+            tag_name: "4.15.0",
+            name: "4.15.0",
+            body: "source release",
+            created_at: "2026-07-01T00:00:00Z",
+            published_at: "2026-07-01T00:00:00Z",
+            prerelease: false,
+            draft: false,
+          },
+          {
+            id: 2,
+            html_url:
+              "https://github.com/coturn/coturn/releases/tag/docker/4.15.0-r0",
+            tag_name: "docker/4.15.0-r0",
+            name: "docker/4.15.0-r0",
+            body: "docker release",
+            created_at: "2026-06-01T00:00:00Z",
+            published_at: "2026-06-01T00:00:00Z",
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("docker/4.15.0-r0");
+    expect(enriched[0].error).toBeUndefined();
+  });
+
+  it("reports when no release matches a configured version tag pattern", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "coturn/coturn",
+      url: "https://github.com/coturn/coturn",
+      releaseSelectionStrategy: "highest_version",
+      versionTagPattern: "^docker/(?<version>\\d+\\.\\d+\\.\\d+)$",
+    };
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            id: 1,
+            html_url: "https://github.com/coturn/coturn/releases/tag/4.15.0",
+            tag_name: "4.15.0",
+            name: "4.15.0",
+            body: "source release",
+            created_at: "2026-07-01T00:00:00Z",
+            published_at: "2026-07-01T00:00:00Z",
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release).toBeUndefined();
+    expect(enriched[0].error?.type).toBe("no_matching_version_tags");
+  });
+
+  it("does not use a page-one ETag for highest-version selection", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "o/r",
+      url: "https://github.com/o/r",
+      releaseSelectionStrategy: "highest_version",
+      releasesPerPage: 101,
+      etag: 'W/"page-one"',
+      latestRelease: {
+        html_url: "https://github.com/o/r/releases/tag/v1.0.0",
+        tag_name: "v1.0.0",
+        name: "v1.0.0",
+        body: "body",
+        created_at: "2024-01-01T00:00:00Z",
+        published_at: "2024-01-01T00:00:00Z",
+      },
+    };
+
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      id: index + 1,
+      html_url: `https://github.com/o/r/releases/tag/v${index + 1}.0.0`,
+      tag_name: `v${index + 1}.0.0`,
+      name: `v${index + 1}.0.0`,
+      body: "body",
+      created_at: "2024-02-01T00:00:00Z",
+      published_at: "2024-02-01T00:00:00Z",
+      prerelease: false,
+      draft: false,
+    }));
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: firstPage }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            id: 999,
+            html_url: "https://github.com/o/r/releases/tag/v999.0.0",
+            tag_name: "v999.0.0",
+            name: "v999.0.0",
+            body: "body",
+            created_at: "2024-02-01T00:00:00Z",
+            published_at: "2024-02-01T00:00:00Z",
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("v999.0.0");
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(2);
+    expect(
+      headerRecord(fetchCallHeaders(vi.mocked(global.fetch).mock.calls[0]))[
+        "If-None-Match"
+      ],
+    ).toBeUndefined();
+  });
+
   it("does not use a stale releases ETag when no cached release exists", async () => {
     const actions = await import("@/app/actions");
 
@@ -187,6 +396,119 @@ describe("actions fetcher scenarios", () => {
     );
     expect(vi.mocked(global.fetch).mock.calls.length).toBe(2);
     expect(enriched[0].release?.tag_name).toBe("v150");
+  });
+
+  it("uses GitHub's provider-latest endpoint when configured", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "o/r",
+      url: "https://github.com/o/r",
+      releaseSelectionStrategy: "provider_latest",
+    };
+    const newestByPublication = {
+      id: 2,
+      html_url: "https://github.com/o/r/releases/tag/v2.0.0",
+      tag_name: "v2.0.0",
+      name: "v2.0.0",
+      body: "newer publication",
+      created_at: "2024-04-01T00:00:00Z",
+      published_at: "2024-04-01T00:00:00Z",
+      prerelease: false,
+      draft: false,
+    };
+    const providerLatest = {
+      ...newestByPublication,
+      id: 1,
+      tag_name: "v1.5.0",
+      html_url: "https://github.com/o/r/releases/tag/v1.5.0",
+      created_at: "2024-01-01T00:00:00Z",
+      published_at: "2024-01-01T00:00:00Z",
+    };
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: providerLatest }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("v1.5.0");
+    expect(vi.mocked(global.fetch).mock.calls[0][0]).toBe(
+      "https://api.github.com/repos/o/r/releases/latest",
+    );
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledOnce();
+  });
+
+  it("preserves provider-latest endpoint errors", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "o/r",
+      url: "https://github.com/o/r",
+      releaseSelectionStrategy: "provider_latest",
+    };
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 429,
+        statusText: "Too Many Requests",
+        text: "rate limited",
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release).toBeUndefined();
+    expect(enriched[0].error?.type).toBe("rate_limit");
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledOnce();
+  });
+
+  it("checks only one releases page when provider-latest is absent", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "o/r",
+      url: "https://github.com/o/r",
+      releaseSelectionStrategy: "provider_latest",
+      releasesPerPage: 150,
+    };
+    const releases = Array.from({ length: 100 }, (_, index) => ({
+      id: index + 1,
+      html_url: `https://github.com/o/r/releases/tag/v${index + 1}`,
+      tag_name: `v${index + 1}`,
+      name: `v${index + 1}`,
+      body: "body",
+      created_at: "2024-01-01T00:00:00Z",
+      published_at: "2024-01-01T00:00:00Z",
+      prerelease: false,
+      draft: false,
+    }));
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: releases }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].error?.type).toBe("no_matching_releases");
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(global.fetch).mock.calls[1][0]).toContain(
+      "/releases?per_page=100&page=1",
+    );
   });
 
   it("falls back to tags when no releases", async () => {
@@ -303,6 +625,81 @@ describe("actions fetcher scenarios", () => {
     ).toBeUndefined();
     expect(calls[3][0]).toContain(`/commits/${selectedSha}`);
     expect(calls.some(([url]) => String(url).includes("/tags?"))).toBe(false);
+  });
+
+  it("selects the highest version across paginated GitHub tag fallbacks", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "owner/repo",
+      url: "https://github.com/owner/repo",
+      releaseSelectionStrategy: "highest_version",
+      releasesPerPage: 150,
+    };
+    const selectedSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const firstPageTags = Array.from({ length: 100 }, (_, index) => ({
+      name: `v${index + 1}.0.0`,
+      commit: {
+        sha: String(index + 1).padStart(40, "0"),
+      },
+    }));
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: [] }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: firstPageTags,
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [{ name: "v999.0.0", commit: { sha: selectedSha } }],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: { object: { type: "commit", sha: selectedSha, url: "unused" } },
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: {
+          commit: {
+            message: "v999.0.0",
+            committer: { date: "2026-01-01T00:00:00Z" },
+          },
+        },
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("v999.0.0");
+    expect(vi.mocked(global.fetch).mock.calls[1][0]).toContain(
+      "/tags?per_page=100&page=1",
+    );
+    expect(vi.mocked(global.fetch).mock.calls[2][0]).toContain(
+      "/tags?per_page=50&page=2",
+    );
+    expect(vi.mocked(global.fetch).mock.calls[4][0]).toContain(
+      `/commits/${selectedSha}`,
+    );
+    expect(
+      vi
+        .mocked(global.fetch)
+        .mock.calls.some(
+          ([url]) => String(url) === "https://github.com/owner/repo/tags",
+        ),
+    ).toBe(false);
   });
 
   it("falls back to the first matching stable tag when newer tags are prereleases", async () => {

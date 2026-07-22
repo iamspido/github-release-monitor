@@ -1,6 +1,6 @@
 // vitest globals enabled
 
-import type { Repository } from "@/types";
+import type { AppSettings, Repository } from "@/types";
 
 vi.mock("next/cache", () => ({
   revalidatePath: () => {},
@@ -13,11 +13,24 @@ vi.mock("next-intl/server", () => ({
 }));
 
 const mem: { repos: Repository[] } = { repos: [] };
+const globalSettings: AppSettings = {
+  timeFormat: "24h",
+  locale: "en",
+  refreshInterval: 10,
+  cacheInterval: 5,
+  releasesPerPage: 30,
+  parallelRepoFetches: 5,
+  releaseChannels: ["stable"],
+  releaseSelectionStrategy: "newest",
+};
 vi.mock("@/lib/storage/repositories", () => ({
   getRepositories: async () => mem.repos,
   saveRepositories: async (list: Repository[]) => {
     mem.repos = JSON.parse(JSON.stringify(list));
   },
+}));
+vi.mock("@/lib/storage/settings", () => ({
+  getSettings: async () => globalSettings,
 }));
 
 describe("updateRepositorySettingsAction", () => {
@@ -90,6 +103,76 @@ describe("updateRepositorySettingsAction", () => {
     });
     expect(res.success).toBe(true);
     expect(mem.repos[0].etag).toBe('W/"keep"');
+  });
+
+  it("rebaselines release detection when the effective selection changes", async () => {
+    mem.repos = [
+      {
+        id: "o/r",
+        url: "https://github.com/o/r",
+        etag: 'W/"old"',
+        lastSeenReleaseTag: "v1.0.0",
+        isNew: true,
+      },
+    ];
+
+    const { updateRepositorySettingsAction } = await import("@/app/actions");
+    const result = await updateRepositorySettingsAction("o/r", {
+      releaseSelectionStrategy: "highest_version",
+    });
+
+    expect(result.success).toBe(true);
+    expect(mem.repos[0].releaseSelectionStrategy).toBe("highest_version");
+    expect(mem.repos[0].lastSeenReleaseTag).toBeUndefined();
+    expect(mem.repos[0].isNew).toBe(false);
+    expect(mem.repos[0].etag).toBeUndefined();
+  });
+
+  it("rebaselines release detection when the version tag pattern changes", async () => {
+    mem.repos = [
+      {
+        id: "o/r",
+        url: "https://github.com/o/r",
+        releaseSelectionStrategy: "highest_version",
+        etag: 'W/"old"',
+        lastSeenReleaseTag: "v1.0.0",
+        isNew: true,
+      },
+    ];
+
+    const { updateRepositorySettingsAction } = await import("@/app/actions");
+    const result = await updateRepositorySettingsAction("o/r", {
+      releaseSelectionStrategy: "highest_version",
+      versionTagPattern: "^pkg/(?<version>\\d+\\.\\d+\\.\\d+)$",
+    });
+
+    expect(result.success).toBe(true);
+    expect(mem.repos[0].versionTagPattern).toContain("(?<version>");
+    expect(mem.repos[0].lastSeenReleaseTag).toBeUndefined();
+    expect(mem.repos[0].isNew).toBe(false);
+    expect(mem.repos[0].etag).toBeUndefined();
+  });
+
+  it("rejects a version tag pattern without a named version group", async () => {
+    mem.repos = [
+      {
+        id: "o/r",
+        url: "https://github.com/o/r",
+        releaseSelectionStrategy: "highest_version",
+      },
+    ];
+
+    const { updateRepositorySettingsAction } = await import("@/app/actions");
+    const result = await updateRepositorySettingsAction("o/r", {
+      releaseSelectionStrategy: "highest_version",
+      versionTagPattern: "^(\\d+\\.\\d+\\.\\d+)$",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "version_tag_pattern_error_missing_version_group",
+    });
+    expect(mem.repos[0].versionTagPattern).toBeUndefined();
   });
 
   it("normalizes the display name without clearing the ETag", async () => {

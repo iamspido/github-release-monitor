@@ -63,6 +63,7 @@ import {
 } from "@/hooks/use-autosave-controller";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { validateVersionTagPattern } from "@/lib/releases/version-tag-pattern";
 import {
   formatRepoIdForDisplay,
   getRepositoryNameFromId,
@@ -113,6 +114,7 @@ import type {
   AppSettings,
   PreReleaseChannelType,
   ReleaseChannel,
+  ReleaseSelectionStrategy,
   Repository,
 } from "@/types";
 import { allPreReleaseTypes } from "@/types";
@@ -217,6 +219,8 @@ type RepositorySettingsSnapshot = Pick<
   | "tags"
   | "releaseChannels"
   | "preReleaseSubChannels"
+  | "releaseSelectionStrategy"
+  | "versionTagPattern"
   | "releasesPerPage"
   | "refreshInterval"
   | "cacheInterval"
@@ -237,6 +241,7 @@ const DEFERRED_REPOSITORY_SETTING_KEYS = new Set<
   "backgroundCheckCron",
   "includeRegex",
   "excludeRegex",
+  "versionTagPattern",
   "appriseTags",
 ]);
 
@@ -255,6 +260,8 @@ interface RepoSettingsDialogProps {
     | "isPinned"
     | "releaseChannels"
     | "preReleaseSubChannels"
+    | "releaseSelectionStrategy"
+    | "versionTagPattern"
     | "releasesPerPage"
     | "refreshInterval"
     | "cacheInterval"
@@ -299,6 +306,8 @@ export function RepoSettingsDialog({
   const includeRegexId = React.useId();
   const excludeRegexId = React.useId();
   const releasesPerPageId = React.useId();
+  const releaseSelectionStrategyId = React.useId();
+  const versionTagPatternId = React.useId();
   const refreshModeId = React.useId();
   const intervalMinutesId = React.useId();
   const intervalHoursId = React.useId();
@@ -359,6 +368,13 @@ export function RepoSettingsDialog({
   const [preReleaseSubChannels, setPreReleaseSubChannels] = React.useState<
     PreReleaseChannelType[] | undefined
   >(currentRepoSettings?.preReleaseSubChannels);
+  const [releaseSelectionStrategy, setReleaseSelectionStrategy] =
+    React.useState<ReleaseSelectionStrategy | undefined>(
+      currentRepoSettings?.releaseSelectionStrategy,
+    );
+  const [versionTagPattern, setVersionTagPattern] = React.useState(
+    currentRepoSettings?.versionTagPattern ?? "",
+  );
   const [releasesPerPage, setReleasesPerPage] = React.useState<string | number>(
     currentRepoSettings?.releasesPerPage ?? "",
   );
@@ -558,6 +574,8 @@ export function RepoSettingsDialog({
         tags: currentRepositoryTags,
         releaseChannels: currentRepoSettings?.releaseChannels ?? [],
         preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels,
+        releaseSelectionStrategy: currentRepoSettings?.releaseSelectionStrategy,
+        versionTagPattern: currentRepoSettings?.versionTagPattern,
         releasesPerPage: currentRepoSettings?.releasesPerPage ?? null,
         refreshInterval: currentRepoSettings?.refreshInterval ?? null,
         cacheInterval: currentRepoSettings?.cacheInterval ?? null,
@@ -582,6 +600,8 @@ export function RepoSettingsDialog({
       finishRepositoryTagDrag();
       setRepositoryTagOrderAnnouncement("");
       setPreReleaseSubChannels(initialSettings.preReleaseSubChannels);
+      setReleaseSelectionStrategy(initialSettings.releaseSelectionStrategy);
+      setVersionTagPattern(initialSettings.versionTagPattern ?? "");
       setReleasesPerPage(initialSettings.releasesPerPage ?? "");
       setAutomationMode(getAutomationMode(initialSettings));
       const intervalParts = minutesToDhms(
@@ -645,6 +665,12 @@ export function RepoSettingsDialog({
   const useGlobalChannels = channels.length === 0;
   const useAutomaticDisplayName = displayName.trim() === "";
   const useGlobalSubChannels = preReleaseSubChannels === undefined;
+  const useGlobalReleaseSelection = releaseSelectionStrategy === undefined;
+  const effectiveReleaseSelectionStrategy =
+    releaseSelectionStrategy ??
+    globalSettings.releaseSelectionStrategy ??
+    "newest";
+  const useDefaultVersionTagPattern = versionTagPattern.trim() === "";
   const useGlobalReleasesPerPage = String(releasesPerPage).trim() === "";
   const useGlobalAutomation = automationMode === "global" && !useCustomCache;
   const useGlobalIncludeRegex = includeRegex.trim() === "";
@@ -657,6 +683,8 @@ export function RepoSettingsDialog({
     useAutomaticDisplayName &&
     useGlobalChannels &&
     useGlobalSubChannels &&
+    useGlobalReleaseSelection &&
+    useDefaultVersionTagPattern &&
     useGlobalReleasesPerPage &&
     useGlobalAutomation &&
     useGlobalIncludeRegex &&
@@ -705,6 +733,8 @@ export function RepoSettingsDialog({
       tags: repositoryTags,
       releaseChannels: channels,
       preReleaseSubChannels,
+      releaseSelectionStrategy,
+      versionTagPattern: versionTagPattern.trim() || undefined,
       releasesPerPage: finalReleasesPerPage,
       refreshInterval: finalRefreshInterval,
       cacheInterval: finalCacheInterval,
@@ -720,6 +750,8 @@ export function RepoSettingsDialog({
     repositoryTags,
     channels,
     preReleaseSubChannels,
+    releaseSelectionStrategy,
+    versionTagPattern,
     releasesPerPage,
     automationMode,
     intervalDays,
@@ -752,6 +784,7 @@ export function RepoSettingsDialog({
     cronError,
     includeRegexError,
     excludeRegexError,
+    versionTagPatternError,
   } = React.useMemo(() => {
     const intervalFieldsFilled =
       intervalDays !== "" && intervalHours !== "" && intervalMinutes !== "";
@@ -792,6 +825,7 @@ export function RepoSettingsDialog({
       ),
       includeRegexError: validateRegexInput(includeRegex),
       excludeRegexError: validateRegexInput(excludeRegex),
+      versionTagPatternError: validateVersionTagPattern(versionTagPattern),
     };
   }, [
     releasesPerPage,
@@ -810,6 +844,7 @@ export function RepoSettingsDialog({
     globalSettings.backgroundCheckCron,
     includeRegex,
     excludeRegex,
+    versionTagPattern,
   ]);
 
   const hasEmptyIntervalFields =
@@ -831,7 +866,8 @@ export function RepoSettingsDialog({
       isCacheInvalid ||
       cronError ||
       includeRegexError ||
-      excludeRegexError,
+      excludeRegexError ||
+      versionTagPatternError,
   );
   const hasValidationErrors = Boolean(
     hasNonTagValidationErrors || repositoryTagError,
@@ -1322,7 +1358,9 @@ export function RepoSettingsDialog({
                       ? includeRegexId
                       : excludeRegexError
                         ? excludeRegexId
-                        : null;
+                        : versionTagPatternError
+                          ? versionTagPatternId
+                          : null;
     if (!targetId) return;
     window.requestAnimationFrame(() =>
       document.getElementById(targetId)?.focus(),
@@ -1448,6 +1486,8 @@ export function RepoSettingsDialog({
     setIsPinned(false);
     setChannels([]);
     setPreReleaseSubChannels(undefined);
+    setReleaseSelectionStrategy(undefined);
+    setVersionTagPattern("");
     setReleasesPerPage("");
     resetAutomationOverrideState();
     setIncludeRegex("");
@@ -1572,6 +1612,130 @@ export function RepoSettingsDialog({
                     {t("pin_to_top_description")}
                   </p>
                 </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 p-4 border rounded-md">
+              <Label
+                htmlFor={releaseSelectionStrategyId}
+                className="font-semibold text-base"
+              >
+                {tGlobal("release_selection_strategy_label")}
+              </Label>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={releaseSelectionStrategy ?? "global"}
+                  onValueChange={(value: ReleaseSelectionStrategy | "global") =>
+                    setReleaseSelectionStrategy(
+                      value === "global" ? undefined : value,
+                    )
+                  }
+                  disabled={!isOnline}
+                >
+                  <SelectTrigger id={releaseSelectionStrategyId}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="global">
+                      {t("release_selection_option_global", {
+                        strategy: tGlobal(
+                          `release_selection_${globalSettings.releaseSelectionStrategy ?? "newest"}`,
+                        ),
+                      })}
+                    </SelectItem>
+                    <SelectItem value="newest">
+                      {tGlobal("release_selection_newest")}
+                    </SelectItem>
+                    <SelectItem value="provider_latest">
+                      {tGlobal("release_selection_provider_latest")}
+                    </SelectItem>
+                    <SelectItem value="highest_version">
+                      {tGlobal("release_selection_highest_version")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          requestImmediateSave();
+                          setReleaseSelectionStrategy(undefined);
+                        }}
+                        className="size-8 shrink-0"
+                        disabled={!isOnline || useGlobalReleaseSelection}
+                      >
+                        <RotateCcw className="size-4" />
+                        <span className="sr-only">
+                          {t("release_selection_reset_button")}
+                        </span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{t("reset_to_global_tooltip")}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {tGlobal(
+                  `release_selection_${releaseSelectionStrategy ?? globalSettings.releaseSelectionStrategy ?? "newest"}_hint`,
+                )}
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor={versionTagPatternId}>
+                  {t("version_tag_pattern_label")}
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id={versionTagPatternId}
+                    value={versionTagPattern}
+                    onChange={(event) =>
+                      setVersionTagPattern(event.target.value)
+                    }
+                    placeholder={t("version_tag_pattern_placeholder")}
+                    className="font-mono"
+                    disabled={
+                      !isOnline ||
+                      effectiveReleaseSelectionStrategy !== "highest_version"
+                    }
+                    aria-invalid={Boolean(versionTagPatternError)}
+                    aria-describedby={`${versionTagPatternId}-description`}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      requestImmediateSave();
+                      setVersionTagPattern("");
+                    }}
+                    className="size-8 shrink-0"
+                    disabled={!isOnline || useDefaultVersionTagPattern}
+                  >
+                    <RotateCcw className="size-4" />
+                    <span className="sr-only">
+                      {t("version_tag_pattern_reset_button")}
+                    </span>
+                  </Button>
+                </div>
+                <p
+                  id={`${versionTagPatternId}-description`}
+                  className="text-xs text-muted-foreground"
+                >
+                  {t("version_tag_pattern_hint")}
+                </p>
+                {versionTagPatternError ? (
+                  <p className="text-sm text-destructive">
+                    {t(
+                      versionTagPatternError === "missing_version_group"
+                        ? "version_tag_pattern_error_missing_version_group"
+                        : "version_tag_pattern_error_invalid",
+                    )}
+                  </p>
+                ) : null}
               </div>
             </div>
 

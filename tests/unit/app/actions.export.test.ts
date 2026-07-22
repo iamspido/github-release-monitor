@@ -22,6 +22,7 @@ describe("getRepositoriesForExport", () => {
           url: "https://github.com/o/r",
           displayName: "Production Monitor",
           isPinned: true,
+          versionTagPattern: "^pkg/(?<version>\\d+\\.\\d+\\.\\d+)$",
           pendingNotifications: [{ id: "internal-delivery" }],
         },
       ],
@@ -32,6 +33,7 @@ describe("getRepositoriesForExport", () => {
     expect(res.data?.length).toBe(1);
     expect(res.data?.[0]?.displayName).toBe("Production Monitor");
     expect(res.data?.[0]?.isPinned).toBe(true);
+    expect(res.data?.[0]?.versionTagPattern).toContain("(?<version>");
     expect(res.data?.[0]).not.toHaveProperty("pendingNotifications");
   });
 

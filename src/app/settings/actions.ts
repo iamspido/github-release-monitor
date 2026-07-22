@@ -67,22 +67,47 @@ async function applySettingsUpdate(
       releaseCacheInvalidation,
       settingsToSave,
       shouldClearEtags,
+      shouldRebaselineReleaseSelection,
       shouldResetNewFlags,
     } = preparedUpdate.value;
     responseLocale = settingsToSave.locale;
     let repositoriesBeforeSettingsUpdate: Awaited<
       ReturnType<typeof getRepositories>
     > | null = null;
+    const selectionStrategyIsOnlyCacheChange =
+      releaseCacheInvalidation.releaseSelectionStrategyChanged === true &&
+      !releaseCacheInvalidation.filtersChanged &&
+      !releaseCacheInvalidation.releaseChannelsChanged &&
+      !releaseCacheInvalidation.preReleaseSubChannelsChanged &&
+      !releaseCacheInvalidation.releasesPerPageChanged;
 
     // All validation is complete before any persistent side effects begin.
-    if (shouldResetNewFlags || shouldClearEtags) {
+    if (
+      shouldResetNewFlags ||
+      shouldClearEtags ||
+      shouldRebaselineReleaseSelection
+    ) {
       const allRepos = await getRepositories();
       repositoriesBeforeSettingsUpdate = allRepos;
-      const updatedRepos = allRepos.map((repository) => ({
-        ...repository,
-        isNew: shouldResetNewFlags ? false : repository.isNew,
-        etag: shouldClearEtags ? undefined : repository.etag,
-      }));
+      const updatedRepos = allRepos.map((repository) => {
+        const shouldRebaselineRepository =
+          shouldRebaselineReleaseSelection &&
+          repository.releaseSelectionStrategy === undefined;
+        const shouldClearRepositoryEtag =
+          shouldClearEtags &&
+          (!selectionStrategyIsOnlyCacheChange || shouldRebaselineRepository);
+        return {
+          ...repository,
+          lastSeenReleaseTag: shouldRebaselineRepository
+            ? undefined
+            : repository.lastSeenReleaseTag,
+          isNew:
+            shouldResetNewFlags || shouldRebaselineRepository
+              ? false
+              : repository.isNew,
+          etag: shouldClearRepositoryEtag ? undefined : repository.etag,
+        };
+      });
       await saveRepositories(updatedRepos);
     }
 
@@ -121,7 +146,9 @@ async function applySettingsUpdate(
       logger
         .withScope("Settings")
         .info(
-          `Cleared ETags for all repositories due to: ${reasons.join(", ")}`,
+          selectionStrategyIsOnlyCacheChange
+            ? `Cleared ETags for repositories inheriting the global release selection due to: ${reasons.join(", ")}`
+            : `Cleared ETags for all repositories due to: ${reasons.join(", ")}`,
         );
     }
     if (changes.length > 0) {

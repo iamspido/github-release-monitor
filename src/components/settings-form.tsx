@@ -100,6 +100,7 @@ import type {
   PreReleaseChannelType,
   ReleaseChannel,
   ReleaseProviderSortKey,
+  ReleaseSelectionStrategy,
   ReleaseSortOrder,
   SecurityHighlightColorPreset,
   TimeFormat,
@@ -266,6 +267,7 @@ export function SettingsForm({
       timeFormat24h: `${baseId}-time-24h`,
       languageSelect: `${baseId}-language`,
       releaseSortOrder: `${baseId}-release-sort-order`,
+      releaseSelectionStrategy: `${baseId}-release-selection-strategy`,
       providerSortOrder: `${baseId}-provider-sort-order`,
       prioritizeNewSecurityReleases: `${baseId}-prioritize-new-security-releases`,
       securityHighlightColor: `${baseId}-security-highlight-color`,
@@ -313,6 +315,10 @@ export function SettingsForm({
   const [releaseSortOrder, setReleaseSortOrder] =
     React.useState<ReleaseSortOrder>(
       currentSettings.releaseSortOrder ?? "latest_first",
+    );
+  const [releaseSelectionStrategy, setReleaseSelectionStrategy] =
+    React.useState<ReleaseSelectionStrategy>(
+      currentSettings.releaseSelectionStrategy ?? "newest",
     );
   const [providerSortOrder, setProviderSortOrder] = React.useState<
     ReleaseProviderSortKey[]
@@ -485,6 +491,7 @@ export function SettingsForm({
         1,
       releaseChannels: channels,
       preReleaseSubChannels,
+      releaseSelectionStrategy,
       releaseSortOrder,
       providerSortOrder,
       prioritizeNewSecurityReleases,
@@ -524,6 +531,7 @@ export function SettingsForm({
     locale,
     channels,
     preReleaseSubChannels,
+    releaseSelectionStrategy,
     releaseSortOrder,
     providerSortOrder,
     prioritizeNewSecurityReleases,
@@ -1831,6 +1839,40 @@ export function SettingsForm({
                   {t("cache_settings_description")}
                 </p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor={ids.releaseSelectionStrategy}>
+                {t("release_selection_strategy_label")}
+              </Label>
+              <Select
+                value={releaseSelectionStrategy}
+                onValueChange={(value: ReleaseSelectionStrategy) =>
+                  setReleaseSelectionStrategy(value)
+                }
+                disabled={!isOnline}
+              >
+                <SelectTrigger
+                  id={ids.releaseSelectionStrategy}
+                  className="w-full sm:w-[320px]"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">
+                    {t("release_selection_newest")}
+                  </SelectItem>
+                  <SelectItem value="provider_latest">
+                    {t("release_selection_provider_latest")}
+                  </SelectItem>
+                  <SelectItem value="highest_version">
+                    {t("release_selection_highest_version")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {t(`release_selection_${releaseSelectionStrategy}_hint`)}
+              </p>
             </div>
 
             <div>

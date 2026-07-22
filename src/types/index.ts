@@ -18,6 +18,8 @@ export type Repository = {
   // Empty arrays/undefined mean "use global setting"
   releaseChannels?: ReleaseChannel[];
   preReleaseSubChannels?: PreReleaseChannelType[];
+  releaseSelectionStrategy?: ReleaseSelectionStrategy;
+  versionTagPattern?: string;
   releasesPerPage?: number | null;
   refreshInterval?: number | null;
   cacheInterval?: number | null;
@@ -82,6 +84,7 @@ export type FetchError = {
     | "repo_not_found"
     | "no_releases_found"
     | "no_matching_releases"
+    | "no_matching_version_tags"
     | "invalid_url"
     | "api_error"
     | "not_modified";
@@ -99,6 +102,8 @@ export type EnrichedRelease = {
     isPinned?: boolean;
     releaseChannels?: ReleaseChannel[];
     preReleaseSubChannels?: PreReleaseChannelType[];
+    releaseSelectionStrategy?: ReleaseSelectionStrategy;
+    versionTagPattern?: string;
     releasesPerPage?: number | null;
     refreshInterval?: number | null;
     cacheInterval?: number | null;
@@ -227,6 +232,13 @@ export const releaseSortOrders = [
   "provider_grouped",
 ] as const;
 export type ReleaseSortOrder = (typeof releaseSortOrders)[number];
+export const releaseSelectionStrategies = [
+  "newest",
+  "provider_latest",
+  "highest_version",
+] as const;
+export type ReleaseSelectionStrategy =
+  (typeof releaseSelectionStrategies)[number];
 export const repoProviderSortKeys = ["github", "gitlab", "codeberg"] as const;
 export type ReleaseProviderSortKey = (typeof repoProviderSortKeys)[number];
 export const defaultProviderSortOrder: ReleaseProviderSortKey[] = [
@@ -258,6 +270,7 @@ export type AppSettings = {
   parallelRepoFetches: number;
   releaseChannels: ReleaseChannel[];
   preReleaseSubChannels?: PreReleaseChannelType[];
+  releaseSelectionStrategy?: ReleaseSelectionStrategy;
   releaseSortOrder?: ReleaseSortOrder;
   providerSortOrder?: ReleaseProviderSortKey[];
   prioritizeNewSecurityReleases?: boolean;

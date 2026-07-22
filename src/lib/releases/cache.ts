@@ -58,6 +58,10 @@ export async function fetchLatestReleaseWithCache(
     repoSettings.releasesPerPage <= 1000
       ? repoSettings.releasesPerPage
       : globalSettings.releasesPerPage;
+  const effectiveReleaseSelectionStrategy =
+    repoSettings.releaseSelectionStrategy ??
+    globalSettings.releaseSelectionStrategy ??
+    "newest";
 
   const cacheKeyPrefix =
     provider === "github"
@@ -116,6 +120,7 @@ export async function fetchLatestReleaseWithCache(
       locale,
       JSON.stringify(repoSettings),
       String(effectiveReleasesPerPage),
+      effectiveReleaseSelectionStrategy,
       String(cacheIntervalMinutes),
     ],
     {

@@ -3,6 +3,11 @@ import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { getLatestReleasesForRepos } from "@/lib/releases";
 import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
+import {
+  normalizeReleaseSelectionStrategy,
+  resolveEffectiveReleaseSelectionStrategy,
+} from "@/lib/releases/selection";
+import { validateVersionTagPattern } from "@/lib/releases/version-tag-pattern";
 import { normalizeRepositoryDisplayName } from "@/lib/repositories/display-name";
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
 import { toPublicRepository } from "@/lib/repositories/public-repository";
@@ -45,6 +50,8 @@ function createReleaseFetchFingerprint(
     locale: settings.locale,
     releaseChannels: [...filters.effectiveReleaseChannels].sort(),
     preReleaseSubChannels: [...filters.effectivePreReleaseSubChannels].sort(),
+    releaseSelectionStrategy: filters.effectiveReleaseSelectionStrategy,
+    versionTagPattern: filters.versionTagPattern,
     releasesPerPage: filters.totalReleasesToFetch,
     includeRegex: filters.effectiveIncludeRegex,
     excludeRegex: filters.effectiveExcludeRegex,
@@ -218,14 +225,35 @@ export async function importRepositoriesAction(
           addedCount++;
         }
 
+        const existingRepo = currentReposMap.get(importedRepo.id);
         const repoToSave: Repository = {
-          ...currentReposMap.get(importedRepo.id),
+          ...existingRepo,
           ...importedRepo,
           isNew:
             (settings.showAcknowledge ?? true)
               ? (importedRepo.isNew ?? false)
               : false,
         };
+        const releaseSelectionConfigChanged =
+          existingRepo &&
+          (resolveEffectiveReleaseSelectionStrategy(
+            existingRepo,
+            settings.releaseSelectionStrategy,
+          ) !==
+            resolveEffectiveReleaseSelectionStrategy(
+              repoToSave,
+              settings.releaseSelectionStrategy,
+            ) ||
+            (existingRepo.versionTagPattern?.trim() || undefined) !==
+              (repoToSave.versionTagPattern?.trim() || undefined));
+        if (releaseSelectionConfigChanged) {
+          if (!Object.hasOwn(importedRepo, "lastSeenReleaseTag")) {
+            delete repoToSave.lastSeenReleaseTag;
+          }
+          if (!Object.hasOwn(importedRepo, "etag")) {
+            delete repoToSave.etag;
+          }
+        }
         currentReposMap.set(importedRepo.id, repoToSave);
         reposToFetch.push(repoToSave);
       }
@@ -327,7 +355,9 @@ export async function refreshSingleRepositoryAction(repoId: string) {
       return;
     }
 
-    applyReleaseFetchResultToRepository(allRepos[repoIndex], enrichedRelease);
+    applyReleaseFetchResultToRepository(allRepos[repoIndex], enrichedRelease, {
+      initializeLastSeenFromRealRelease: true,
+    });
 
     await saveRepositories(allRepos);
     revalidatePath("/");
@@ -505,6 +535,8 @@ export async function updateRepositorySettingsAction(
     | "isPinned"
     | "releaseChannels"
     | "preReleaseSubChannels"
+    | "releaseSelectionStrategy"
+    | "versionTagPattern"
     | "releasesPerPage"
     | "refreshInterval"
     | "cacheInterval"
@@ -540,6 +572,41 @@ export async function updateRepositorySettingsAction(
       }
 
       const existing = currentRepos[repoIndex];
+      const newReleaseSelectionStrategy = settings.releaseSelectionStrategy
+        ? normalizeReleaseSelectionStrategy(settings.releaseSelectionStrategy)
+        : undefined;
+      const newVersionTagPattern =
+        settings.versionTagPattern?.trim() || undefined;
+      const versionTagPatternError =
+        validateVersionTagPattern(newVersionTagPattern);
+      if (versionTagPatternError) {
+        return {
+          success: false,
+          error: t(
+            versionTagPatternError === "missing_version_group"
+              ? "version_tag_pattern_error_missing_version_group"
+              : "version_tag_pattern_error_invalid",
+          ),
+        };
+      }
+      const versionTagPatternChanged =
+        (existing.versionTagPattern?.trim() || undefined) !==
+        newVersionTagPattern;
+      const releaseSelectionOverrideChanged =
+        existing.releaseSelectionStrategy !== newReleaseSelectionStrategy;
+      let effectiveReleaseSelectionChanged = false;
+      if (releaseSelectionOverrideChanged) {
+        const globalSettings = await getSettings();
+        effectiveReleaseSelectionChanged =
+          resolveEffectiveReleaseSelectionStrategy(
+            existing,
+            globalSettings.releaseSelectionStrategy,
+          ) !==
+          resolveEffectiveReleaseSelectionStrategy(
+            { releaseSelectionStrategy: newReleaseSelectionStrategy },
+            globalSettings.releaseSelectionStrategy,
+          );
+      }
 
       const hasDisplayNameUpdate = Object.hasOwn(settings, "displayName");
       const normalizedDisplayName = normalizeRepositoryDisplayName(
@@ -593,7 +660,11 @@ export async function updateRepositorySettingsAction(
           : null;
 
       const releaseCacheInvalidation =
-        getRepositoryReleaseCacheInvalidationChanges(existing, settings);
+        getRepositoryReleaseCacheInvalidationChanges(existing, {
+          ...settings,
+          releaseSelectionStrategy: newReleaseSelectionStrategy,
+          versionTagPattern: newVersionTagPattern,
+        });
       const backgroundCheckCronChanged =
         (existing.backgroundCheckCron ?? undefined) !== newBackgroundCheckCron;
 
@@ -601,6 +672,8 @@ export async function updateRepositorySettingsAction(
         existing,
         {
           ...settings,
+          releaseSelectionStrategy: newReleaseSelectionStrategy,
+          versionTagPattern: newVersionTagPattern,
           displayName: normalizedDisplayName.displayName,
           isPinned: newIsPinned,
           tags: newTags,
@@ -622,6 +695,8 @@ export async function updateRepositorySettingsAction(
         isPinned: newIsPinned,
         releaseChannels: settings.releaseChannels,
         preReleaseSubChannels: settings.preReleaseSubChannels,
+        releaseSelectionStrategy: newReleaseSelectionStrategy,
+        versionTagPattern: newVersionTagPattern,
         releasesPerPage: settings.releasesPerPage,
         refreshInterval: newRefreshInterval,
         cacheInterval: newCacheInterval,
@@ -634,6 +709,14 @@ export async function updateRepositorySettingsAction(
         tags: newTags,
         appriseTags: settings.appriseTags,
         appriseFormat: settings.appriseFormat,
+        lastSeenReleaseTag:
+          effectiveReleaseSelectionChanged || versionTagPatternChanged
+            ? undefined
+            : existing.lastSeenReleaseTag,
+        isNew:
+          effectiveReleaseSelectionChanged || versionTagPatternChanged
+            ? false
+            : existing.isNew,
         // Invalidate ETag when filters/pagination that affect visible latest release change
         etag: etagInvalidated ? undefined : existing.etag,
       };

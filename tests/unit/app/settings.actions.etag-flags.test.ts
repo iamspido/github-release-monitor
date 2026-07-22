@@ -97,6 +97,13 @@ describe("updateSettingsAction clears ETags for all change flags", () => {
     await runAndAssert({ ...mem.settings, releasesPerPage: 99 });
   });
 
+  it("release selection changes clear ETags", async () => {
+    await runAndAssert({
+      ...mem.settings,
+      releaseSelectionStrategy: "highest_version",
+    });
+  });
+
   it("display sort changes do not clear ETags or trigger refresh", async () => {
     vi.mocked(checkForNewReleases).mockClear();
     const { updateSettingsAction } = await import("@/app/settings/actions");

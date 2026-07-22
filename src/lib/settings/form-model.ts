@@ -112,6 +112,8 @@ export type RefreshSensitiveRepoSettings = Pick<
   Repository,
   | "releaseChannels"
   | "preReleaseSubChannels"
+  | "releaseSelectionStrategy"
+  | "versionTagPattern"
   | "releasesPerPage"
   | "includeRegex"
   | "excludeRegex"
@@ -134,11 +136,18 @@ export function hasRefreshSensitiveRepoSettingChanges(
   );
   const releasesPerPageChanged =
     previous.releasesPerPage !== next.releasesPerPage;
+  const releaseSelectionStrategyChanged =
+    previous.releaseSelectionStrategy !== next.releaseSelectionStrategy;
+  const versionTagPatternChanged =
+    (previous.versionTagPattern ?? "").trim() !==
+    (next.versionTagPattern ?? "").trim();
 
   return (
     filtersChanged ||
     channelsChanged ||
     preReleaseSubChannelsChanged ||
+    releaseSelectionStrategyChanged ||
+    versionTagPatternChanged ||
     releasesPerPageChanged
   );
 }

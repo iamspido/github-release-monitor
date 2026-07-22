@@ -150,6 +150,7 @@ describe("releases/cache", () => {
         "en",
         JSON.stringify(repoSettings),
         "42",
+        "newest",
         "3",
       ],
       {

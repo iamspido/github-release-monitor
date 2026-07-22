@@ -123,6 +123,86 @@ describe("importRepositoriesAction idempotency", () => {
     );
   });
 
+  it("rebaselines an existing repository when an import changes its selection strategy", async () => {
+    mem.repos[0] = {
+      ...mem.repos[0],
+      etag: 'W/"old"',
+      lastSeenReleaseTag: "v1.0.0",
+      isNew: true,
+    };
+    const actions = await import("@/app/actions");
+
+    const result = await actions.importRepositoriesAction([
+      {
+        id: "ignored",
+        url: "https://github.com/owner1/repo1",
+        releaseSelectionStrategy: "highest_version",
+      },
+    ]);
+
+    expect(result.success).toBe(true);
+    expect(mem.repos[0]).toMatchObject({
+      releaseSelectionStrategy: "highest_version",
+      isNew: false,
+    });
+    expect(mem.repos[0].lastSeenReleaseTag).toBeUndefined();
+    expect(mem.repos[0].etag).toBeUndefined();
+  });
+
+  it("preserves explicitly imported release state with a changed selection strategy", async () => {
+    mem.repos[0] = {
+      ...mem.repos[0],
+      etag: 'W/"old"',
+      lastSeenReleaseTag: "v1.0.0",
+    };
+    const actions = await import("@/app/actions");
+
+    const result = await actions.importRepositoriesAction([
+      {
+        id: "ignored",
+        url: "https://github.com/owner1/repo1",
+        releaseSelectionStrategy: "highest_version",
+        etag: 'W/"imported"',
+        lastSeenReleaseTag: "v9.0.0",
+      },
+    ]);
+
+    expect(result.success).toBe(true);
+    expect(mem.repos[0]).toMatchObject({
+      releaseSelectionStrategy: "highest_version",
+      etag: 'W/"imported"',
+      lastSeenReleaseTag: "v9.0.0",
+    });
+  });
+
+  it("rebaselines an existing repository when an import changes its version tag pattern", async () => {
+    mem.repos[0] = {
+      ...mem.repos[0],
+      releaseSelectionStrategy: "highest_version",
+      versionTagPattern: "^old/(?<version>\\d+\\.\\d+\\.\\d+)$",
+      etag: 'W/"old"',
+      lastSeenReleaseTag: "old/1.0.0",
+      isNew: true,
+    };
+    const actions = await import("@/app/actions");
+    const nextPattern = "^new/(?<version>\\d+\\.\\d+\\.\\d+)$";
+
+    const result = await actions.importRepositoriesAction([
+      {
+        id: "ignored",
+        url: "https://github.com/owner1/repo1",
+        releaseSelectionStrategy: "highest_version",
+        versionTagPattern: nextPattern,
+      },
+    ]);
+
+    expect(result.success).toBe(true);
+    expect(mem.repos[0].versionTagPattern).toBe(nextPattern);
+    expect(mem.repos[0].lastSeenReleaseTag).toBeUndefined();
+    expect(mem.repos[0].etag).toBeUndefined();
+    expect(mem.repos[0].isNew).toBe(false);
+  });
+
   it("adds batch tags without replacing tags on an existing repository", async () => {
     mem.repos[0].tags = ["existing", "shared"];
     const actions = await import("@/app/actions");

@@ -2,6 +2,7 @@ import {
   normalizeProviderSortOrder,
   normalizeReleaseSortOrder,
 } from "@/lib/release-sort";
+import { normalizeReleaseSelectionStrategy } from "@/lib/releases/selection";
 import { normalizeBackgroundCheckCron } from "@/lib/runtime/repository-schedule";
 import {
   getInvalidCustomSecurityPattern,
@@ -30,6 +31,7 @@ export type PreparedSettingsUpdate = {
   changes: string[];
   shouldResetNewFlags: boolean;
   shouldClearEtags: boolean;
+  shouldRebaselineReleaseSelection: boolean;
 };
 
 export function prepareSettingsUpdate(
@@ -121,6 +123,9 @@ export function prepareSettingsUpdate(
       Math.round(newSettings.appriseMaxCharacters ?? 1800),
     ),
     releaseSortOrder: normalizeReleaseSortOrder(newSettings.releaseSortOrder),
+    releaseSelectionStrategy: normalizeReleaseSelectionStrategy(
+      newSettings.releaseSelectionStrategy,
+    ),
     providerSortOrder: normalizeProviderSortOrder(
       newSettings.providerSortOrder,
     ),
@@ -147,6 +152,8 @@ export function prepareSettingsUpdate(
         Boolean(currentSettings.showAcknowledge) &&
         settingsToSave.showAcknowledge === false,
       shouldClearEtags: shouldInvalidateReleaseCache(releaseCacheInvalidation),
+      shouldRebaselineReleaseSelection:
+        releaseCacheInvalidation.releaseSelectionStrategyChanged === true,
     },
   };
 }

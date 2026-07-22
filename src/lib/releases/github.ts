@@ -20,7 +20,7 @@ import {
   releaseSuccessResult,
   resolvePageCount,
   resolvePageSize,
-  selectFirstMatchingRelease,
+  resolveReleaseSelectionErrorType,
   selectLatestMatchingRelease,
 } from "@/lib/releases/provider-pipeline";
 import type {
@@ -28,14 +28,63 @@ import type {
   RepoSettingsForFetch,
 } from "@/lib/releases/types";
 import { log, normalizeEnvToken } from "@/lib/server-action-helpers";
-import type { AppSettings, GithubRelease } from "@/types";
+import type { AppSettings, FetchError, GithubRelease } from "@/types";
 
 type GithubTagCandidate = {
   tag: { name: string; commit: { sha: string } };
   release: GithubRelease;
 };
 
-async function fetchLatestMatchingTagFromGithubPage(args: {
+async function fetchGithubProviderLatestRelease(
+  apiBaseUrl: string,
+  headers: Record<string, string>,
+  owner: string,
+  repo: string,
+): Promise<{ release: GithubRelease | null; error: FetchError | null }> {
+  const { response, data } = await fetchJsonResponseWithRetry<GithubRelease>(
+    `${apiBaseUrl}/releases/latest`,
+    { headers, cache: "no-store" },
+    { description: `GitHub provider-latest release for ${owner}/${repo}` },
+  );
+
+  if (!response.ok) {
+    await discardResponseWithTimeout(response);
+    if (response.status === 404) {
+      return { release: null, error: null };
+    }
+    const error: FetchError = {
+      type:
+        response.status === 403 || response.status === 429
+          ? "rate_limit"
+          : "api_error",
+    };
+    log.warn(
+      `GitHub provider-latest endpoint failed for ${owner}/${repo}: ${response.status} ${response.statusText}`,
+    );
+    return { release: null, error };
+  }
+
+  return { release: data ?? null, error: null };
+}
+
+function selectGithubTagCandidate(args: {
+  candidates: GithubTagCandidate[];
+  filters: ReturnType<typeof resolveEffectiveRepoFilters>;
+  repoIdForLog: string;
+}): GithubTagCandidate | null {
+  const selectedRelease = selectLatestMatchingRelease({
+    releases: args.candidates.map(({ release }) => release),
+    filters: args.filters,
+    repoIdForLog: args.repoIdForLog,
+    strategy: args.filters.effectiveReleaseSelectionStrategy,
+  });
+
+  return (
+    args.candidates.find(({ release }) => release === selectedRelease) ?? null
+  );
+}
+
+async function fetchMatchingTagFromGithubPage(args: {
   owner: string;
   repo: string;
   filters: ReturnType<typeof resolveEffectiveRepoFilters>;
@@ -82,13 +131,11 @@ async function fetchLatestMatchingTagFromGithubPage(args: {
       },
     }));
 
-    return (
-      selectFirstMatchingRelease(
-        candidates,
-        args.filters,
-        `${args.owner}/${args.repo}`,
-      ) ?? null
-    );
+    return selectGithubTagCandidate({
+      candidates,
+      filters: args.filters,
+      repoIdForLog: `${args.owner}/${args.repo}`,
+    });
   } catch (error) {
     log.warn(
       `Could not use the chronological GitHub tags page for ${args.owner}/${args.repo}; falling back to the REST tags endpoint.`,
@@ -109,7 +156,7 @@ export async function fetchLatestReleaseFromGitHub(
   const fetchedAtTimestamp = new Date().toISOString();
 
   const filters = resolveEffectiveRepoFilters(repoSettings, globalSettings);
-  const { totalReleasesToFetch } = filters;
+  const { effectiveReleaseSelectionStrategy, totalReleasesToFetch } = filters;
 
   // --- Special handling for the virtual test repository ---
   if (owner === "test" && repo === "test") {
@@ -133,8 +180,11 @@ export async function fetchLatestReleaseFromGitHub(
   const GITHUB_API_BASE_URL = `https://api.github.com/repos/${owner}/${repo}`;
   const MAX_PER_PAGE = 100;
   const pagesToFetch = resolvePageCount(totalReleasesToFetch, MAX_PER_PAGE);
+  const releasePagesToFetch =
+    effectiveReleaseSelectionStrategy === "provider_latest" ? 1 : pagesToFetch;
   let allReleases: GithubRelease[] = [];
   let newEtag: string | null | undefined;
+  let providerLatestRelease: GithubRelease | null | undefined;
 
   const headers: HeadersInit = {
     Accept: "application/vnd.github.v3+json",
@@ -147,7 +197,29 @@ export async function fetchLatestReleaseFromGitHub(
   }
 
   try {
-    for (let page = 1; page <= pagesToFetch; page++) {
+    if (effectiveReleaseSelectionStrategy === "provider_latest") {
+      const providerLatestResult = await fetchGithubProviderLatestRelease(
+        GITHUB_API_BASE_URL,
+        headers,
+        owner,
+        repo,
+      );
+      if (providerLatestResult.error) {
+        return {
+          release: null,
+          error: providerLatestResult.error,
+          newEtag,
+        };
+      }
+      providerLatestRelease = providerLatestResult.release;
+      if (providerLatestRelease) allReleases = [providerLatestRelease];
+    }
+
+    for (
+      let page = 1;
+      !providerLatestRelease && page <= releasePagesToFetch;
+      page++
+    ) {
       const releasesOnThisPage = resolvePageSize({
         maxPerPage: MAX_PER_PAGE,
         totalItemsToFetch: totalReleasesToFetch,
@@ -158,9 +230,11 @@ export async function fetchLatestReleaseFromGitHub(
       const url = `${GITHUB_API_BASE_URL}/releases?per_page=${releasesOnThisPage}&page=${page}`;
 
       const currentHeaders = { ...headers };
-      // Only use ETag for the first page request.
+      // A page-one ETag cannot validate candidates from later pages.
       if (
         page === 1 &&
+        releasePagesToFetch === 1 &&
+        effectiveReleaseSelectionStrategy !== "provider_latest" &&
         repoSettings.etag &&
         repoSettings.latestRelease &&
         !isCachedTagFallbackRelease(repoSettings.latestRelease)
@@ -231,17 +305,24 @@ export async function fetchLatestReleaseFromGitHub(
       }
     }
 
-    if (allReleases.length === 0) {
+    if (
+      allReleases.length === 0 &&
+      effectiveReleaseSelectionStrategy !== "provider_latest"
+    ) {
       log.info(
         `No formal releases found for ${owner}/${repo}. Falling back to tags.`,
       );
       newEtag = null;
+      let tagReleasesForError: GithubRelease[] = [];
 
-      let selectedCandidate = await fetchLatestMatchingTagFromGithubPage({
-        owner,
-        repo,
-        filters,
-      });
+      let selectedCandidate =
+        effectiveReleaseSelectionStrategy === "highest_version"
+          ? null
+          : await fetchMatchingTagFromGithubPage({
+              owner,
+              repo,
+              filters,
+            });
 
       if (!selectedCandidate) {
         const allTags: { name: string; commit: { sha: string } }[] = [];
@@ -267,9 +348,15 @@ export async function fetchLatestReleaseFromGitHub(
             log.error(
               `Failed to fetch tags for ${owner}/${repo} after failing to find releases.`,
             );
+            const errorType: FetchError["type"] =
+              tagsResponse.status === 403 || tagsResponse.status === 429
+                ? "rate_limit"
+                : tagsResponse.status === 404
+                  ? "repo_not_found"
+                  : "api_error";
             return {
               release: null,
-              error: { type: "no_releases_found" },
+              error: { type: errorType },
               newEtag,
             };
           }
@@ -310,13 +397,13 @@ export async function fetchLatestReleaseFromGitHub(
             draft: false,
           },
         }));
+        tagReleasesForError = tagCandidates.map(({ release }) => release);
 
-        selectedCandidate =
-          selectFirstMatchingRelease(
-            tagCandidates,
-            filters,
-            `${owner}/${repo}`,
-          ) ?? null;
+        selectedCandidate = selectGithubTagCandidate({
+          candidates: tagCandidates,
+          filters,
+          repoIdForLog: `${owner}/${repo}`,
+        });
       }
 
       if (!selectedCandidate) {
@@ -325,7 +412,13 @@ export async function fetchLatestReleaseFromGitHub(
         );
         return {
           release: null,
-          error: { type: "no_matching_releases" },
+          error: {
+            type: resolveReleaseSelectionErrorType({
+              releases: tagReleasesForError,
+              filters,
+              strategy: effectiveReleaseSelectionStrategy,
+            }),
+          },
           newEtag,
         };
       }
@@ -409,7 +502,7 @@ export async function fetchLatestReleaseFromGitHub(
         }
       } catch (e) {
         log.error(`Error during tag fallback for ${owner}/${repo}:`, e);
-        return { release: null, error: { type: "api_error" } };
+        return { release: null, error: { type: "api_error" }, newEtag };
       }
 
       const virtualRelease: GithubRelease = {
@@ -425,10 +518,19 @@ export async function fetchLatestReleaseFromGitHub(
       releases: allReleases,
       filters,
       repoIdForLog: `${owner}/${repo}`,
+      strategy: effectiveReleaseSelectionStrategy,
+      providerLatestRelease,
     });
 
     if (!latestRelease) {
-      return releaseErrorResult("no_matching_releases", newEtag);
+      return releaseErrorResult(
+        resolveReleaseSelectionErrorType({
+          releases: allReleases,
+          filters,
+          strategy: effectiveReleaseSelectionStrategy,
+        }),
+        null,
+      );
     }
 
     // This check is for formal releases that have an empty body.
@@ -486,6 +588,6 @@ export async function fetchLatestReleaseFromGitHub(
     );
   } catch (error) {
     log.error(`Failed to fetch releases for ${owner}/${repo}:`, error);
-    return { release: null, error: { type: "api_error" } };
+    return { release: null, error: { type: "api_error" }, newEtag: null };
   }
 }

@@ -117,6 +117,39 @@ describe("settings actions", () => {
     expect(settingsStore.current.refreshInterval).toBe(10);
   });
 
+  it("rebaselines only repositories inheriting a changed release selection", async () => {
+    memRepos.list = [
+      {
+        id: "o/inherited",
+        url: "https://github.com/o/inherited",
+        etag: "E1",
+        lastSeenReleaseTag: "v1.0.0",
+        isNew: true,
+      },
+      {
+        id: "o/override",
+        url: "https://github.com/o/override",
+        etag: "E2",
+        lastSeenReleaseTag: "v2.0.0",
+        isNew: true,
+        releaseSelectionStrategy: "newest",
+      },
+    ];
+    const { updateSettingsAction } = await import("@/app/settings/actions");
+
+    await updateSettingsAction({
+      ...settingsStore.current,
+      releaseSelectionStrategy: "highest_version",
+    });
+
+    expect(memRepos.list[0]).toMatchObject({ isNew: false });
+    expect(memRepos.list[0].lastSeenReleaseTag).toBeUndefined();
+    expect(memRepos.list[0].etag).toBeUndefined();
+    expect(memRepos.list[1].lastSeenReleaseTag).toBe("v2.0.0");
+    expect(memRepos.list[1].isNew).toBe(true);
+    expect(memRepos.list[1].etag).toBe("E2");
+  });
+
   it("rejects invalid release regexes before persisting settings", async () => {
     const { updateSettingsAction } = await import("@/app/settings/actions");
     const previousSettings = structuredClone(settingsStore.current);

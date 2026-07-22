@@ -20,7 +20,7 @@ import type {
   PendingReleaseNotification,
   Repository,
 } from "@/types";
-import { allPreReleaseTypes } from "@/types";
+import { allPreReleaseTypes, releaseSelectionStrategies } from "@/types";
 
 // Resolve the path to the data file.
 // Using process.cwd() ensures the path is correct whether running in dev or prod.
@@ -34,6 +34,7 @@ const isReleaseChannel = isOneOf(["stable", "prerelease", "draft"]);
 const isPreReleaseChannel = isOneOf(allPreReleaseTypes);
 const isAppriseFormat = isOneOf(["text", "markdown", "html"]);
 const isReleaseSource = isOneOf(["release", "tag"]);
+const isReleaseSelectionStrategy = isOneOf(releaseSelectionStrategies);
 const isNotificationChannel = isOneOf(["email", "apprise"]);
 const isTimeFormat = isOneOf(["12h", "24h"]);
 
@@ -198,6 +199,12 @@ function parseRepository(value: unknown, index: number): Repository {
     isArrayOf(isPreReleaseChannel),
     "an array of prerelease channels",
   );
+  assertOptionalField(
+    repository,
+    "releaseSelectionStrategy",
+    isReleaseSelectionStrategy,
+    "a supported release selection strategy",
+  );
   for (const key of [
     "releasesPerPage",
     "refreshInterval",
@@ -220,6 +227,7 @@ function parseRepository(value: unknown, index: number): Repository {
     "lastBackgroundCheckAt",
     "includeRegex",
     "excludeRegex",
+    "versionTagPattern",
     "appriseTags",
   ] as const) {
     assertOptionalField(repository, key, isString, "a string");
@@ -302,6 +310,14 @@ function mergeRepositoriesPreferFirst(
     preReleaseSubChannels: preferDefined(
       base.preReleaseSubChannels,
       incoming.preReleaseSubChannels,
+    ),
+    releaseSelectionStrategy: preferDefined(
+      base.releaseSelectionStrategy,
+      incoming.releaseSelectionStrategy,
+    ),
+    versionTagPattern: preferDefined(
+      base.versionTagPattern,
+      incoming.versionTagPattern,
     ),
     releasesPerPage: preferDefined(
       base.releasesPerPage,

@@ -1,10 +1,15 @@
+import type { EffectiveRepoFilters } from "@/lib/releases/filters";
 import {
-  createEffectiveReleaseMatcher,
-  type EffectiveRepoFilters,
-} from "@/lib/releases/filters";
+  getReleaseSelectionErrorType,
+  selectMatchingRelease,
+} from "@/lib/releases/selection";
 import type { LatestReleaseFetchResult } from "@/lib/releases/types";
 import { log } from "@/lib/server-action-helpers";
-import type { FetchError, GithubRelease } from "@/types";
+import type {
+  FetchError,
+  GithubRelease,
+  ReleaseSelectionStrategy,
+} from "@/types";
 
 type CommitMetadata = {
   message?: string;
@@ -85,31 +90,27 @@ export function applyCommitMetadata(
   release.published_at = release.published_at ?? metadata.date;
 }
 
-export function selectFirstMatchingRelease<
-  T extends { release: GithubRelease },
->(candidates: T[], filters: EffectiveRepoFilters, repoIdForLog: string) {
-  const matchesRelease = createEffectiveReleaseMatcher(filters, repoIdForLog);
-  return candidates.find(({ release }) => matchesRelease(release));
-}
-
 export function selectLatestMatchingRelease(args: {
   releases: GithubRelease[];
   filters: EffectiveRepoFilters;
   repoIdForLog: string;
+  strategy?: ReleaseSelectionStrategy;
+  providerLatestRelease?: GithubRelease | null;
 }) {
-  const matchesRelease = createEffectiveReleaseMatcher(
-    args.filters,
-    args.repoIdForLog,
-  );
-  const filteredReleases = args.releases.filter(matchesRelease);
+  return selectMatchingRelease({
+    ...args,
+    strategy: args.strategy ?? "newest",
+  });
+}
 
-  if (filteredReleases.length === 0) {
-    return null;
-  }
-
-  return filteredReleases.slice().sort((a, b) => {
-    const aTime = new Date(a.published_at || a.created_at).getTime();
-    const bTime = new Date(b.published_at || b.created_at).getTime();
-    return bTime - aTime;
-  })[0];
+export function resolveReleaseSelectionErrorType(args: {
+  releases: GithubRelease[];
+  filters: EffectiveRepoFilters;
+  strategy: ReleaseSelectionStrategy;
+}): FetchError["type"] {
+  return getReleaseSelectionErrorType({
+    releases: args.releases,
+    strategy: args.strategy,
+    versionTagPattern: args.filters.versionTagPattern,
+  });
 }

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getReleaseCardHeading } from "@/components/release-card-helpers";
+import {
+  getReleaseCardHeading,
+  hasCustomRepoSettings,
+} from "@/components/release-card-helpers";
 
 describe("getReleaseCardHeading", () => {
   it("always gives an explicitly configured display name priority", () => {
@@ -41,5 +44,21 @@ describe("getReleaseCardHeading", () => {
         repoId: "github:owner/repo",
       }),
     ).toBe("repo");
+  });
+});
+
+describe("hasCustomRepoSettings", () => {
+  it("recognizes a repository-specific release selection strategy", () => {
+    expect(
+      hasCustomRepoSettings({ releaseSelectionStrategy: "highest_version" }),
+    ).toBe(true);
+  });
+
+  it("recognizes a repository-specific version tag pattern", () => {
+    expect(
+      hasCustomRepoSettings({
+        versionTagPattern: "^pkg/(?<version>\\d+\\.\\d+\\.\\d+)$",
+      }),
+    ).toBe(true);
   });
 });

@@ -1,3 +1,4 @@
+import { validateVersionTagPattern } from "@/lib/releases/version-tag-pattern";
 import { normalizeRepositoryDisplayName } from "@/lib/repositories/display-name";
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
 import { normalizeRepositoryTags } from "@/lib/repositories/tags";
@@ -6,9 +7,13 @@ import type {
   CachedRelease,
   PreReleaseChannelType,
   ReleaseChannel,
+  ReleaseSelectionStrategy,
   Repository,
 } from "@/types";
-import { allPreReleaseTypes } from "@/types";
+import {
+  allPreReleaseTypes,
+  releaseSelectionStrategies as supportedReleaseSelectionStrategies,
+} from "@/types";
 
 const releaseChannels = new Set<ReleaseChannel>([
   "stable",
@@ -17,6 +22,9 @@ const releaseChannels = new Set<ReleaseChannel>([
 ]);
 const preReleaseChannels = new Set<PreReleaseChannelType>(allPreReleaseTypes);
 const appriseFormats = new Set<AppriseFormat>(["text", "markdown", "html"]);
+const releaseSelectionStrategies = new Set<ReleaseSelectionStrategy>(
+  supportedReleaseSelectionStrategies,
+);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -147,6 +155,21 @@ export function parseImportedRepository(value: unknown): Repository | null {
   );
   if (importedPreReleaseChannels) {
     repository.preReleaseSubChannels = importedPreReleaseChannels;
+  }
+  if (
+    releaseSelectionStrategies.has(
+      value.releaseSelectionStrategy as ReleaseSelectionStrategy,
+    )
+  ) {
+    repository.releaseSelectionStrategy =
+      value.releaseSelectionStrategy as ReleaseSelectionStrategy;
+  }
+  const versionTagPattern = readOptionalString(
+    value,
+    "versionTagPattern",
+  )?.trim();
+  if (versionTagPattern && !validateVersionTagPattern(versionTagPattern)) {
+    repository.versionTagPattern = versionTagPattern;
   }
 
   const releasesPerPage = readOptionalNullableFiniteNumber(

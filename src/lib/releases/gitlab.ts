@@ -5,7 +5,10 @@ import {
 } from "@/lib/http/fetch-with-timeout";
 import { buildGitlabAuthChain } from "@/lib/releases/auth-chains";
 import { fetchJsonResponseWithRetryAuthChain } from "@/lib/releases/fetch";
-import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
+import {
+  isCachedTagFallbackRelease,
+  resolveEffectiveRepoFilters,
+} from "@/lib/releases/filters";
 import {
   fetchGitlabTagsViaGitTransport,
   tryFetchGitlabCommitMetadataViaGitTransport,
@@ -18,6 +21,7 @@ import {
   releaseSuccessResult,
   resolvePageCount,
   resolvePageSize,
+  resolveReleaseSelectionErrorType,
   selectLatestMatchingRelease,
 } from "@/lib/releases/provider-pipeline";
 import type {
@@ -29,7 +33,7 @@ import {
   getGitlabAuthForHost,
 } from "@/lib/repositories/providers";
 import { log } from "@/lib/server-action-helpers";
-import type { AppSettings, GithubRelease } from "@/types";
+import type { AppSettings, FetchError, GithubRelease } from "@/types";
 
 type GitlabReleaseApi = {
   name?: string | null;
@@ -68,6 +72,84 @@ function hashStringToId(value: string): number {
     hash = (hash * 31 + value.charCodeAt(i)) | 0;
   }
   return Math.abs(hash) || 1;
+}
+
+function mapGitlabRelease(
+  release: GitlabReleaseApi,
+  gitlabHost: string,
+  projectPath: string,
+  fallbackTimestamp: string,
+): GithubRelease | null {
+  const tagName =
+    typeof release.tag_name === "string" ? release.tag_name : null;
+  if (!tagName) return null;
+
+  const createdAt =
+    typeof release.created_at === "string"
+      ? release.created_at
+      : typeof release.released_at === "string"
+        ? release.released_at
+        : fallbackTimestamp;
+  const publishedAt =
+    typeof release.released_at === "string"
+      ? release.released_at
+      : typeof release.created_at === "string"
+        ? release.created_at
+        : null;
+
+  return {
+    id: hashStringToId(tagName),
+    html_url: `https://${gitlabHost}/${projectPath}/-/releases/${encodeURIComponent(tagName)}`,
+    tag_name: tagName,
+    name: typeof release.name === "string" ? release.name : null,
+    body: typeof release.description === "string" ? release.description : null,
+    created_at: createdAt,
+    published_at: publishedAt,
+    prerelease: false,
+    draft: !!release.upcoming_release,
+  };
+}
+
+async function fetchGitlabProviderLatestRelease(
+  apiBaseUrl: string,
+  headersWithoutAuth: Record<string, string>,
+  auth: GitlabAuthConfig | null,
+  gitlabHost: string,
+  projectPath: string,
+  fallbackTimestamp: string,
+): Promise<{ release: GithubRelease | null; error: FetchError | null }> {
+  const chain = buildGitlabAuthChain(headersWithoutAuth, auth);
+  const { response, data } =
+    await fetchJsonResponseWithRetryAuthChain<GitlabReleaseApi>(
+      `${apiBaseUrl}/releases/permalink/latest`,
+      chain,
+      { description: `GitLab provider-latest release for ${projectPath}` },
+    );
+
+  if (!response.ok) {
+    await discardResponseWithTimeout(response);
+    if (response.status === 404) {
+      return { release: null, error: null };
+    }
+    const error: FetchError = {
+      type:
+        response.status === 429 ||
+        (response.status === 403 && response.headers.get("retry-after"))
+          ? "rate_limit"
+          : "api_error",
+    };
+    log.warn(
+      `GitLab provider-latest endpoint failed for ${projectPath} on ${gitlabHost}: ${response.status} ${response.statusText}`,
+    );
+    return { release: null, error };
+  }
+
+  return {
+    release: data
+      ? mapGitlabRelease(data, gitlabHost, projectPath, fallbackTimestamp)
+      : null,
+    error: null,
+  };
 }
 
 function extractGitlabCommitDate(
@@ -129,13 +211,16 @@ export async function fetchLatestReleaseFromGitLab(
   const fetchedAtTimestamp = new Date().toISOString();
 
   const filters = resolveEffectiveRepoFilters(repoSettings, globalSettings);
-  const { totalReleasesToFetch } = filters;
+  const { effectiveReleaseSelectionStrategy, totalReleasesToFetch } = filters;
 
   const GITLAB_API_BASE_URL = `https://${gitlabHost}/api/v4/projects/${encodeURIComponent(projectPath)}`;
   const MAX_PER_PAGE = 100;
   const pagesToFetch = resolvePageCount(totalReleasesToFetch, MAX_PER_PAGE);
+  const releasePagesToFetch =
+    effectiveReleaseSelectionStrategy === "provider_latest" ? 1 : pagesToFetch;
   let allReleases: GithubRelease[] = [];
-  let newEtag: string | undefined;
+  let newEtag: string | null | undefined;
+  let providerLatestRelease: GithubRelease | null | undefined;
   let fellBackToTagsAfterReleases404 = false;
   const gitTransportCommitShasByTag = new Map<string, string>();
   const apiCommitRefsByTag = new Map<string, string>();
@@ -147,7 +232,31 @@ export async function fetchLatestReleaseFromGitLab(
   const gitlabAuth = getGitlabAuthForHost(gitlabHost);
 
   try {
-    for (let page = 1; page <= pagesToFetch; page += 1) {
+    if (effectiveReleaseSelectionStrategy === "provider_latest") {
+      const providerLatestResult = await fetchGitlabProviderLatestRelease(
+        GITLAB_API_BASE_URL,
+        headersWithoutAuth,
+        gitlabAuth,
+        gitlabHost,
+        projectPath,
+        fetchedAtTimestamp,
+      );
+      if (providerLatestResult.error) {
+        return {
+          release: null,
+          error: providerLatestResult.error,
+          newEtag,
+        };
+      }
+      providerLatestRelease = providerLatestResult.release;
+      if (providerLatestRelease) allReleases = [providerLatestRelease];
+    }
+
+    for (
+      let page = 1;
+      !providerLatestRelease && page <= releasePagesToFetch;
+      page += 1
+    ) {
       const releasesOnThisPage = resolvePageSize({
         maxPerPage: MAX_PER_PAGE,
         totalItemsToFetch: totalReleasesToFetch,
@@ -158,7 +267,15 @@ export async function fetchLatestReleaseFromGitLab(
       const url = `${GITLAB_API_BASE_URL}/releases?per_page=${releasesOnThisPage}&page=${page}`;
 
       const currentHeadersWithoutAuth = { ...headersWithoutAuth };
-      if (page === 1 && repoSettings.etag) {
+      // A page-one ETag cannot validate candidates from later pages.
+      if (
+        page === 1 &&
+        releasePagesToFetch === 1 &&
+        effectiveReleaseSelectionStrategy !== "provider_latest" &&
+        repoSettings.etag &&
+        repoSettings.latestRelease &&
+        !isCachedTagFallbackRelease(repoSettings.latestRelease)
+      ) {
         currentHeadersWithoutAuth["If-None-Match"] = repoSettings.etag;
       }
 
@@ -227,41 +344,14 @@ export async function fetchLatestReleaseFromGitLab(
       allReleases = [
         ...allReleases,
         ...pageReleases
-          .map((release) => {
-            const tagName =
-              typeof release.tag_name === "string" ? release.tag_name : null;
-            if (!tagName) return null;
-
-            const createdAt =
-              typeof release.created_at === "string"
-                ? release.created_at
-                : typeof release.released_at === "string"
-                  ? release.released_at
-                  : fetchedAtTimestamp;
-
-            const publishedAt =
-              typeof release.released_at === "string"
-                ? release.released_at
-                : typeof release.created_at === "string"
-                  ? release.created_at
-                  : null;
-
-            const mapped: GithubRelease = {
-              id: hashStringToId(tagName),
-              html_url: `https://${gitlabHost}/${projectPath}/-/releases/${encodeURIComponent(tagName)}`,
-              tag_name: tagName,
-              name: typeof release.name === "string" ? release.name : null,
-              body:
-                typeof release.description === "string"
-                  ? release.description
-                  : null,
-              created_at: createdAt,
-              published_at: publishedAt,
-              prerelease: false,
-              draft: !!release.upcoming_release,
-            };
-            return mapped;
-          })
+          .map((release) =>
+            mapGitlabRelease(
+              release,
+              gitlabHost,
+              projectPath,
+              fetchedAtTimestamp,
+            ),
+          )
           .filter((release): release is GithubRelease => release !== null),
       ];
 
@@ -270,7 +360,11 @@ export async function fetchLatestReleaseFromGitLab(
       }
     }
 
-    if (allReleases.length === 0) {
+    if (
+      allReleases.length === 0 &&
+      effectiveReleaseSelectionStrategy !== "provider_latest"
+    ) {
+      newEtag = null;
       if (fellBackToTagsAfterReleases404) {
         log.info(
           `Falling back to tags for ${projectPath} after releases endpoint 404.`,
@@ -330,7 +424,17 @@ export async function fetchLatestReleaseFromGitLab(
       }
 
       if (hadSuccessfulTagResponse && tagsResponse && !tagsResponse.ok) {
+        const errorType: FetchError["type"] =
+          tagsResponse.status === 429 ||
+          (tagsResponse.status === 403 &&
+            Boolean(tagsResponse.headers.get("retry-after")))
+            ? "rate_limit"
+            : "api_error";
+        log.error(
+          `GitLab tag pagination failed for ${projectPath} on ${gitlabHost}: ${tagsResponse.status} ${tagsResponse.statusText}. Refusing to select from partial results.`,
+        );
         await discardResponseWithTimeout(tagsResponse);
+        return { release: null, error: { type: errorType }, newEtag };
       }
 
       if (!hadSuccessfulTagResponse) {
@@ -433,6 +537,17 @@ export async function fetchLatestReleaseFromGitLab(
             `Failed to fetch tags for ${projectPath} after failing to find releases. (${details})`,
             bodyText ? { bodyText } : undefined,
           );
+          if (
+            tagsResponse?.status === 429 ||
+            (tagsResponse?.status === 403 &&
+              tagsResponse.headers.get("retry-after"))
+          ) {
+            return {
+              release: null,
+              error: { type: "rate_limit" },
+              newEtag,
+            };
+          }
           if (tagsResponse?.status === 404) {
             return {
               release: null,
@@ -503,10 +618,19 @@ export async function fetchLatestReleaseFromGitLab(
       releases: allReleases,
       filters,
       repoIdForLog: `gitlab:${gitlabHost}/${projectPath}`,
+      strategy: effectiveReleaseSelectionStrategy,
+      providerLatestRelease,
     });
 
     if (!latestRelease) {
-      return releaseErrorResult("no_matching_releases", newEtag);
+      return releaseErrorResult(
+        resolveReleaseSelectionErrorType({
+          releases: allReleases,
+          filters,
+          strategy: effectiveReleaseSelectionStrategy,
+        }),
+        null,
+      );
     }
 
     if (
@@ -555,6 +679,6 @@ export async function fetchLatestReleaseFromGitLab(
     return releaseSuccessResult(latestRelease, newEtag, fetchedAtTimestamp);
   } catch (error) {
     log.error(`Failed to fetch GitLab releases for ${projectPath}:`, error);
-    return { release: null, error: { type: "api_error" } };
+    return { release: null, error: { type: "api_error" }, newEtag: null };
   }
 }

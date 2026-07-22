@@ -236,6 +236,8 @@ describe("storage/repositories", () => {
           cacheInterval: null,
           backgroundCheckCron: null,
           includeRegex: "base-only",
+          releaseSelectionStrategy: "highest_version",
+          versionTagPattern: "^pkg/(?<version>\\d+\\.\\d+\\.\\d+)$",
         },
         {
           id: "github:owner/repo",
@@ -262,6 +264,8 @@ describe("storage/repositories", () => {
         backgroundCheckCron: null,
         includeRegex: "base-only",
         excludeRegex: "incoming-only",
+        releaseSelectionStrategy: "highest_version",
+        versionTagPattern: "^pkg/(?<version>\\d+\\.\\d+\\.\\d+)$",
       },
     ]);
   });

@@ -48,6 +48,18 @@ const translationMap: Record<string, Record<string, string>> = {
     toast_error_title: "Save error",
     reset_to_global_button: "Reset filters",
     reset_to_global_tooltip: "Reset to global",
+    release_selection_reset_button: "Use global release selection setting",
+    version_tag_pattern_label: "Version tag pattern (optional)",
+    version_tag_pattern_placeholder: "Version pattern",
+    version_tag_pattern_hint: "Use named version and revision groups",
+    version_tag_pattern_reset_button: "Clear version tag pattern",
+    version_tag_pattern_error_invalid: "Invalid version pattern",
+    version_tag_pattern_error_missing_version_group:
+      "Missing named version group",
+    reset_all_button_text: "Reset all",
+    reset_all_dialog_title: "Reset all settings",
+    reset_all_dialog_description: "Reset every override",
+    reset_all_confirm_button: "Confirm reset all",
     releases_per_page_label_repo: "Releases per page",
     releases_per_page_hint_global: "Using global value",
     releases_per_page_hint_individual: "Using custom value",
@@ -77,6 +89,7 @@ const translationMap: Record<string, Record<string, string>> = {
     release_channel_prerelease: "Prerelease",
     release_channel_draft: "Draft",
     prerelease_subtype_description: "Prerelease tags",
+    release_selection_strategy_label: "Release selection",
     regex_filter_description_repo: "Filter releases",
     include_regex_label: "Include regex",
     exclude_regex_label: "Exclude regex",
@@ -187,6 +200,8 @@ const emptyRepoSettings: Pick<
   Repository,
   | "releaseChannels"
   | "preReleaseSubChannels"
+  | "releaseSelectionStrategy"
+  | "versionTagPattern"
   | "releasesPerPage"
   | "refreshInterval"
   | "cacheInterval"
@@ -198,6 +213,8 @@ const emptyRepoSettings: Pick<
 > = {
   releaseChannels: [],
   preReleaseSubChannels: [],
+  releaseSelectionStrategy: undefined,
+  versionTagPattern: undefined,
   releasesPerPage: null,
   refreshInterval: null,
   cacheInterval: null,
@@ -375,6 +392,75 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     expect(document.body.textContent).toContain(
       "Offline – this dialog is read-only. Changes will not be saved until you're back online.",
     );
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("associates the release selection label with its trigger", async () => {
+    renderDialog();
+    await flushEffects();
+
+    const label = Array.from(container.querySelectorAll("label")).find(
+      (candidate) => candidate.textContent === "Release selection",
+    );
+    expect(label?.htmlFor).toBeTruthy();
+    expect(
+      document.getElementById(label?.htmlFor ?? "")?.getAttribute("role"),
+    ).toBe("combobox");
+  });
+
+  it("autosaves a valid repository version tag pattern", async () => {
+    renderDialog({
+      currentRepoSettings: {
+        ...emptyRepoSettings,
+        releaseSelectionStrategy: "highest_version",
+        versionTagPattern: "^pkg/(?<version>\\d+\\.\\d+\\.\\d+)$",
+      },
+    });
+    await flushEffects();
+
+    const label = Array.from(container.querySelectorAll("label")).find(
+      (candidate) => candidate.textContent === "Version tag pattern (optional)",
+    );
+    const input = document.getElementById(
+      label?.htmlFor ?? "",
+    ) as HTMLInputElement | null;
+    expect(input?.disabled).toBe(false);
+
+    const pattern =
+      "^docker/(?<version>\\d+\\.\\d+\\.\\d+)-r(?<revision>\\d+)$";
+    await act(async () => {
+      if (input) setInputValue(input, pattern);
+    });
+    await advanceAutosaveDelay();
+
+    expect(updateSettingsMock).toHaveBeenCalledWith(
+      "owner/repo",
+      expect.objectContaining({ versionTagPattern: pattern }),
+    );
+  });
+
+  it("blocks autosave when the version tag pattern has no version group", async () => {
+    renderDialog({
+      currentRepoSettings: {
+        ...emptyRepoSettings,
+        releaseSelectionStrategy: "highest_version",
+      },
+    });
+    await flushEffects();
+
+    const label = Array.from(container.querySelectorAll("label")).find(
+      (candidate) => candidate.textContent === "Version tag pattern (optional)",
+    );
+    const input = document.getElementById(
+      label?.htmlFor ?? "",
+    ) as HTMLInputElement | null;
+
+    await act(async () => {
+      if (input) setInputValue(input, "^(\\d+\\.\\d+\\.\\d+)$");
+    });
+    await advanceAutosaveDelay();
+
+    expect(container.textContent).toContain("Missing named version group");
     expect(updateSettingsMock).not.toHaveBeenCalled();
   });
 
@@ -1034,6 +1120,46 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     expect(updateSettingsMock).not.toHaveBeenCalled();
     await advanceAutosaveDelay();
     expect(updateSettingsMock).toHaveBeenCalledOnce();
+  });
+
+  it("resets the release selection override with all repository settings", async () => {
+    renderDialog({
+      currentRepoSettings: {
+        ...emptyRepoSettings,
+        releaseSelectionStrategy: "highest_version",
+        versionTagPattern: "^pkg/(?<version>\\d+\\.\\d+\\.\\d+)$",
+      },
+    });
+    await flushEffects();
+
+    const resetAllButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent?.includes("Reset all"));
+    expect(resetAllButton).toBeDefined();
+
+    await act(async () => {
+      resetAllButton?.click();
+    });
+    await flushEffects();
+
+    const confirmButton = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent?.includes("Confirm reset all"));
+    expect(confirmButton).toBeDefined();
+
+    await act(async () => {
+      confirmButton?.click();
+    });
+    await flushEffects();
+    await advanceAutosaveDelay();
+
+    expect(updateSettingsMock).toHaveBeenCalledWith(
+      "owner/repo",
+      expect.objectContaining({
+        releaseSelectionStrategy: undefined,
+        versionTagPattern: undefined,
+      }),
+    );
   });
 
   it("reorders repository tags with controls and autosaves their order", async () => {

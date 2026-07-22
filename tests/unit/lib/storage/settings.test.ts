@@ -90,6 +90,7 @@ describe("storage/settings failure scenarios", () => {
     expect(second.parallelRepoFetches).toBe(1);
     expect(first).toHaveProperty("repositoryFormExpanded", true);
     expect(first).toHaveProperty("appriseMaxCharacters", 1800);
+    expect(first).toHaveProperty("releaseSelectionStrategy", "newest");
 
     first.releaseChannels.push("draft");
     if (!first.providerSortOrder) {
@@ -243,11 +244,13 @@ describe("storage/settings failure scenarios", () => {
     await saveSettings({
       ...current,
       releaseSortOrder: "not-real",
+      releaseSelectionStrategy: "not-real",
       providerSortOrder: ["gitlab", "bad", "github"],
     } as unknown as typeof current);
 
     await expect(getSettings()).resolves.toMatchObject({
       releaseSortOrder: "latest_first",
+      releaseSelectionStrategy: "newest",
       providerSortOrder: ["gitlab", "github", "codeberg"],
     });
   });

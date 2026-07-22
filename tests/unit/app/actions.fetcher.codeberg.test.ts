@@ -79,6 +79,111 @@ describe("actions Codeberg fetcher scenarios", () => {
     expect(enriched[0].release?.tag_name).toBe("v1");
   });
 
+  it("does not use a page-one ETag for highest-version selection", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "codeberg:o/r",
+      url: "https://codeberg.org/o/r",
+      releaseSelectionStrategy: "highest_version",
+      releasesPerPage: 51,
+      etag: 'W/"page-one"',
+      latestRelease: {
+        html_url: "https://codeberg.org/o/r/releases/tag/v1.0.0",
+        tag_name: "v1.0.0",
+        name: "v1.0.0",
+        body: "body",
+        created_at: "2024-01-01T00:00:00Z",
+        published_at: "2024-01-01T00:00:00Z",
+      },
+    };
+
+    const firstPage = Array.from({ length: 50 }, (_, index) => ({
+      id: index + 1,
+      html_url: `https://codeberg.org/o/r/releases/tag/v${index + 1}.0.0`,
+      tag_name: `v${index + 1}.0.0`,
+      name: `v${index + 1}.0.0`,
+      body: "body",
+      created_at: "2024-02-01T00:00:00Z",
+      published_at: "2024-02-01T00:00:00Z",
+      prerelease: false,
+      draft: false,
+    }));
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: firstPage }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            id: 999,
+            html_url: "https://codeberg.org/o/r/releases/tag/v999.0.0",
+            tag_name: "v999.0.0",
+            name: "v999.0.0",
+            body: "body",
+            created_at: "2024-02-01T00:00:00Z",
+            published_at: "2024-02-01T00:00:00Z",
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("v999.0.0");
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(2);
+    expect(
+      headerRecord(fetchCallHeaders(vi.mocked(global.fetch).mock.calls[0]))[
+        "If-None-Match"
+      ],
+    ).toBeUndefined();
+  });
+
+  it("uses Codeberg's provider-latest endpoint when configured", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "codeberg:o/r",
+      url: "https://codeberg.org/o/r",
+      releaseSelectionStrategy: "provider_latest",
+    };
+    const release = {
+      id: 1,
+      html_url: "https://codeberg.org/o/r/releases/tag/v1.0.0",
+      tag_name: "v1.0.0",
+      name: "v1.0.0",
+      body: "body",
+      created_at: "2024-01-01T00:00:00Z",
+      published_at: "2024-01-01T00:00:00Z",
+      prerelease: false,
+      draft: false,
+    };
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: release }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("v1.0.0");
+    expect(vi.mocked(global.fetch).mock.calls[0][0]).toBe(
+      "https://codeberg.org/api/v1/repos/o/r/releases/latest",
+    );
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledOnce();
+  });
+
   it("falls back to tags when no releases", async () => {
     const actions = await import("@/app/actions");
     const commitDate = "2020-02-03T04:05:06.000Z";
@@ -86,12 +191,23 @@ describe("actions Codeberg fetcher scenarios", () => {
     const repo: Repository = {
       id: "codeberg:o/r",
       url: "https://codeberg.org/o/r",
+      etag: 'W/"empty-releases"',
+      latestRelease: {
+        html_url: "https://codeberg.org/o/r/src/tag/v0",
+        tag_name: "v0",
+        name: "Tag: v0",
+        body: "old tag",
+        created_at: "2019-01-01T00:00:00Z",
+        published_at: "2019-01-01T00:00:00Z",
+        source: "tag",
+      },
     };
 
     vi.mocked(global.fetch).mockResolvedValueOnce(
       mockFetchResponse({
         status: 200,
         statusText: "OK",
+        headers: { etag: 'W/"still-empty"' },
         json: [],
       }),
     );
@@ -125,6 +241,12 @@ describe("actions Codeberg fetcher scenarios", () => {
     expect(enriched[0].release?.published_at).toBe(commitDate);
     expect(enriched[0].release?.published_at_unknown).toBe(false);
     expect(enriched[0].error).toBeUndefined();
+    expect(enriched[0].newEtag).toBeNull();
+    expect(
+      headerRecord(fetchCallHeaders(vi.mocked(global.fetch).mock.calls[0]))[
+        "If-None-Match"
+      ],
+    ).toBeUndefined();
   });
 
   it("selects an older matching tag when the newest tag is filtered out", async () => {
@@ -251,6 +373,55 @@ describe("actions Codeberg fetcher scenarios", () => {
     expect(enriched[0].release?.tag_name).toBe("v2");
     expect(enriched[0].release?.body).toContain("msg2");
     expect(enriched[0].error).toBeUndefined();
+  });
+
+  it("rejects partial Codeberg tag results when a later page throws", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "codeberg:o/r",
+      url: "https://codeberg.org/o/r",
+      releaseSelectionStrategy: "highest_version",
+      releasesPerPage: 51,
+    };
+    const firstTagPage = Array.from({ length: 50 }, (_, index) => ({
+      name: `v${index + 1}.0.0`,
+      message: "tag",
+    }));
+
+    vi.mocked(global.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/releases?")) {
+        return mockFetchResponse({ status: 200, json: [] });
+      }
+      if (url.includes("/tags?")) {
+        const page = new URL(url).searchParams.get("page");
+        if (page === "1") {
+          return mockFetchResponse({ status: 200, json: firstTagPage });
+        }
+        if (page === "2") {
+          throw new Error("network failure on page 2");
+        }
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release).toBeUndefined();
+    expect(enriched[0].error?.type).toBe("api_error");
+    expect(
+      vi
+        .mocked(global.fetch)
+        .mock.calls.some(
+          ([input]) =>
+            new URL(String(input)).searchParams.get("page") === "2",
+        ),
+    ).toBe(true);
   });
 
   it("maps rate_limit error on 429", async () => {

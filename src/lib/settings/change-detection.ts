@@ -9,6 +9,8 @@ export type ReleaseCacheInvalidationChanges = {
   releaseChannelsChanged?: boolean;
   preReleaseSubChannelsChanged?: boolean;
   releasesPerPageChanged?: boolean;
+  releaseSelectionStrategyChanged?: boolean;
+  versionTagPatternChanged?: boolean;
 };
 
 function normalizeComparableArray<T>(
@@ -115,6 +117,12 @@ export function getReleaseCacheInvalidationReasons(
   if (changes.releasesPerPageChanged) {
     reasons.push("releasesPerPageChanged");
   }
+  if (changes.releaseSelectionStrategyChanged) {
+    reasons.push("releaseSelectionStrategyChanged");
+  }
+  if (changes.versionTagPatternChanged) {
+    reasons.push("versionTagPatternChanged");
+  }
 
   return reasons;
 }
@@ -150,6 +158,9 @@ export function getGlobalReleaseCacheInvalidationChanges(
       next.preReleaseSubChannels,
     ),
     releasesPerPageChanged: previous.releasesPerPage !== next.releasesPerPage,
+    releaseSelectionStrategyChanged:
+      (previous.releaseSelectionStrategy ?? "newest") !==
+      (next.releaseSelectionStrategy ?? "newest"),
   };
 }
 
@@ -196,6 +207,12 @@ export function buildGlobalSettingsChangeLog(
     "releaseChannels",
     previous.releaseChannels,
     next.releaseChannels,
+  );
+  pushValueChange(
+    changes,
+    "releaseSelectionStrategy",
+    previous.releaseSelectionStrategy ?? "newest",
+    next.releaseSelectionStrategy ?? "newest",
   );
   pushArrayChange(
     changes,
@@ -322,6 +339,8 @@ export type RepositorySettingsUpdate = Pick<
   | "tags"
   | "releaseChannels"
   | "preReleaseSubChannels"
+  | "releaseSelectionStrategy"
+  | "versionTagPattern"
   | "releasesPerPage"
   | "refreshInterval"
   | "cacheInterval"
@@ -360,6 +379,12 @@ export function getRepositoryReleaseCacheInvalidationChanges(
     releasesPerPageChanged:
       (previous.releasesPerPage ?? undefined) !==
       (next.releasesPerPage ?? undefined),
+    releaseSelectionStrategyChanged:
+      (previous.releaseSelectionStrategy ?? undefined) !==
+      (next.releaseSelectionStrategy ?? undefined),
+    versionTagPatternChanged:
+      normalizeOptionalText(previous.versionTagPattern) !==
+      normalizeOptionalText(next.versionTagPattern),
   };
 }
 
@@ -404,6 +429,18 @@ export function buildRepositorySettingsChangeLog(
     previous.preReleaseSubChannels,
     next.preReleaseSubChannels,
     { emptyAsUndefined: true },
+  );
+  pushValueChange(
+    changes,
+    "releaseSelectionStrategy",
+    previous.releaseSelectionStrategy ?? undefined,
+    next.releaseSelectionStrategy ?? undefined,
+  );
+  pushValueChange(
+    changes,
+    "versionTagPattern",
+    normalizeOptionalText(previous.versionTagPattern),
+    normalizeOptionalText(next.versionTagPattern),
   );
   pushValueChange(
     changes,
