@@ -51,7 +51,7 @@ export function RepositoryTagFilter({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="h-9 justify-between gap-2">
+        <Button variant="outline" size="sm" className="w-full sm:w-auto">
           <Tags className="size-4" />
           <span>
             {activeCount > 0
