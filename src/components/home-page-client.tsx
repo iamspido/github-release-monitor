@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, LayoutGrid, List } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { EmptyState } from "@/components/empty-state";
@@ -18,10 +18,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useOptimisticSettingsPatch } from "@/hooks/use-optimistic-settings-patch";
+import { useReleaseViewMode } from "@/hooks/use-release-view-mode";
 import {
   normalizeReleaseSortOrder,
   sortEnrichedReleases,
 } from "@/lib/release-sort";
+import type { ReleaseViewMode } from "@/lib/release-view-mode";
 import { repositoryMatchesTagFilter } from "@/lib/repositories/tags";
 import { isSecurityRelease } from "@/lib/security-release";
 import type {
@@ -41,6 +43,7 @@ interface HomePageClientProps {
   errorSummary: Map<Exclude<FetchError["type"], "not_modified">, number> | null;
   lastUpdated: Date;
   locale: string;
+  initialViewMode: ReleaseViewMode;
   canMutate?: boolean;
   isAppriseConfigured?: boolean;
 }
@@ -69,6 +72,7 @@ export function HomePageClient({
   errorSummary,
   lastUpdated,
   locale,
+  initialViewMode,
   canMutate = true,
   isAppriseConfigured = false,
 }: HomePageClientProps) {
@@ -101,6 +105,7 @@ export function HomePageClient({
   const [openRepositorySettings, setOpenRepositorySettings] = React.useState<
     Set<string>
   >(() => new Set());
+  const { updateViewMode, viewMode } = useReleaseViewMode(initialViewMode);
   const sortSetting = useOptimisticSettingsPatch<ReleaseSortOrder>({
     canMutate,
     serverValue: normalizeReleaseSortOrder(settings.releaseSortOrder),
@@ -332,6 +337,37 @@ export function HomePageClient({
               onUntaggedToggle={() => setIncludeUntagged((current) => !current)}
               onClear={clearTagFilter}
             />
+            <fieldset className="grid grid-cols-2 rounded-md border p-0.5">
+              <legend className="sr-only">{t("view_mode_label")}</legend>
+              <Button
+                type="button"
+                variant={viewMode === "cards" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => updateViewMode("cards")}
+                aria-pressed={viewMode === "cards"}
+                aria-label={t("view_mode_cards")}
+                title={t("view_mode_cards")}
+              >
+                <LayoutGrid className="size-4" />
+                <span className="hidden lg:inline">{t("view_mode_cards")}</span>
+              </Button>
+              <Button
+                type="button"
+                variant={viewMode === "compact" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => updateViewMode("compact")}
+                aria-pressed={viewMode === "compact"}
+                aria-label={t("view_mode_compact")}
+                title={t("view_mode_compact")}
+              >
+                <List className="size-4" />
+                <span className="hidden lg:inline">
+                  {t("view_mode_compact")}
+                </span>
+              </Button>
+            </fieldset>
             <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
               <label
                 htmlFor="release-sort-order"
@@ -419,7 +455,13 @@ export function HomePageClient({
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div
+            className={
+              viewMode === "cards"
+                ? "grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
+                : "grid grid-cols-[repeat(auto-fill,minmax(min(100%,28rem),1fr))] items-start gap-2"
+            }
+          >
             {visibleReleases.map((enrichedRelease) => (
               <ReleaseCard
                 key={enrichedRelease.repoId}
@@ -443,6 +485,7 @@ export function HomePageClient({
                   )
                 }
                 settings={settings}
+                variant={viewMode === "compact" ? "compact" : "card"}
                 canMutate={canMutate}
                 isAppriseConfigured={isAppriseConfigured}
               />

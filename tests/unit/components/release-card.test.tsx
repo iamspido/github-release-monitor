@@ -37,6 +37,9 @@ const translationMap: Record<string, Record<string, string>> = {
     pinned_tooltip: "Pinned to top",
     repository_tags_more_aria: "{count} more repository tags: {tags}",
     security_release_badge: "Security",
+    new_release_badge: "New",
+    expand_details: "Expand release details for {repo}",
+    collapse_details: "Collapse release details for {repo}",
     settings_button_aria: "Open repository settings",
     toast_error_title: "Something went wrong",
     toast_success_title: "Success",
@@ -45,8 +48,11 @@ const translationMap: Record<string, Record<string, string>> = {
     toast_acknowledge_error_generic: "Failed to acknowledge",
     toast_error_description: "Error occurred",
     acknowledge_button: "Acknowledge release",
+    acknowledge_button_for_repo: "Mark release for {repo} as seen",
     mark_as_new_button: "Mark as new",
+    mark_as_new_button_for_repo: "Mark release for {repo} as new",
     remove_button: "Remove repository",
+    remove_button_for_repo: "Remove {repo}",
     confirm_dialog_title: "Remove repository?",
     confirm_dialog_description_long: "Remove {repoId}?",
     security_acknowledge_confirm_title: "Confirm security acknowledge",
@@ -56,6 +62,9 @@ const translationMap: Record<string, Record<string, string>> = {
     cancel_button: "Cancel",
     view_on_github: "Open release",
     view_tag: "Open tag",
+    view_release_for_repo: "Open release for {repo}",
+    view_tag_for_repo: "Open tag for {repo}",
+    settings_button_aria_for_repo: "Open settings for {repo}",
     released_ago: "Released {time}",
     checked_ago: "Checked {time}",
     no_release_notes: "No release notes available",
@@ -325,6 +334,200 @@ function getButtonBySpanText(text: string) {
 }
 
 describe("ReleaseCard component", () => {
+  it("renders a compact row and mounts release notes only when expanded", async () => {
+    const actions = await mockedActions();
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={makeRelease()}
+        settings={baseSettings}
+        variant="compact"
+      />,
+    );
+
+    expect(container?.querySelector("article")).not.toBeNull();
+    expect(container?.querySelector('[data-testid="markdown"]')).toBeNull();
+
+    const expandButton = container?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Expand release details for owner/repo"]',
+    );
+    expect(expandButton?.getAttribute("aria-expanded")).toBe("false");
+    const controlledDetails = document.getElementById(
+      expandButton?.getAttribute("aria-controls") ?? "",
+    );
+    expect(controlledDetails).not.toBeNull();
+    expect(controlledDetails?.hidden).toBe(true);
+    expect(expandButton?.className).toContain("hover:bg-foreground/5");
+    expect(expandButton?.className).not.toContain("hover:bg-accent");
+    expect(expandButton?.className).toContain("focus-visible:ring-inset");
+    expect(expandButton?.className).toContain("focus-visible:ring-offset-0");
+    const article = container?.querySelector("article");
+    expect(article?.className).toContain("isolate");
+    const headingId = article?.getAttribute("aria-labelledby");
+    expect(headingId).toBeTruthy();
+    expect(document.getElementById(headingId ?? "")?.tagName).toBe("H3");
+    expect(
+      container?.querySelector(
+        'button[aria-label="Mark release for owner/repo as new"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container?.querySelector('button[aria-label="Remove owner/repo"]'),
+    ).not.toBeNull();
+    expect(
+      container?.querySelector('a[aria-label="Open release for owner/repo"]'),
+    ).not.toBeNull();
+    const compactActionLabels = Array.from(
+      container?.querySelectorAll<HTMLElement>(
+        '[aria-label="Mark release for owner/repo as new"], [aria-label="Open settings for owner/repo"], [aria-label="Open release for owner/repo"], [aria-label="Remove owner/repo"]',
+      ) ?? [],
+    ).map((element) => element.getAttribute("aria-label"));
+    expect(compactActionLabels).toEqual([
+      "Mark release for owner/repo as new",
+      "Open settings for owner/repo",
+      "Open release for owner/repo",
+      "Remove owner/repo",
+    ]);
+
+    const repositoryLink = container?.querySelector<HTMLAnchorElement>(
+      'a[href="https://github.com/owner/repo"]',
+    );
+    repositoryLink?.addEventListener("click", (event) =>
+      event.preventDefault(),
+    );
+    expect(repositoryLink?.className).toContain("w-fit");
+    await act(async () => repositoryLink?.click());
+    expect(expandButton?.getAttribute("aria-expanded")).toBe("false");
+
+    const releaseLink = container?.querySelector<HTMLAnchorElement>(
+      'a[href="https://github.com/owner/repo/releases/tag/v1.0.0"]:not([aria-label])',
+    );
+    releaseLink?.addEventListener("click", (event) => event.preventDefault());
+    expect(releaseLink?.className).toContain("w-fit");
+    await act(async () => releaseLink?.click());
+    expect(expandButton?.getAttribute("aria-expanded")).toBe("false");
+
+    const markAsNewButton = container?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Mark release for owner/repo as new"]',
+    );
+    await act(async () => {
+      markAsNewButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(expandButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(actions.markAsNewAction).toHaveBeenCalledWith("owner/repo");
+
+    await act(async () => expandButton?.click());
+
+    const collapseButton = container?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Collapse release details for owner/repo"]',
+    );
+    expect(collapseButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(controlledDetails?.hidden).toBe(false);
+    expect(container?.querySelector('[data-testid="markdown"]')).not.toBeNull();
+    expect(container?.querySelector("article")?.className).toContain(
+      "col-span-full",
+    );
+  });
+
+  it("keeps the repository path linked while expanding compact error details", async () => {
+    const enrichedRelease: EnrichedRelease = {
+      repoId: "owner/repo",
+      repoUrl: "https://github.com/owner/repo",
+      error: { type: "repo_not_found" },
+      repoSettings: { displayName: "Production Monitor" },
+    };
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={baseSettings}
+        variant="compact"
+      />,
+    );
+
+    const expandButton = container?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Expand release details for owner/repo"]',
+    );
+    const repositoryLinks = container?.querySelectorAll<HTMLAnchorElement>(
+      'a[href="https://github.com/owner/repo"]',
+    );
+    expect(repositoryLinks?.length).toBe(2);
+    repositoryLinks?.forEach((link) => {
+      link.addEventListener("click", (event) => event.preventDefault());
+    });
+    await act(async () => repositoryLinks?.[1]?.click());
+    expect(expandButton?.getAttribute("aria-expanded")).toBe("false");
+    await act(async () => expandButton?.click());
+
+    expect(container?.querySelector("article")?.className).toContain("isolate");
+    expect(container?.textContent).toContain("Repository not found");
+    expect(
+      container?.querySelector('button[aria-label="Remove owner/repo"]'),
+    ).not.toBeNull();
+    expect(
+      container?.querySelector('[aria-label="Overrides applied"]'),
+    ).not.toBeNull();
+  });
+
+  it("limits the repository link hit area in a compact loading row", () => {
+    const enrichedRelease: EnrichedRelease = {
+      repoId: "owner/repo",
+      repoUrl: "https://github.com/owner/repo",
+    };
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={baseSettings}
+        variant="compact"
+      />,
+    );
+
+    const repositoryLink = container?.querySelector<HTMLAnchorElement>(
+      'a[href="https://github.com/owner/repo"]',
+    );
+    expect(repositoryLink?.className).toContain("w-fit");
+    expect(repositoryLink?.className).toContain("max-w-full");
+  });
+
+  it("keeps repository state indicators available in compact desktop and mobile layouts", async () => {
+    const enrichedRelease = makeRelease();
+    enrichedRelease.repoSettings = {
+      displayName: "Production Monitor",
+      isPinned: true,
+    };
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={baseSettings}
+        variant="compact"
+      />,
+    );
+
+    const expandButton = container?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Expand release details for owner/repo"]',
+    );
+    await act(async () => expandButton?.click());
+
+    const pinnedIndicators = container?.querySelectorAll(
+      '[aria-label="Pinned to top"]',
+    );
+    const customIndicators = container?.querySelectorAll(
+      '[aria-label="Overrides applied"]',
+    );
+
+    expect(pinnedIndicators?.length).toBe(2);
+    expect(customIndicators?.length).toBe(2);
+    expect(pinnedIndicators?.[0]?.parentElement?.className).toContain(
+      "hidden sm:flex",
+    );
+    expect(pinnedIndicators?.[1]?.parentElement?.className).toContain(
+      "flex sm:hidden",
+    );
+  });
+
   it("uses the custom display name as the release card heading", () => {
     const enrichedRelease = makeRelease();
     enrichedRelease.repoSettings = { displayName: "Production Monitor" };

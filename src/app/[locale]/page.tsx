@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
 import { AutoRefresher } from "@/components/auto-refresher";
 import { BackToTopButton } from "@/components/back-to-top-button";
@@ -6,6 +7,10 @@ import { HomePageClient } from "@/components/home-page-client";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
 import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
+import {
+  normalizeReleaseViewMode,
+  RELEASE_VIEW_MODE_COOKIE,
+} from "@/lib/release-view-mode";
 import { toCachedEnrichedRelease } from "@/lib/releases/cached-enriched-release";
 import { toPublicRepository } from "@/lib/repositories/public-repository";
 import { getUpdateNotificationStateOrFallback } from "@/lib/runtime/app-update-notice";
@@ -38,6 +43,9 @@ export default async function HomePage({
   > | null = null;
   const updateNoticePromise = getUpdateNotificationStateOrFallback();
   const authAccessPromise = getCurrentAuthAccess();
+  const initialViewModePromise = cookies().then((cookieStore) =>
+    normalizeReleaseViewMode(cookieStore.get(RELEASE_VIEW_MODE_COOKIE)?.value),
+  );
   const { isAppriseConfigured } = getNotificationRuntimeConfig();
 
   try {
@@ -57,9 +65,10 @@ export default async function HomePage({
     resolvedError = t("load_error");
   }
 
-  const [updateNotice, authAccess] = await Promise.all([
+  const [updateNotice, authAccess, initialViewMode] = await Promise.all([
     updateNoticePromise,
     authAccessPromise,
+    initialViewModePromise,
   ]);
 
   return (
@@ -82,6 +91,7 @@ export default async function HomePage({
           errorSummary={errorSummary}
           lastUpdated={lastUpdated}
           locale={locale}
+          initialViewMode={initialViewMode}
           canMutate={authAccess.canMutate}
           isAppriseConfigured={isAppriseConfigured}
         />
