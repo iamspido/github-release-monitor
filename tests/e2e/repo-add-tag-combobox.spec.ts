@@ -12,6 +12,7 @@ const CREATED_REPOSITORIES = [
   "add-tag-target/repository",
   "add-tag-import/repository",
   "add-tag-limit/repository",
+  "add-tag-options/repository",
 ] as const;
 
 test.afterEach(async ({ page }) => {
@@ -133,6 +134,116 @@ test("new and existing tags can be selected while adding repositories", async ({
   ).toBeVisible();
   await expect(
     importedRepositoryCard.getByText("batch-tag", { exact: true }),
+  ).toBeVisible();
+});
+
+test("shows every matching tag in a scrollable menu outside the add form border", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/en");
+
+  const tags = Array.from(
+    { length: 20 },
+    (_, index) => `option-tag-${String(index).padStart(2, "0")}`,
+  );
+  await page.locator('input[type="file"][accept*=".json"]').setInputFiles({
+    name: "repository-with-many-tags.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify([
+        {
+          id: "add-tag-options/repository",
+          url: "https://github.com/add-tag-options/repository",
+          tags,
+        },
+      ]),
+    ),
+  });
+
+  const importDialog = page.getByRole("alertdialog");
+  await expect(importDialog).toBeVisible();
+  await importDialog.getByRole("button", { name: "Import" }).click();
+  await expect(
+    page.getByText("Import Successful", { exact: true }),
+  ).toBeVisible();
+
+  await page.goto("/en");
+  await ensureRepositoryFormExpanded(page);
+
+  const tagInput = page.getByRole("combobox", {
+    name: "Search or add repository tags",
+  });
+  await tagInput.fill("option-tag-");
+
+  const listbox = page.getByRole("listbox", { name: "Existing tags" });
+  await expect(listbox).toBeVisible();
+  await expect(page.getByRole("option", { name: /^option-tag-/ })).toHaveCount(
+    tags.length,
+  );
+  await expect
+    .poll(() =>
+      listbox.evaluate(
+        (element) => element.scrollHeight > element.clientHeight,
+      ),
+    )
+    .toBe(true);
+
+  const addFormCard = page
+    .getByRole("heading", { name: "Add Repositories" })
+    .locator(
+      "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' rounded-lg ')][1]",
+    );
+  const [cardBox, listboxBox] = await Promise.all([
+    addFormCard.boundingBox(),
+    listbox.boundingBox(),
+  ]);
+  expect(cardBox).not.toBeNull();
+  expect(listboxBox).not.toBeNull();
+
+  if (!cardBox || !listboxBox) {
+    throw new Error("Could not determine tag menu and add form bounds.");
+  }
+
+  const cardTop = cardBox.y;
+  const cardBottom = cardTop + cardBox.height;
+  const listboxTop = listboxBox.y;
+  const listboxBottom = listboxBox.y + listboxBox.height;
+  const pointOutsideCard = (() => {
+    if (listboxBottom > cardBottom) {
+      const visibleOutsideTop = Math.max(cardBottom, listboxTop);
+      return {
+        x: listboxBox.x + listboxBox.width / 2,
+        y: visibleOutsideTop + (listboxBottom - visibleOutsideTop) / 2,
+      };
+    }
+
+    if (listboxTop < cardTop) {
+      const visibleOutsideBottom = Math.min(cardTop, listboxBottom);
+      return {
+        x: listboxBox.x + listboxBox.width / 2,
+        y: listboxTop + (visibleOutsideBottom - listboxTop) / 2,
+      };
+    }
+
+    throw new Error("The tag menu did not extend beyond the add form bounds.");
+  })();
+  expect(
+    await listbox.evaluate(
+      (element, point) =>
+        element.contains(document.elementFromPoint(point.x, point.y)),
+      pointOutsideCard,
+    ),
+  ).toBe(true);
+
+  const lastTag = tags.at(-1);
+  if (!lastTag) throw new Error("Expected at least one tag option.");
+
+  const lastOption = page.getByRole("option", { name: lastTag, exact: true });
+  await lastOption.scrollIntoViewIfNeeded();
+  await lastOption.click();
+  await expect(
+    page.getByRole("button", { name: `Remove tag ${lastTag}` }),
   ).toBeVisible();
 });
 

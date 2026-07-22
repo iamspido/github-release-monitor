@@ -2,9 +2,23 @@
 
 import { Plus } from "lucide-react";
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { Input } from "@/components/ui/input";
 import { normalizeRepositoryTag } from "@/lib/repositories/tags";
 import { cn } from "@/lib/utils";
+
+const LISTBOX_GAP = 4;
+const LISTBOX_MAX_HEIGHT = 240;
+
+interface ListboxLayout {
+  bottom?: number;
+  container: HTMLElement;
+  left: number;
+  maxHeight: number;
+  strategy: "absolute" | "fixed";
+  top?: number;
+  width: number;
+}
 
 interface RepositoryTagPickerProps {
   id: string;
@@ -41,6 +55,8 @@ export function RepositoryTagPicker({
 }: RepositoryTagPickerProps) {
   const [open, setOpen] = React.useState(false);
   const [activeIndex, setActiveIndex] = React.useState(-1);
+  const [listboxLayout, setListboxLayout] =
+    React.useState<ListboxLayout | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const listboxId = React.useId();
   const normalizedValue = normalizeRepositoryTag(value);
@@ -57,6 +73,58 @@ export function RepositoryTagPicker({
       ? value.trim()
       : null;
   const itemCount = filteredOptions.length + (createCandidate ? 1 : 0);
+
+  React.useEffect(() => {
+    if (!open || itemCount === 0) {
+      setListboxLayout(null);
+      return;
+    }
+
+    const updateListboxPosition = () => {
+      const input = inputRef.current;
+      if (!input) return;
+
+      const rect = input.getBoundingClientRect();
+      const dialog = input.closest<HTMLElement>('[role="dialog"]');
+      const container = dialog ?? document.body;
+      const containerRect = dialog?.getBoundingClientRect();
+      const availableBelow = Math.max(
+        0,
+        window.innerHeight - rect.bottom - LISTBOX_GAP,
+      );
+      const availableAbove = Math.max(0, rect.top - LISTBOX_GAP);
+      const openAbove =
+        availableBelow < LISTBOX_MAX_HEIGHT && availableAbove > availableBelow;
+      const availableHeight = openAbove ? availableAbove : availableBelow;
+
+      setListboxLayout({
+        ...(openAbove
+          ? {
+              bottom:
+                (containerRect?.bottom ?? window.innerHeight) -
+                rect.top +
+                LISTBOX_GAP,
+            }
+          : {
+              top: rect.bottom - (containerRect?.top ?? 0) + LISTBOX_GAP,
+            }),
+        container,
+        left: rect.left - (containerRect?.left ?? 0),
+        maxHeight: Math.min(LISTBOX_MAX_HEIGHT, availableHeight),
+        strategy: dialog ? "absolute" : "fixed",
+        width: rect.width,
+      });
+    };
+
+    updateListboxPosition();
+    window.addEventListener("resize", updateListboxPosition);
+    window.addEventListener("scroll", updateListboxPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateListboxPosition);
+      window.removeEventListener("scroll", updateListboxPosition, true);
+    };
+  }, [itemCount, open]);
 
   const keepInputFocused = (event: React.PointerEvent) => {
     event.preventDefault();
@@ -162,65 +230,79 @@ export function RepositoryTagPicker({
         )}
       />
 
-      {open && itemCount > 0 && (
-        <div
-          id={listboxId}
-          role="listbox"
-          aria-label={listboxLabel}
-          className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-        >
-          {filteredOptions.map((tag, index) => (
-            <button
-              id={`${listboxId}-option-${index}`}
-              key={tag}
-              type="button"
-              role="option"
-              tabIndex={-1}
-              aria-selected={activeIndex === index}
-              onPointerDown={keepInputFocused}
-              onMouseEnter={() => setActiveIndex(index)}
-              onClick={() => selectTag(tag)}
-              className={cn(
-                "flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground",
-                activeIndex === index && "bg-accent text-accent-foreground",
-              )}
-            >
-              <Plus
-                aria-hidden="true"
-                data-tag-add-icon="true"
-                className="mr-2 size-4 shrink-0"
-              />
-              <span className="min-w-0 truncate">{tag}</span>
-            </button>
-          ))}
-          {createCandidate && (
-            <button
-              id={`${listboxId}-option-${filteredOptions.length}`}
-              type="button"
-              role="option"
-              tabIndex={-1}
-              aria-selected={activeIndex === filteredOptions.length}
-              onPointerDown={keepInputFocused}
-              onMouseEnter={() => setActiveIndex(filteredOptions.length)}
-              onClick={createTag}
-              className={cn(
-                "flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground",
-                activeIndex === filteredOptions.length &&
-                  "bg-accent text-accent-foreground",
-              )}
-            >
-              <Plus
-                aria-hidden="true"
-                data-tag-add-icon="true"
-                className="mr-2 size-4 shrink-0"
-              />
-              <span className="min-w-0 truncate">
-                {createOptionLabel(createCandidate)}
-              </span>
-            </button>
-          )}
-        </div>
-      )}
+      {open &&
+        itemCount > 0 &&
+        listboxLayout &&
+        createPortal(
+          <div
+            id={listboxId}
+            role="listbox"
+            aria-label={listboxLabel}
+            className={cn(
+              "pointer-events-auto z-[60] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md",
+              listboxLayout.strategy,
+            )}
+            style={{
+              bottom: listboxLayout.bottom,
+              left: listboxLayout.left,
+              maxHeight: listboxLayout.maxHeight,
+              top: listboxLayout.top,
+              width: listboxLayout.width,
+            }}
+          >
+            {filteredOptions.map((tag, index) => (
+              <button
+                id={`${listboxId}-option-${index}`}
+                key={tag}
+                type="button"
+                role="option"
+                tabIndex={-1}
+                aria-selected={activeIndex === index}
+                onPointerDown={keepInputFocused}
+                onMouseEnter={() => setActiveIndex(index)}
+                onClick={() => selectTag(tag)}
+                className={cn(
+                  "flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground",
+                  activeIndex === index && "bg-accent text-accent-foreground",
+                )}
+              >
+                <Plus
+                  aria-hidden="true"
+                  data-tag-add-icon="true"
+                  className="mr-2 size-4 shrink-0"
+                />
+                <span className="min-w-0 truncate">{tag}</span>
+              </button>
+            ))}
+            {createCandidate && (
+              <button
+                id={`${listboxId}-option-${filteredOptions.length}`}
+                type="button"
+                role="option"
+                tabIndex={-1}
+                aria-selected={activeIndex === filteredOptions.length}
+                onPointerDown={keepInputFocused}
+                onMouseEnter={() => setActiveIndex(filteredOptions.length)}
+                onClick={createTag}
+                className={cn(
+                  "flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground",
+                  activeIndex === filteredOptions.length &&
+                    "bg-accent text-accent-foreground",
+                )}
+              >
+                <Plus
+                  aria-hidden="true"
+                  data-tag-add-icon="true"
+                  className="mr-2 size-4 shrink-0"
+                />
+                <span className="min-w-0 truncate">
+                  {createOptionLabel(createCandidate)}
+                </span>
+              </button>
+            )}
+          </div>,
+          listboxLayout.container,
+        )}
     </div>
   );
 }

@@ -24,6 +24,16 @@ test("existing repository tags can be searched and added from a compact picker",
   await ensureTestRepo(page);
   await page.goto("/en");
 
+  const availableTags = [
+    "infra",
+    "media",
+    "retro",
+    ...Array.from(
+      { length: 17 },
+      (_, index) => `source-tag-${String(index).padStart(2, "0")}`,
+    ),
+  ];
+
   const fileInput = page.locator('input[type="file"][accept*=".json"]');
   await fileInput.setInputFiles({
     name: "repository-tags.json",
@@ -33,7 +43,7 @@ test("existing repository tags can be searched and added from a compact picker",
         {
           id: "tag-source/repository",
           url: "https://github.com/tag-source/repository",
-          tags: ["infra", "media", "retro"],
+          tags: availableTags,
         },
         {
           id: "tag-picker-target/repository",
@@ -69,6 +79,22 @@ test("existing repository tags can be searched and added from a compact picker",
   });
   await search.focus();
   await expect(search).toBeFocused();
+
+  const tagListbox = page.getByRole("listbox", { name: "Existing tags" });
+  await expect(tagListbox).toBeVisible();
+  await expect
+    .poll(() =>
+      tagListbox.evaluate(
+        (element) => element.scrollHeight > element.clientHeight,
+      ),
+    )
+    .toBe(true);
+  await tagListbox.hover();
+  await page.mouse.wheel(0, 200);
+  await expect
+    .poll(() => tagListbox.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+
   await search.fill("med");
   const mediaOption = page.getByRole("option", { name: "media" });
   await expect(mediaOption).toBeVisible();
