@@ -5,10 +5,10 @@ services:
     volumes:
       - "./smtp:/etc/opendkim/keys"
     environment:
-#      - "POSTFIX_myhostname=DOMAIN.EXAMPLE"
-#      - "OPENDKIM_DOMAINS=DOMAIN1.EXAMPLE=example-mail DOMAIN2.EXAMPLE=example-mail"
-      - "POSTFIX_myhostname=example.com"
-      - "OPENDKIM_DOMAINS=example.com=example-mail"
+#      - "POSTFIX_myhostname=DOMAIN.TEST"
+#      - "OPENDKIM_DOMAINS=DOMAIN1.TEST=example-mail DOMAIN2.TEST=example-mail"
+      - "POSTFIX_myhostname=example.test"
+      - "OPENDKIM_DOMAINS=example.test=example-mail"
       - "TZ=Europe/Berlin"
     logging:
       driver: "json-file"

@@ -74,7 +74,7 @@ The `example/` directory contains a complete Docker Compose setup for a robust, 
 
 ### 1. Prerequisites
 - Docker and Docker Compose installed on your server.
-- A domain name (e.g., `github-releases.your-domain.com`) pointing to your server's public IP address.
+- A domain name (e.g., `github-releases.your-domain.test`) pointing to your server's public IP address.
 
 ### 2. Configuration
 Navigate to the `example/` directory. You will need to configure the environment files for each service.
@@ -105,7 +105,7 @@ Navigate to the `example/` directory. You will need to configure the environment
    # Better Auth secret (at least 32 chars). Generate: openssl rand -base64 32
    BETTER_AUTH_SECRET=your_super_secret_better_auth_key_here
    # Base URL of the app (required by Better Auth for cookie/session handling)
-   BETTER_AUTH_URL=https://github-releases.your-domain.com
+   BETTER_AUTH_URL=https://github-releases.your-domain.test
    # One-time token for initial admin setup (recommended 32+ chars)
    AUTH_SETUP_TOKEN=your_one_time_setup_token_here
    # Keep self-service signup disabled by default (recommended for single-user)
@@ -149,14 +149,14 @@ Navigate to the `example/` directory. You will need to configure the environment
    - For private repositories, ensure the token has at least project role `Reporter` (or higher).
    ```env
    # Optional additional GitLab instances besides gitlab.com (comma-separated).
-   GITLAB_ADDITIONAL_HOSTS=gitlab.example.com,gitlab.internal.example
+   GITLAB_ADDITIONAL_HOSTS=gitlab.example.test,gitlab.internal.test
 
    # Optional host-based GitLab tokens as comma-separated host=token pairs.
-   # Example: gitlab.com=glpat_xxx,gitlab.example.com=glpat_yyy
+   # Example: gitlab.com=glpat_xxx,gitlab.example.test=glpat_yyy
    GITLAB_ACCESS_TOKENS=
 
    # Optional host-based GitLab deploy tokens as comma-separated host=username:token pairs.
-   # Example: gitlab.example.com=gitlab+deploy-token-123:gl-dpt-xyz
+   # Example: gitlab.example.test=gitlab+deploy-token-123:gl-dpt-xyz
    GITLAB_DEPLOY_TOKENS=
    ```
 
@@ -190,9 +190,9 @@ Navigate to the `example/` directory. You will need to configure the environment
    The example compose setup uses a local SMTP relay. The default values are already set for this. You only need to change `MAIL_FROM_ADDRESS` and `MAIL_TO_ADDRESS`.
    ```env
    # The "from" and "to" addresses for notifications.
-   MAIL_FROM_ADDRESS=notifications@your-domain.com
+   MAIL_FROM_ADDRESS=notifications@your-domain.test
    MAIL_FROM_NAME=GitHub Release Monitor
-   MAIL_TO_ADDRESS=your-personal-email@example.com
+   MAIL_TO_ADDRESS=your-personal-email@example.test
    ```
    **Important**: For this Docker setup, `MAIL_HOST` is correctly set to `smtp` and `MAIL_PORT` to `25`. You do not need a `MAIL_USERNAME` or `MAIL_PASSWORD` for the local relay.
 
@@ -222,9 +222,9 @@ Navigate to the `example/` directory. You will need to configure the environment
    labels:
      # ...
      # HTTP Router
-     - "traefik.http.routers.github-release-monitor.rule=Host(`github-releases.your-domain.com`)"
+     - "traefik.http.routers.github-release-monitor.rule=Host(`github-releases.your-domain.test`)"
      # HTTPS Router
-     - "traefik.http.routers.github-release-monitor-secured.rule=Host(`github-releases.your-domain.com`)"
+     - "traefik.http.routers.github-release-monitor-secured.rule=Host(`github-releases.your-domain.test`)"
      # ...
    ```
 
@@ -236,7 +236,7 @@ Navigate to the `example/` directory. You will need to configure the environment
    # ...
    command:
      # ...
-     - "--certificatesresolvers.letsencrypt.acme.email=your-email@your-domain.com"
+     - "--certificatesresolvers.letsencrypt.acme.email=your-email@your-domain.test"
      # ...
    ```
 
@@ -248,8 +248,8 @@ For improved email deliverability and to avoid being marked as spam, it's recomm
    ```yaml
    # ...
    environment:
-     - "POSTFIX_myhostname=your-domain.com"
-     - "OPENDKIM_DOMAINS=your-domain.com=example-mail"
+     - "POSTFIX_myhostname=your-domain.test"
+     - "OPENDKIM_DOMAINS=your-domain.test=example-mail"
    # ...
    ```
 For further customization of the SMTP relay, please refer to the official documentation of the [wader/postfix-relay](https://github.com/wader/postfix-relay) image.
@@ -284,7 +284,7 @@ docker compose -f example/smtp/compose.yaml up -d
 docker compose -f example/github-release-monitor/compose.yaml up -d
 ```
 
-After a few moments, your application should be accessible at `https://github-releases.your-domain.com` with a valid SSL certificate.
+After a few moments, your application should be accessible at `https://github-releases.your-domain.test` with a valid SSL certificate.
 
 ---
 
@@ -442,14 +442,14 @@ If you want to monitor private GitLab repositories (including self-hosted instan
 
 ```env
 # Optional additional GitLab instances besides gitlab.com (comma-separated).
-GITLAB_ADDITIONAL_HOSTS=gitlab.example.com,gitlab.internal.example
+GITLAB_ADDITIONAL_HOSTS=gitlab.example.test,gitlab.internal.test
 
 # Optional host-based GitLab tokens as comma-separated host=token pairs.
-# Example: gitlab.com=glpat_xxx,gitlab.example.com=glpat_yyy
+# Example: gitlab.com=glpat_xxx,gitlab.example.test=glpat_yyy
 GITLAB_ACCESS_TOKENS=
 
 # Optional host-based GitLab deploy tokens as comma-separated host=username:token pairs.
-# Example: gitlab.example.com=gitlab+deploy-token-123:gl-dpt-xyz
+# Example: gitlab.example.test=gitlab+deploy-token-123:gl-dpt-xyz
 GITLAB_DEPLOY_TOKENS=
 ```
 
@@ -477,15 +477,15 @@ These variables are required if you want to receive email notifications.
 
 ```env
 # Your SMTP server details.
-MAIL_HOST=smtp.example.com
+MAIL_HOST=smtp.example.test
 MAIL_PORT=587
-MAIL_USERNAME=your-email@example.com
+MAIL_USERNAME=your-email@example.test
 MAIL_PASSWORD=your_email_password_or_app_token
 
 # The "from" and "to" addresses for notifications.
-MAIL_FROM_ADDRESS=notifications@your-domain.com
+MAIL_FROM_ADDRESS=notifications@your-domain.test
 MAIL_FROM_NAME=GitHub Release Monitor
-MAIL_TO_ADDRESS=your-personal-email@example.com
+MAIL_TO_ADDRESS=your-personal-email@example.test
 ```
 
 #### **Apprise Configuration (Optional)**
@@ -570,10 +570,10 @@ Official documentation:
 
 1. Open: `GitHub -> Settings -> Developer settings -> OAuth Apps -> New OAuth App`
 2. Fill in:
-   - **Homepage URL**: your app URL (e.g. `http://localhost:3000` or `https://your-domain.tld`)
+   - **Homepage URL**: your app URL (e.g. `http://localhost:3000` or `https://your-domain.test`)
    - **Authorization callback URL**:
      - Local: `http://localhost:3000/api/auth/callback/github`
-     - Production: `https://your-domain.tld/api/auth/callback/github`
+     - Production: `https://your-domain.test/api/auth/callback/github`
 3. Create app and copy:
    - **Client ID** -> `AUTH_GITHUB_CLIENT_ID`
    - **Client Secret** -> `AUTH_GITHUB_CLIENT_SECRET`
@@ -588,10 +588,10 @@ Official documentation:
 3. Configure:
    - **Authorized redirect URIs**:
      - Local: `http://localhost:3000/api/auth/callback/google`
-     - Production: `https://your-domain.tld/api/auth/callback/google`
+     - Production: `https://your-domain.test/api/auth/callback/google`
    - **Authorized JavaScript origins** (optional but recommended):
      - `http://localhost:3000`
-     - `https://your-domain.tld`
+     - `https://your-domain.test`
 4. Copy:
    - **Client ID** -> `AUTH_GOOGLE_CLIENT_ID`
    - **Client Secret** -> `AUTH_GOOGLE_CLIENT_SECRET`

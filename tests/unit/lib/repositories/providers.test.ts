@@ -43,21 +43,21 @@ describe("repositories/providers", () => {
       "@/lib/repositories/providers"
     );
 
-    expect(normalizeGitlabHost(" GitLab.Example.COM ")).toBe(
-      "gitlab.example.com",
+    expect(normalizeGitlabHost(" GitLab.Example.TEST ")).toBe(
+      "gitlab.example.test",
     );
-    expect(normalizeGitlabHost("sub.gitlab.example")).toBe(
-      "sub.gitlab.example",
+    expect(normalizeGitlabHost("sub.gitlab.test")).toBe(
+      "sub.gitlab.test",
     );
 
     for (const host of [
       "",
-      "https://gitlab.example.com",
-      "gitlab.example.com:443",
-      "gitlab.example.com/group",
-      "gitlab.example.com?x=1",
-      ".gitlab.example.com",
-      "gitlab.example.com.",
+      "https://gitlab.example.test",
+      "gitlab.example.test:443",
+      "gitlab.example.test/group",
+      "gitlab.example.test?x=1",
+      ".gitlab.example.test",
+      "gitlab.example.test.",
     ]) {
       expect(normalizeGitlabHost(host)).toBeNull();
     }

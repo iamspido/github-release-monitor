@@ -4,7 +4,7 @@ test("mobile header menu closes after navigation; back works", async ({
   page,
 }) => {
   const u =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
   const p = process.env.AUTH_PASSWORD || "TestPassword123";
   await page.setViewportSize({ width: 420, height: 900 });
   await page.goto("/en/login");

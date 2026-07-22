@@ -6,12 +6,12 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-net"
       # HTTP Router
-      - "traefik.http.routers.github-release-monitor.rule=Host(`github-release-monitor.example.com`)"
+      - "traefik.http.routers.github-release-monitor.rule=Host(`github-release-monitor.example.test`)"
       - "traefik.http.routers.github-release-monitor.entrypoints=web"
       - "traefik.http.routers.github-release-monitor.service=github-release-monitor-service"
       - "traefik.http.routers.github-release-monitor.middlewares=github-release-monitor-redirect@docker"
       # HTTPS Router
-      - "traefik.http.routers.github-release-monitor-secured.rule=Host(`github-release-monitor.example.com`)"
+      - "traefik.http.routers.github-release-monitor-secured.rule=Host(`github-release-monitor.example.test`)"
       - "traefik.http.routers.github-release-monitor-secured.entrypoints=websecure"
       - "traefik.http.routers.github-release-monitor-secured.service=github-release-monitor-service"
       - "traefik.http.routers.github-release-monitor-secured.tls=true"
@@ -52,12 +52,12 @@ services:
       # Explicitly define the service and tell Traefik which port to use.
 #      - "traefik.http.services.apprise-service.loadbalancer.server.port=8000"
       # HTTP Router
-#      - "traefik.http.routers.apprise.rule=Host(`apprise.example.com`)"
+#      - "traefik.http.routers.apprise.rule=Host(`apprise.example.test`)"
 #      - "traefik.http.routers.apprise.entrypoints=web"
 #      - "traefik.http.routers.apprise.service=apprise-service"
 #      - "traefik.http.routers.apprise.middlewares=apprise-redirect@docker"
       # HTTPS Router
-#      - "traefik.http.routers.apprise-secured.rule=Host(`apprise.example.com`)"
+#      - "traefik.http.routers.apprise-secured.rule=Host(`apprise.example.test`)"
 #      - "traefik.http.routers.apprise-secured.entrypoints=websecure"
 #      - "traefik.http.routers.apprise-secured.service=apprise-service"
 #      - "traefik.http.routers.apprise-secured.tls=true"
@@ -73,7 +73,7 @@ services:
 #    ports:
 #      - "8000:8000"
     environment:
-      - "APPRISE_STATELESS_URLS=mailto://smtp:25?from=no-reply@example.com&name=GitHub%20Release%20Monitor&to=example@example.com,discord://{WebhookID}/{WebhookToken}/,tgram://{bot_token}/{chat_id}/"
+      - "APPRISE_STATELESS_URLS=mailto://smtp:25?from=no-reply@example.test&name=GitHub%20Release%20Monitor&to=example@example.test,discord://{WebhookID}/{WebhookToken}/,tgram://{bot_token}/{chat_id}/"
       - "TZ=Europe/Berlin"
     logging:
       driver: "json-file"

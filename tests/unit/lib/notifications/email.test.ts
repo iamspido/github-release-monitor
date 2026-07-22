@@ -108,10 +108,10 @@ describe("notifications/email", () => {
   });
 
   it("sendNewReleaseEmail calls nodemailer with expected fields when configured", async () => {
-    process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_HOST = "smtp.example.test";
     process.env.MAIL_PORT = "587";
-    process.env.MAIL_FROM_ADDRESS = "from@example.com";
-    process.env.MAIL_TO_ADDRESS = "to@example.com";
+    process.env.MAIL_FROM_ADDRESS = "from@example.test";
+    process.env.MAIL_TO_ADDRESS = "to@example.test";
     process.env.MAIL_USERNAME = "user";
     process.env.MAIL_PASSWORD = "pass";
     process.env.MAIL_FROM_NAME = "FromName";
@@ -119,17 +119,17 @@ describe("notifications/email", () => {
     await sendNewReleaseEmail(repo, { ...release, body: "notes" }, "en", "24h");
     expect(sendMailMock).toHaveBeenCalledTimes(1);
     const arg = sendMailMock.mock.calls[0][0];
-    expect(arg).toMatchObject({ to: "to@example.com" });
+    expect(arg).toMatchObject({ to: "to@example.test" });
     expect(arg.subject).toContain("subject"); // key from mocked translations
     expect(arg.text).toContain("text_release_notes_label");
     expect(arg.html).toContain("<html");
   });
 
   it("sendNewReleaseEmail throws translated error when transport fails", async () => {
-    process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_HOST = "smtp.example.test";
     process.env.MAIL_PORT = "587";
-    process.env.MAIL_FROM_ADDRESS = "from@example.com";
-    process.env.MAIL_TO_ADDRESS = "to@example.com";
+    process.env.MAIL_FROM_ADDRESS = "from@example.test";
+    process.env.MAIL_TO_ADDRESS = "to@example.test";
     process.env.MAIL_USERNAME = "user";
     process.env.MAIL_PASSWORD = "pass";
     // make sendMail throw
@@ -140,10 +140,10 @@ describe("notifications/email", () => {
   });
 
   it("sendNewReleaseEmail uses i18n from_name_fallback when MAIL_FROM_NAME is missing", async () => {
-    process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_HOST = "smtp.example.test";
     process.env.MAIL_PORT = "587";
-    process.env.MAIL_FROM_ADDRESS = "from@example.com";
-    process.env.MAIL_TO_ADDRESS = "to@example.com";
+    process.env.MAIL_FROM_ADDRESS = "from@example.test";
+    process.env.MAIL_TO_ADDRESS = "to@example.test";
     process.env.MAIL_USERNAME = "user";
     process.env.MAIL_PASSWORD = "pass";
     delete process.env.MAIL_FROM_NAME;

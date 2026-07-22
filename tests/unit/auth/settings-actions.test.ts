@@ -208,7 +208,7 @@ describe("auth settings actions", () => {
     );
 
     const result = await updateAccountEmailAction({
-      newEmail: "admin@example.com",
+      newEmail: "admin@example.test",
       callbackURL: "/de/settings",
     });
 
@@ -222,15 +222,15 @@ describe("auth settings actions", () => {
     );
 
     const result = await updateAccountEmailAction({
-      newEmail: " Admin@Example.com ",
-      callbackURL: "https://evil.example/phish",
+      newEmail: " Admin@Example.test ",
+      callbackURL: "https://evil.test/phish",
     });
 
     expect(result).toEqual({ ok: true, mode: "updated" });
     expect(changeEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         body: {
-          newEmail: "admin@example.com",
+          newEmail: "admin@example.test",
           callbackURL: "/",
         },
       }),
@@ -239,7 +239,7 @@ describe("auth settings actions", () => {
 
   it("treats unchanged email as success without calling Better Auth changeEmail", async () => {
     getSessionMock.mockResolvedValueOnce({
-      user: { id: "user-1", email: "Admin@example.com" },
+      user: { id: "user-1", email: "Admin@example.test" },
       session: { id: "session-1" },
     });
     const { updateAccountEmailAction } = await import(
@@ -247,7 +247,7 @@ describe("auth settings actions", () => {
     );
 
     const result = await updateAccountEmailAction({
-      newEmail: "admin@example.com",
+      newEmail: "admin@example.test",
       callbackURL: "/settings",
     });
 
@@ -270,7 +270,7 @@ describe("auth settings actions", () => {
     );
 
     const result = await updateAccountEmailAction({
-      newEmail: "taken@example.com",
+      newEmail: "taken@example.test",
       callbackURL: "/settings",
     });
 
@@ -295,7 +295,7 @@ describe("auth settings actions", () => {
     );
 
     const result = await updateAccountEmailAction({
-      newEmail: "new@example.com",
+      newEmail: "new@example.test",
       callbackURL: "/settings",
     });
 
@@ -312,7 +312,7 @@ describe("auth settings actions", () => {
     );
 
     const result = await updateAccountEmailAction({
-      newEmail: "new@example.com",
+      newEmail: "new@example.test",
       callbackURL: "/settings",
     });
 
@@ -342,7 +342,7 @@ describe("auth settings actions", () => {
     );
 
     const result = await updateAccountEmailAction({
-      newEmail: "new@example.com",
+      newEmail: "new@example.test",
       callbackURL: "/settings",
     });
 
@@ -365,7 +365,7 @@ describe("auth settings actions", () => {
     );
 
     const result = await updateAccountEmailAction({
-      newEmail: "new@example.com",
+      newEmail: "new@example.test",
       callbackURL: "/settings",
     });
 

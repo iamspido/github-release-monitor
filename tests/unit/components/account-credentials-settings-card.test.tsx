@@ -19,7 +19,7 @@ vi.mock("next-intl", () => ({
       account_email_current_value: `Current email: ${values?.value ?? ""}`,
       account_email_not_set: "not set",
       account_email_new_label: "New email",
-      account_email_new_placeholder: "name@example.com",
+      account_email_new_placeholder: "name@example.test",
       account_email_save_button: "Save email",
       account_password_status_loading: "Checking password status...",
       account_password_status_set: "Password exists",

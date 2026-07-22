@@ -5,11 +5,11 @@ test("open redirect is prevented and lands on app root", async ({
   context,
 }) => {
   await context.clearCookies();
-  await page.goto("/en/login?next=https://evil.com");
+  await page.goto("/en/login?next=https://evil.test");
   await page
     .getByLabel(/email|e-mail/i)
     .fill(
-      process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com",
+      process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test",
     );
   await page
     .locator('input[name="password"]')

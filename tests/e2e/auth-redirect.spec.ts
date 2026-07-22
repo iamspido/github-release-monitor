@@ -18,7 +18,7 @@ test("failed login shows error and clears password field", async ({
 }) => {
   await context.clearCookies();
   await page.goto("/en/login");
-  await page.getByLabel(/email|e-mail/i).fill("wrong@example.com");
+  await page.getByLabel(/email|e-mail/i).fill("wrong@example.test");
   await page.locator('input[name="password"]').fill("wrong");
   await page.locator('button[type="submit"]').first().click();
   // Still on login page

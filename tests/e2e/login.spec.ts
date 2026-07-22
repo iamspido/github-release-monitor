@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("can login with valid credentials", async ({ page }) => {
   const username =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
   const password = process.env.AUTH_PASSWORD || "TestPassword123";
 
   await page.goto("/en/login");
@@ -18,7 +18,7 @@ test("can login with valid credentials", async ({ page }) => {
 
 test("test page renders after login", async ({ page }) => {
   const username =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
   const password = process.env.AUTH_PASSWORD || "TestPassword123";
 
   await page.goto("/en/login?next=/en/test");
@@ -37,7 +37,7 @@ test("localized login with next does not trigger global error boundary", async (
   context,
 }) => {
   const username =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
   const password = process.env.AUTH_PASSWORD || "TestPassword123";
   const authErrors: string[] = [];
 

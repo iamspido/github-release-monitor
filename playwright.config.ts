@@ -39,7 +39,7 @@ export default defineConfig({
       BETTER_AUTH_SECRET: 'x'.repeat(64),
       BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
       AUTH_SETUP_TOKEN: process.env.AUTH_SETUP_TOKEN || 'y'.repeat(64),
-      AUTH_EMAIL: process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || 'test@example.com',
+      AUTH_EMAIL: process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || 'test@example.test',
       AUTH_PASSWORD: process.env.AUTH_PASSWORD || 'TestPassword123',
       GITLAB_ADDITIONAL_HOSTS: process.env.GITLAB_ADDITIONAL_HOSTS || 'gitlab.self.test',
     },

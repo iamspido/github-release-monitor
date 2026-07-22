@@ -84,7 +84,7 @@ describe("auth actions", () => {
   it("login: valid credentials call Better Auth and return a safe redirect target", async () => {
     const { login } = await import("@/app/auth/actions");
     const fd = new FormData();
-    fd.set("email", "user@example.com");
+    fd.set("email", "user@example.test");
     fd.set("password", "pass");
     fd.set("next", "/en/test");
 
@@ -92,7 +92,7 @@ describe("auth actions", () => {
     expect(result).toEqual({ redirectTo: "/en/test" });
     expect(signInEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: { email: "user@example.com", password: "pass" },
+        body: { email: "user@example.test", password: "pass" },
       }),
     );
     expect(signInUsernameMock).not.toHaveBeenCalled();
@@ -124,7 +124,7 @@ describe("auth actions", () => {
     );
     const { login } = await import("@/app/auth/actions");
     const fd = new FormData();
-    fd.set("email", "user@example.com");
+    fd.set("email", "user@example.test");
     fd.set("password", "pass");
 
     const res = await login(undefined, fd);
@@ -135,7 +135,7 @@ describe("auth actions", () => {
     signInEmailMock.mockResolvedValue(new Response(null, { status: 401 }));
     const { login } = await import("@/app/auth/actions");
     const fd = new FormData();
-    fd.set("email", "user@example.com");
+    fd.set("email", "user@example.test");
     fd.set("password", "wrong");
     const res = await login(undefined, fd);
     expect(res).toEqual({ errorKey: "error_invalid_credentials" });
@@ -154,9 +154,9 @@ describe("auth actions", () => {
   it("login: unsafe next redirects to root", async () => {
     const { login } = await import("@/app/auth/actions");
     const fd = new FormData();
-    fd.set("email", "user@example.com");
+    fd.set("email", "user@example.test");
     fd.set("password", "pass");
-    fd.set("next", "https://evil.com/whatever");
+    fd.set("next", "https://evil.test/whatever");
     const result = await login(undefined, fd);
     expect(result).toEqual({ redirectTo: "/en/" });
     expect((globalThis as Record<string, unknown>).__redirectCalls).toEqual([]);
@@ -165,7 +165,7 @@ describe("auth actions", () => {
   it("login: does not strip locale-looking prefixes from normal path segments", async () => {
     const { login } = await import("@/app/auth/actions");
     const fd = new FormData();
-    fd.set("email", "user@example.com");
+    fd.set("email", "user@example.test");
     fd.set("password", "pass");
     fd.set("next", "/enterprise");
     const result = await login(undefined, fd);
@@ -194,20 +194,20 @@ describe("auth actions", () => {
     const { login } = await import("@/app/auth/actions");
 
     const firstAttempt = new FormData();
-    firstAttempt.set("email", "user@example.com");
+    firstAttempt.set("email", "user@example.test");
     firstAttempt.set("password", "wrong");
     const firstResult = await login(undefined, firstAttempt);
     expect(firstResult).toEqual({ errorKey: "error_invalid_credentials" });
 
     const secondAttempt = new FormData();
-    secondAttempt.set("email", "user@example.com");
+    secondAttempt.set("email", "user@example.test");
     secondAttempt.set("password", "wrong-again");
     const secondResult = await login(undefined, secondAttempt);
     expect(secondResult).toEqual({ errorKey: "error_too_many_attempts" });
 
     signInEmailMock.mockResolvedValue(new Response(null, { status: 200 }));
     const correctAttempt = new FormData();
-    correctAttempt.set("email", "user@example.com");
+    correctAttempt.set("email", "user@example.test");
     correctAttempt.set("password", "pass");
     const lockedResult = await login(undefined, correctAttempt);
     expect(lockedResult).toEqual({ errorKey: "error_too_many_attempts" });
@@ -222,7 +222,7 @@ describe("auth actions", () => {
 
     async function attempt(password: string) {
       const data = new FormData();
-      data.set("email", "user@example.com");
+      data.set("email", "user@example.test");
       data.set("password", password);
       return login(undefined, data);
     }
@@ -253,7 +253,7 @@ describe("auth actions", () => {
 
     async function attempt(password: string) {
       const data = new FormData();
-      data.set("email", "user@example.com");
+      data.set("email", "user@example.test");
       data.set("password", password);
       return login(undefined, data);
     }
@@ -284,14 +284,14 @@ describe("auth actions", () => {
     const { login } = await import("@/app/auth/actions");
 
     const firstAttempt = new FormData();
-    firstAttempt.set("email", "first@example.com");
+    firstAttempt.set("email", "first@example.test");
     firstAttempt.set("password", "wrong");
     await expect(login(undefined, firstAttempt)).resolves.toEqual({
       errorKey: "error_invalid_credentials",
     });
 
     const secondAttempt = new FormData();
-    secondAttempt.set("email", "second@example.com");
+    secondAttempt.set("email", "second@example.test");
     secondAttempt.set("password", "wrong");
     await expect(login(undefined, secondAttempt)).resolves.toEqual({
       errorKey: "error_too_many_attempts",
@@ -316,16 +316,16 @@ describe("auth actions", () => {
       return login(undefined, data);
     }
 
-    await expect(attempt("first@example.com", "wrong")).resolves.toEqual({
+    await expect(attempt("first@example.test", "wrong")).resolves.toEqual({
       errorKey: "error_invalid_credentials",
     });
-    await expect(attempt("second@example.com", "wrong")).resolves.toEqual({
+    await expect(attempt("second@example.test", "wrong")).resolves.toEqual({
       errorKey: "error_invalid_credentials",
     });
-    await expect(attempt("valid@example.com", "correct")).resolves.toEqual({
+    await expect(attempt("valid@example.test", "correct")).resolves.toEqual({
       redirectTo: "/en/",
     });
-    await expect(attempt("third@example.com", "wrong")).resolves.toEqual({
+    await expect(attempt("third@example.test", "wrong")).resolves.toEqual({
       errorKey: "error_too_many_attempts",
     });
   });
@@ -336,7 +336,7 @@ describe("auth actions", () => {
     const { register } = await import("@/app/auth/actions");
     const fd = new FormData();
     fd.set("username", "admin");
-    fd.set("email", "admin@example.com");
+    fd.set("email", "admin@example.test");
     fd.set("password", "VeryStrongPass123");
 
     const res = await register(undefined, fd);
@@ -353,7 +353,7 @@ describe("auth actions", () => {
     const { register } = await import("@/app/auth/actions");
     const fd = new FormData();
     fd.set("username", "admin");
-    fd.set("email", "admin@example.com");
+    fd.set("email", "admin@example.test");
     fd.set("password", password);
 
     const res = await register(undefined, fd);
@@ -370,7 +370,7 @@ describe("auth actions", () => {
     const { register } = await import("@/app/auth/actions");
     const fd = new FormData();
     fd.set("username", "admin");
-    fd.set("email", "admin@example.com");
+    fd.set("email", "admin@example.test");
     fd.set("password", "VeryStrongPass123");
 
     const res = await register(undefined, fd);
@@ -384,7 +384,7 @@ describe("auth actions", () => {
     const { register } = await import("@/app/auth/actions");
     const fd = new FormData();
     fd.set("username", "admin-user");
-    fd.set("email", "admin@example.com");
+    fd.set("email", "admin@example.test");
     fd.set("password", "VeryStrongPass123");
 
     const res = await register(undefined, fd);

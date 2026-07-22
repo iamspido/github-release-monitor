@@ -32,7 +32,7 @@ describe("addRepositoriesAction only invalid inputs", () => {
     const fd = new FormData();
     fd.set(
       "urls",
-      ["https://example.com/not-github/abc", "not a url", "   "].join("\n"),
+      ["https://example.test/not-github/abc", "not a url", "   "].join("\n"),
     );
 
     const res = await addRepositoriesAction({}, fd);

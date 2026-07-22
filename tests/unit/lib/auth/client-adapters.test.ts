@@ -31,11 +31,11 @@ describe("Better Auth client adapters", () => {
   it("reads session fields without exposing client response details", () => {
     expect(
       readAuthSessionSnapshot({
-        data: { user: { email: "user@example.com", twoFactorEnabled: true } },
+        data: { user: { email: "user@example.test", twoFactorEnabled: true } },
         isPending: true,
       }),
     ).toEqual({
-      email: "user@example.com",
+      email: "user@example.test",
       isPending: true,
       twoFactorEnabled: true,
     });

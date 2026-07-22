@@ -150,7 +150,7 @@ services:
       .mockResolvedValueOnce(
         jsonResponse({
           annotations: {
-            "org.opencontainers.image.source": "https://example.com/owner/repo",
+            "org.opencontainers.image.source": "https://example.test/owner/repo",
           },
         }),
       );

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("logout in one tab protects the other tab", async ({ context, page }) => {
   const u =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
   const p = process.env.AUTH_PASSWORD || "TestPassword123";
 
   await page.goto("/en/login");

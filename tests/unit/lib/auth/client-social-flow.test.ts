@@ -56,7 +56,7 @@ describe("social client flows", () => {
       startRegistrationSocialFlow({
         provider: "google",
         username: "release_user",
-        email: "user@example.com",
+        email: "user@example.test",
       }),
     ).resolves.toEqual({
       status: "error",

@@ -60,7 +60,7 @@ describe("api/login/password route", () => {
 
     const response = await POST(
       buildRequest({
-        identifier: "user@example.com",
+        identifier: "user@example.test",
         password: "pass",
         locale: "en",
         next: "/enterprise",
@@ -77,7 +77,7 @@ describe("api/login/password route", () => {
 
     const response = await POST(
       buildRequest({
-        identifier: "user@example.com",
+        identifier: "user@example.test",
         password: "pass",
         locale: "en",
         next: "/en/settings",

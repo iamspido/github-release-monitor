@@ -83,17 +83,17 @@ describe("notifications/index", () => {
   });
 
   it("sendNotification: sends email when SMTP is fully configured", async () => {
-    process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_HOST = "smtp.example.test";
     process.env.MAIL_PORT = "587";
-    process.env.MAIL_FROM_ADDRESS = "from@example.com";
-    process.env.MAIL_TO_ADDRESS = "to@example.com";
+    process.env.MAIL_FROM_ADDRESS = "from@example.test";
+    process.env.MAIL_TO_ADDRESS = "to@example.test";
     await sendNotification(repo, release, "en", baseSettings);
     expect(sendNewReleaseEmailMock).toHaveBeenCalledTimes(1);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it("does not select email when the SMTP configuration is incomplete", () => {
-    process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_HOST = "smtp.example.test";
     delete process.env.MAIL_PORT;
     delete process.env.MAIL_FROM_ADDRESS;
     delete process.env.MAIL_TO_ADDRESS;
@@ -110,10 +110,10 @@ describe("notifications/index", () => {
     "-1",
     "5.5",
   ])("does not select email when MAIL_PORT is %s", (port) => {
-    process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_HOST = "smtp.example.test";
     process.env.MAIL_PORT = port;
-    process.env.MAIL_FROM_ADDRESS = "from@example.com";
-    process.env.MAIL_TO_ADDRESS = "to@example.com";
+    process.env.MAIL_FROM_ADDRESS = "from@example.test";
+    process.env.MAIL_TO_ADDRESS = "to@example.test";
     delete process.env.APPRISE_URL;
 
     expect(getConfiguredNotificationChannels()).toEqual([]);
@@ -130,10 +130,10 @@ describe("notifications/index", () => {
   });
 
   it("sendNotification: both configured, failure of one rejects", async () => {
-    process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_HOST = "smtp.example.test";
     process.env.MAIL_PORT = "587";
-    process.env.MAIL_FROM_ADDRESS = "from@example.com";
-    process.env.MAIL_TO_ADDRESS = "to@example.com";
+    process.env.MAIL_FROM_ADDRESS = "from@example.test";
+    process.env.MAIL_TO_ADDRESS = "to@example.test";
     process.env.APPRISE_URL = "http://apprise.test";
     vi.mocked(global.fetch).mockResolvedValue(
       mockFetchResponse({ status: 500, text: "err" }),

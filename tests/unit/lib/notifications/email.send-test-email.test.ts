@@ -38,25 +38,25 @@ describe("sendTestEmail", () => {
   });
 
   function primeEnv() {
-    process.env.MAIL_HOST = "smtp.example.com";
+    process.env.MAIL_HOST = "smtp.example.test";
     process.env.MAIL_PORT = "465";
-    process.env.MAIL_FROM_ADDRESS = "from@example.com";
-    process.env.MAIL_TO_ADDRESS = "to@example.com";
+    process.env.MAIL_FROM_ADDRESS = "from@example.test";
+    process.env.MAIL_TO_ADDRESS = "to@example.test";
     process.env.MAIL_USERNAME = "user";
     process.env.MAIL_PASSWORD = "pass";
   }
 
   it("uses explicit toAddress override", async () => {
     primeEnv();
-    await sendTestEmail(repo, release, "en", "24h", "override@example.com");
+    await sendTestEmail(repo, release, "en", "24h", "override@example.test");
     const arg = sendMailMock.mock.calls[0][0];
-    expect(arg.to).toBe("override@example.com");
+    expect(arg.to).toBe("override@example.test");
   });
 
   it("falls back to MAIL_TO_ADDRESS when no override provided", async () => {
     primeEnv();
     await sendTestEmail(repo, release, "en", "24h");
     const arg = sendMailMock.mock.calls[0][0];
-    expect(arg.to).toBe("to@example.com");
+    expect(arg.to).toBe("to@example.test");
   });
 });

@@ -49,7 +49,7 @@ describe("getRepositoryNameFromId", () => {
     expect(getRepositoryNameFromId("github:owner/repo")).toBe("repo");
     expect(getRepositoryNameFromId("owner/repo")).toBe("repo");
     expect(
-      getRepositoryNameFromId("gitlab:gitlab.example.com/group/sub/repo"),
+      getRepositoryNameFromId("gitlab:gitlab.example.test/group/sub/repo"),
     ).toBe("repo");
   });
 });

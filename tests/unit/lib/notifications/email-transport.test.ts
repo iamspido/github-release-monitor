@@ -24,11 +24,11 @@ describe("notifications/email-transport", () => {
 
   it("configures finite SMTP connection and socket timeouts", async () => {
     await sendEmailMessage(
-      { host: "smtp.example.com", port: 587 },
+      { host: "smtp.example.test", port: 587 },
       {
         fromName: "Release Monitor",
-        fromAddress: "from@example.com",
-        to: "to@example.com",
+        fromAddress: "from@example.test",
+        to: "to@example.test",
         subject: "New release",
         text: "text",
         html: "<p>text</p>",

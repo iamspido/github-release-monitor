@@ -5,7 +5,7 @@ test("session persists across reload and new tab; login page redirects when logg
   context,
 }) => {
   const username =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
   const password = process.env.AUTH_PASSWORD || "TestPassword123";
 
   // Login

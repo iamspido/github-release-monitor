@@ -5,7 +5,7 @@ import type { GithubRelease } from "@/types";
 function release(overrides: Partial<GithubRelease>): GithubRelease {
   return {
     id: 1,
-    html_url: "https://example.com/release",
+    html_url: "https://example.test/release",
     tag_name: "v1.0.0",
     name: "v1.0.0",
     body: null,

@@ -48,8 +48,8 @@ describe("sendTestEmailAction", () => {
   it("returns error on invalid custom email format", async () => {
     process.env.MAIL_HOST = "smtp";
     process.env.MAIL_PORT = "587";
-    process.env.MAIL_FROM_ADDRESS = "from@example.com";
-    process.env.MAIL_TO_ADDRESS = "to@example.com";
+    process.env.MAIL_FROM_ADDRESS = "from@example.test";
+    process.env.MAIL_TO_ADDRESS = "to@example.test";
 
     const { sendTestEmailAction } = await import("@/app/actions");
     const res = await sendTestEmailAction("bad-email");
@@ -60,8 +60,8 @@ describe("sendTestEmailAction", () => {
   it("returns success when sendTestEmail resolves", async () => {
     process.env.MAIL_HOST = "smtp";
     process.env.MAIL_PORT = "587";
-    process.env.MAIL_FROM_ADDRESS = "from@example.com";
-    process.env.MAIL_TO_ADDRESS = "to@example.com";
+    process.env.MAIL_FROM_ADDRESS = "from@example.test";
+    process.env.MAIL_TO_ADDRESS = "to@example.test";
     mail.sendTestEmail.mockResolvedValueOnce(undefined);
 
     const { sendTestEmailAction } = await import("@/app/actions");
@@ -72,8 +72,8 @@ describe("sendTestEmailAction", () => {
   it("returns failure error message when sendTestEmail rejects", async () => {
     process.env.MAIL_HOST = "smtp";
     process.env.MAIL_PORT = "587";
-    process.env.MAIL_FROM_ADDRESS = "from@example.com";
-    process.env.MAIL_TO_ADDRESS = "to@example.com";
+    process.env.MAIL_FROM_ADDRESS = "from@example.test";
+    process.env.MAIL_TO_ADDRESS = "to@example.test";
     mail.sendTestEmail.mockRejectedValueOnce(new Error("fail-mail"));
 
     const { sendTestEmailAction } = await import("@/app/actions");

@@ -7,7 +7,7 @@ describe("getLatestReleasesForRepos invalid url path", () => {
     const { getLatestReleasesForRepos } = await import("@/app/actions");
     const repo: Repository = {
       id: "e/r",
-      url: "https://example.com/e/r",
+      url: "https://example.test/e/r",
       displayName: "Broken source",
       includeRegex: "^v2",
       refreshInterval: 30,

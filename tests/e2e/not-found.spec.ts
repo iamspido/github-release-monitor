@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("invalid path returns 404 when logged in", async ({ page }) => {
   const username =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
   const password = process.env.AUTH_PASSWORD || "TestPassword123";
   // Login first to avoid middleware redirect to login page
   await page.goto("/en/login");

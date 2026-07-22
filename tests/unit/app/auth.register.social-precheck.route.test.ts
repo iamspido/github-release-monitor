@@ -59,7 +59,7 @@ describe("auth register social-precheck route", () => {
       setupRequest({
         provider: "github",
         username: "admin",
-        email: "admin@example.com",
+        email: "admin@example.test",
       }),
     );
 
@@ -68,7 +68,7 @@ describe("auth register social-precheck route", () => {
     expect(buildSocialLoginIntentValueMock).toHaveBeenCalledWith("github", {
       purpose: "register",
       username: "admin",
-      email: "admin@example.com",
+      email: "admin@example.test",
     });
     expect(response.headers.get("set-cookie")).toContain(
       "auth_social_login_intent=",
@@ -84,7 +84,7 @@ describe("auth register social-precheck route", () => {
       setupRequest({
         provider: "github",
         username: "admin",
-        email: "admin@example.com",
+        email: "admin@example.test",
       }),
     );
 
@@ -103,7 +103,7 @@ describe("auth register social-precheck route", () => {
       setupRequest({
         provider: "github",
         username: "a",
-        email: "admin@example.com",
+        email: "admin@example.test",
       }),
     );
 
@@ -121,7 +121,7 @@ describe("auth register social-precheck route", () => {
       setupRequest({
         provider: "github",
         username: "admin-user",
-        email: "admin@example.com",
+        email: "admin@example.test",
       }),
     );
 

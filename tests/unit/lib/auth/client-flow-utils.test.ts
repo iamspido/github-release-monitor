@@ -39,17 +39,17 @@ describe("auth/client-flow-utils", () => {
 
   it("normalizes safe relative paths", () => {
     expect(normalizeSafeRelativePath("/settings")).toBe("/settings");
-    expect(normalizeSafeRelativePath("https://evil.example")).toBe("/");
-    expect(normalizeSafeRelativePath("//evil.example")).toBe("/");
+    expect(normalizeSafeRelativePath("https://evil.test")).toBe("/");
+    expect(normalizeSafeRelativePath("//evil.test")).toBe("/");
     expect(normalizeSafeRelativePath("/../settings")).toBe("/");
-    expect(normalizeSafeRelativePath("/\\\\evil.example")).toBe("/");
+    expect(normalizeSafeRelativePath("/\\\\evil.test")).toBe("/");
     expect(normalizeSafeRelativePath("/%2e%2e/settings")).toBe("/");
-    expect(normalizeSafeRelativePath("/%2f%2fevil.example")).toBe("/");
+    expect(normalizeSafeRelativePath("/%2f%2fevil.test")).toBe("/");
     expect(normalizeSafeRelativePath("/settings?q=1#section")).toBe(
       "/settings?q=1#section",
     );
     expect(normalizeOptionalSafeRelativePath("/settings")).toBe("/settings");
-    expect(normalizeOptionalSafeRelativePath("https://evil.example")).toBe(
+    expect(normalizeOptionalSafeRelativePath("https://evil.test")).toBe(
       undefined,
     );
   });
@@ -74,7 +74,7 @@ describe("auth/client-flow-utils", () => {
     expect(normalizeLocalizedRedirectPath("/de/settings", "en")).toBe(
       "/de/settings",
     );
-    expect(normalizeLocalizedRedirectPath("https://evil.example", "en")).toBe(
+    expect(normalizeLocalizedRedirectPath("https://evil.test", "en")).toBe(
       "/",
     );
   });

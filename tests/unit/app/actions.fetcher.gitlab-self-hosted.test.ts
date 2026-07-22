@@ -71,7 +71,7 @@ function buildUploadPackResponseForSingleCommit(
   epochSeconds: number,
 ): Uint8Array {
   const encoder = new TextEncoder();
-  const commitObject = `tree 1111111111111111111111111111111111111111\nauthor Test <test@example.com> ${epochSeconds} +0000\ncommitter Test <test@example.com> ${epochSeconds} +0000\n\n${commitMessage}\n`;
+  const commitObject = `tree 1111111111111111111111111111111111111111\nauthor Test <test@example.test> ${epochSeconds} +0000\ncommitter Test <test@example.test> ${epochSeconds} +0000\n\n${commitMessage}\n`;
   const commitBytes = encoder.encode(commitObject);
   const objectHeader = encodePackObjectHeader(1, commitBytes.length);
   const compressed = deflateSync(commitBytes);

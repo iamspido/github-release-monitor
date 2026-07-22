@@ -7,10 +7,10 @@ describe("diagnostics notification config", () => {
   it("does not expose MAIL_PASSWORD in the initial config", () => {
     const config = buildNotificationConfig({
       AUTHENTICATION_METHOD: "Basic",
-      MAIL_HOST: "smtp.example.com",
+      MAIL_HOST: "smtp.example.test",
       MAIL_PORT: "587",
-      MAIL_FROM_ADDRESS: "from@example.com",
-      MAIL_TO_ADDRESS: "to@example.com",
+      MAIL_FROM_ADDRESS: "from@example.test",
+      MAIL_TO_ADDRESS: "to@example.test",
       MAIL_PASSWORD: "super-secret",
     });
 

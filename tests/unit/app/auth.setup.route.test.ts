@@ -141,7 +141,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password: "SuperSecurePass123",
         name: "Admin",
         username: "admin",
@@ -153,7 +153,7 @@ describe("auth setup route", () => {
     expect(signUpEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         body: {
-          email: "admin@example.com",
+          email: "admin@example.test",
           password: "SuperSecurePass123",
           name: "Admin",
           username: "admin",
@@ -163,7 +163,7 @@ describe("auth setup route", () => {
     );
     expect(writeAuthSetupLockMock).toHaveBeenCalledWith({
       reason: "setup_completed",
-      email: "admin@example.com",
+      email: "admin@example.test",
       source: "/api/auth/setup",
     });
     expect(acquireAuthSetupBootstrapLockMock).toHaveBeenCalledWith({
@@ -177,7 +177,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password: "SuperSecurePass123",
         name: "Admin",
         username: "admin",
@@ -188,7 +188,7 @@ describe("auth setup route", () => {
     expect(signUpEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         body: {
-          email: "admin@example.com",
+          email: "admin@example.test",
           password: "SuperSecurePass123",
           name: "Admin",
           username: "admin",
@@ -202,7 +202,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password: "SuperSecurePass123",
         name: "Admin",
       }),
@@ -220,7 +220,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password: "SuperSecurePass123",
         username: "admin-user",
       }),
@@ -238,7 +238,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password: "lowercaseonly12",
         username: "admin",
       }),
@@ -259,7 +259,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password,
         username: "admin",
       }),
@@ -290,7 +290,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password: "SuperSecurePass123",
         username: "admin",
       }),
@@ -309,7 +309,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password: "SuperSecurePass123",
         username: "admin",
       }),
@@ -327,7 +327,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password: "SuperSecurePass123",
         username: "admin",
       }),
@@ -351,7 +351,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password: "SuperSecurePass123",
         username: "admin",
       }),
@@ -374,7 +374,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password: "SuperSecurePass123",
         username: "admin",
       }),
@@ -398,7 +398,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password: "SuperSecurePass123",
         username: "admin",
       }),
@@ -419,7 +419,7 @@ describe("auth setup route", () => {
     const response = await POST(
       setupRequest({
         token: process.env.AUTH_SETUP_TOKEN,
-        email: "admin@example.com",
+        email: "admin@example.test",
         password: "SuperSecurePass123",
         username: "admin",
       }),

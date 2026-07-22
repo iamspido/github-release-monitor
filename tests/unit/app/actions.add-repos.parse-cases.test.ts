@@ -40,7 +40,7 @@ describe("addRepositoriesAction parsing cases", () => {
         "https://github.com/Owner.Name/My_Repo",
         "",
         "https://github.com/owner-name/re.po",
-        "https://example.com/not-valid",
+        "https://example.test/not-valid",
         "https://github.com/owner---/r_e.p.o",
       ].join("\n"),
     );

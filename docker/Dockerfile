@@ -102,7 +102,7 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
     BETTER_AUTH_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
     BETTER_AUTH_URL=http://localhost:3000 \
     AUTH_SETUP_TOKEN=yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy \
-    AUTH_EMAIL=test@example.com \
+    AUTH_EMAIL=test@example.test \
     AUTH_PASSWORD=TestPassword123
 
 # Copy minimal files for running tests and server

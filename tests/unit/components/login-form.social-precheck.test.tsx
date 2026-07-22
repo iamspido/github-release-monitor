@@ -27,7 +27,7 @@ vi.mock("next-intl", () => ({
       social_provider_github: "GitHub",
       social_sign_in_button: `Sign in with ${values?.provider ?? ""}`.trim(),
       social_identifier_label: "Username or email (for social login)",
-      social_identifier_placeholder: "admin or admin@example.com",
+      social_identifier_placeholder: "admin or admin@example.test",
       social_login_requires_link_notice:
         "Social sign-in works only for already linked accounts.",
       error_social_login_unavailable:

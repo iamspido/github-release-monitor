@@ -405,7 +405,7 @@ describe("auth catch-all route setup social cookie handling", () => {
       provider: "github",
       purpose: "register",
       username: "AdminUser",
-      email: "admin@example.com",
+      email: "admin@example.test",
       issuedAt: Date.now(),
       expiresAt: Date.now() + 60_000,
       nonce: "nonce",
@@ -737,7 +737,7 @@ describe("auth catch-all route setup social cookie handling", () => {
       provider: "github",
       purpose: "register",
       username: "AdminUser",
-      email: "admin@example.com",
+      email: "admin@example.test",
       issuedAt: Date.now(),
       expiresAt: Date.now() + 60_000,
       nonce: "nonce",
@@ -763,7 +763,7 @@ describe("auth catch-all route setup social cookie handling", () => {
     expect(applySocialRegistrationProfileMock).toHaveBeenCalledWith({
       previousUserIds: snapshot,
       username: "AdminUser",
-      email: "admin@example.com",
+      email: "admin@example.test",
     });
     expect(response.headers.get("set-cookie")).toContain(
       "auth_social_login_intent=",
@@ -777,7 +777,7 @@ describe("auth catch-all route setup social cookie handling", () => {
       provider: "google",
       purpose: "register",
       username: "AdminUser",
-      email: "admin@example.com",
+      email: "admin@example.test",
       issuedAt: Date.now(),
       expiresAt: Date.now() + 60_000,
       nonce: "nonce",

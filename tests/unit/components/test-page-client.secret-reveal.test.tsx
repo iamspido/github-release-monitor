@@ -82,7 +82,7 @@ function makeNotificationConfig(
     variables: [
       {
         key: "MAIL_HOST",
-        displayValue: "smtp.example.com",
+        displayValue: "smtp.example.test",
         isSet: true,
         isRequired: true,
         isSensitive: false,
@@ -106,7 +106,7 @@ function makeNotificationConfig(
       },
       {
         key: "MAIL_FROM_ADDRESS",
-        displayValue: "from@example.com",
+        displayValue: "from@example.test",
         isSet: true,
         isRequired: true,
         isSensitive: false,
@@ -114,7 +114,7 @@ function makeNotificationConfig(
       },
       {
         key: "MAIL_TO_ADDRESS",
-        displayValue: "to@example.com",
+        displayValue: "to@example.test",
         isSet: true,
         isRequired: true,
         isSensitive: false,

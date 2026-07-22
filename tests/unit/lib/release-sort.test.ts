@@ -11,13 +11,13 @@ function release(
 ): EnrichedRelease {
   return {
     repoId,
-    repoUrl: `https://example.com/${repoId}`,
+    repoUrl: `https://example.test/${repoId}`,
     isNew,
     repoSettings: { isPinned },
     release: date
       ? ({
           id: 1,
-          html_url: `https://example.com/${repoId}/releases/v1`,
+          html_url: `https://example.test/${repoId}/releases/v1`,
           tag_name: "v1",
           name: "v1",
           body,

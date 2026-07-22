@@ -65,10 +65,10 @@ describe("repository-form-helpers", () => {
   it("derives display labels from repository provider ids", () => {
     expect(
       getRepositoryDisplayName({
-        id: "gitlab:gitlab.example.com/group/project",
-        url: "https://gitlab.example.com/group/project",
+        id: "gitlab:gitlab.example.test/group/project",
+        url: "https://gitlab.example.test/group/project",
       }),
-    ).toBe("gitlab.example.com/group/project");
+    ).toBe("gitlab.example.test/group/project");
     expect(
       getRepositoryProviderName({
         id: "codeberg:owner/repo",
@@ -86,8 +86,8 @@ describe("repository-form-helpers", () => {
         },
         {
           provider: "gitlab",
-          providerHost: "z.gitlab.example",
-          canonicalRepoUrl: "https://z.gitlab.example/owner/repo",
+          providerHost: "z.gitlab.test",
+          canonicalRepoUrl: "https://z.gitlab.test/owner/repo",
         },
         {
           provider: "github",
@@ -95,14 +95,14 @@ describe("repository-form-helpers", () => {
         },
         {
           provider: "gitlab",
-          providerHost: "a.gitlab.example",
-          canonicalRepoUrl: "https://a.gitlab.example/owner/repo",
+          providerHost: "a.gitlab.test",
+          canonicalRepoUrl: "https://a.gitlab.test/owner/repo",
         },
       ]).map((candidate) => candidate.canonicalRepoUrl),
     ).toEqual([
       "https://github.com/owner/repo",
-      "https://a.gitlab.example/owner/repo",
-      "https://z.gitlab.example/owner/repo",
+      "https://a.gitlab.test/owner/repo",
+      "https://z.gitlab.test/owner/repo",
       "https://codeberg.org/owner/repo",
     ]);
   });

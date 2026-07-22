@@ -47,7 +47,7 @@ describe("auth request context", () => {
 
   it("does not store or log the raw login identifier", () => {
     process.env.AUTH_TRUST_PROXY_HEADERS = "true";
-    const identifier = "Sensitive.User@example.com";
+    const identifier = "Sensitive.User@example.test";
     const context = getLoginRequestContext(
       new Headers({ "x-real-ip": "198.51.100.20" }),
       identifier,
@@ -65,11 +65,11 @@ describe("auth request context", () => {
     process.env.AUTH_TRUST_PROXY_HEADERS = "true";
     const first = getLoginRequestContext(
       new Headers({ "x-real-ip": "198.51.100.20" }),
-      "user@example.com",
+      "user@example.test",
     );
     const second = getLoginRequestContext(
       new Headers({ "x-real-ip": "198.51.100.21" }),
-      "user@example.com",
+      "user@example.test",
     );
 
     expect(first.accountRateLimitKey).not.toBe(second.accountRateLimitKey);
@@ -84,13 +84,13 @@ describe("auth request context", () => {
         "user-agent": "test-browser",
         "accept-language": "en-US",
       }),
-      "user@example.com",
+      "user@example.test",
     );
 
     expect(context.rateLimitKey).toHaveLength(1);
     expect(context.accountRateLimitKey).toMatch(/^identifier:[a-f0-9]{64}$/);
     expect(context.rateLimitKey.join(":")).not.toContain("test-browser");
-    expect(context.rateLimitKey.join(":")).not.toContain("user@example.com");
+    expect(context.rateLimitKey.join(":")).not.toContain("user@example.test");
   });
 
   it("does not let client-controlled headers rotate fallback rate limits", () => {
@@ -98,11 +98,11 @@ describe("auth request context", () => {
 
     const first = getLoginRequestContext(
       new Headers({ "user-agent": "first-browser" }),
-      "user@example.com",
+      "user@example.test",
     );
     const second = getLoginRequestContext(
       new Headers({ "user-agent": "second-browser" }),
-      "user@example.com",
+      "user@example.test",
     );
 
     expect(first.rateLimitKey).toEqual(second.rateLimitKey);

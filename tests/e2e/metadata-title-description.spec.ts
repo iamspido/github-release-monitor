@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("title and description are localized on EN routes", async ({ page }) => {
   const username =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
   const password = process.env.AUTH_PASSWORD || "TestPassword123";
   await page.goto("/en/login");
   await page.getByLabel(/email|e-mail/i).fill(username);

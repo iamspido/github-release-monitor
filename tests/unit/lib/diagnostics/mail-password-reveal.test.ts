@@ -136,7 +136,7 @@ describe("revealMailPasswordActionImpl", () => {
       canAccessRestrictedPages: true,
     });
     mocks.getSession.mockResolvedValue({
-      user: { id: "user-1", email: "user@example.com" },
+      user: { id: "user-1", email: "user@example.test" },
     });
     mocks.signInEmail.mockResolvedValue({ ok: true });
     const { revealMailPasswordActionImpl } = await import(
@@ -148,7 +148,7 @@ describe("revealMailPasswordActionImpl", () => {
     ).resolves.toEqual({ success: true, value: "mail-secret" });
     expect(mocks.signInEmail).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: { email: "user@example.com", password: "current-pass" },
+        body: { email: "user@example.test", password: "current-pass" },
       }),
     );
   });
@@ -159,7 +159,7 @@ describe("revealMailPasswordActionImpl", () => {
       canAccessRestrictedPages: true,
     });
     mocks.getSession.mockResolvedValue({
-      user: { id: "user-1", email: "user@example.com" },
+      user: { id: "user-1", email: "user@example.test" },
     });
     mocks.signInEmail.mockResolvedValue({ ok: false });
     const { revealMailPasswordActionImpl } = await import(
@@ -180,7 +180,7 @@ describe("revealMailPasswordActionImpl", () => {
       canAccessRestrictedPages: true,
     });
     mocks.getSession.mockResolvedValue({
-      user: { id: "user-1", email: "user@example.com" },
+      user: { id: "user-1", email: "user@example.test" },
     });
     mocks.hasCredentialPasswordAccount.mockReturnValue(true);
     mocks.hasVerifiedTotpForUser.mockReturnValue(true);
@@ -207,7 +207,7 @@ describe("revealMailPasswordActionImpl", () => {
       canAccessRestrictedPages: true,
     });
     mocks.getSession.mockResolvedValue({
-      user: { id: "user-1", email: "user@example.com" },
+      user: { id: "user-1", email: "user@example.test" },
     });
     mocks.hasVerifiedTotpForUser.mockReturnValue(true);
     mocks.verifyTOTP.mockResolvedValue({ ok: true });
@@ -231,7 +231,7 @@ describe("revealMailPasswordActionImpl", () => {
       canAccessRestrictedPages: true,
     });
     mocks.getSession.mockResolvedValue({
-      user: { id: "user-1", email: "user@example.com" },
+      user: { id: "user-1", email: "user@example.test" },
     });
     mocks.getLinkedSocialProvidersForUser.mockReturnValue(["github"]);
     const { beginSecretRevealStepUpActionImpl } = await import(
@@ -261,7 +261,7 @@ describe("revealMailPasswordActionImpl", () => {
       canAccessRestrictedPages: true,
     });
     mocks.getSession.mockResolvedValue({
-      user: { id: "user-1", email: "user@example.com" },
+      user: { id: "user-1", email: "user@example.test" },
     });
     const { completeSecretRevealStepUpActionImpl } = await import(
       "@/lib/diagnostics/notification-config"
@@ -279,7 +279,7 @@ describe("revealMailPasswordActionImpl", () => {
       canAccessRestrictedPages: true,
     });
     mocks.getSession.mockResolvedValue({
-      user: { id: "user-1", email: "user@example.com" },
+      user: { id: "user-1", email: "user@example.test" },
     });
     const {
       createSecretRevealStepUpPayload,
@@ -312,7 +312,7 @@ describe("revealMailPasswordActionImpl", () => {
       canAccessRestrictedPages: true,
     });
     mocks.getSession.mockResolvedValue({
-      user: { id: "user-1", email: "user@example.com" },
+      user: { id: "user-1", email: "user@example.test" },
     });
     const {
       createSecretRevealStepUpPayload,
@@ -342,7 +342,7 @@ describe("revealMailPasswordActionImpl", () => {
       canAccessRestrictedPages: true,
     });
     mocks.getSession.mockResolvedValue({
-      user: { id: "user-1", email: "user@example.com" },
+      user: { id: "user-1", email: "user@example.test" },
     });
     const {
       createSecretRevealStepUpPayload,

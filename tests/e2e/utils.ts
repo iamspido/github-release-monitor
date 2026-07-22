@@ -225,7 +225,7 @@ export async function login(
     email ||
     process.env.AUTH_EMAIL ||
     process.env.AUTH_USERNAME ||
-    "test@example.com";
+    "test@example.test";
   const p = password || process.env.AUTH_PASSWORD || "TestPassword123";
   const setupToken = process.env.AUTH_SETUP_TOKEN || "x".repeat(64);
 

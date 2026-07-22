@@ -12,7 +12,7 @@ export default async function globalSetup(config: FullConfig) {
   const baseUrl = resolveBaseUrl(config);
   const setupToken = process.env.AUTH_SETUP_TOKEN || "y".repeat(64);
   const authEmail =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.com";
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
   const authUsername =
     process.env.AUTH_USERNAME || authEmail.split("@")[0] || "testadmin";
   const authPassword = process.env.AUTH_PASSWORD || "TestPassword123";
