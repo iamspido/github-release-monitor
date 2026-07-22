@@ -726,8 +726,50 @@ export function TestPageClient({
     });
   };
 
+  const consumeSocialReauthCallback = React.useEffectEvent(
+    (target: SecretRevealTarget) => {
+      const startTransition =
+        target === "mail_password"
+          ? startMailPasswordRevealTransition
+          : startAppriseUrlRevealTransition;
+      startTransition(async () => {
+        setSecretRevealPendingMethod("social");
+        try {
+          const completeResult = await completeSecretRevealStepUpAction({
+            target,
+          });
+          if (!completeResult.success) {
+            const message = t(completeResult.errorKey);
+            setSecretRevealStepUpError(message);
+            setTargetRevealError(target, message);
+            toast({
+              title: t("toast_error_title"),
+              description: message,
+              variant: "destructive",
+            });
+            return;
+          }
+          await revealSecretAfterStepUp(target);
+        } catch (error: unknown) {
+          if (reloadIfServerActionStale(error)) {
+            return;
+          }
+          const message = t("error_step_up_failed");
+          setSecretRevealStepUpError(message);
+          setTargetRevealError(target, message);
+          toast({
+            title: t("toast_error_title"),
+            description: message,
+            variant: "destructive",
+          });
+        } finally {
+          setSecretRevealPendingMethod(null);
+        }
+      });
+    },
+  );
+
   // Runs once after social re-auth redirects back to the diagnostics page.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: This must only consume the callback URL once.
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
@@ -739,44 +781,7 @@ export function TestPageClient({
     url.searchParams.delete("secretRevealStepUp");
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
 
-    const startTransition =
-      target === "mail_password"
-        ? startMailPasswordRevealTransition
-        : startAppriseUrlRevealTransition;
-    startTransition(async () => {
-      setSecretRevealPendingMethod("social");
-      try {
-        const completeResult = await completeSecretRevealStepUpAction({
-          target,
-        });
-        if (!completeResult.success) {
-          const message = t(completeResult.errorKey);
-          setSecretRevealStepUpError(message);
-          setTargetRevealError(target, message);
-          toast({
-            title: t("toast_error_title"),
-            description: message,
-            variant: "destructive",
-          });
-          return;
-        }
-        await revealSecretAfterStepUp(target);
-      } catch (error: unknown) {
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        const message = t("error_step_up_failed");
-        setSecretRevealStepUpError(message);
-        setTargetRevealError(target, message);
-        toast({
-          title: t("toast_error_title"),
-          description: message,
-          variant: "destructive",
-        });
-      } finally {
-        setSecretRevealPendingMethod(null);
-      }
-    });
+    consumeSocialReauthCallback(target);
   }, []);
 
   return (

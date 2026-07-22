@@ -3,6 +3,7 @@ import type React from "react";
 import { act } from "react";
 import ReactDOM from "react-dom/client";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { SECRET_REVEAL_TARGET_STORAGE_KEY } from "@/components/diagnostics/secret-reveal-model";
 import type { NotificationConfig, UpdateNotificationState } from "@/types";
 
 (
@@ -442,8 +443,47 @@ describe("TestPageClient mail password reveal", () => {
         callbackURL: `${window.location.pathname}?secretRevealStepUp=1`,
       });
       expect(
-        window.sessionStorage.getItem("diagnosticSecretRevealTarget"),
+        window.sessionStorage.getItem(SECRET_REVEAL_TARGET_STORAGE_KEY),
       ).toBe("mail_password");
+    } finally {
+      window.sessionStorage.clear();
+      cleanup();
+    }
+  });
+
+  it("completes social step-up and reveals the stored target after the callback", async () => {
+    completeSecretRevealStepUpActionMock.mockResolvedValue({ success: true });
+    revealAppriseUrlActionMock.mockResolvedValue({
+      success: true,
+      value: "http://apprise:8000/notify/key",
+    });
+    window.sessionStorage.setItem(
+      SECRET_REVEAL_TARGET_STORAGE_KEY,
+      "apprise_url",
+    );
+    window.history.replaceState({}, "", "/test?secretRevealStepUp=1");
+
+    const { div, cleanup } = await renderClient(
+      makeNotificationConfig("password_confirm"),
+    );
+    try {
+      await waitForExpectation(() => {
+        expect(completeSecretRevealStepUpActionMock).toHaveBeenCalledWith({
+          target: "apprise_url",
+        });
+        expect(revealAppriseUrlActionMock).toHaveBeenCalledWith();
+        expect(div.textContent).toContain(
+          "APPRISE_URL=http://apprise:8000/notify/key",
+        );
+      });
+
+      expect(completeSecretRevealStepUpActionMock).toHaveBeenCalledTimes(1);
+      expect(revealAppriseUrlActionMock).toHaveBeenCalledTimes(1);
+      expect(
+        window.sessionStorage.getItem(SECRET_REVEAL_TARGET_STORAGE_KEY),
+      ).toBeNull();
+      expect(window.location.pathname).toBe("/test");
+      expect(window.location.search).toBe("");
     } finally {
       window.sessionStorage.clear();
       cleanup();
