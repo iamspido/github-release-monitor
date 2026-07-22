@@ -68,9 +68,17 @@ vi.mock("@/components/ui/dialog", () => {
   const passthrough = ({ children, ...props }: MockDivProps) => (
     <div {...props}>{children}</div>
   );
+  const dialog = ({ children }: MockChildrenProps) => <div>{children}</div>;
+  const dialogContent = ({
+    children,
+    onOpenAutoFocus: _onOpenAutoFocus,
+    ...props
+  }: MockDivProps & {
+    onOpenAutoFocus?: (event: Event) => void;
+  }) => <div {...props}>{children}</div>;
   return {
-    Dialog: passthrough,
-    DialogContent: passthrough,
+    Dialog: dialog,
+    DialogContent: dialogContent,
     DialogHeader: passthrough,
     DialogTitle: passthrough,
     DialogDescription: passthrough,
@@ -237,7 +245,7 @@ describe("RepoSettingsDialog cron defaults", () => {
     });
   }
 
-  it("uses 08:00 when switching a repository override to schedule mode", () => {
+  it("uses 08:00 when switching a repository override to schedule mode", async () => {
     renderDialog();
 
     const automationSelect = findSelectWithOptions(container, [
@@ -250,6 +258,7 @@ describe("RepoSettingsDialog cron defaults", () => {
     act(() => {
       setSelectValue(automationSelect as HTMLSelectElement, "cron");
     });
+    await flushEffects();
 
     const hourSelect = getSelects(container).find((select) => {
       const values = Array.from(select.options).map((option) => option.value);
@@ -283,7 +292,7 @@ describe("RepoSettingsDialog cron defaults", () => {
     await flushEffects();
 
     await act(async () => {
-      vi.advanceTimersByTime(1500);
+      vi.advanceTimersByTime(750);
       await Promise.resolve();
       await Promise.resolve();
     });

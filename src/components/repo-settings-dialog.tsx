@@ -58,15 +58,19 @@ import {
 } from "@/components/ui/tooltip";
 import {
   type AutosaveStatus,
-  useDebouncedAutosave,
-} from "@/hooks/use-debounced-autosave";
+  type AutosaveTask,
+  useAutosaveController,
+} from "@/hooks/use-autosave-controller";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import {
   formatRepoIdForDisplay,
   getRepositoryNameFromId,
 } from "@/lib/repo-id-display";
-import { MAX_REPOSITORY_DISPLAY_NAME_LENGTH } from "@/lib/repositories/display-name";
+import {
+  MAX_REPOSITORY_DISPLAY_NAME_LENGTH,
+  normalizeRepositoryDisplayName,
+} from "@/lib/repositories/display-name";
 import {
   MAX_REPOSITORY_TAG_LENGTH,
   MAX_REPOSITORY_TAGS,
@@ -76,6 +80,7 @@ import {
 } from "@/lib/repositories/tags";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import {
+  areSettingsSnapshotsEqual,
   hasRefreshSensitiveRepoSettingChanges,
   hasSettingsSnapshotDrift,
   isCacheIntervalInvalid,
@@ -204,6 +209,36 @@ function SaveStatusIndicator({ status }: { status: AutosaveStatus }) {
     </div>
   );
 }
+
+type RepositorySettingsSnapshot = Pick<
+  Repository,
+  | "displayName"
+  | "isPinned"
+  | "tags"
+  | "releaseChannels"
+  | "preReleaseSubChannels"
+  | "releasesPerPage"
+  | "refreshInterval"
+  | "cacheInterval"
+  | "backgroundCheckCron"
+  | "includeRegex"
+  | "excludeRegex"
+  | "appriseTags"
+  | "appriseFormat"
+>;
+
+const DEFERRED_REPOSITORY_SETTING_KEYS = new Set<
+  keyof RepositorySettingsSnapshot
+>([
+  "displayName",
+  "releasesPerPage",
+  "refreshInterval",
+  "cacheInterval",
+  "backgroundCheckCron",
+  "includeRegex",
+  "excludeRegex",
+  "appriseTags",
+]);
 
 interface RepoSettingsDialogProps {
   isOpen: boolean;
@@ -379,12 +414,29 @@ export function RepoSettingsDialog({
   const {
     status: saveStatus,
     setStatus: setSaveStatus,
-    cancel: cancelAutosave,
+    hasPending: hasPendingAutosave,
+    discardPending: discardPendingAutosave,
     schedule: scheduleAutosave,
-  } = useDebouncedAutosave();
-  const dialogSessionRef = React.useRef(0);
-  const reconciliationRevisionRef = React.useRef(0);
-  const [reconciliationRevision, setReconciliationRevision] = React.useState(0);
+    saveNow: saveAutosaveNow,
+    flush: flushAutosave,
+    pause: pauseAutosave,
+    resume: resumeAutosave,
+  } = useAutosaveController();
+  const saveStatusRef = React.useRef(saveStatus);
+  saveStatusRef.current = saveStatus;
+  const hasPendingAutosaveRef = React.useRef(hasPendingAutosave);
+  hasPendingAutosaveRef.current = hasPendingAutosave;
+  const previousDraftSettingsRef = React.useRef<
+    RepositorySettingsSnapshot | undefined
+  >(undefined);
+  const [immediateSaveRevision, requestImmediateSave] = React.useReducer(
+    (revision: number) => revision + 1,
+    0,
+  );
+  const handledImmediateSaveRevisionRef = React.useRef(0);
+  const skipOpenHydrationAutosaveRef = React.useRef(false);
+  const [closeValidationBlocked, setCloseValidationBlocked] =
+    React.useState(false);
   const { isOnline } = useNetworkStatus();
 
   const savedThisSessionRef = React.useRef(false);
@@ -488,14 +540,18 @@ export function RepoSettingsDialog({
     const wasOpen = prevIsOpenRef.current;
 
     if (wasOpen && !isOpen) {
-      cancelAutosave();
       finishRepositoryTagDrag();
     }
 
     // transition: closed -> open
     if (!wasOpen && isOpen) {
-      cancelAutosave();
-      dialogSessionRef.current += 1;
+      setCloseValidationBlocked(false);
+
+      if (hasPendingAutosave) {
+        prevIsOpenRef.current = isOpen;
+        return;
+      }
+
       const initialSettings = {
         displayName: currentRepoSettings?.displayName ?? undefined,
         isPinned: currentRepoSettings?.isPinned === true,
@@ -512,6 +568,10 @@ export function RepoSettingsDialog({
         appriseTags: currentRepoSettings?.appriseTags ?? undefined,
         appriseFormat: currentRepoSettings?.appriseFormat ?? undefined,
       };
+
+      skipOpenHydrationAutosaveRef.current = true;
+      previousDraftSettingsRef.current = initialSettings;
+      queuedSettingsRef.current = null;
 
       setChannels(initialSettings.releaseChannels);
       setDisplayName(initialSettings.displayName ?? "");
@@ -562,8 +622,8 @@ export function RepoSettingsDialog({
     isOpen,
     currentRepoSettings,
     currentRepositoryTags,
-    cancelAutosave,
     finishRepositoryTagDrag,
+    hasPendingAutosave,
     setSaveStatus,
   ]);
 
@@ -604,22 +664,7 @@ export function RepoSettingsDialog({
     useGlobalAppriseTags &&
     useGlobalAppriseFormat;
 
-  const newSettings: Pick<
-    Repository,
-    | "displayName"
-    | "isPinned"
-    | "tags"
-    | "releaseChannels"
-    | "preReleaseSubChannels"
-    | "releasesPerPage"
-    | "refreshInterval"
-    | "cacheInterval"
-    | "backgroundCheckCron"
-    | "includeRegex"
-    | "excludeRegex"
-    | "appriseTags"
-    | "appriseFormat"
-  > = React.useMemo(() => {
+  const newSettings: RepositorySettingsSnapshot = React.useMemo(() => {
     let finalReleasesPerPage: number | null = null;
     const releasesPerPageStr = String(releasesPerPage).trim();
 
@@ -696,6 +741,9 @@ export function RepoSettingsDialog({
 
   const prevSettingsRef = React.useRef(newSettings);
   const lastSubmittedSettingsRef = React.useRef(newSettings);
+  const queuedSettingsRef = React.useRef<RepositorySettingsSnapshot | null>(
+    null,
+  );
 
   const {
     releasesPerPageError,
@@ -764,152 +812,208 @@ export function RepoSettingsDialog({
     excludeRegex,
   ]);
 
-  React.useEffect(() => {
-    if (!isOpen) return;
-
-    if (!isOnline) {
-      cancelAutosave("paused");
-      return;
-    }
-
-    if (
-      !hasSettingsSnapshotDrift(
-        prevSettingsRef.current,
-        lastSubmittedSettingsRef.current,
-        newSettings,
-      )
-    ) {
-      return;
-    }
-
-    const saveDialogSession = dialogSessionRef.current;
-
-    if (
+  const hasEmptyIntervalFields =
+    automationMode === "interval" &&
+    [intervalDays, intervalHours, intervalMinutes].some(
+      (value) => value === "",
+    );
+  const hasEmptyCacheFields =
+    useCustomCache &&
+    [cacheDays, cacheHours, cacheMinutes].some((value) => value === "");
+  const hasDisplayNameError =
+    !normalizeRepositoryDisplayName(displayName).success;
+  const hasNonTagValidationErrors = Boolean(
+    hasDisplayNameError ||
+      hasEmptyIntervalFields ||
+      hasEmptyCacheFields ||
       releasesPerPageError ||
       intervalError ||
       isCacheInvalid ||
       cronError ||
       includeRegexError ||
-      excludeRegexError
-    ) {
-      cancelAutosave("idle");
-      return;
-    }
+      excludeRegexError,
+  );
+  const hasValidationErrors = Boolean(
+    hasNonTagValidationErrors || repositoryTagError,
+  );
 
-    return scheduleAutosave(async ({ isCurrent, setStatus }) => {
-      if (reconciliationRevision !== reconciliationRevisionRef.current) return;
-      if (!isCurrent()) return;
+  const createSaveTask = React.useCallback(
+    (settingsSnapshot: RepositorySettingsSnapshot): AutosaveTask =>
+      async () => {
+        try {
+          const previousSettings = prevSettingsRef.current;
+          if (
+            queuedSettingsRef.current &&
+            areSettingsSnapshotsEqual(
+              queuedSettingsRef.current,
+              settingsSnapshot,
+            )
+          ) {
+            queuedSettingsRef.current = null;
+          }
+          lastSubmittedSettingsRef.current = settingsSnapshot;
+          const result = await updateRepositorySettingsAction(repoId, {
+            ...settingsSnapshot,
+            // `undefined` properties are omitted while serializing Server
+            // Action arguments. Use an empty string so clearing a custom
+            // display name remains distinguishable from a partial update.
+            displayName: settingsSnapshot.displayName ?? "",
+          });
 
-      try {
-        lastSubmittedSettingsRef.current = newSettings;
-        const result = await updateRepositorySettingsAction(
-          repoId,
-          newSettings,
-        );
-
-        if (!isCurrent()) {
-          // The UI state has moved on, but the serialized server action still
-          // persisted this snapshot. If the dialog closed meanwhile, perform
-          // the same cache refresh the successful save would normally trigger.
-          if (result.success) {
-            publishRepositoryTagsChange(newSettings.tags ?? []);
-            publishDisplayNameChange(newSettings.displayName);
-            publishPinnedChange(newSettings.isPinned === true);
-            if (
-              isOpenRef.current &&
-              saveDialogSession !== dialogSessionRef.current
-            ) {
-              // This save belongs to an earlier dialog session. Record the
-              // snapshot that reached the server and trigger a compensating
-              // save for the settings visible in the reopened dialog.
-              prevSettingsRef.current = newSettings;
-              if (mountedRef.current) {
-                reconciliationRevisionRef.current += 1;
-                setReconciliationRevision(reconciliationRevisionRef.current);
-              }
-            } else if (
-              !isOpenRef.current &&
-              hasRefreshSensitiveRepoSettingChanges(
-                prevSettingsRef.current,
-                newSettings,
-              )
-            ) {
-              refreshSingleRepositoryAction(repoId).catch((error: unknown) => {
-                reloadIfServerActionStale(error);
+          if (!result.success) {
+            if (mountedRef.current) {
+              toast({
+                title: t("toast_error_title"),
+                description: result.error,
+                variant: "destructive",
               });
             }
+            return false;
           }
-          return;
-        }
 
-        if (result.success) {
-          if (mountedRef.current) {
-            setStatus("success");
-
-            if (
-              hasRefreshSensitiveRepoSettingChanges(
-                prevSettingsRef.current,
-                newSettings,
-              )
-            ) {
-              filterSettingsChangedRef.current = true;
-            }
-
-            prevSettingsRef.current = newSettings;
-            lastSubmittedSettingsRef.current = newSettings;
-            savedThisSessionRef.current = true;
-            publishRepositoryTagsChange(newSettings.tags ?? []);
-            publishDisplayNameChange(newSettings.displayName);
-            publishPinnedChange(newSettings.isPinned === true);
-            if (!isOpenRef.current) refreshAfterClosedSave();
-          } else {
-            savedThisSessionRef.current = true;
+          if (
+            hasRefreshSensitiveRepoSettingChanges(
+              previousSettings,
+              settingsSnapshot,
+            )
+          ) {
+            filterSettingsChangedRef.current = true;
           }
-        } else {
+
+          prevSettingsRef.current = settingsSnapshot;
+          lastSubmittedSettingsRef.current = settingsSnapshot;
+          savedThisSessionRef.current = true;
+          publishRepositoryTagsChange(settingsSnapshot.tags ?? []);
+          publishDisplayNameChange(settingsSnapshot.displayName);
+          publishPinnedChange(settingsSnapshot.isPinned === true);
+          if (!isOpenRef.current) refreshAfterClosedSave();
+          return true;
+        } catch (error: unknown) {
+          if (reloadIfServerActionStale(error)) return true;
           if (mountedRef.current) {
-            setStatus("error");
             toast({
               title: t("toast_error_title"),
-              description: result.error,
+              description: String(error),
               variant: "destructive",
             });
           }
+          return false;
         }
-      } catch (error: unknown) {
-        if (!isCurrent()) return;
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        if (mountedRef.current) {
-          setStatus("error");
-          toast({
-            title: t("toast_error_title"),
-            description: String(error),
-            variant: "destructive",
-          });
-        }
+      },
+    [
+      publishDisplayNameChange,
+      publishPinnedChange,
+      publishRepositoryTagsChange,
+      refreshAfterClosedSave,
+      repoId,
+      t,
+      toast,
+    ],
+  );
+
+  React.useEffect(() => {
+    if (!isOnline) {
+      pauseAutosave();
+      return;
+    }
+    resumeAutosave();
+  }, [isOnline, pauseAutosave, resumeAutosave]);
+
+  React.useEffect(() => {
+    if (saveStatus === "success" && hasValidationErrors) {
+      setSaveStatus("idle");
+    }
+  }, [hasValidationErrors, saveStatus, setSaveStatus]);
+
+  React.useEffect(() => {
+    if (skipOpenHydrationAutosaveRef.current) {
+      skipOpenHydrationAutosaveRef.current = false;
+      return;
+    }
+
+    const previousDraftSettings = previousDraftSettingsRef.current;
+    previousDraftSettingsRef.current = newSettings;
+    const saveImmediatelyRequested =
+      handledImmediateSaveRevisionRef.current !== immediateSaveRevision;
+    handledImmediateSaveRevisionRef.current = immediateSaveRevision;
+    if (!isOpen) return;
+
+    if (!hasValidationErrors) setCloseValidationBlocked(false);
+
+    const changedKeys = previousDraftSettings
+      ? (
+          Object.keys(newSettings) as Array<keyof RepositorySettingsSnapshot>
+        ).filter(
+          (key) =>
+            !areSettingsSnapshotsEqual(
+              previousDraftSettings[key],
+              newSettings[key],
+            ),
+        )
+      : [];
+
+    const hasSettingsDrift = hasSettingsSnapshotDrift(
+      prevSettingsRef.current,
+      lastSubmittedSettingsRef.current,
+      newSettings,
+    );
+    if (!hasSettingsDrift) {
+      if (
+        queuedSettingsRef.current &&
+        !areSettingsSnapshotsEqual(queuedSettingsRef.current, newSettings)
+      ) {
+        queuedSettingsRef.current = null;
+        discardPendingAutosave("idle");
       }
-    });
+      return;
+    }
+
+    if (hasValidationErrors) {
+      queuedSettingsRef.current = null;
+      discardPendingAutosave("idle");
+      return;
+    }
+
+    if (hasPendingAutosaveRef.current) {
+      const matchesSubmittedSnapshot = areSettingsSnapshotsEqual(
+        lastSubmittedSettingsRef.current,
+        newSettings,
+      );
+      const matchesQueuedSnapshot = areSettingsSnapshotsEqual(
+        queuedSettingsRef.current,
+        newSettings,
+      );
+      const shouldRetryFailedSnapshot =
+        saveStatusRef.current === "error" && changedKeys.length > 0;
+
+      if (matchesQueuedSnapshot && !shouldRetryFailedSnapshot) return;
+      if (matchesSubmittedSnapshot && !shouldRetryFailedSnapshot) {
+        if (queuedSettingsRef.current) {
+          queuedSettingsRef.current = null;
+          discardPendingAutosave("idle");
+        }
+        return;
+      }
+    }
+
+    const saveImmediately =
+      saveImmediatelyRequested ||
+      (changedKeys.length > 0 &&
+        changedKeys.every((key) => !DEFERRED_REPOSITORY_SETTING_KEYS.has(key)));
+    setCloseValidationBlocked(false);
+    const task = createSaveTask(newSettings);
+    queuedSettingsRef.current = newSettings;
+    if (saveImmediately) saveAutosaveNow(task);
+    else scheduleAutosave(task);
   }, [
-    newSettings,
-    repoId,
+    discardPendingAutosave,
+    createSaveTask,
+    hasValidationErrors,
+    immediateSaveRevision,
     isOpen,
-    releasesPerPageError,
-    intervalError,
-    isCacheInvalid,
-    cronError,
-    includeRegexError,
-    excludeRegexError,
-    toast,
-    t,
-    isOnline,
-    reconciliationRevision,
-    refreshAfterClosedSave,
-    cancelAutosave,
+    newSettings,
+    saveAutosaveNow,
     scheduleAutosave,
-    publishRepositoryTagsChange,
-    publishDisplayNameChange,
-    publishPinnedChange,
   ]);
 
   const handleChannelChange = (channel: ReleaseChannel) => {
@@ -1177,8 +1281,146 @@ export function RepoSettingsDialog({
     setPreReleaseSubChannels([]);
   };
 
+  const focusFirstValidationError = (
+    hasTagError = Boolean(repositoryTagError),
+  ) => {
+    const firstEmptyIntervalId =
+      intervalMinutes === ""
+        ? intervalMinutesId
+        : intervalHours === ""
+          ? intervalHoursId
+          : intervalDays === ""
+            ? intervalDaysId
+            : null;
+    const firstEmptyCacheId =
+      cacheMinutes === ""
+        ? cacheMinutesId
+        : cacheHours === ""
+          ? cacheHoursId
+          : cacheDays === ""
+            ? cacheDaysId
+            : null;
+    const targetId = hasDisplayNameError
+      ? displayNameId
+      : hasTagError
+        ? repositoryTagsId
+        : hasEmptyIntervalFields
+          ? firstEmptyIntervalId
+          : hasEmptyCacheFields
+            ? firstEmptyCacheId
+            : releasesPerPageError
+              ? releasesPerPageId
+              : intervalError
+                ? intervalMinutesId
+                : isCacheInvalid
+                  ? cacheMinutesId
+                  : cronError
+                    ? cronPreset === "custom"
+                      ? cronExpressionId
+                      : cronHourId
+                    : includeRegexError
+                      ? includeRegexId
+                      : excludeRegexError
+                        ? excludeRegexId
+                        : null;
+    if (!targetId) return;
+    window.requestAnimationFrame(() =>
+      document.getElementById(targetId)?.focus(),
+    );
+  };
+
   const handleOpenChange = (open: boolean) => {
-    setIsOpen(open);
+    if (open) {
+      isOpenRef.current = true;
+      setIsOpen(true);
+      return;
+    }
+
+    let settingsSnapshot = newSettings;
+    if (repositoryTagInput.trim()) {
+      const tagResult = normalizeRepositoryTags([
+        ...repositoryTags,
+        repositoryTagInput,
+      ]);
+      if (!tagResult.success) {
+        setRepositoryTagError(tagResult.error);
+        setCloseValidationBlocked(true);
+        focusFirstValidationError(true);
+        return;
+      }
+
+      settingsSnapshot = { ...newSettings, tags: tagResult.tags };
+      setRepositoryTags(tagResult.tags);
+      setRepositoryTagInput("");
+      setRepositoryTagError(null);
+    } else if (repositoryTagError) {
+      setCloseValidationBlocked(true);
+      focusFirstValidationError(true);
+      return;
+    }
+
+    const hasUnsavedChanges = hasSettingsSnapshotDrift(
+      prevSettingsRef.current,
+      lastSubmittedSettingsRef.current,
+      settingsSnapshot,
+    );
+    if (hasNonTagValidationErrors) {
+      setCloseValidationBlocked(true);
+      focusFirstValidationError(false);
+      return;
+    }
+
+    if (
+      queuedSettingsRef.current &&
+      !areSettingsSnapshotsEqual(queuedSettingsRef.current, settingsSnapshot)
+    ) {
+      queuedSettingsRef.current = null;
+      discardPendingAutosave("idle");
+    }
+
+    isOpenRef.current = false;
+    if (
+      hasUnsavedChanges &&
+      (!hasPendingAutosave ||
+        (!areSettingsSnapshotsEqual(
+          lastSubmittedSettingsRef.current,
+          settingsSnapshot,
+        ) &&
+          !areSettingsSnapshotsEqual(
+            queuedSettingsRef.current,
+            settingsSnapshot,
+          )))
+    ) {
+      queuedSettingsRef.current = settingsSnapshot;
+      saveAutosaveNow(createSaveTask(settingsSnapshot));
+    } else {
+      flushAutosave();
+    }
+    setIsOpen(false);
+  };
+
+  const handleAutosaveBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (
+      !hasValidationErrors &&
+      (event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement) &&
+      event.target.getAttribute("role") !== "combobox"
+    ) {
+      flushAutosave();
+    }
+  };
+
+  const handleAutosaveKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (
+      !hasValidationErrors &&
+      !event.defaultPrevented &&
+      event.key === "Enter" &&
+      event.target instanceof HTMLInputElement
+    ) {
+      flushAutosave();
+    }
   };
 
   const resetAutomationOverrideState = () => {
@@ -1201,6 +1443,7 @@ export function RepoSettingsDialog({
 
   const handleResetAll = () => {
     if (!isOnline) return;
+    requestImmediateSave();
     setDisplayName("");
     setIsPinned(false);
     setChannels([]);
@@ -1215,6 +1458,7 @@ export function RepoSettingsDialog({
 
   const handleResetFilters = () => {
     if (!isOnline) return;
+    requestImmediateSave();
     setChannels([]);
     setPreReleaseSubChannels(undefined);
     setIncludeRegex("");
@@ -1223,6 +1467,7 @@ export function RepoSettingsDialog({
 
   const handleResetAutomation = () => {
     if (!isOnline) return;
+    requestImmediateSave();
     resetAutomationOverrideState();
   };
 
@@ -1248,6 +1493,8 @@ export function RepoSettingsDialog({
         <DialogContent
           className="sm:max-w-lg"
           onOpenAutoFocus={(e) => e.preventDefault()}
+          onBlur={handleAutosaveBlur}
+          onKeyDown={handleAutosaveKeyDown}
         >
           <DialogHeader>
             <DialogTitle>{t("title")}</DialogTitle>
@@ -1265,6 +1512,15 @@ export function RepoSettingsDialog({
           {!isOnline && (
             <div className="mb-3 mt-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-300">
               {tGlobal("offline_notice")}
+            </div>
+          )}
+
+          {closeValidationBlocked && (
+            <div
+              className="mb-3 mt-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
+              role="alert"
+            >
+              {t("close_validation_error")}
             </div>
           )}
 
@@ -1287,10 +1543,21 @@ export function RepoSettingsDialog({
                   maxLength={MAX_REPOSITORY_DISPLAY_NAME_LENGTH}
                   placeholder={getRepositoryNameFromId(repoId)}
                   disabled={!isOnline}
+                  aria-invalid={hasDisplayNameError}
+                  className={cn(
+                    hasDisplayNameError &&
+                      "border-destructive focus-visible:ring-destructive",
+                  )}
                 />
-                <p className="text-xs text-muted-foreground">
-                  {t("display_name_hint")}
-                </p>
+                {hasDisplayNameError ? (
+                  <p className="text-sm text-destructive">
+                    {t("display_name_error_invalid")}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {t("display_name_hint")}
+                  </p>
+                )}
               </div>
               <div className="flex items-start space-x-2">
                 <Checkbox
@@ -1572,11 +1839,7 @@ export function RepoSettingsDialog({
                         variant="outline"
                         size="sm"
                         onClick={handleSelectAllPreRelease}
-                        disabled={
-                          !isPreReleaseChecked ||
-                          saveStatus === "saving" ||
-                          !isOnline
-                        }
+                        disabled={!isPreReleaseChecked || !isOnline}
                       >
                         {tGlobal("prerelease_select_all")}
                       </Button>
@@ -1585,11 +1848,7 @@ export function RepoSettingsDialog({
                         variant="outline"
                         size="sm"
                         onClick={handleDeselectAllPreRelease}
-                        disabled={
-                          !isPreReleaseChecked ||
-                          saveStatus === "saving" ||
-                          !isOnline
-                        }
+                        disabled={!isPreReleaseChecked || !isOnline}
                       >
                         {tGlobal("prerelease_deselect_all")}
                       </Button>
@@ -1732,9 +1991,10 @@ export function RepoSettingsDialog({
                 </Label>
                 <Select
                   value={automationMode}
-                  onValueChange={(value: AutomationMode) =>
-                    setAutomationMode(value)
-                  }
+                  onValueChange={(value: AutomationMode) => {
+                    requestImmediateSave();
+                    setAutomationMode(value);
+                  }}
                   disabled={!isOnline}
                 >
                   <SelectTrigger id={refreshModeId}>
@@ -1843,9 +2103,10 @@ export function RepoSettingsDialog({
                     </Label>
                     <Select
                       value={cronPreset}
-                      onValueChange={(value: CronPreset) =>
-                        setCronPreset(value)
-                      }
+                      onValueChange={(value: CronPreset) => {
+                        requestImmediateSave();
+                        setCronPreset(value);
+                      }}
                       disabled={!isOnline}
                     >
                       <SelectTrigger id={cronPresetId}>
@@ -1879,7 +2140,10 @@ export function RepoSettingsDialog({
                             pm: tGlobal("cron_time_pm"),
                           }}
                           value={cronTime}
-                          onChange={setCronTime}
+                          onChange={(value) => {
+                            requestImmediateSave();
+                            setCronTime(value);
+                          }}
                           timeFormat={globalSettings.timeFormat}
                           disabled={!isOnline}
                         />
@@ -1891,7 +2155,10 @@ export function RepoSettingsDialog({
                           </Label>
                           <Select
                             value={cronWeekday}
-                            onValueChange={setCronWeekday}
+                            onValueChange={(value) => {
+                              requestImmediateSave();
+                              setCronWeekday(value);
+                            }}
                             disabled={!isOnline}
                           >
                             <SelectTrigger id={cronWeekdayId}>
@@ -1948,9 +2215,10 @@ export function RepoSettingsDialog({
                 <Checkbox
                   id={cacheOverrideId}
                   checked={useCustomCache}
-                  onCheckedChange={(checked) =>
-                    setUseCustomCache(Boolean(checked))
-                  }
+                  onCheckedChange={(checked) => {
+                    requestImmediateSave();
+                    setUseCustomCache(Boolean(checked));
+                  }}
                   disabled={!isOnline}
                   className="mt-1"
                 />
@@ -2074,7 +2342,10 @@ export function RepoSettingsDialog({
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => setReleasesPerPage("")}
+                        onClick={() => {
+                          requestImmediateSave();
+                          setReleasesPerPage("");
+                        }}
                         className="size-8 shrink-0"
                         disabled={!isOnline}
                       >
@@ -2163,7 +2434,10 @@ export function RepoSettingsDialog({
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setAppriseFormat("")}
+                          onClick={() => {
+                            requestImmediateSave();
+                            setAppriseFormat("");
+                          }}
                           className="size-8 shrink-0"
                           disabled={!isOnline}
                         >
@@ -2205,7 +2479,10 @@ export function RepoSettingsDialog({
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setAppriseTags("")}
+                          onClick={() => {
+                            requestImmediateSave();
+                            setAppriseTags("");
+                          }}
                           className="size-8 shrink-0"
                           disabled={!isOnline}
                         >

@@ -413,6 +413,7 @@
     "display_name_error_invalid": "Geben Sie einen gültigen Anzeigenamen mit höchstens 100 Zeichen ein.",
     "pin_to_top_label": "Oben anheften",
     "pin_to_top_description": "Zeigt dieses Repository unabhängig von der gewählten Sortierung vor nicht angehefteten Repositories an.",
+    "close_validation_error": "Korrigieren Sie die ungültigen Einstellungen, bevor Sie diesen Dialog schließen.",
     "tags_section_title": "Organisation",
     "tags_section_description": "Fügen Sie bis zu {maxTags} Tags mit jeweils höchstens {maxLength} Zeichen hinzu.",
     "tags_label": "Repository-Tags",

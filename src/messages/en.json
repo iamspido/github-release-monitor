@@ -413,6 +413,7 @@
     "display_name_error_invalid": "Enter a valid display name with no more than 100 characters.",
     "pin_to_top_label": "Pin to top",
     "pin_to_top_description": "Shows this repository before unpinned repositories, regardless of the selected sort order.",
+    "close_validation_error": "Fix the invalid settings before closing this dialog.",
     "tags_section_title": "Organization",
     "tags_section_description": "Add up to {maxTags} tags with at most {maxLength} characters each.",
     "tags_label": "Repository tags",

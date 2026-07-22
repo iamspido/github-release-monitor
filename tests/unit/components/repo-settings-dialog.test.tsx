@@ -23,6 +23,9 @@ type TranslationFn = ((
 type PassthroughProps = React.HTMLAttributes<HTMLDivElement> & {
   children?: React.ReactNode;
 };
+type DialogContentProps = PassthroughProps & {
+  onOpenAutoFocus?: (event: Event) => void;
+};
 type UpdateRepositorySettingsAction =
   typeof import("@/app/actions").updateRepositorySettingsAction;
 
@@ -33,8 +36,10 @@ const translationMap: Record<string, Record<string, string>> = {
     display_section_description: "Customize display",
     display_name_label: "Display name (optional)",
     display_name_hint: "Overrides the automatic heading",
+    display_name_error_invalid: "Enter a valid display name",
     pin_to_top_label: "Pin to top",
     pin_to_top_description: "Show before unpinned repositories",
+    close_validation_error: "Fix invalid settings before closing",
     autosave_waiting: "Waiting to save…",
     autosave_saving: "Saving…",
     autosave_success_short: "Saved",
@@ -121,8 +126,28 @@ vi.mock("@/components/ui/dialog", () => {
     <div {...rest}>{children}</div>
   );
   return {
-    Dialog: passthrough,
-    DialogContent: passthrough,
+    Dialog: ({
+      children,
+      onOpenChange,
+    }: {
+      children: React.ReactNode;
+      onOpenChange?: (open: boolean) => void;
+    }) => (
+      <div>
+        <button
+          type="button"
+          data-testid="close-repository-settings"
+          onClick={() => onOpenChange?.(false)}
+        >
+          Close repository settings
+        </button>
+        {children}
+      </div>
+    ),
+    DialogContent: ({
+      onOpenAutoFocus: _onOpenAutoFocus,
+      ...props
+    }: DialogContentProps) => passthrough(props),
     DialogHeader: passthrough,
     DialogTitle: passthrough,
     DialogDescription: passthrough,
@@ -280,7 +305,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     return event;
   }
 
-  async function advanceAutosaveDelay(delay = 1500) {
+  async function advanceAutosaveDelay(delay = 750) {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(delay);
       await Promise.resolve();
@@ -370,6 +395,23 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     expect(updateSettingsMock).not.toHaveBeenCalled();
   });
 
+  it("does not autosave a stale closed draft while hydrating updated props", async () => {
+    renderDialog({ isOpen: false });
+    await flushEffects();
+
+    renderDialog({
+      currentRepoSettings: {
+        ...emptyRepoSettings,
+        includeRegex: "from-parent",
+      },
+    });
+    await flushEffects();
+    await advanceAutosaveDelay();
+
+    expect((await getIncludeInput()).value).toBe("from-parent");
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
   it("refreshes after a filter save that finishes after the dialog closes", async () => {
     let resolveSave: ((value: { success: true }) => void) | undefined;
     updateSettingsMock.mockReturnValueOnce(
@@ -386,7 +428,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     await flushEffects();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
+      await vi.advanceTimersByTimeAsync(750);
       await Promise.resolve();
     });
     expect(updateSettingsMock).toHaveBeenCalledOnce();
@@ -406,7 +448,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     });
   });
 
-  it("reconciles a save from an earlier dialog session after reopening", async () => {
+  it("preserves an in-flight draft when the dialog reopens", async () => {
     let resolveSave: ((value: { success: true }) => void) | undefined;
     updateSettingsMock.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -421,7 +463,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     });
     await flushEffects();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
+      await vi.advanceTimersByTimeAsync(750);
       await Promise.resolve();
     });
     expect(updateSettingsMock).toHaveBeenCalledOnce();
@@ -430,6 +472,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     await flushEffects();
     renderDialog();
     await flushEffects();
+    expect((await getIncludeInput()).value).toBe("discarded-filter");
 
     await act(async () => {
       resolveSave?.({ success: true });
@@ -437,15 +480,94 @@ describe("RepoSettingsDialog autosave behaviour", () => {
       await Promise.resolve();
     });
     await advanceAutosaveDelay();
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+  });
 
-    await expectEventually(() => {
-      expect(updateSettingsMock).toHaveBeenCalledTimes(2);
+  it("keeps a close-flushed snapshot immediate when reopening during an in-flight save", async () => {
+    let resolveFirstSave: ((value: { success: true }) => void) | undefined;
+    updateSettingsMock
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirstSave = resolve;
+        }),
+      )
+      .mockResolvedValueOnce({ success: true });
+    const setIsOpen = vi.fn();
+
+    renderDialog({ setIsOpen });
+    const input = await getIncludeInput();
+    await act(async () => {
+      setInputValue(input, "first-filter");
     });
-    expect(updateSettingsMock).toHaveBeenNthCalledWith(
-      2,
+    await flushEffects();
+    await advanceAutosaveDelay();
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      setInputValue(input, "latest-filter");
+    });
+    await flushEffects();
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="close-repository-settings"]',
+        )
+        ?.click();
+    });
+    expect(setIsOpen).toHaveBeenCalledWith(false);
+
+    renderDialog({ isOpen: false, setIsOpen });
+    await flushEffects();
+    renderDialog({ setIsOpen });
+    await flushEffects();
+
+    await act(async () => {
+      resolveFirstSave?.({ success: true });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(updateSettingsMock).toHaveBeenCalledTimes(2);
+    expect(updateSettingsMock).toHaveBeenLastCalledWith(
       "owner/repo",
-      expect.objectContaining({ includeRegex: undefined }),
+      expect.objectContaining({ includeRegex: "latest-filter" }),
     );
+  });
+
+  it("drops a waiting snapshot when the draft returns to the saved snapshot", async () => {
+    let resolveFirstSave: ((value: { success: true }) => void) | undefined;
+    updateSettingsMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFirstSave = resolve;
+      }),
+    );
+
+    renderDialog();
+    const input = await getIncludeInput();
+    await act(async () => {
+      setInputValue(input, "saved-filter");
+    });
+    await flushEffects();
+    await advanceAutosaveDelay();
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      setInputValue(input, "stale-filter");
+    });
+    await flushEffects();
+    await act(async () => {
+      resolveFirstSave?.({ success: true });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      setInputValue(input, "saved-filter");
+    });
+    await flushEffects();
+    await advanceAutosaveDelay(1000);
+
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
   });
 
   it("shows success and commits settings when autosave succeeds", async () => {
@@ -509,6 +631,35 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     expect(onDisplayNameChange).toHaveBeenCalledWith("Production Monitor");
   });
 
+  it("sends a serializable empty value when clearing the display name", async () => {
+    renderDialog({
+      currentRepoSettings: {
+        ...emptyRepoSettings,
+        displayName: "Production Monitor",
+      },
+    });
+    await flushEffects();
+
+    const input = container.querySelector<HTMLInputElement>(
+      'input[maxlength="100"]',
+    );
+    expect(input).not.toBeNull();
+    expect(input?.value).toBe("Production Monitor");
+
+    await act(async () => {
+      if (input) setInputValue(input, "");
+    });
+    await flushEffects();
+    await advanceAutosaveDelay();
+
+    await expectEventually(() => {
+      expect(updateSettingsMock).toHaveBeenCalledWith(
+        "owner/repo",
+        expect.objectContaining({ displayName: "" }),
+      );
+    });
+  });
+
   it("autosaves pinning and publishes it after the dialog closes", async () => {
     const onPinnedChange = vi.fn();
     renderDialog({ onPinnedChange });
@@ -525,7 +676,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     await act(async () => {
       (checkbox as HTMLButtonElement | null)?.click();
     });
-    await advanceAutosaveDelay();
+    await flushEffects();
 
     await expectEventually(() => {
       expect(updateSettingsMock).toHaveBeenCalledWith(
@@ -538,6 +689,351 @@ describe("RepoSettingsDialog autosave behaviour", () => {
     renderDialog({ isOpen: false, onPinnedChange });
     await flushEffects();
     expect(onPinnedChange).toHaveBeenCalledWith(true);
+  });
+
+  it("flushes a valid text change when the dialog closes", async () => {
+    const setIsOpen = vi.fn();
+    renderDialog({ setIsOpen });
+    const input = await getIncludeInput();
+    await act(async () => {
+      setInputValue(input, "^v$");
+    });
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="close-repository-settings"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(setIsOpen).toHaveBeenCalledWith(false);
+    expect(updateSettingsMock).toHaveBeenCalledWith(
+      "owner/repo",
+      expect.objectContaining({ includeRegex: "^v$" }),
+    );
+  });
+
+  it("keeps the dialog open when unsaved settings are invalid", async () => {
+    const setIsOpen = vi.fn();
+    renderDialog({ setIsOpen });
+    const input = await getIncludeInput();
+    await act(async () => {
+      setInputValue(input, "(");
+    });
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="close-repository-settings"]',
+        )
+        ?.click();
+      await vi.advanceTimersByTimeAsync(20);
+    });
+
+    expect(setIsOpen).not.toHaveBeenCalled();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain(
+      "Fix invalid settings before closing",
+    );
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("clears the close warning after restoring a valid saved value", async () => {
+    const setIsOpen = vi.fn();
+    renderDialog({ setIsOpen });
+    const input = await getIncludeInput();
+    await act(async () => {
+      setInputValue(input, "(");
+    });
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="close-repository-settings"]',
+        )
+        ?.click();
+      await vi.advanceTimersByTimeAsync(20);
+    });
+    expect(container.textContent).toContain(
+      "Fix invalid settings before closing",
+    );
+
+    await act(async () => {
+      setInputValue(input, "");
+    });
+    await flushEffects();
+
+    expect(container.textContent).not.toContain(
+      "Fix invalid settings before closing",
+    );
+  });
+
+  it("blocks closing and focuses an invalid display name", async () => {
+    const setIsOpen = vi.fn();
+    renderDialog({ setIsOpen });
+    const displayNameInput = container.querySelector<HTMLInputElement>(
+      'input[maxlength="100"]',
+    );
+    expect(displayNameInput).not.toBeNull();
+
+    await act(async () => {
+      if (displayNameInput) setInputValue(displayNameInput, "bad\u0007name");
+    });
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="close-repository-settings"]',
+        )
+        ?.click();
+      await vi.advanceTimersByTimeAsync(20);
+    });
+
+    expect(setIsOpen).not.toHaveBeenCalled();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Enter a valid display name");
+    expect(document.activeElement).toBe(displayNameInput);
+  });
+
+  it("commits a pending tag when the dialog closes", async () => {
+    const setIsOpen = vi.fn();
+    renderDialog({ setIsOpen });
+    const tagInput = container.querySelector<HTMLInputElement>(
+      'input[role="combobox"]',
+    );
+    expect(tagInput).not.toBeNull();
+
+    await act(async () => {
+      if (tagInput) setInputValue(tagInput, "critical");
+    });
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="close-repository-settings"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(setIsOpen).toHaveBeenCalledWith(false);
+    expect(updateSettingsMock).toHaveBeenCalledWith(
+      "owner/repo",
+      expect.objectContaining({ tags: ["critical"] }),
+    );
+  });
+
+  it("blocks closing and focuses an invalid pending tag", async () => {
+    const setIsOpen = vi.fn();
+    renderDialog({ setIsOpen });
+    const tagInput = container.querySelector<HTMLInputElement>(
+      'input[role="combobox"]',
+    );
+    expect(tagInput).not.toBeNull();
+
+    await act(async () => {
+      if (tagInput) setInputValue(tagInput, "x".repeat(41));
+    });
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="close-repository-settings"]',
+        )
+        ?.click();
+      await vi.advanceTimersByTimeAsync(20);
+    });
+
+    expect(setIsOpen).not.toHaveBeenCalled();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(tagInput);
+  });
+
+  it("blocks closing when a rejected comma-separated tag leaves an empty input", async () => {
+    const setIsOpen = vi.fn();
+    renderDialog({ setIsOpen });
+    const tagInput = container.querySelector<HTMLInputElement>(
+      'input[role="combobox"]',
+    );
+    expect(tagInput).not.toBeNull();
+
+    await act(async () => {
+      if (tagInput) setInputValue(tagInput, `${"x".repeat(41)},`);
+    });
+    await flushEffects();
+    expect(tagInput?.value).toBe("");
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="close-repository-settings"]',
+        )
+        ?.click();
+      await vi.advanceTimersByTimeAsync(20);
+    });
+
+    expect(setIsOpen).not.toHaveBeenCalled();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(tagInput);
+  });
+
+  it("blocks closing when an active interval field is empty", async () => {
+    const setIsOpen = vi.fn();
+    renderDialog({
+      setIsOpen,
+      currentRepoSettings: {
+        ...emptyRepoSettings,
+        refreshInterval: 60,
+      },
+    });
+    const minuteLabel = Array.from(container.querySelectorAll("label")).find(
+      (label) =>
+        label.textContent === "SettingsForm.refresh_interval_minutes_label",
+    );
+    const minuteInput = minuteLabel?.htmlFor
+      ? (document.getElementById(
+          minuteLabel.htmlFor,
+        ) as HTMLInputElement | null)
+      : null;
+    expect(minuteInput).not.toBeNull();
+
+    await act(async () => {
+      if (minuteInput) setInputValue(minuteInput, "");
+    });
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="close-repository-settings"]',
+        )
+        ?.click();
+      await vi.advanceTimersByTimeAsync(20);
+    });
+
+    expect(setIsOpen).not.toHaveBeenCalled();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(minuteInput);
+  });
+
+  it("requeues a failed snapshot after a temporary validation error", async () => {
+    const setIsOpen = vi.fn();
+    updateSettingsMock
+      .mockResolvedValueOnce({ success: false, error: "save failed" })
+      .mockResolvedValueOnce({ success: true });
+    renderDialog({ setIsOpen });
+    const input = await getIncludeInput();
+
+    await act(async () => {
+      setInputValue(input, "feature");
+    });
+    await flushEffects();
+    await advanceAutosaveDelay();
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      setInputValue(input, "(");
+    });
+    await flushEffects();
+    await act(async () => {
+      setInputValue(input, "feature");
+    });
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="close-repository-settings"]',
+        )
+        ?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(setIsOpen).toHaveBeenCalledWith(false);
+    expect(updateSettingsMock).toHaveBeenCalledTimes(2);
+    expect(updateSettingsMock).toHaveBeenLastCalledWith(
+      "owner/repo",
+      expect.objectContaining({ includeRegex: "feature" }),
+    );
+  });
+
+  it("retries a failed in-flight snapshot after an invalid draft is corrected", async () => {
+    let resolveSave:
+      | ((value: { success: false; error: string }) => void)
+      | undefined;
+    updateSettingsMock
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveSave = resolve;
+        }),
+      )
+      .mockResolvedValueOnce({ success: true });
+    renderDialog();
+    const input = await getIncludeInput();
+
+    await act(async () => {
+      setInputValue(input, "feature");
+    });
+    await flushEffects();
+    await advanceAutosaveDelay();
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      setInputValue(input, "(");
+    });
+    await flushEffects();
+    await act(async () => {
+      resolveSave?.({ success: false, error: "save failed" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      setInputValue(input, "feature");
+    });
+    await flushEffects();
+    await advanceAutosaveDelay(749);
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
+    await advanceAutosaveDelay(1);
+    expect(updateSettingsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not make the next text edit immediate after a no-op reset", async () => {
+    renderDialog();
+    await flushEffects();
+    const automationHeading = Array.from(container.querySelectorAll("h4")).find(
+      (heading) => heading.textContent === "Automation",
+    );
+    const automationSection = automationHeading?.parentElement?.parentElement;
+    const resetButton =
+      automationSection?.querySelector<HTMLButtonElement>("button");
+    expect(resetButton).not.toBeNull();
+
+    await act(async () => {
+      resetButton?.click();
+    });
+    await flushEffects();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+
+    const displayNameInput = container.querySelector<HTMLInputElement>(
+      'input[maxlength="100"]',
+    );
+    await act(async () => {
+      if (displayNameInput) setInputValue(displayNameInput, "Delayed name");
+    });
+    await flushEffects();
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    await advanceAutosaveDelay();
+    expect(updateSettingsMock).toHaveBeenCalledOnce();
   });
 
   it("reorders repository tags with controls and autosaves their order", async () => {

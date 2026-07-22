@@ -56,7 +56,21 @@ test.describe("Global settings offline read-only + autosave pause", () => {
     const rpp = page
       .getByLabel("Number of releases to fetch per repository")
       .or(page.getByLabel("Anzahl der pro Repository abzurufenden Releases"));
-    await rpp.fill("31");
+    const originalRpp = await rpp.inputValue();
+    const changedRpp = originalRpp === "31" ? "32" : "31";
+    await rpp.fill(changedRpp);
     await waitForAutosave(page);
+
+    // Restore shared E2E state and wait for a fresh success indication rather
+    // than accidentally matching the one from the change above.
+    await expect(
+      page.getByText("All changes saved", { exact: true }),
+    ).toHaveCount(0, { timeout: 5000 });
+    await rpp.fill(originalRpp);
+    await rpp.blur();
+    await waitForAutosave(page);
+
+    await page.reload();
+    await expect(rpp).toHaveValue(originalRpp);
   });
 });

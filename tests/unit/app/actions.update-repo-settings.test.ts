@@ -161,7 +161,7 @@ describe("updateRepositorySettingsAction", () => {
     expect(mem.repos[0].etag).toBe('W/"keep"');
   });
 
-  it("clears an explicitly unset display name", async () => {
+  it("clears an explicitly empty display name", async () => {
     mem.repos = [
       {
         id: "o/r",
@@ -172,7 +172,7 @@ describe("updateRepositorySettingsAction", () => {
 
     const { updateRepositorySettingsAction } = await import("@/app/actions");
     const result = await updateRepositorySettingsAction("o/r", {
-      displayName: undefined,
+      displayName: "",
     });
 
     expect(result.success).toBe(true);

@@ -48,8 +48,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   type AutosaveStatus,
-  useDebouncedAutosave,
-} from "@/hooks/use-debounced-autosave";
+  type AutosaveTask,
+  useAutosaveController,
+} from "@/hooks/use-autosave-controller";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { usePathname, useRouter } from "@/i18n/navigation";
@@ -62,6 +63,7 @@ import {
 } from "@/lib/security-release";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import {
+  areSettingsSnapshotsEqual,
   getSettingsReconciliationPatch,
   hasSettingsSnapshotDrift,
   isCacheIntervalInvalid,
@@ -108,6 +110,20 @@ type GlobalAutomationMode = "interval" | "cron";
 
 type IntervalValidationError = RangeValidationError;
 type ReleasesPerPageError = RangeValidationError;
+
+const DEFERRED_GLOBAL_SETTING_KEYS = new Set<keyof AppSettings>([
+  "refreshInterval",
+  "cacheInterval",
+  "releasesPerPage",
+  "parallelRepoFetches",
+  "backgroundCheckCron",
+  "includeRegex",
+  "excludeRegex",
+  "securityHighlightCustomColor",
+  "customSecurityPatterns",
+  "appriseMaxCharacters",
+  "appriseTags",
+]);
 type ParallelRepoFetchError = RangeValidationError;
 type HexColorError = "invalid" | null;
 type SecurityPatternsError = "invalid" | null;
@@ -408,12 +424,24 @@ export function SettingsForm({
   const {
     status: saveStatus,
     setStatus: setSaveStatus,
-    cancel: cancelAutosave,
+    discardPending: discardPendingAutosave,
     schedule: scheduleAutosave,
-  } = useDebouncedAutosave();
+    saveNow: saveAutosaveNow,
+    flush: flushAutosave,
+    pause: pauseAutosave,
+    resume: resumeAutosave,
+  } = useAutosaveController();
   const isInitialMount = React.useRef(true);
+  const previousDraftSettingsRef = React.useRef(currentSettings);
+  const [immediateSaveRevision, requestImmediateSave] = React.useReducer(
+    (revision: number) => revision + 1,
+    0,
+  );
+  const handledImmediateSaveRevisionRef = React.useRef(0);
+  const pendingLocaleNavigationRef = React.useRef<Locale | null>(null);
   const lastSavedSettingsRef = React.useRef(currentSettings);
   const lastSubmittedSettingsRef = React.useRef(currentSettings);
+  const queuedSettingsRef = React.useRef<AppSettings | null>(null);
 
   // Check for saved state after locale change
   React.useEffect(() => {
@@ -423,8 +451,6 @@ export function SettingsForm({
     if (savedAfterLocaleChange === "true") {
       sessionStorage.removeItem("settingsSavedAfterLocaleChange");
       setSaveStatus("success");
-      // Auto-hide success message after 3 seconds
-      setTimeout(() => setSaveStatus("idle"), 3000);
     }
   }, [setSaveStatus]);
 
@@ -600,16 +626,138 @@ export function SettingsForm({
     newSettings.backgroundCheckCron,
   ]);
 
-  // Auto-Save Effect
-  // biome-ignore lint/correctness/useExhaustiveDependencies: router, toast, pathname, and t are stable functions from hooks
+  const hasEmptyIntervalFields =
+    automationMode === "interval" &&
+    [days, hours, minutes].some((value) => value === "");
+  const hasEmptyCronFields =
+    automationMode === "cron" &&
+    (cronPreset === "custom"
+      ? cronExpression.trim() === ""
+      : cronTime.trim() === "" ||
+        (cronPreset === "weekly" && cronWeekday.trim() === ""));
+  const hasEmptyFields =
+    hasEmptyIntervalFields ||
+    hasEmptyCronFields ||
+    [
+      cacheDays,
+      cacheHours,
+      cacheMinutes,
+      releasesPerPage,
+      parallelRepoFetches,
+      appriseMaxCharacters,
+    ].some((value) => value === "");
+  const hasValidationErrors = Boolean(
+    hasEmptyFields ||
+      intervalError ||
+      isCacheInvalid ||
+      releasesPerPageError ||
+      parallelRepoFetchesError ||
+      includeRegexError ||
+      excludeRegexError ||
+      securityHighlightCustomColorError ||
+      customSecurityPatternsError ||
+      cronError,
+  );
+
+  const createSaveTask = React.useCallback(
+    (settingsSnapshot: AppSettings): AutosaveTask =>
+      async () => {
+        try {
+          if (
+            queuedSettingsRef.current &&
+            areSettingsSnapshotsEqual(
+              queuedSettingsRef.current,
+              settingsSnapshot,
+            )
+          ) {
+            queuedSettingsRef.current = null;
+          }
+          const settingsPatch = getSettingsReconciliationPatch(
+            lastSavedSettingsRef.current,
+            lastSubmittedSettingsRef.current,
+            settingsSnapshot,
+          );
+          lastSubmittedSettingsRef.current = settingsSnapshot;
+          const result = await updateSettingsPatchAction(settingsPatch);
+
+          if (!result.success) {
+            toast({
+              title: result.message.title,
+              description: result.message.description,
+              variant: "destructive",
+            });
+            return false;
+          }
+
+          lastSavedSettingsRef.current = settingsSnapshot;
+          lastSubmittedSettingsRef.current = settingsSnapshot;
+          pendingLocaleNavigationRef.current =
+            settingsSnapshot.locale !== currentSettings.locale
+              ? settingsSnapshot.locale
+              : null;
+          return true;
+        } catch (error: unknown) {
+          if (reloadIfServerActionStale(error)) return true;
+          toast({
+            title: t("toast_error_title"),
+            description: t("autosave_error"),
+            variant: "destructive",
+          });
+          return false;
+        }
+      },
+    [currentSettings.locale, t, toast],
+  );
+
   React.useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
+    if (!isOnline) {
+      pauseAutosave();
       return;
     }
+    resumeAutosave();
+  }, [isOnline, pauseAutosave, resumeAutosave]);
 
-    if (!isOnline) {
-      cancelAutosave("paused");
+  React.useEffect(() => {
+    if (saveStatus !== "success") return;
+    if (hasValidationErrors) {
+      setSaveStatus("idle");
+      return;
+    }
+    const targetLocale = pendingLocaleNavigationRef.current;
+    if (targetLocale) {
+      if (newSettings.locale !== targetLocale) {
+        setSaveStatus("idle");
+        return;
+      }
+      pendingLocaleNavigationRef.current = null;
+      sessionStorage.setItem("settingsSavedAfterLocaleChange", "true");
+      router.push(pathname, { locale: targetLocale });
+      return;
+    }
+    const timer = window.setTimeout(() => setSaveStatus("idle"), 3000);
+    return () => window.clearTimeout(timer);
+  }, [
+    hasValidationErrors,
+    newSettings.locale,
+    pathname,
+    router,
+    saveStatus,
+    setSaveStatus,
+  ]);
+
+  // Auto-Save Effect
+  React.useEffect(() => {
+    const previousDraftSettings = previousDraftSettingsRef.current;
+    previousDraftSettingsRef.current = newSettings;
+    const saveImmediatelyRequested =
+      handledImmediateSaveRevisionRef.current !== immediateSaveRevision;
+    handledImmediateSaveRevisionRef.current = immediateSaveRevision;
+
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      lastSavedSettingsRef.current = newSettings;
+      lastSubmittedSettingsRef.current = newSettings;
+      queuedSettingsRef.current = null;
       return;
     }
 
@@ -620,126 +768,89 @@ export function SettingsForm({
         newSettings,
       )
     ) {
+      if (
+        queuedSettingsRef.current &&
+        !areSettingsSnapshotsEqual(queuedSettingsRef.current, newSettings)
+      ) {
+        queuedSettingsRef.current = null;
+        discardPendingAutosave("idle");
+      }
+      if (
+        !hasValidationErrors &&
+        pendingLocaleNavigationRef.current === newSettings.locale
+      ) {
+        setSaveStatus("success");
+      }
       return;
     }
 
-    const hasEmptyIntervalFields =
-      automationMode === "interval" &&
-      [days, hours, minutes].some((val) => val === "");
-    const hasEmptyCronFields =
-      automationMode === "cron" &&
-      (cronPreset === "custom"
-        ? cronExpression.trim() === ""
-        : cronTime.trim() === "" ||
-          (cronPreset === "weekly" && cronWeekday.trim() === ""));
-    const hasEmptyFields =
-      hasEmptyIntervalFields ||
-      hasEmptyCronFields ||
-      [
-        cacheDays,
-        cacheHours,
-        cacheMinutes,
-        releasesPerPage,
-        parallelRepoFetches,
-        appriseMaxCharacters,
-      ].some((val) => val === "");
+    if (hasValidationErrors) {
+      queuedSettingsRef.current = null;
+      discardPendingAutosave("idle");
+      return;
+    }
 
     if (
-      hasEmptyFields ||
-      intervalError ||
-      isCacheInvalid ||
-      releasesPerPageError ||
-      parallelRepoFetchesError ||
-      includeRegexError ||
-      excludeRegexError ||
-      securityHighlightCustomColorError ||
-      customSecurityPatternsError ||
-      cronError
+      queuedSettingsRef.current &&
+      !areSettingsSnapshotsEqual(queuedSettingsRef.current, newSettings) &&
+      areSettingsSnapshotsEqual(lastSubmittedSettingsRef.current, newSettings)
     ) {
-      cancelAutosave("idle");
+      queuedSettingsRef.current = null;
+      discardPendingAutosave("idle");
       return;
     }
 
-    return scheduleAutosave(async ({ isCurrent, setStatus }) => {
-      try {
-        const settingsPatch = getSettingsReconciliationPatch(
-          lastSavedSettingsRef.current,
-          lastSubmittedSettingsRef.current,
-          newSettings,
-        );
-        lastSubmittedSettingsRef.current = newSettings;
-        const result = await updateSettingsPatchAction(settingsPatch);
-
-        if (!isCurrent()) return;
-
-        if (result.success) {
-          lastSavedSettingsRef.current = newSettings;
-          lastSubmittedSettingsRef.current = newSettings;
-          // On locale change: save flag and redirect immediately
-          if (newSettings.locale !== currentSettings.locale) {
-            sessionStorage.setItem("settingsSavedAfterLocaleChange", "true");
-            router.push(pathname, { locale: newSettings.locale });
-            return;
-          }
-
-          // Normal save: show success status and auto-hide after 3 seconds
-          setStatus("success");
-          setTimeout(() => {
-            setStatus("idle");
-          }, 3000);
-        } else {
-          setStatus("error");
-          // Toast only on error
-          toast({
-            title: result.message.title,
-            description: result.message.description,
-            variant: "destructive",
-          });
-        }
-      } catch (error: unknown) {
-        if (!isCurrent()) return;
-        if (reloadIfServerActionStale(error)) {
-          return;
-        }
-        setStatus("error");
-        // Toast only on error
-        toast({
-          title: t("toast_error_title"),
-          description: t("autosave_error"),
-          variant: "destructive",
-        });
-      }
-    });
+    const changedKeys = (
+      Object.keys(newSettings) as Array<keyof AppSettings>
+    ).filter(
+      (key) =>
+        !areSettingsSnapshotsEqual(
+          previousDraftSettings[key],
+          newSettings[key],
+        ),
+    );
+    const saveImmediately =
+      saveImmediatelyRequested ||
+      (changedKeys.length > 0 &&
+        changedKeys.every((key) => !DEFERRED_GLOBAL_SETTING_KEYS.has(key)));
+    const task = createSaveTask(newSettings);
+    queuedSettingsRef.current = newSettings;
+    if (saveImmediately) saveAutosaveNow(task);
+    else scheduleAutosave(task);
   }, [
     newSettings,
-    days,
-    hours,
-    minutes,
-    automationMode,
-    cronPreset,
-    cronTime,
-    cronWeekday,
-    cronExpression,
-    cacheDays,
-    cacheHours,
-    cacheMinutes,
-    releasesPerPage,
-    parallelRepoFetches,
-    intervalError,
-    isCacheInvalid,
-    releasesPerPageError,
-    parallelRepoFetchesError,
-    includeRegexError,
-    excludeRegexError,
-    securityHighlightCustomColorError,
-    customSecurityPatternsError,
-    cronError,
-    appriseMaxCharacters,
-    isOnline,
-    currentSettings.locale,
-    cancelAutosave,
+    immediateSaveRevision,
+    hasValidationErrors,
+    discardPendingAutosave,
+    createSaveTask,
+    saveAutosaveNow,
     scheduleAutosave,
+    setSaveStatus,
   ]);
+
+  const handleAutosaveBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (
+      !hasValidationErrors &&
+      (event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement)
+    ) {
+      flushAutosave();
+    }
+  };
+
+  const handleAutosaveKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (
+      !hasValidationErrors &&
+      !event.defaultPrevented &&
+      event.key === "Enter" &&
+      event.target instanceof HTMLInputElement &&
+      event.target.type !== "color"
+    ) {
+      flushAutosave();
+    }
+  };
 
   const handleChannelChange = (channel: ReleaseChannel) => {
     const newChannels = toggleReleaseChannel(channels, channel);
@@ -793,7 +904,13 @@ export function SettingsForm({
     <>
       <FloatingSaveIndicator status={saveStatus} />
 
-      <div className="mx-auto max-w-2xl space-y-8">
+      {/* Delegated handlers give every text-like field consistent blur/Enter saving. */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: child form controls remain the interactive targets */}
+      <div
+        className="mx-auto max-w-2xl space-y-8"
+        onBlur={handleAutosaveBlur}
+        onKeyDown={handleAutosaveKeyDown}
+      >
         <Card>
           <CardHeader>
             <CardDescription>{t("description")}</CardDescription>
@@ -805,7 +922,7 @@ export function SettingsForm({
                 value={timeFormat}
                 onValueChange={(value: TimeFormat) => setTimeFormat(value)}
                 className="flex items-center gap-4"
-                disabled={saveStatus === "saving" || !isOnline}
+                disabled={!isOnline}
               >
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="12h" id={ids.timeFormat12h} />
@@ -826,7 +943,7 @@ export function SettingsForm({
               <Select
                 value={locale}
                 onValueChange={(value: Locale) => setLocale(value)}
-                disabled={saveStatus === "saving" || !isOnline}
+                disabled={!isOnline}
               >
                 <SelectTrigger
                   id={ids.languageSelect}
@@ -849,7 +966,7 @@ export function SettingsForm({
                 onValueChange={(value: ReleaseSortOrder) =>
                   setReleaseSortOrder(value)
                 }
-                disabled={saveStatus === "saving" || !isOnline}
+                disabled={!isOnline}
               >
                 <SelectTrigger
                   id={ids.releaseSortOrder}
@@ -889,7 +1006,7 @@ export function SettingsForm({
                   onValueChange={(value) =>
                     setProviderSortOrder(deserializeProviderSortOrder(value))
                   }
-                  disabled={saveStatus === "saving" || !isOnline}
+                  disabled={!isOnline}
                 >
                   <SelectTrigger
                     id={ids.providerSortOrder}
@@ -922,7 +1039,7 @@ export function SettingsForm({
                   onCheckedChange={(checked) =>
                     setShowAcknowledge(Boolean(checked))
                   }
-                  disabled={saveStatus === "saving" || !isOnline}
+                  disabled={!isOnline}
                   className="mt-1"
                 />
                 <div className="grid gap-1.5 leading-none">
@@ -952,9 +1069,7 @@ export function SettingsForm({
                     onCheckedChange={(checked) =>
                       setShowMarkAsNew(Boolean(checked))
                     }
-                    disabled={
-                      saveStatus === "saving" || !showAcknowledge || !isOnline
-                    }
+                    disabled={!showAcknowledge || !isOnline}
                     className="mt-1"
                   />
                   <div className="grid gap-1.5 leading-none">
@@ -977,7 +1092,7 @@ export function SettingsForm({
                   onCheckedChange={(checked) =>
                     setShowProviderPrefixInRepoId(Boolean(checked))
                   }
-                  disabled={saveStatus === "saving" || !isOnline}
+                  disabled={!isOnline}
                   className="mt-1"
                 />
                 <div className="grid gap-1.5 leading-none">
@@ -999,7 +1114,7 @@ export function SettingsForm({
                   onCheckedChange={(checked) =>
                     setShowProviderDomainInRepoId(Boolean(checked))
                   }
-                  disabled={saveStatus === "saving" || !isOnline}
+                  disabled={!isOnline}
                   className="mt-1"
                 />
                 <div className="grid gap-1.5 leading-none">
@@ -1021,7 +1136,7 @@ export function SettingsForm({
                   onCheckedChange={(checked) =>
                     setRepositoryFormExpanded(Boolean(checked))
                   }
-                  disabled={saveStatus === "saving" || !isOnline}
+                  disabled={!isOnline}
                   className="mt-1"
                 />
                 <div className="grid gap-1.5 leading-none">
@@ -1055,7 +1170,7 @@ export function SettingsForm({
                 onCheckedChange={(checked) =>
                   setPrioritizeNewSecurityReleases(Boolean(checked))
                 }
-                disabled={saveStatus === "saving" || !isOnline}
+                disabled={!isOnline}
                 className="mt-1"
               />
               <div className="grid gap-1.5 leading-none">
@@ -1081,7 +1196,7 @@ export function SettingsForm({
                   )
                 }
                 className="grid gap-2 sm:grid-cols-2"
-                disabled={saveStatus === "saving" || !isOnline}
+                disabled={!isOnline}
               >
                 {securityHighlightColorOptions.map((option) => {
                   const optionId = `${ids.securityHighlightColor}-${option.value}`;
@@ -1134,12 +1249,13 @@ export function SettingsForm({
                           ? securityHighlightCustomColor
                           : defaultSecurityHighlightCustomColor
                       }
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        requestImmediateSave();
                         setSecurityHighlightCustomColor(
                           event.target.value.toLowerCase(),
-                        )
-                      }
-                      disabled={saveStatus === "saving" || !isOnline}
+                        );
+                      }}
+                      disabled={!isOnline}
                       className="h-10 w-16 p-1"
                     />
                   </div>
@@ -1154,7 +1270,7 @@ export function SettingsForm({
                         setSecurityHighlightCustomColor(event.target.value)
                       }
                       placeholder={defaultSecurityHighlightCustomColor}
-                      disabled={saveStatus === "saving" || !isOnline}
+                      disabled={!isOnline}
                       className={cn(
                         !!securityHighlightCustomColorError &&
                           "border-destructive focus-visible:ring-destructive",
@@ -1181,7 +1297,7 @@ export function SettingsForm({
                 onCheckedChange={(checked) =>
                   setConfirmSecurityAcknowledge(Boolean(checked))
                 }
-                disabled={saveStatus === "saving" || !isOnline}
+                disabled={!isOnline}
                 className="mt-1"
               />
               <div className="grid gap-1.5 leading-none">
@@ -1205,7 +1321,7 @@ export function SettingsForm({
                   onCheckedChange={(checked) =>
                     setIncludeDefaultSecurityPatterns(Boolean(checked))
                   }
-                  disabled={saveStatus === "saving" || !isOnline}
+                  disabled={!isOnline}
                   className="mt-1"
                 />
                 <div className="grid gap-1.5 leading-none">
@@ -1231,7 +1347,7 @@ export function SettingsForm({
                     setCustomSecurityPatterns(event.target.value)
                   }
                   placeholder={t("custom_security_patterns_placeholder")}
-                  disabled={saveStatus === "saving" || !isOnline}
+                  disabled={!isOnline}
                   className={cn(
                     "min-h-32 font-mono text-sm",
                     !!customSecurityPatternsError &&
@@ -1273,7 +1389,7 @@ export function SettingsForm({
                 id={ids.stable}
                 checked={channels.includes("stable")}
                 onCheckedChange={() => handleChannelChange("stable")}
-                disabled={saveStatus === "saving" || !isOnline}
+                disabled={!isOnline}
               />
               <Label
                 htmlFor={ids.stable}
@@ -1289,7 +1405,7 @@ export function SettingsForm({
                   id={ids.prerelease}
                   checked={isPreReleaseChecked}
                   onCheckedChange={() => handleChannelChange("prerelease")}
-                  disabled={saveStatus === "saving" || !isOnline}
+                  disabled={!isOnline}
                 />
                 <Label
                   htmlFor={ids.prerelease}
@@ -1317,11 +1433,7 @@ export function SettingsForm({
                       variant="outline"
                       size="sm"
                       onClick={handleSelectAllPreRelease}
-                      disabled={
-                        !isPreReleaseChecked ||
-                        saveStatus === "saving" ||
-                        !isOnline
-                      }
+                      disabled={!isPreReleaseChecked || !isOnline}
                     >
                       {t("prerelease_select_all")}
                     </Button>
@@ -1330,11 +1442,7 @@ export function SettingsForm({
                       variant="outline"
                       size="sm"
                       onClick={handleDeselectAllPreRelease}
-                      disabled={
-                        !isPreReleaseChecked ||
-                        saveStatus === "saving" ||
-                        !isOnline
-                      }
+                      disabled={!isPreReleaseChecked || !isOnline}
                     >
                       {t("prerelease_deselect_all")}
                     </Button>
@@ -1351,11 +1459,7 @@ export function SettingsForm({
                           onCheckedChange={() =>
                             handlePreReleaseSubChannelChange(subType)
                           }
-                          disabled={
-                            !isPreReleaseChecked ||
-                            saveStatus === "saving" ||
-                            !isOnline
-                          }
+                          disabled={!isPreReleaseChecked || !isOnline}
                         />
                         <Label
                           htmlFor={`prerelease-${subType}`}
@@ -1375,7 +1479,7 @@ export function SettingsForm({
                 id={ids.draft}
                 checked={channels.includes("draft")}
                 onCheckedChange={() => handleChannelChange("draft")}
-                disabled={saveStatus === "saving" || !isOnline}
+                disabled={!isOnline}
               />
               <Label htmlFor={ids.draft} className="font-normal cursor-pointer">
                 {t("release_channel_draft")}
@@ -1397,7 +1501,7 @@ export function SettingsForm({
                 value={includeRegex}
                 onChange={(e) => setIncludeRegex(e.target.value)}
                 placeholder={t("regex_placeholder")}
-                disabled={saveStatus === "saving" || !isOnline}
+                disabled={!isOnline}
                 className={cn(
                   !!includeRegexError &&
                     "border-destructive focus-visible:ring-destructive",
@@ -1418,7 +1522,7 @@ export function SettingsForm({
                 value={excludeRegex}
                 onChange={(e) => setExcludeRegex(e.target.value)}
                 placeholder={t("regex_placeholder")}
-                disabled={saveStatus === "saving" || !isOnline}
+                disabled={!isOnline}
                 className={cn(
                   !!excludeRegexError &&
                     "border-destructive focus-visible:ring-destructive",
@@ -1449,10 +1553,11 @@ export function SettingsForm({
               </Label>
               <Select
                 value={automationMode}
-                onValueChange={(value: GlobalAutomationMode) =>
-                  setAutomationMode(value)
-                }
-                disabled={saveStatus === "saving" || !isOnline}
+                onValueChange={(value: GlobalAutomationMode) => {
+                  requestImmediateSave();
+                  setAutomationMode(value);
+                }}
+                disabled={!isOnline}
               >
                 <SelectTrigger id={ids.automationMode} className="mt-2">
                   <SelectValue />
@@ -1483,7 +1588,7 @@ export function SettingsForm({
                       onChange={(e) => setMinutes(e.target.value)}
                       min={0}
                       max={59}
-                      disabled={saveStatus === "saving" || !isOnline}
+                      disabled={!isOnline}
                       className={cn(
                         !!intervalError &&
                           "border-destructive focus-visible:ring-destructive",
@@ -1501,7 +1606,7 @@ export function SettingsForm({
                       onChange={(e) => setHours(e.target.value)}
                       min={0}
                       max={23}
-                      disabled={saveStatus === "saving" || !isOnline}
+                      disabled={!isOnline}
                       className={cn(
                         !!intervalError &&
                           "border-destructive focus-visible:ring-destructive",
@@ -1519,7 +1624,7 @@ export function SettingsForm({
                       onChange={(e) => setDays(e.target.value)}
                       min={0}
                       max={3650}
-                      disabled={saveStatus === "saving" || !isOnline}
+                      disabled={!isOnline}
                       className={cn(
                         !!intervalError &&
                           "border-destructive focus-visible:ring-destructive",
@@ -1551,8 +1656,11 @@ export function SettingsForm({
                   </Label>
                   <Select
                     value={cronPreset}
-                    onValueChange={(value: CronPreset) => setCronPreset(value)}
-                    disabled={saveStatus === "saving" || !isOnline}
+                    onValueChange={(value: CronPreset) => {
+                      requestImmediateSave();
+                      setCronPreset(value);
+                    }}
+                    disabled={!isOnline}
                   >
                     <SelectTrigger id={ids.cronPreset} className="mt-2">
                       <SelectValue />
@@ -1585,9 +1693,12 @@ export function SettingsForm({
                           pm: t("cron_time_pm"),
                         }}
                         value={cronTime}
-                        onChange={setCronTime}
+                        onChange={(value) => {
+                          requestImmediateSave();
+                          setCronTime(value);
+                        }}
                         timeFormat={timeFormat}
-                        disabled={saveStatus === "saving" || !isOnline}
+                        disabled={!isOnline}
                       />
                     </div>
                     {cronPreset === "weekly" && (
@@ -1597,8 +1708,11 @@ export function SettingsForm({
                         </Label>
                         <Select
                           value={cronWeekday}
-                          onValueChange={setCronWeekday}
-                          disabled={saveStatus === "saving" || !isOnline}
+                          onValueChange={(value) => {
+                            requestImmediateSave();
+                            setCronWeekday(value);
+                          }}
+                          disabled={!isOnline}
                         >
                           <SelectTrigger id={ids.cronWeekday}>
                             <SelectValue />
@@ -1629,7 +1743,7 @@ export function SettingsForm({
                         setCronExpression(event.target.value)
                       }
                       placeholder={defaultCronExpression}
-                      disabled={saveStatus === "saving" || !isOnline}
+                      disabled={!isOnline}
                       className={cn(
                         !!cronError &&
                           "border-destructive focus-visible:ring-destructive",
@@ -1664,7 +1778,7 @@ export function SettingsForm({
                     onChange={(e) => setCacheMinutes(e.target.value)}
                     min={0}
                     max={59}
-                    disabled={saveStatus === "saving" || !isOnline}
+                    disabled={!isOnline}
                     className={cn(
                       isCacheInvalid &&
                         "border-destructive focus-visible:ring-destructive",
@@ -1682,7 +1796,7 @@ export function SettingsForm({
                     onChange={(e) => setCacheHours(e.target.value)}
                     min={0}
                     max={23}
-                    disabled={saveStatus === "saving" || !isOnline}
+                    disabled={!isOnline}
                     className={cn(
                       isCacheInvalid &&
                         "border-destructive focus-visible:ring-destructive",
@@ -1700,7 +1814,7 @@ export function SettingsForm({
                     onChange={(e) => setCacheDays(e.target.value)}
                     min={0}
                     max={3650}
-                    disabled={saveStatus === "saving" || !isOnline}
+                    disabled={!isOnline}
                     className={cn(
                       isCacheInvalid &&
                         "border-destructive focus-visible:ring-destructive",
@@ -1730,7 +1844,7 @@ export function SettingsForm({
                 onChange={(e) => setReleasesPerPage(e.target.value)}
                 min={1}
                 max={1000}
-                disabled={saveStatus === "saving" || !isOnline}
+                disabled={!isOnline}
                 className={cn(
                   "mt-2 w-full sm:w-48",
                   !!releasesPerPageError &&
@@ -1766,7 +1880,7 @@ export function SettingsForm({
                 onChange={(e) => setParallelRepoFetches(e.target.value)}
                 min={1}
                 max={50}
-                disabled={saveStatus === "saving" || !isOnline}
+                disabled={!isOnline}
                 className={cn(
                   "mt-2 w-full sm:w-48",
                   !!parallelRepoFetchesError &&
@@ -1818,9 +1932,7 @@ export function SettingsForm({
                 value={appriseMaxCharacters}
                 onChange={(e) => setAppriseMaxCharacters(e.target.value)}
                 min={0}
-                disabled={
-                  saveStatus === "saving" || !isAppriseConfigured || !isOnline
-                }
+                disabled={!isAppriseConfigured || !isOnline}
                 className="mt-2 w-full sm:w-48"
               />
               {isAppriseConfigured ? (
@@ -1843,9 +1955,7 @@ export function SettingsForm({
                 onValueChange={(value: AppriseFormat) =>
                   setAppriseFormat(value)
                 }
-                disabled={
-                  saveStatus === "saving" || !isAppriseConfigured || !isOnline
-                }
+                disabled={!isAppriseConfigured || !isOnline}
               >
                 <SelectTrigger
                   id={ids.appriseFormat}
@@ -1883,9 +1993,7 @@ export function SettingsForm({
                 type="text"
                 value={appriseTags}
                 onChange={(e) => setAppriseTags(e.target.value)}
-                disabled={
-                  saveStatus === "saving" || !isAppriseConfigured || !isOnline
-                }
+                disabled={!isAppriseConfigured || !isOnline}
                 className="mt-2 w-full"
                 placeholder={t("apprise_tags_placeholder")}
               />
