@@ -1,18 +1,6 @@
-import { expect, test } from "./fixtures/test";
-
-async function login(page) {
-  const username =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
-  const password = process.env.AUTH_PASSWORD || "TestPassword123";
-  await page.goto("/en/login");
-  await page.getByLabel(/email|e-mail/i).fill(username);
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').first().click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-}
+import { expect, test } from "./fixtures/ensureLoggedIn";
 
 test("mobile menu navigates correctly between routes", async ({ page }) => {
-  await login(page);
   await page.setViewportSize({ width: 420, height: 900 });
 
   // Home → Settings → Test Page

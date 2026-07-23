@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import { ensureTestRepo, goOffline, goOnline, login } from "./utils";
 
 test.describe("Remove dialog offline behavior", () => {

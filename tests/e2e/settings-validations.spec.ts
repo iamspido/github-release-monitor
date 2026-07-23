@@ -1,21 +1,9 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/ensureLoggedIn";
 import { assertNoAutosave } from "./utils";
-
-async function login(page) {
-  const username =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
-  const password = process.env.AUTH_PASSWORD || "TestPassword123";
-  await page.goto("/en/login");
-  await page.getByLabel(/email|e-mail/i).fill(username);
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').first().click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-}
 
 test("refresh interval < 1 shows error and blocks autosave", async ({
   page,
 }) => {
-  await login(page);
   await page.goto("/en/settings");
 
   // Set refresh interval to 0 minutes (below minimum)
@@ -35,7 +23,6 @@ test("refresh interval < 1 shows error and blocks autosave", async ({
 });
 
 test("releases per page > 1000 shows inline error", async ({ page }) => {
-  await login(page);
   await page.goto("/en/settings");
 
   const rpp = page

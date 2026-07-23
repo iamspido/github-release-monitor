@@ -1,5 +1,5 @@
-import { expect, test } from "./fixtures/test";
-import { ensureTestRepo, login } from "./utils";
+import { expect, test } from "./fixtures/withTestRepo";
+import { ensureTestRepo, login, waitForAutosave } from "./utils";
 
 test("repo dialog RPP sets Custom badge; Reset All removes it", async ({
   page,
@@ -18,9 +18,7 @@ test("repo dialog RPP sets Custom badge; Reset All removes it", async ({
   const dialog = page.getByRole("dialog");
   const rppInput = dialog.locator('input[type="number"]').first();
 
-  await rppInput.fill("10");
-  // Wait for autosave debounce & save in the dialog
-  await page.waitForTimeout(1700);
+  await waitForAutosave(page, () => rppInput.fill("10"));
 
   // Close dialog (ESC) to trigger refresh
   await page.keyboard.press("Escape");
@@ -34,11 +32,12 @@ test("repo dialog RPP sets Custom badge; Reset All removes it", async ({
     .first()
     .click();
   await page.getByRole("button", { name: "Reset All Settings" }).click();
-  await page
-    .getByRole("alertdialog")
-    .getByRole("button", { name: "Yes, reset all" })
-    .click();
-  await page.waitForTimeout(1700);
+  await waitForAutosave(page, () =>
+    page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Yes, reset all" })
+      .click(),
+  );
   await page.keyboard.press("Escape");
 
   // Custom badge should disappear

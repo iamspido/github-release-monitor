@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import {
   assertNoAutosave,
   ensureTestRepo,

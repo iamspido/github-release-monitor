@@ -1,4 +1,4 @@
-import { expect, type Page, type Request, test } from "./fixtures/test";
+import { expect, type Page, type Request, test } from "./fixtures/withTestRepo";
 import { ensureTestRepo, login, waitForRepoLink } from "./utils";
 
 function trackPostRequestsUntilSettled(page: Page) {

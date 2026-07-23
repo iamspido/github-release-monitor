@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import { ensureTestRepo, login, waitForAutosave } from "./utils";
 
 test("repository version tag pattern persists with highest-version selection", async ({
@@ -16,14 +16,15 @@ test("repository version tag pattern persists with highest-version selection", a
   const dialog = page.getByRole("dialog");
   const strategy = dialog.getByLabel("Release selection");
   await strategy.click();
-  await page.getByRole("option", { name: "Highest version" }).click();
+  await waitForAutosave(page, () =>
+    page.getByRole("option", { name: "Highest version" }).click(),
+  );
 
   const pattern =
     "^docker/(?<version>\\d+(?:\\.\\d+){2,3})-r(?<revision>\\d+)$";
   const patternInput = dialog.getByLabel("Version tag pattern (optional)");
   await expect(patternInput).toBeEnabled();
-  await patternInput.fill(pattern);
-  await waitForAutosave(page);
+  await waitForAutosave(page, () => patternInput.fill(pattern));
 
   await page.keyboard.press("Escape");
   await page.reload();

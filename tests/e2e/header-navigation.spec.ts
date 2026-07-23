@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/ensureLoggedIn";
 import { login } from "./utils";
 
 test("header navigation: Home, Settings, Test routes work", async ({

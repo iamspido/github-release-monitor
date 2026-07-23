@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import {
   ensureTestRepo,
   login,
@@ -21,9 +21,8 @@ test("global include/exclude regex reflected as placeholders in repo dialog", as
     .getByLabel("Exclude Pattern")
     .or(page.getByLabel("Ausschließen-Muster (Exclude)"));
 
-  await includeRegexInput.fill("^foo$");
-  await excludeRegexInput.fill("^bar$");
-  await waitForAutosave(page);
+  await waitForAutosave(page, () => includeRegexInput.fill("^foo$"));
+  await waitForAutosave(page, () => excludeRegexInput.fill("^bar$"));
 
   // Open repo dialog and check placeholders
   await page.goto("/en");

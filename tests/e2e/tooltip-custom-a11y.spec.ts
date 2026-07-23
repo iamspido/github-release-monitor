@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import {
   ensureTestRepo,
   login,
@@ -22,8 +22,7 @@ test("custom badge tooltip is accessible via hover/focus text", async ({
   const dialog = page.getByRole("dialog");
   const rppInput = dialog.locator('input[type="number"]').first();
 
-  await rppInput.fill("9");
-  await waitForAutosave(page);
+  await waitForAutosave(page, () => rppInput.fill("9"));
   await page.keyboard.press("Escape");
 
   // Badge visible

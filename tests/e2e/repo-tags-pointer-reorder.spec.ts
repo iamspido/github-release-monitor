@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import {
   ensureTestRepo,
   login,
@@ -31,13 +31,16 @@ test("repository tags follow the pointer and persist their new order", async ({
     name: /^Remove tag /,
   });
   while ((await existingRemoveButtons.count()) > 0) {
-    await existingRemoveButtons.first().click();
+    await waitForAutosave(page, () => existingRemoveButtons.first().click());
   }
-  await tagInput.fill("first");
-  await tagInput.press("Enter");
-  await tagInput.fill("second");
-  await tagInput.press("Enter");
-  await waitForAutosave(page);
+  await waitForAutosave(page, async () => {
+    await tagInput.fill("first");
+    await tagInput.press("Enter");
+  });
+  await waitForAutosave(page, async () => {
+    await tagInput.fill("second");
+    await tagInput.press("Enter");
+  });
 
   const tagList = dialog.locator("ul").filter({ hasText: "first" });
   const firstLabel = tagList.getByText("first", { exact: true });
@@ -66,13 +69,11 @@ test("repository tags follow the pointer and persist their new order", async ({
     dialog.locator('[data-repository-tag-dragging="true"]'),
   ).toHaveCSS("opacity", "0");
 
-  await page.mouse.up();
+  await waitForAutosave(page, () => page.mouse.up());
   await expect(page.locator('[data-tag-drag-preview="true"]')).toHaveCount(0);
   expect(
     await tagList.locator("li[data-repository-tag-index]").allTextContents(),
   ).toEqual(["second", "first"]);
-  await waitForAutosave(page);
-
   await page.keyboard.press("Escape");
   await page.reload();
   await page

@@ -61,8 +61,7 @@ export async function switchLocaleFromSettings(
   page: Page,
   targetLocale: "en" | "de",
 ): Promise<void> {
-  await selectLocale(page, targetLocale);
-  await waitForAutosave(page);
+  await waitForAutosave(page, () => selectLocale(page, targetLocale));
   await expect(page).toHaveURL(
     new RegExp(settingsPaths[targetLocale].replace(/\//g, "\\/")),
   );
@@ -73,8 +72,8 @@ export async function ensureAppLocale(
   targetLocale: "en" | "de",
 ): Promise<void> {
   await ensureAuthenticated(page);
-  await page.goto("/");
-  await page.waitForLoadState("networkidle");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(/\/(en|de)(\/|$)/);
   const currentLocale = extractLocaleFromUrl(page.url()) ?? "en";
   if (currentLocale === targetLocale) {
     return;

@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import {
   ensureTestRepo,
   login,
@@ -107,10 +107,9 @@ test("repository tags filter cards with search, OR semantics, and untagged suppo
     .getByRole("button", { name: "Open settings for this repository" })
     .click();
   const settingsDialog = page.getByRole("dialog");
-  await settingsDialog
-    .getByRole("button", { name: "Remove tag media" })
-    .click();
-  await waitForAutosave(page);
+  await waitForAutosave(page, () =>
+    settingsDialog.getByRole("button", { name: "Remove tag media" }).click(),
+  );
   await expect(settingsDialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(settingsDialog).toHaveCount(0);
@@ -186,10 +185,9 @@ test("clears a tag filter after its last matching tag is removed", async ({
     .getByRole("button", { name: "Open settings for this repository" })
     .click();
   const settingsDialog = page.getByRole("dialog");
-  await settingsDialog
-    .getByRole("button", { name: "Remove tag last-tag" })
-    .click();
-  await waitForAutosave(page);
+  await waitForAutosave(page, () =>
+    settingsDialog.getByRole("button", { name: "Remove tag last-tag" }).click(),
+  );
   await page.keyboard.press("Escape");
 
   await expect(settingsDialog).toHaveCount(0);

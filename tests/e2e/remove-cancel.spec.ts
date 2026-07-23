@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import { ensureTestRepo, login, waitForRepoLink } from "./utils";
 
 test("remove dialog cancel keeps the repository card", async ({ page }) => {

@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import {
   ensureTestRepo,
   login,
@@ -17,8 +17,7 @@ test("global releases-per-page persists and reflects in repo dialog placeholder"
   const releasesPerPageInput = page
     .getByLabel("Number of releases to fetch per repository")
     .or(page.getByLabel("Anzahl der pro Repository abzurufenden Releases"));
-  await releasesPerPageInput.fill("55");
-  await waitForAutosave(page);
+  await waitForAutosave(page, () => releasesPerPageInput.fill("55"));
 
   // Open repo dialog and check placeholder reflects 55
   await page.goto("/en");

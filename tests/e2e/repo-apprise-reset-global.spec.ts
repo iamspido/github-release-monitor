@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import { ensureTestRepo, waitForAutosave } from "./utils";
 import { ensureAppLocale } from "./utils/locale";
 
@@ -47,13 +47,13 @@ test("repo apprise format/tags reset-to-global buttons restore global hints", as
     page.getByText("Using individual Apprise settings."),
   ).toBeVisible();
 
-  await formatSelect
-    .locator("..")
-    .getByRole("button", { name: "Reset" })
-    .click();
-  await tagsInput.locator("..").getByRole("button", { name: "Reset" }).click();
+  await waitForAutosave(page, () =>
+    formatSelect.locator("..").getByRole("button", { name: "Reset" }).click(),
+  );
+  await waitForAutosave(page, () =>
+    tagsInput.locator("..").getByRole("button", { name: "Reset" }).click(),
+  );
 
   await expect(tagsInput).toHaveValue("");
   await expect(page.getByText("Using global Apprise settings.")).toBeVisible();
-  await waitForAutosave(page);
 });

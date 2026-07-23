@@ -1,4 +1,8 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import {
+  hasAuthenticationSessionCookie,
+  hasTestRepoBaselineCookie,
+} from "./fixtures/cookies";
 
 // Matches autosave success indicators across EN/DE and short/long variants.
 const AUTOSAVE_SUCCESS_LONG_RE =
@@ -7,7 +11,7 @@ const AUTOSAVE_SUCCESS_SHORT_RE = /^Saved$|^Gespeichert$/;
 const AUTOSAVE_TOAST_RE =
   /Settings updated successfully\.|Einstellungen erfolgreich aktualisiert\./;
 
-export async function waitForAutosave(page: Page, timeoutMs = 8000) {
+async function waitForAutosaveIndicator(page: Page, timeoutMs: number) {
   const statusLocator = page
     .getByRole("status")
     .filter({ hasText: AUTOSAVE_SUCCESS_LONG_RE })
@@ -40,6 +44,33 @@ export async function waitForAutosave(page: Page, timeoutMs = 8000) {
   }
 
   throw new Error("Autosave indicator not visible within timeout");
+}
+
+export async function waitForAutosave(
+  page: Page,
+  action: () => Promise<unknown>,
+  timeoutMs = 8000,
+) {
+  const requestPromise = page.waitForRequest(
+    (request) => {
+      return (
+        request.method() === "POST" &&
+        request.headers()["next-action"] !== undefined
+      );
+    },
+    { timeout: timeoutMs },
+  );
+
+  const [request] = await Promise.all([requestPromise, action()]);
+  const response = await request.response();
+  if (!response) {
+    throw new Error("Autosave server action completed without a response.");
+  }
+  expect(
+    response.ok(),
+    `Autosave server action returned ${response.status()}.`,
+  ).toBe(true);
+  await waitForAutosaveIndicator(page, timeoutMs);
 }
 
 export async function assertNoAutosave(page: Page, waitMs = 1600) {
@@ -84,6 +115,10 @@ export async function waitForTestRepoReady(page: Page, timeoutMs = 8_000) {
 }
 
 export async function ensureTestRepo(page: Page, timeoutMs = 8_000) {
+  if (hasTestRepoBaselineCookie(await page.context().cookies())) {
+    return;
+  }
+
   await page.goto("/en/test");
   await page
     .getByRole("button", {
@@ -198,7 +233,7 @@ export async function goOnline(page: Page, waitMs = 450) {
 
 async function hasSessionCookie(page: Page): Promise<boolean> {
   const cookies = await page.context().cookies();
-  return cookies.some((cookie) => cookie.name === "better-auth.session_token");
+  return hasAuthenticationSessionCookie(cookies);
 }
 
 export async function isLoggedIn(page: Page): Promise<boolean> {

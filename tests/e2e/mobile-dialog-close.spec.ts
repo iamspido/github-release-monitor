@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import { ensureTestRepo, login } from "./utils";
 
 test("mobile: dialog closes on overlay click and focus returns to trigger", async ({

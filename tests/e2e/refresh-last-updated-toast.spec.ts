@@ -1,15 +1,4 @@
-import { expect, test } from "./fixtures/test";
-
-async function login(page) {
-  const u =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
-  const p = process.env.AUTH_PASSWORD || "TestPassword123";
-  await page.goto("/en/login");
-  await page.getByLabel(/email|e-mail/i).fill(u);
-  await page.locator('input[name="password"]').fill(p);
-  await page.locator('button[type="submit"]').first().click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-}
+import { expect, test } from "./fixtures/ensureLoggedIn";
 
 function getLastUpdatedText(page) {
   return page.locator("text=Last updated:");
@@ -18,12 +7,18 @@ function getLastUpdatedText(page) {
 test("Refresh updates last-updated and shows stable toast", async ({
   page,
 }) => {
-  await login(page);
   await page.goto("/en");
   const before = await getLastUpdatedText(page).first().textContent();
 
-  // Wait at least one second to avoid same-second timestamps, then refresh
-  await page.waitForTimeout(1200);
+  // Let a complete second elapse. This remains valid when BASE_URL points to a
+  // server whose clock has a different sub-second offset from the test runner.
+  const refreshNotBefore = Date.now() + 1_050;
+  await expect
+    .poll(() => Date.now(), {
+      timeout: 1_500,
+      intervals: [50],
+    })
+    .toBeGreaterThanOrEqual(refreshNotBefore);
   await page.getByRole("button", { name: "Refresh" }).click();
   // Expect toast (role=status) visible with matching text
   const toast = page

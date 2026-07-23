@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import { ensureTestRepo, login } from "./utils";
 
 test("delete all repositories from settings danger zone", async ({ page }) => {

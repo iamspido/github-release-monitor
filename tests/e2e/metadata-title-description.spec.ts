@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/ensureLoggedIn";
 import { ensureAppLocale } from "./utils/locale";
 
 test("title and description are localized on EN routes", async ({ page }) => {

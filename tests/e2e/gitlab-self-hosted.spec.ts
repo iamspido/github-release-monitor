@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/ensureLoggedIn";
 import { ensureRepositoryFormExpanded, login } from "./utils";
 
 test.describe("GitLab self-hosted repository add flow", () => {

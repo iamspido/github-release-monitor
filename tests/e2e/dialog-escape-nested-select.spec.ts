@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import { ensureTestRepo, login } from "./utils";
 
 test("ESC closes nested Select first, then dialog; focus returns to trigger", async ({

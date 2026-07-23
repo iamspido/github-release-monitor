@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import { ensureTestRepo, login } from "./utils";
 
 test("mark as new shows toast and persists after reload", async ({ page }) => {

@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import { ensureTestRepo, login, waitForAutosave } from "./utils";
 
 test("repo custom settings persist and show badge", async ({ page }) => {
@@ -16,8 +16,7 @@ test("repo custom settings persist and show badge", async ({ page }) => {
   const dialog = page.getByRole("dialog");
   const rppInput = dialog.locator('input[type="number"]').first();
 
-  await rppInput.fill("10");
-  await waitForAutosave(page);
+  await waitForAutosave(page, () => rppInput.fill("10"));
 
   // Close dialog and verify Custom badge
   await page.keyboard.press("Escape");

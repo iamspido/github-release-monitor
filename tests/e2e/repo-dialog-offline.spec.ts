@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import {
   ensureTestRepo,
   goOffline,
@@ -78,8 +78,7 @@ test.describe("Repo dialog offline read-only + autosave pause", () => {
 
     // Make a small change to trigger autosave
     const rpp = dialog.locator('input[type="number"]').first();
-    await rpp.fill("7");
-    await waitForAutosave(page);
+    await waitForAutosave(page, () => rpp.fill("7"));
   });
 
   test("scroll container allows reaching bottom content", async ({ page }) => {

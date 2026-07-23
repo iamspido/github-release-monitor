@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import {
   ensureTestRepo,
   login,
@@ -106,14 +106,14 @@ test("existing repository tags can be searched and added from a compact picker",
   await expect(dialog.getByText("med", { exact: true })).toHaveCount(0);
   await search.focus();
 
-  await page.getByRole("option", { name: "media" }).click();
+  await waitForAutosave(page, () =>
+    page.getByRole("option", { name: "media" }).click(),
+  );
   await expect(dialog).toBeVisible();
   await expect(search).toBeVisible();
   await expect(search).toHaveValue("");
   await expect(dialog.getByText("media", { exact: true })).toBeVisible();
   await expect(page.getByRole("option", { name: "media" })).toHaveCount(0);
-  await waitForAutosave(page);
-
   await search.fill("media");
   await expect(
     page.getByRole("option", { name: "Add “media” as a new tag" }),
@@ -133,13 +133,11 @@ test("existing repository tags can be searched and added from a compact picker",
       name: "Add “settings-new-tag” as a new tag",
     }),
   ).toBeVisible();
-  await search.press("Enter");
+  await waitForAutosave(page, () => search.press("Enter"));
   await expect(
     dialog.getByText("settings-new-tag", { exact: true }),
   ).toBeVisible();
   await expect(search).toHaveValue("");
-  await waitForAutosave(page);
-
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);

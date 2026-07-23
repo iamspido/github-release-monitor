@@ -1,18 +1,6 @@
-import { expect, test } from "./fixtures/test";
-
-async function login(page) {
-  const username =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
-  const password = process.env.AUTH_PASSWORD || "TestPassword123";
-  await page.goto("/en/login");
-  await page.getByLabel(/email|e-mail/i).fill(username);
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').first().click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-}
+import { expect, test } from "./fixtures/ensureLoggedIn";
 
 test("apprise not configured notice and disabled actions", async ({ page }) => {
-  await login(page);
   await page.goto("/en/test");
   await expect(page.getByText("Apprise is not configured.")).toBeVisible();
   await expect(
@@ -30,7 +18,6 @@ test("apprise not configured notice and disabled actions", async ({ page }) => {
 test("send direct test email button is disabled without SMTP config", async ({
   page,
 }) => {
-  await login(page);
   await page.goto("/en/test");
   const btn = page.getByRole("button", { name: "Send Direct Test Email" });
   await expect(btn).toBeDisabled();

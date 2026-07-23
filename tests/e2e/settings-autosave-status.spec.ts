@@ -1,18 +1,6 @@
-import { expect, test } from "./fixtures/test";
-
-async function login(page) {
-  const username =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
-  const password = process.env.AUTH_PASSWORD || "TestPassword123";
-  await page.goto("/en/login");
-  await page.getByLabel(/email|e-mail/i).fill(username);
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').first().click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
-}
+import { expect, test } from "./fixtures/ensureLoggedIn";
 
 test("autosave ends with All changes saved", async ({ page }) => {
-  await login(page);
   await page.goto("/en/settings");
 
   const rpp = page
@@ -29,7 +17,6 @@ test("autosave ends with All changes saved", async ({ page }) => {
 test("export button remains enabled during settings autosave", async ({
   page,
 }) => {
-  await login(page);
   await page.goto("/en/settings");
   // Trigger autosave
   const rpp = page

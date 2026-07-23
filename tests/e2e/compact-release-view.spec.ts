@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import {
   ensureTestRepo,
   login,
@@ -19,12 +19,13 @@ test("compact rows expand from free space and persist before server render", asy
     .first()
     .click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Display name (optional)").fill("Compact status");
+  await waitForAutosave(page, () =>
+    dialog.getByLabel("Display name (optional)").fill("Compact status"),
+  );
   const pinCheckbox = dialog.getByRole("checkbox", { name: "Pin to top" });
   if (!(await pinCheckbox.isChecked())) {
-    await pinCheckbox.click();
+    await waitForAutosave(page, () => pinCheckbox.click());
   }
-  await waitForAutosave(page);
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 

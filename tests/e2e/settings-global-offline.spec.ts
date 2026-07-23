@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/ensureLoggedIn";
 import { goOffline, goOnline, login, waitForAutosave } from "./utils";
 import { ensureAppLocale } from "./utils/locale";
 
@@ -58,17 +58,17 @@ test.describe("Global settings offline read-only + autosave pause", () => {
       .or(page.getByLabel("Anzahl der pro Repository abzurufenden Releases"));
     const originalRpp = await rpp.inputValue();
     const changedRpp = originalRpp === "31" ? "32" : "31";
-    await rpp.fill(changedRpp);
-    await waitForAutosave(page);
+    await waitForAutosave(page, () => rpp.fill(changedRpp));
 
     // Restore shared E2E state and wait for a fresh success indication rather
     // than accidentally matching the one from the change above.
     await expect(
       page.getByText("All changes saved", { exact: true }),
     ).toHaveCount(0, { timeout: 5000 });
-    await rpp.fill(originalRpp);
-    await rpp.blur();
-    await waitForAutosave(page);
+    await waitForAutosave(page, async () => {
+      await rpp.fill(originalRpp);
+      await rpp.blur();
+    });
 
     await page.reload();
     await expect(rpp).toHaveValue(originalRpp);

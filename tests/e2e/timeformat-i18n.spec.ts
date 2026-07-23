@@ -1,4 +1,5 @@
-import { expect, type Page, test } from "./fixtures/test";
+import { expect, type Page, test } from "./fixtures/ensureLoggedIn";
+import { waitForAutosave } from "./utils";
 import { ensureAppLocale } from "./utils/locale";
 
 const settingsPathsLocale: Record<"en" | "de", string> = {
@@ -26,14 +27,17 @@ async function setFormatAndRead(
   variant: "12" | "24",
 ) {
   await page.goto(settingsPathsLocale[locale]);
-  await page.getByLabel(timeFormatLabel(locale, variant)).click();
-  await page.waitForTimeout(2000);
+  const formatOption = page.getByLabel(timeFormatLabel(locale, variant));
+  if (!(await formatOption.isChecked())) {
+    await waitForAutosave(page, () => formatOption.click());
+  }
   await page.goto(homePaths[locale]);
   await expect(page).toHaveURL(
     new RegExp(`${locale === "en" ? "/en" : "/de"}(\\/)?$`),
   );
-  await page.waitForTimeout(500);
-  const text = await lastUpdatedLocator(page, locale).textContent();
+  const lastUpdated = lastUpdatedLocator(page, locale);
+  await expect(lastUpdated).toBeVisible();
+  const text = await lastUpdated.textContent();
   return text || "";
 }
 

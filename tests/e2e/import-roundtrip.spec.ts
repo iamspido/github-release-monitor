@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import { ensureTestRepo, login, waitForRepoLink } from "./utils";
 
 test("export then import shows 0 new and updates existing without duplicates", async ({

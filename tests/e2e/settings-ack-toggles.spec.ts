@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/withTestRepo";
 import {
   ensureTestRepo,
   login,
@@ -23,8 +23,7 @@ test("disabling 'Mark as seen' hides both action buttons", async ({ page }) => {
     name: /Enable 'Mark as seen'/i,
   });
   // Ensure it ends up unchecked (feature disabled)
-  await ackCheckbox.uncheck();
-  await waitForAutosave(page);
+  await waitForAutosave(page, () => ackCheckbox.uncheck());
 
   // Back to home
   await page.goto("/en");
@@ -37,8 +36,7 @@ test("disabling 'Mark as seen' hides both action buttons", async ({ page }) => {
   );
   // Restore setting (re-enable) to avoid affecting subsequent tests
   await page.goto("/en/settings");
-  await ackCheckbox.check();
-  await waitForAutosave(page);
+  await waitForAutosave(page, () => ackCheckbox.check());
 });
 
 test("disabling 'Mark as new' hides only that button when not new", async ({
@@ -76,8 +74,7 @@ test("disabling 'Mark as new' hides only that button when not new", async ({
   const markNewCheckbox = page.getByRole("checkbox", {
     name: /Show 'Mark as new' button/i,
   });
-  await markNewCheckbox.uncheck();
-  await waitForAutosave(page);
+  await waitForAutosave(page, () => markNewCheckbox.uncheck());
 
   await page.goto("/en");
   await waitForRepoLink(page);
@@ -86,6 +83,5 @@ test("disabling 'Mark as new' hides only that button when not new", async ({
   );
   // Restore setting (re-enable) for subsequent tests
   await page.goto("/en/settings");
-  await markNewCheckbox.check();
-  await waitForAutosave(page);
+  await waitForAutosave(page, () => markNewCheckbox.check());
 });

@@ -2,7 +2,15 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { test as base } from "@playwright/test";
+import {
+  type APIRequestContext,
+  type Browser,
+  test as base,
+} from "@playwright/test";
+import {
+  getTestRepoBaselineCookieName,
+  hasAuthenticationSessionCookie,
+} from "./cookies";
 import {
   getAvailablePort,
   hasServerExited,
@@ -20,16 +28,28 @@ const workerFixtureTimeoutMs = 180_000;
 const testIsolationTimeoutMs = 90_000;
 
 type WorkerServer = {
+  authenticatedStorageState: AuthenticatedStorageState;
   baseURL: string;
-  prepareForTest: () => Promise<void>;
+  hasTestRepoBaseline: boolean;
+  prepareForTest: (testRepo: boolean) => Promise<void>;
 };
 
 type TestFixtures = {
+  authenticated: boolean;
+  testRepo: boolean;
   workerStateIsolation: undefined;
 };
 
 type WorkerFixtures = {
   workerServer: WorkerServer;
+};
+
+type AuthenticatedStorageState = Awaited<
+  ReturnType<APIRequestContext["storageState"]>
+>;
+
+type RequestContextFactory = {
+  newContext: (options: { baseURL: string }) => Promise<APIRequestContext>;
 };
 
 function resolveStandaloneDirectory(): string {
@@ -206,16 +226,100 @@ async function bootstrapWorker(baseURL: string): Promise<void> {
   );
 }
 
+async function authenticateWorker(
+  request: RequestContextFactory,
+  baseURL: string,
+): Promise<AuthenticatedStorageState> {
+  const requestContext = await request.newContext({ baseURL });
+  const identifier =
+    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
+  const password = process.env.AUTH_PASSWORD || "TestPassword123";
+
+  try {
+    const response = await requestContext.post("/api/login/password", {
+      data: { identifier, password, locale: "en" },
+    });
+    if (!response.ok()) {
+      const payload = await response.text().catch(() => "");
+      throw new Error(
+        `Failed to authenticate worker: POST /api/login/password returned ${response.status()}${payload ? ` (${payload})` : ""}.`,
+      );
+    }
+
+    const storageState = await requestContext.storageState();
+    if (!hasAuthenticationSessionCookie(storageState.cookies)) {
+      throw new Error("Worker authentication did not create a session cookie.");
+    }
+    return storageState;
+  } finally {
+    await requestContext.dispose();
+  }
+}
+
+async function seedTestRepository(
+  browser: Browser,
+  baseURL: string,
+  storageState: AuthenticatedStorageState,
+): Promise<void> {
+  const context = await browser.newContext({ baseURL, storageState });
+  try {
+    const page = await context.newPage();
+    await page.goto("/en/test", { waitUntil: "domcontentloaded" });
+    await page
+      .getByRole("button", {
+        name: /Add\/Reset Test Repo|Test-Repo hinzufügen\/zurücksetzen/,
+      })
+      .click();
+    await page
+      .getByText(
+        /The 'test\/test' repository is now ready\.|Das 'test\/test'-Repository ist jetzt bereit\./,
+      )
+      .first()
+      .waitFor({ state: "visible", timeout: 8_000 });
+  } finally {
+    await context.close();
+  }
+}
+
+function addTestRepoBaselineCookie(
+  storageState: AuthenticatedStorageState,
+): AuthenticatedStorageState {
+  const testRepoBaselineCookieName = getTestRepoBaselineCookieName();
+  return {
+    cookies: [
+      ...storageState.cookies,
+      {
+        name: testRepoBaselineCookieName,
+        value: "1",
+        domain: "localhost",
+        path: "/",
+        expires: -1,
+        httpOnly: false,
+        secure: false,
+        sameSite: "Lax",
+      },
+    ],
+    origins: [...storageState.origins],
+  };
+}
+
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  authenticated: [false, { option: true }],
+  testRepo: [false, { option: true }],
   workerServer: [
-    // biome-ignore lint/correctness/noEmptyPattern: Playwright requires a destructured fixtures argument.
-    async ({}, use, workerInfo) => {
+    async ({ browser, playwright }, use, workerInfo) => {
       const configuredBaseURL = process.env.BASE_URL?.replace(/\/$/, "");
       if (configuredBaseURL) {
         // Preserve the previous externally managed, single-server test mode.
         await bootstrapWorker(configuredBaseURL);
+        const authenticatedStorageState = await authenticateWorker(
+          playwright.request,
+          configuredBaseURL,
+        );
         await use({
+          authenticatedStorageState,
           baseURL: configuredBaseURL,
+          hasTestRepoBaseline: false,
           prepareForTest: async () => {},
         });
         return;
@@ -243,7 +347,14 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         logFile = await fs.open(logPath, "a");
         const setupToken = process.env.AUTH_SETUP_TOKEN || "y".repeat(64);
         const dataDirectory = path.join(workerDirectory, "data");
-        const baselineDirectory = path.join(workerDirectory, ".baseline-data");
+        const baselineDirectory = path.join(
+          workerDirectory,
+          ".baseline-authenticated",
+        );
+        const testRepoBaselineDirectory = path.join(
+          workerDirectory,
+          ".baseline-test-repo",
+        );
 
         const startServer = async (bootstrap: boolean) => {
           if (!logFile) {
@@ -357,30 +468,51 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         };
 
         await startServer(true);
+        const authenticatedStorageState = await authenticateWorker(
+          playwright.request,
+          baseURL,
+        );
         await stopCurrentServer();
-        // Snapshot the bootstrapped admin database while SQLite is closed.
+        // Snapshot the authenticated admin database while SQLite is closed.
         if (existsSync(dataDirectory)) {
           await fs.cp(dataDirectory, baselineDirectory, { recursive: true });
         } else {
           await fs.mkdir(baselineDirectory, { recursive: true });
         }
+
+        await startServer(false);
+        await seedTestRepository(browser, baseURL, authenticatedStorageState);
+        await stopCurrentServer();
+        await fs.cp(dataDirectory, testRepoBaselineDirectory, {
+          recursive: true,
+        });
+
+        await fs.rm(dataDirectory, { recursive: true, force: true });
+        await fs.cp(baselineDirectory, dataDirectory, { recursive: true });
         await startServer(false);
 
         let isFirstTest = true;
         await use({
+          authenticatedStorageState,
           get baseURL() {
             return baseURL;
           },
-          prepareForTest: async () => {
-            if (isFirstTest) {
+          hasTestRepoBaseline: true,
+          prepareForTest: async (testRepo) => {
+            if (isFirstTest && !testRepo) {
               isFirstTest = false;
               return;
             }
+            isFirstTest = false;
 
             await stopCurrentServer();
             // Restarting also clears module-level storage caches between tests.
             await fs.rm(dataDirectory, { recursive: true, force: true });
-            await fs.cp(baselineDirectory, dataDirectory, { recursive: true });
+            await fs.cp(
+              testRepo ? testRepoBaselineDirectory : baselineDirectory,
+              dataDirectory,
+              { recursive: true },
+            );
             await startServer(false);
           },
         });
@@ -402,12 +534,32 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   ],
 
   workerStateIsolation: [
-    async ({ workerServer }, use) => {
-      await workerServer.prepareForTest();
+    async ({ testRepo, workerServer }, use) => {
+      await workerServer.prepareForTest(testRepo);
       await use(undefined);
     },
     { auto: true, timeout: testIsolationTimeoutMs },
   ],
+
+  storageState: async (
+    { authenticated, testRepo, workerServer, workerStateIsolation },
+    use,
+  ) => {
+    void workerStateIsolation;
+    if (testRepo && !authenticated) {
+      throw new Error("The testRepo fixture requires authenticated: true.");
+    }
+    if (!authenticated) {
+      await use({ cookies: [], origins: [] });
+      return;
+    }
+
+    await use(
+      testRepo && workerServer.hasTestRepoBaseline
+        ? addTestRepoBaselineCookie(workerServer.authenticatedStorageState)
+        : workerServer.authenticatedStorageState,
+    );
+  },
 
   baseURL: async ({ workerServer, workerStateIsolation }, use) => {
     // Keep the URL lookup ordered after the reset, because every restart gets

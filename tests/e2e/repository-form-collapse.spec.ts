@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/ensureLoggedIn";
 import { login, waitForAutosave } from "./utils";
 
 test("add repositories form collapse state persists and can be restored from settings", async ({
@@ -11,8 +11,7 @@ test("add repositories form collapse state persists and can be restored from set
     name: /Show add repositories form expanded by default/i,
   });
   if (!(await setting.isChecked())) {
-    await setting.check();
-    await waitForAutosave(page);
+    await waitForAutosave(page, () => setting.check());
   }
 
   await page.goto("/en");
@@ -37,8 +36,7 @@ test("add repositories form collapse state persists and can be restored from set
 
   await page.goto("/en/settings");
   await expect(setting).not.toBeChecked();
-  await setting.check();
-  await waitForAutosave(page);
+  await waitForAutosave(page, () => setting.check());
 
   await page.goto("/en");
   await expect(page.locator('textarea[name="urls"]')).toBeVisible();

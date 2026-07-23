@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/ensureLoggedIn";
 import { login } from "./utils";
 
 test("header active state follows route", async ({ page }) => {

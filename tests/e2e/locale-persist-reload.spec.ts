@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { expect, test } from "./fixtures/ensureLoggedIn";
 import { ensureAppLocale } from "./utils/locale";
 
 test("locale persists via settings across reloads", async ({ page }) => {
