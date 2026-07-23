@@ -13,11 +13,13 @@ test.describe("Remove dialog offline behavior", () => {
     page,
   }) => {
     await goOffline(page);
+    await expect(
+      page.getByText("You're offline.", { exact: true }),
+    ).toBeVisible();
+
     const removeBtn = page.getByRole("button", { name: "Remove" }).first();
 
-    // If the trigger is disabled, we are done; otherwise, dialog may open but confirm must be disabled
-    const isDisabled = await removeBtn.isDisabled().catch(() => false);
-    if (isDisabled) {
+    if (await removeBtn.isDisabled()) {
       await expect(page.getByRole("alertdialog")).toHaveCount(0);
     } else {
       await removeBtn.click();
@@ -26,9 +28,8 @@ test.describe("Remove dialog offline behavior", () => {
       await expect(
         dialog.getByRole("button", { name: "Confirm" }),
       ).toBeDisabled();
-      // Close dialog to clean up
       await dialog.getByRole("button", { name: "Cancel" }).click();
-      await expect(page.getByRole("alertdialog")).toHaveCount(0);
+      await expect(dialog).toHaveCount(0);
     }
 
     await goOnline(page);
