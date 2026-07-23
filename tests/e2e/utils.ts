@@ -138,6 +138,12 @@ export async function waitForRepoLink(
   return link;
 }
 
+export async function waitForRepositoryUpdate(page: Page) {
+  await expect(
+    page.getByText(/^(Update Complete|Aktualisierung abgeschlossen)$/),
+  ).toBeVisible();
+}
+
 export async function ensureRepositoryFormExpanded(page: Page) {
   const toggleName = new RegExp(
     [

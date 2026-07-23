@@ -5,6 +5,7 @@ import {
   login,
   removeRepositoriesIfPresent,
   waitForRepoLink,
+  waitForRepositoryUpdate,
 } from "./utils";
 
 const CREATED_REPOSITORIES = [
@@ -22,6 +23,8 @@ test.afterEach(async ({ page }) => {
 test("new and existing tags can be selected while adding repositories", async ({
   page,
 }) => {
+  test.setTimeout(60_000);
+
   await login(page);
   await ensureTestRepo(page);
   await page.goto("/en");
@@ -46,6 +49,7 @@ test("new and existing tags can be selected while adding repositories", async ({
   await expect(
     page.getByText("Import Successful", { exact: true }),
   ).toBeVisible();
+  await waitForRepositoryUpdate(page);
 
   await page.goto("/en");
   await ensureRepositoryFormExpanded(page);
@@ -81,6 +85,7 @@ test("new and existing tags can be selected while adding repositories", async ({
   await expect(
     page.getByText("Repositories Processed", { exact: true }),
   ).toBeVisible();
+  await waitForRepositoryUpdate(page);
 
   await page.goto("/en");
   const repoLink = await waitForRepoLink(page, "add-tag-target/repository");
@@ -120,6 +125,7 @@ test("new and existing tags can be selected while adding repositories", async ({
   await expect(
     page.getByText("Import Successful", { exact: true }),
   ).toBeVisible();
+  await waitForRepositoryUpdate(page);
 
   await page.goto("/en");
   const importedRepoLink = await waitForRepoLink(
@@ -167,6 +173,7 @@ test("shows every matching tag in a scrollable menu outside the add form border"
   await expect(
     page.getByText("Import Successful", { exact: true }),
   ).toBeVisible();
+  await waitForRepositoryUpdate(page);
 
   await page.goto("/en");
   await ensureRepositoryFormExpanded(page);
@@ -276,6 +283,7 @@ test("keeps the import preview open when selected tags exceed the limit", async 
   await expect(
     page.getByText("Import Successful", { exact: true }),
   ).toBeVisible();
+  await waitForRepositoryUpdate(page);
 
   await page.goto("/en");
   await ensureRepositoryFormExpanded(page);
