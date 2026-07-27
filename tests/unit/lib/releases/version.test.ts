@@ -74,9 +74,7 @@ describe("releases/version", () => {
       family: "docker",
       revision: BigInt(10),
     });
-    expect(
-      parseComparableVersion("docker/5.0.0-experimental.1-r2"),
-    ).toEqual({
+    expect(parseComparableVersion("docker/5.0.0-experimental.1-r2")).toEqual({
       core: [BigInt(5), BigInt(0), BigInt(0)],
       prerelease: ["experimental", BigInt(1)],
       family: "docker",

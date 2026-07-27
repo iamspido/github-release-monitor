@@ -112,10 +112,7 @@ describe("releases/provider-pipeline", () => {
   });
 
   it("selects the highest semantic version independently of publication date", () => {
-    const mostRecentlyPublished = release(
-      "v2.9.0",
-      "2024-04-01T00:00:00Z",
-    );
+    const mostRecentlyPublished = release("v2.9.0", "2024-04-01T00:00:00Z");
     const highestVersion = release("v2.10.0", "2024-01-01T00:00:00Z");
     const prerelease = release("v3.0.0-rc.1", "2024-05-01T00:00:00Z", {
       prerelease: true,
@@ -132,10 +129,7 @@ describe("releases/provider-pipeline", () => {
   });
 
   it("selects prefixed abbreviated versions independently of publication date", () => {
-    const mostRecentlyPublished = release(
-      "release-v1",
-      "2026-07-01T00:00:00Z",
-    );
+    const mostRecentlyPublished = release("release-v1", "2026-07-01T00:00:00Z");
     const highestVersion = release("release-v2", "2026-06-01T00:00:00Z");
 
     expect(
@@ -213,16 +207,12 @@ describe("releases/provider-pipeline", () => {
   });
 
   it("uses deterministic ASCII ordering for SemVer prerelease identifiers", () => {
-    const uppercase = release(
-      "v1.0.0-alpha.B",
-      "2024-02-01T00:00:00Z",
-      { prerelease: true },
-    );
-    const lowercase = release(
-      "v1.0.0-alpha.a",
-      "2024-01-01T00:00:00Z",
-      { prerelease: true },
-    );
+    const uppercase = release("v1.0.0-alpha.B", "2024-02-01T00:00:00Z", {
+      prerelease: true,
+    });
+    const lowercase = release("v1.0.0-alpha.a", "2024-01-01T00:00:00Z", {
+      prerelease: true,
+    });
     const prereleaseFilters: EffectiveRepoFilters = {
       ...stableOnlyFilters,
       effectiveReleaseChannels: ["prerelease"],
@@ -254,10 +244,7 @@ describe("releases/provider-pipeline", () => {
   });
 
   it("recognizes prefixed versions without treating dated tags as versions", () => {
-    const datedTag = release(
-      "weekly.2012-03-27",
-      "2026-07-03T00:00:00Z",
-    );
+    const datedTag = release("weekly.2012-03-27", "2026-07-03T00:00:00Z");
     const mixedSeparatorDate = release(
       "weekly.2012-03.27",
       "2026-07-05T00:00:00Z",
@@ -274,10 +261,7 @@ describe("releases/provider-pipeline", () => {
       "build/2026.07.26",
       "2026-07-09T00:00:00Z",
     );
-    const tooManyComponents = release(
-      "9.8.7.6.5",
-      "2026-07-06T00:00:00Z",
-    );
+    const tooManyComponents = release("9.8.7.6.5", "2026-07-06T00:00:00Z");
     const olderStable = release("runtime1.25.10", "2026-07-02T00:00:00Z");
     const latestStable = release("runtime1.26.5", "2026-07-01T00:00:00Z");
     const legacyVersionFamily = release(
@@ -540,10 +524,7 @@ describe("releases/provider-pipeline", () => {
 
   it("selects a Coturn Docker revision through a repository version pattern", () => {
     const sourceRelease = release("4.15.0", "2026-07-01T00:00:00Z");
-    const dockerRelease = release(
-      "docker/4.15.0-r0",
-      "2026-06-01T00:00:00Z",
-    );
+    const dockerRelease = release("docker/4.15.0-r0", "2026-06-01T00:00:00Z");
     const pattern =
       "^docker/(?<version>\\d+(?:\\.\\d+){2,3})-r(?<revision>\\d+)$";
 
@@ -558,18 +539,12 @@ describe("releases/provider-pipeline", () => {
   });
 
   it("compares numeric revisions and four-part extracted versions", () => {
-    const olderRevision = release(
-      "docker/4.15.0.1-r2",
-      "2026-07-03T00:00:00Z",
-    );
+    const olderRevision = release("docker/4.15.0.1-r2", "2026-07-03T00:00:00Z");
     const newerRevision = release(
       "docker/4.15.0.1-r10",
       "2026-07-01T00:00:00Z",
     );
-    const olderVersion = release(
-      "docker/4.15.0.0-r99",
-      "2026-07-04T00:00:00Z",
-    );
+    const olderVersion = release("docker/4.15.0.0-r99", "2026-07-04T00:00:00Z");
     const pattern =
       "^docker/(?<version>\\d+(?:\\.\\d+){2,3})-r(?<revision>\\d+)$";
 
@@ -603,10 +578,7 @@ describe("releases/provider-pipeline", () => {
   });
 
   it("does not interpret words in a matched tag path as prerelease channels", () => {
-    const stable = release(
-      "beta/docker/4.15.0-r0",
-      "2026-07-01T00:00:00Z",
-    );
+    const stable = release("beta/docker/4.15.0-r0", "2026-07-01T00:00:00Z");
     const pattern =
       "^beta/docker/(?<version>\\d+\\.\\d+\\.\\d+)-r(?<revision>\\d+)$";
 

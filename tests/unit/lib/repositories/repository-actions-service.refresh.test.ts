@@ -3,14 +3,16 @@ import type { EnrichedRelease, Repository } from "@/types";
 
 const mocks = vi.hoisted(() => ({
   getLatestReleasesForRepos: vi.fn(),
+  getRestrictedActionError: vi.fn(),
   getRepositories: vi.fn(),
   getSettings: vi.fn(),
+  revalidatePath: vi.fn(),
   saveRepositories: vi.fn(),
   setJobStatus: vi.fn(),
   isRestrictedActionAllowed: vi.fn(),
 }));
 
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("next-intl/server", () => ({
   getLocale: async () => "en",
   getTranslations: async () => (key: string) => key,
@@ -36,7 +38,7 @@ vi.mock("@/lib/runtime/background-tasks", () => ({
   trackBackgroundTask: vi.fn(),
 }));
 vi.mock("@/lib/server-action-helpers", () => ({
-  getRestrictedActionError: vi.fn(),
+  getRestrictedActionError: mocks.getRestrictedActionError,
   isRestrictedActionAllowed: mocks.isRestrictedActionAllowed,
   log: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
   updateReleaseCacheTags: vi.fn(),
@@ -44,9 +46,120 @@ vi.mock("@/lib/server-action-helpers", () => ({
 
 describe("repository-actions-service background refresh commit", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mocks.getSettings.mockResolvedValue(createSettings());
+    mocks.getRestrictedActionError.mockResolvedValue("error_auth_required");
     mocks.isRestrictedActionAllowed.mockResolvedValue(true);
+  });
+
+  it("blocks every internally guarded repository mutation before side effects", async () => {
+    mocks.isRestrictedActionAllowed.mockResolvedValue(false);
+    const actions = await import(
+      "@/lib/repositories/repository-actions-service"
+    );
+    const formData = new FormData();
+    formData.set("urls", "https://github.com/owner/repo");
+
+    await expect(actions.addRepositoriesAction({}, formData)).resolves.toEqual({
+      success: false,
+      error: "error_auth_required",
+    });
+    await expect(actions.importRepositoriesAction([])).resolves.toEqual({
+      success: false,
+      message: "error_auth_required",
+    });
+    await expect(
+      actions.refreshSingleRepositoryAction("github:owner/repo"),
+    ).resolves.toBeUndefined();
+    await expect(
+      actions.removeRepositoryAction("github:owner/repo"),
+    ).resolves.toBeUndefined();
+    await expect(
+      actions.acknowledgeNewReleaseAction("github:owner/repo"),
+    ).resolves.toEqual({
+      success: false,
+      error: "error_auth_required",
+    });
+    await expect(actions.markAsNewAction("github:owner/repo")).resolves.toEqual(
+      {
+        success: false,
+        error: "error_auth_required",
+      },
+    );
+    await expect(
+      actions.updateRepositorySettingsAction("github:owner/repo", {}),
+    ).resolves.toEqual({
+      success: false,
+      error: "error_auth_required",
+    });
+
+    expect(mocks.getRepositories).not.toHaveBeenCalled();
+    expect(mocks.getSettings).not.toHaveBeenCalled();
+    expect(mocks.getLatestReleasesForRepos).not.toHaveBeenCalled();
+    expect(mocks.saveRepositories).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+    expect(mocks.setJobStatus).not.toHaveBeenCalled();
+  });
+
+  it.each(["settings setup", "release fetch"] as const)(
+    "marks a background refresh job as failed when %s throws",
+    async (failurePoint) => {
+      const repository: Repository = {
+        id: "github:owner/repo",
+        url: "https://github.com/owner/repo",
+      };
+      if (failurePoint === "settings setup") {
+        mocks.getSettings.mockRejectedValueOnce(
+          new Error("settings unavailable"),
+        );
+      } else {
+        mocks.getRepositories.mockResolvedValueOnce([repository]);
+        mocks.getLatestReleasesForRepos.mockRejectedValueOnce(
+          new Error("release fetch unavailable"),
+        );
+      }
+      const { refreshMultipleRepositoriesAction } = await import(
+        "@/lib/repositories/repository-actions-service"
+      );
+
+      await refreshMultipleRepositoriesAction([repository.id], "job-error");
+
+      expect(mocks.setJobStatus).toHaveBeenCalledOnce();
+      expect(mocks.setJobStatus).toHaveBeenCalledWith("job-error", "error");
+      expect(mocks.saveRepositories).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects invalid removals without reading or writing repositories", async () => {
+    const { removeRepositoryAction } = await import(
+      "@/lib/repositories/repository-actions-service"
+    );
+
+    await removeRepositoryAction("invalid repository id");
+
+    expect(mocks.getRepositories).not.toHaveBeenCalled();
+    expect(mocks.saveRepositories).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("removes a valid repository and revalidates the home page", async () => {
+    const removed: Repository = {
+      id: "github:owner/repo",
+      url: "https://github.com/owner/repo",
+    };
+    const retained: Repository = {
+      id: "github:other/repo",
+      url: "https://github.com/other/repo",
+    };
+    mocks.getRepositories.mockResolvedValue([removed, retained]);
+    const { removeRepositoryAction } = await import(
+      "@/lib/repositories/repository-actions-service"
+    );
+
+    await removeRepositoryAction(removed.id);
+
+    expect(mocks.saveRepositories).toHaveBeenCalledWith([retained]);
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/");
   });
 
   it("commits a single refresh into a fresh repository snapshot", async () => {

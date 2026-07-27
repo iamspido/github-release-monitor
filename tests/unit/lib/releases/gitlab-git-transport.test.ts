@@ -192,4 +192,62 @@ describe("gitlab git transport parsers", () => {
       message: "First object commit message",
     });
   });
+
+  it("ignores malformed and irrelevant smart HTTP ref packets", () => {
+    const encoder = new TextEncoder();
+    const malformedRefs = new Uint8Array([
+      ...pktLine("missing-space\n"),
+      ...pktLine("not-an-object-id refs/tags/v1.0.0\n"),
+      ...pktLine("1111111111111111111111111111111111111111 refs/heads/main\n"),
+      ...pktLine("2222222222222222222222222222222222222222 refs/tags/\n"),
+    ]);
+
+    expect(parseGitSmartHttpTagRefs(malformedRefs)).toEqual([]);
+    expect(parseGitSmartHttpTagRefs(encoder.encode("zzzzpayload"))).toEqual([]);
+    expect(parseGitSmartHttpTagRefs(encoder.encode("0010short"))).toEqual([]);
+  });
+
+  it("fails closed for malformed upload-pack packet framing", () => {
+    const encoder = new TextEncoder();
+
+    expect(
+      extractPackPayloadFromUploadPackResponse(encoder.encode("zzzzpayload")),
+    ).toBeNull();
+    expect(
+      extractPackPayloadFromUploadPackResponse(encoder.encode("0010short")),
+    ).toBeNull();
+    expect(
+      extractPackPayloadFromUploadPackResponse(
+        pktLineBytes(new Uint8Array([2, ...encoder.encode("progress\n")])),
+      ),
+    ).toBeNull();
+
+    const directPack = encoder.encode("noisePACKpayload");
+    expect(extractPackPayloadFromUploadPackResponse(directPack)).toEqual(
+      encoder.encode("PACKpayload"),
+    );
+  });
+
+  it("returns null for truncated, corrupt, empty, and unsupported packs", () => {
+    const nonPackHeader = new Uint8Array(32);
+    const emptyPack = buildPack([]);
+    const corruptPack = buildSingleObjectPack(1, "message");
+    corruptPack[13] = 0xff;
+    corruptPack[14] = 0xff;
+    const unsupportedObject = buildSingleObjectPack(
+      3,
+      "blob content without metadata",
+    );
+    const metadataLessCommit = buildSingleObjectPack(
+      1,
+      "tree 0000000000000000000000000000000000000000",
+    );
+
+    expect(parseFirstGitObjectMetadataFromPack(new Uint8Array())).toBeNull();
+    expect(parseFirstGitObjectMetadataFromPack(nonPackHeader)).toBeNull();
+    expect(parseFirstGitObjectMetadataFromPack(emptyPack)).toBeNull();
+    expect(parseFirstGitObjectMetadataFromPack(corruptPack)).toBeNull();
+    expect(parseFirstGitObjectMetadataFromPack(unsupportedObject)).toBeNull();
+    expect(parseFirstGitObjectMetadataFromPack(metadataLessCommit)).toBeNull();
+  });
 });

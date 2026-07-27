@@ -158,25 +158,25 @@ describe("auth settings actions", () => {
     expect(changePasswordMock).not.toHaveBeenCalled();
   });
 
-  it.each([
-    " VerySecurePass123 ",
-    "Very SecurePass123",
-  ])("rejects password updates containing whitespace: %j", async (newPassword) => {
-    const { updateAccountPasswordAction } = await import(
-      "@/app/auth/settings-actions"
-    );
+  it.each([" VerySecurePass123 ", "Very SecurePass123"])(
+    "rejects password updates containing whitespace: %j",
+    async (newPassword) => {
+      const { updateAccountPasswordAction } = await import(
+        "@/app/auth/settings-actions"
+      );
 
-    const result = await updateAccountPasswordAction({
-      newPassword,
-    });
+      const result = await updateAccountPasswordAction({
+        newPassword,
+      });
 
-    expect(result).toEqual({
-      ok: false,
-      errorKey: "account_password_policy_invalid",
-    });
-    expect(setPasswordMock).not.toHaveBeenCalled();
-    expect(changePasswordMock).not.toHaveBeenCalled();
-  });
+      expect(result).toEqual({
+        ok: false,
+        errorKey: "account_password_policy_invalid",
+      });
+      expect(setPasswordMock).not.toHaveBeenCalled();
+      expect(changePasswordMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("passes an existing password through unchanged when changing it", async () => {
     hasCredentialPasswordAccountMock.mockReturnValue(true);

@@ -201,12 +201,15 @@ describe("storage/settings failure scenarios", () => {
     [{ releasesPerPage: 1001 }, "releasesPerPage"],
     [{ parallelRepoFetches: 51 }, "parallelRepoFetches"],
     [{ appriseMaxCharacters: -1 }, "appriseMaxCharacters"],
-  ])("rejects semantically invalid persisted settings %j", async (value, key) => {
-    fsMock.readFile.mockResolvedValue(JSON.stringify(value));
-    const { getSettings } = await import("@/lib/storage/settings");
+  ])(
+    "rejects semantically invalid persisted settings %j",
+    async (value, key) => {
+      fsMock.readFile.mockResolvedValue(JSON.stringify(value));
+      const { getSettings } = await import("@/lib/storage/settings");
 
-    await expect(getSettings()).rejects.toThrow(String(key));
-  });
+      await expect(getSettings()).rejects.toThrow(String(key));
+    },
+  );
 
   it("rejects semantically invalid settings before writing", async () => {
     const { getSettings, saveSettings } = await import(

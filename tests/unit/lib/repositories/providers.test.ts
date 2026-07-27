@@ -46,9 +46,7 @@ describe("repositories/providers", () => {
     expect(normalizeGitlabHost(" GitLab.Example.TEST ")).toBe(
       "gitlab.example.test",
     );
-    expect(normalizeGitlabHost("sub.gitlab.test")).toBe(
-      "sub.gitlab.test",
-    );
+    expect(normalizeGitlabHost("sub.gitlab.test")).toBe("sub.gitlab.test");
 
     for (const host of [
       "",

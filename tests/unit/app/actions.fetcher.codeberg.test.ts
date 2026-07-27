@@ -418,8 +418,7 @@ describe("actions Codeberg fetcher scenarios", () => {
       vi
         .mocked(global.fetch)
         .mock.calls.some(
-          ([input]) =>
-            new URL(String(input)).searchParams.get("page") === "2",
+          ([input]) => new URL(String(input)).searchParams.get("page") === "2",
         ),
     ).toBe(true);
   });

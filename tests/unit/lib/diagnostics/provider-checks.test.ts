@@ -165,26 +165,27 @@ describe("diagnostics/provider-checks", () => {
       });
     });
 
-    it.each([
-      401, 403,
-    ] as const)("treats deploy-token HTTP %s as valid with limited diagnostics", async (status) => {
-      providerMocks.getGitlabDeployTokensByHost.mockReturnValue(
-        new Map([
-          ["gitlab.com", { username: "deploy-user", token: "deploy-token" }],
-        ]),
-      );
-      fetchMocks.fetchWithRetry.mockResolvedValue(textResponse(status, ""));
-      const { getGitlabTokenCheck } = await import(
-        "@/lib/diagnostics/provider-checks"
-      );
+    it.each([401, 403] as const)(
+      "treats deploy-token HTTP %s as valid with limited diagnostics",
+      async (status) => {
+        providerMocks.getGitlabDeployTokensByHost.mockReturnValue(
+          new Map([
+            ["gitlab.com", { username: "deploy-user", token: "deploy-token" }],
+          ]),
+        );
+        fetchMocks.fetchWithRetry.mockResolvedValue(textResponse(status, ""));
+        const { getGitlabTokenCheck } = await import(
+          "@/lib/diagnostics/provider-checks"
+        );
 
-      await expect(getGitlabTokenCheck()).resolves.toEqual({
-        status: "valid",
-        username: null,
-        name: null,
-        diagnosticsLimited: true,
-      });
-    });
+        await expect(getGitlabTokenCheck()).resolves.toEqual({
+          status: "valid",
+          username: null,
+          name: null,
+          diagnosticsLimited: true,
+        });
+      },
+    );
 
     it("returns the deploy-token user payload when diagnostics are available", async () => {
       providerMocks.getGitlabDeployTokensByHost.mockReturnValue(
