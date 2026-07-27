@@ -15,6 +15,7 @@ import { OfflineBanner } from "@/components/offline-banner";
 import { Button } from "@/components/ui/button";
 import { UpdateNoticeBanner } from "@/components/update-notice-banner";
 import { useNetworkStatus } from "@/hooks/use-network";
+import type { Locale } from "@/i18n/config";
 import { Link, usePathname } from "@/i18n/navigation";
 import type { AuthAccess } from "@/lib/auth/mode";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
@@ -23,7 +24,7 @@ import type { UpdateNotificationState } from "@/types";
 import { MobileMenu } from "./mobile-menu";
 
 type HeaderProps = {
-  locale: string;
+  locale: Locale;
   updateNotice?: UpdateNotificationState;
   authAccess?: AuthAccess;
 };
@@ -122,6 +123,7 @@ export function Header({
               <Button
                 variant="ghost"
                 size="icon"
+                data-testid="logout-button"
                 onClick={handleLogout}
                 disabled={isLoggingOut || !isOnline}
                 aria-label={t("logout_aria")}

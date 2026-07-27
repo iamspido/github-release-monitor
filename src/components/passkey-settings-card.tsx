@@ -1,7 +1,7 @@
 "use client";
 
 import { Fingerprint, Loader2, RefreshCw, Trash2 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -14,22 +14,30 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useBrowserTimeZone } from "@/hooks/use-browser-time-zone";
 import {
   addPasskey,
   deletePasskey,
   listPasskeys,
   type PasskeyEntry,
 } from "@/lib/auth/client-adapters";
+import { formatAbsoluteDateTime } from "@/lib/date-time";
+import type { TimeFormat } from "@/types";
 
-function formatTimestamp(value: string | null): string {
-  if (!value) return "-";
+function parseTimestamp(value: string | null): Date | null {
+  if (!value) return null;
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return parsed.toLocaleString();
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-export function PasskeySettingsCard() {
+export function PasskeySettingsCard({
+  timeFormat,
+}: {
+  timeFormat: TimeFormat;
+}) {
   const t = useTranslations("SettingsPage");
+  const locale = useLocale();
+  const browserTimeZone = useBrowserTimeZone();
   const [passkeys, setPasskeys] = React.useState<PasskeyEntry[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isCreating, setIsCreating] = React.useState(false);
@@ -160,7 +168,23 @@ export function PasskeySettingsCard() {
                   <p className="truncate text-sm font-medium">{entry.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {t("passkeys_created_at", {
-                      value: formatTimestamp(entry.createdAt),
+                      value: (() => {
+                        const timestamp = parseTimestamp(entry.createdAt);
+                        if (!timestamp || !browserTimeZone) return "-";
+                        return formatAbsoluteDateTime(timestamp, {
+                          locale,
+                          timeFormat,
+                          timeZone: browserTimeZone,
+                          format: {
+                            year: "numeric",
+                            month: "numeric",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          },
+                        });
+                      })(),
                     })}
                   </p>
                 </div>

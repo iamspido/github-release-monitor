@@ -1,3 +1,4 @@
+import type { Locale } from "@/i18n/config";
 import { readApiErrorCode } from "@/lib/auth/client-api";
 import { isUsernamePolicyValid } from "@/lib/username-policy";
 
@@ -109,7 +110,7 @@ export async function submitPasswordLogin(input: {
   identifier: string;
   password: string;
   next?: string;
-  locale: string;
+  locale: Locale;
 }): Promise<PasswordLoginApiState> {
   try {
     const response = await fetch("/api/login/password", {

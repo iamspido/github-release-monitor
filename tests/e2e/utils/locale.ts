@@ -1,87 +1,59 @@
 import { expect, type Page } from "@playwright/test";
+import { parseLocale, type Locale } from "../../../src/i18n/config";
 import { ensureAuthenticated, waitForAutosave } from "../utils";
 
-const localeOptionLabels: Record<string, string[]> = {
-  en: ["English", "Englisch"],
-  de: ["German", "Deutsch"],
-};
-
-const settingsPaths: Record<string, string> = {
-  en: "/en/settings",
-  de: "/de/einstellungen",
-};
-
-const rootPaths: Record<string, RegExp> = {
-  en: /\/en(\/|$)/,
-  de: /\/de(\/|$)/,
-};
-
-function extractLocaleFromUrl(urlString: string): string | null {
+function extractLocaleFromUrl(urlString: string): Locale | null {
   const pathname = new URL(urlString).pathname;
   const segments = pathname.split("/").filter(Boolean);
-  if (segments.length === 0) {
-    return null;
-  }
-  const candidate = segments[0];
-  return localeOptionLabels[candidate] ? candidate : null;
+  return parseLocale(segments[0]);
+}
+
+async function expectLanguageSelect(page: Page): Promise<void> {
+  await expect(page.getByTestId("language-select")).toBeVisible();
 }
 
 export async function openSettingsForLocale(
   page: Page,
-  locale: "en" | "de",
+  locale: Locale,
 ): Promise<void> {
-  await page.goto(settingsPaths[locale]);
-  const languageSelect = page
-    .getByLabel("Language")
-    .or(page.getByLabel("Sprache"));
-  await expect(languageSelect).toBeVisible();
+  await page.goto(`/${locale}/settings`);
+  await expectLanguageSelect(page);
 }
 
-async function selectLocale(page: Page, targetLocale: string): Promise<void> {
-  const languageSelect = page
-    .getByLabel("Language")
-    .or(page.getByLabel("Sprache"));
+async function selectLocale(page: Page, targetLocale: Locale): Promise<void> {
+  const languageSelect = page.getByTestId("language-select");
   await expect(languageSelect).toBeVisible();
   await languageSelect.click();
-
-  const labels = localeOptionLabels[targetLocale] ?? [targetLocale];
-  for (const label of labels) {
-    const option = page.getByRole("option", { name: label });
-    if (await option.count()) {
-      await option.click();
-      return;
-    }
-  }
-
-  // Fallback to selecting by value attribute if available.
-  await page.locator(`[data-value="${targetLocale}"]`).click();
+  await page.getByTestId(`language-option-${targetLocale}`).click();
 }
 
 export async function switchLocaleFromSettings(
   page: Page,
-  targetLocale: "en" | "de",
+  targetLocale: Locale,
 ): Promise<void> {
   await waitForAutosave(page, () => selectLocale(page, targetLocale));
-  await expect(page).toHaveURL(
-    new RegExp(settingsPaths[targetLocale].replace(/\//g, "\\/")),
-  );
+  await expect.poll(() => extractLocaleFromUrl(page.url())).toBe(targetLocale);
 }
 
 export async function ensureAppLocale(
   page: Page,
-  targetLocale: "en" | "de",
+  targetLocale: Locale,
 ): Promise<void> {
   await ensureAuthenticated(page);
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await expect(page).toHaveURL(/\/(en|de)(\/|$)/);
-  const currentLocale = extractLocaleFromUrl(page.url()) ?? "en";
+  await expect.poll(() => extractLocaleFromUrl(page.url())).not.toBeNull();
+  const currentLocale = extractLocaleFromUrl(page.url());
+  if (!currentLocale) {
+    throw new Error(`Could not determine the locale from '${page.url()}'.`);
+  }
   if (currentLocale === targetLocale) {
     return;
   }
 
-  await openSettingsForLocale(page, currentLocale as "en" | "de");
+  await page.goto("/settings");
+  await expectLanguageSelect(page);
   await switchLocaleFromSettings(page, targetLocale);
 
   await page.goto("/");
-  await expect(page).toHaveURL(rootPaths[targetLocale]);
+  await expect.poll(() => extractLocaleFromUrl(page.url())).toBe(targetLocale);
 }

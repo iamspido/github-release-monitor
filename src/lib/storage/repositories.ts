@@ -1,4 +1,5 @@
 import path from "node:path";
+import { normalizeLocale } from "@/i18n/config";
 import { logger } from "@/lib/logger";
 import { normalizeRepositoryDisplayName } from "@/lib/repositories/display-name";
 import { normalizeRepositoryTags } from "@/lib/repositories/tags";
@@ -104,6 +105,7 @@ function parsePendingNotification(
       throw new Error(`${path}.${key} must be a non-empty string.`);
     }
   }
+  notification.locale = normalizeLocale(notification.locale);
   if (!isFiniteNumber(notification.attempts) || notification.attempts < 0) {
     throw new Error(`${path}.attempts must be a non-negative number.`);
   }

@@ -1,6 +1,5 @@
 "use client";
 
-import { format } from "date-fns";
 import {
   AlertTriangle,
   Bell,
@@ -12,7 +11,7 @@ import {
   RefreshCw,
   Workflow,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 
 import {
@@ -48,10 +47,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useBrowserTimeZone } from "@/hooks/use-browser-time-zone";
 import { useDiagnosticsActions } from "@/hooks/use-diagnostics-actions";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { authClient } from "@/lib/auth/client";
+import { formatAbsoluteDateTime } from "@/lib/date-time";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
 import type {
@@ -60,6 +61,7 @@ import type {
   GitlabTokenCheckResult,
   NotificationConfig,
   RateLimitResult,
+  TimeFormat,
   UpdateNotificationState,
 } from "@/types";
 
@@ -71,6 +73,7 @@ interface TestPageClientProps {
   notificationConfig: NotificationConfig;
   appriseStatus: AppriseStatus;
   updateNotice: UpdateNotificationState;
+  timeFormat: TimeFormat;
 }
 
 export function TestPageClient({
@@ -81,8 +84,11 @@ export function TestPageClient({
   notificationConfig,
   appriseStatus: initialAppriseStatus,
   updateNotice: initialUpdateNotice,
+  timeFormat,
 }: TestPageClientProps) {
   const t = useTranslations("TestPage");
+  const locale = useLocale();
+  const browserTimeZone = useBrowserTimeZone();
   const [isRevealingMailPassword, startMailPasswordRevealTransition] =
     React.useTransition();
   const [isRevealingAppriseUrl, startAppriseUrlRevealTransition] =
@@ -149,20 +155,49 @@ export function TestPageClient({
   const appriseUrlVariable = notificationConfig.variables.find(
     (variable) => variable.key === "APPRISE_URL",
   );
-  const formattedLastChecked = React.useMemo(() => {
+  const [formattedLastChecked, setFormattedLastChecked] = React.useState(() =>
+    updateNotice.lastCheckedAt
+      ? t("update_last_checked", { time: t("not_available") })
+      : t("update_last_checked_never"),
+  );
+  React.useEffect(() => {
     if (!updateNotice.lastCheckedAt) {
-      return t("update_last_checked_never");
+      setFormattedLastChecked(t("update_last_checked_never"));
+      return;
     }
 
     const date = new Date(updateNotice.lastCheckedAt);
     if (Number.isNaN(date.getTime())) {
-      return t("update_last_checked_never");
+      setFormattedLastChecked(
+        t("update_last_checked", { time: t("not_available") }),
+      );
+      return;
+    }
+    if (!browserTimeZone) {
+      setFormattedLastChecked(
+        t("update_last_checked", { time: t("not_available") }),
+      );
+      return;
     }
 
-    return t("update_last_checked", {
-      time: format(date, "yyyy-MM-dd HH:mm:ss"),
-    });
-  }, [updateNotice.lastCheckedAt, t]);
+    setFormattedLastChecked(
+      t("update_last_checked", {
+        time: formatAbsoluteDateTime(date, {
+          locale,
+          timeFormat,
+          timeZone: browserTimeZone,
+          format: {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          },
+        }),
+      }),
+    );
+  }, [browserTimeZone, locale, timeFormat, updateNotice.lastCheckedAt, t]);
 
   const updateStatus = React.useMemo(() => {
     if (updateNotice.lastCheckError) {
@@ -197,15 +232,21 @@ export function TestPageClient({
     : t("update_latest_known_none");
 
   React.useEffect(() => {
-    if (rateLimit) {
-      // Format the time on the client to avoid hydration mismatch
-      const clientFormattedTime = format(
-        new Date(rateLimit.reset * 1000),
-        "HH:mm:ss",
+    if (rateLimit && browserTimeZone) {
+      setResetTime(
+        formatAbsoluteDateTime(new Date(rateLimit.reset * 1000), {
+          locale,
+          timeFormat,
+          timeZone: browserTimeZone,
+          format: {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          },
+        }),
       );
-      setResetTime(clientFormattedTime);
     }
-  }, [rateLimit]);
+  }, [browserTimeZone, locale, rateLimit, timeFormat]);
 
   React.useEffect(
     () => () => {
@@ -1274,6 +1315,7 @@ export function TestPageClient({
               {t("e2e_step1_description")}
             </p>
             <Button
+              data-testid="setup-test-repository"
               onClick={handleSetupTestRepo}
               disabled={isSettingUpRepo || !isOnline}
             >

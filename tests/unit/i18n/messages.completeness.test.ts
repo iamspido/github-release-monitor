@@ -1,6 +1,12 @@
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import {
+  parse,
+  TYPE,
+  type MessageFormatElement,
+} from "@formatjs/icu-messageformat-parser";
 import { describe, expect, it } from "vitest";
-import de from "../../../src/messages/de.json";
-import en from "../../../src/messages/en.json";
+import { englishLocale, locales } from "../../../src/i18n/config";
 
 type Dict = Record<string, unknown>;
 
@@ -17,81 +23,167 @@ function flattenKeys(obj: Dict, prefix = ""): Record<string, string> {
   return out;
 }
 
-function extractPlaceholders(s: string): Set<string> {
-  // ICU-aware extraction: for each top-level {...} placeholder,
-  // capture only the argument name (token before the first comma),
-  // and ignore inner branch content like {one} / {ein} within plural/select.
+export function extractPlaceholderSignatures(s: string): Set<string> {
   const out = new Set<string>();
-  const isIdent = (t: string) => /^[A-Za-z0-9_]+$/.test(t);
 
-  for (let i = 0; i < s.length; i++) {
-    if (s[i] !== "{") continue;
-    let depth = 0;
-    let name: string | null = null;
-    const token: string[] = [];
-
-    // consume the placeholder
-    for (; i < s.length; i++) {
-      const ch = s[i];
-      if (ch === "{") {
-        depth++;
-        // skip the opening brace itself
-        if (depth === 1) continue;
-      } else if (ch === "}") {
-        depth--;
-        if (depth === 0) {
-          // closing of the top-level placeholder
-          const finalName = (name ?? token.join("")).trim();
-          if (finalName && finalName !== "#" && isIdent(finalName))
-            out.add(finalName);
+  const visit = (elements: MessageFormatElement[]) => {
+    for (const element of elements) {
+      switch (element.type) {
+        case TYPE.argument:
+          out.add(`argument:${element.value}`);
           break;
-        }
-      }
-
-      // collect only at depth 1 (top-level content of the placeholder)
-      if (depth === 1) {
-        if (ch === ",") {
-          // name token ends at first comma
-          if (name === null) name = token.join("").trim();
-        } else if (name === null) {
-          token.push(ch);
-        }
+        case TYPE.number:
+          out.add(`number:${element.value}`);
+          break;
+        case TYPE.date:
+          out.add(`date:${element.value}`);
+          break;
+        case TYPE.time:
+          out.add(`time:${element.value}`);
+          break;
+        case TYPE.plural:
+          out.add(`plural:${element.value}`);
+          for (const option of Object.values(element.options)) {
+            visit(option.value);
+          }
+          break;
+        case TYPE.select:
+          out.add(`select:${element.value}`);
+          for (const option of Object.values(element.options)) {
+            visit(option.value);
+          }
+          break;
+        case TYPE.tag:
+          out.add(`tag:${element.value}`);
+          visit(element.children);
+          break;
       }
     }
-  }
+  };
+
+  // Parse with rich-text tag handling enabled, matching the runtime behavior.
+  // This also rejects unescaped HTML-like literals such as named regex groups.
+  visit(parse(s));
   return out;
 }
 
 describe("i18n completeness", () => {
-  const enFlat = flattenKeys(en as Dict);
-  const deFlat = flattenKeys(de as Dict);
+  const messagesDirectory = path.join(process.cwd(), "src", "messages");
+  const messagesByLocale = Object.fromEntries(
+    locales.map((locale) => [
+      locale,
+      JSON.parse(
+        readFileSync(path.join(messagesDirectory, `${locale}.json`), "utf8"),
+      ) as Dict,
+    ]),
+  );
+  const referenceFlat = flattenKeys(messagesByLocale[englishLocale]);
 
-  it("DE has all EN keys and no extra keys", () => {
-    const enKeys = new Set(Object.keys(enFlat));
-    const deKeys = new Set(Object.keys(deFlat));
-
-    const missingInDe: string[] = [];
-    for (const k of enKeys) if (!deKeys.has(k)) missingInDe.push(k);
-
-    const extraInDe: string[] = [];
-    for (const k of deKeys) if (!enKeys.has(k)) extraInDe.push(k);
-
-    expect({ missingInDe, extraInDe }).toEqual({
-      missingInDe: [],
-      extraInDe: [],
-    });
+  it("detects nested ICU arguments without treating regex quantifiers as arguments", () => {
+    expect(
+      [...extractPlaceholderSignatures(
+        "{count, plural, other {{nested, select, yes {ok} other {no}}}} /x'{4,}'/",
+      )].sort(),
+    ).toEqual(["plural:count", "select:nested"]);
   });
 
-  it("placeholders are consistent between EN and DE", () => {
-    const commonKeys = Object.keys(enFlat).filter((k) => k in deFlat);
-    const mismatches: Array<{ key: string; en: string[]; de: string[] }> = [];
-    for (const k of commonKeys) {
-      const enPh = Array.from(extractPlaceholders(enFlat[k])).sort();
-      const dePh = Array.from(extractPlaceholders(deFlat[k])).sort();
-      if (enPh.join("|") !== dePh.join("|")) {
-        mismatches.push({ key: k, en: enPh, de: dePh });
-      }
+  it("includes rich-text tag names in the message signature", () => {
+    expect(
+      [
+        ...extractPlaceholderSignatures(
+          "Remove <bold>{repoId}</bold> from <source></source>.",
+        ),
+      ].sort(),
+    ).toEqual(["argument:repoId", "tag:bold", "tag:source"]);
+  });
+
+  it("renders ICU-escaped regex examples as their intended literal values", () => {
+    const settingsMessages = messagesByLocale[englishLocale].SettingsForm;
+    if (!settingsMessages || typeof settingsMessages !== "object") {
+      throw new Error("SettingsForm messages are missing.");
     }
-    expect(mismatches).toEqual([]);
+
+    expect(
+      parse(
+        (settingsMessages as Dict).custom_security_patterns_placeholder as string,
+      ),
+    ).toEqual([
+      {
+        type: TYPE.literal,
+        value: "breaking\n/CVE-\\d{4}-\\d{4,}/i",
+      },
+    ]);
+    expect(
+      parse(
+        (
+          messagesByLocale[englishLocale].RepoSettingsDialog as Dict
+        ).version_tag_pattern_placeholder as string,
+      ),
+    ).toEqual([
+      {
+        type: TYPE.literal,
+        value:
+          "^docker/(?<version>\\d+(?:\\.\\d+){2,3})-r(?<revision>\\d+)$",
+      },
+    ]);
   });
+
+  it("has exactly one message file for every configured locale", () => {
+    const messageLocales = readdirSync(messagesDirectory)
+      .filter((file) => file.endsWith(".json"))
+      .map((file) => file.slice(0, -".json".length))
+      .sort();
+
+    expect(messageLocales).toEqual([...locales].sort());
+  });
+
+  it.each(locales.filter((locale) => locale !== englishLocale))(
+    "%s has all English keys and no extra keys",
+    (locale) => {
+      const localizedFlat = flattenKeys(messagesByLocale[locale]);
+      const referenceKeys = new Set(Object.keys(referenceFlat));
+      const localizedKeys = new Set(Object.keys(localizedFlat));
+
+      const missing: string[] = [];
+      for (const key of referenceKeys) {
+        if (!localizedKeys.has(key)) missing.push(key);
+      }
+
+      const extra: string[] = [];
+      for (const key of localizedKeys) {
+        if (!referenceKeys.has(key)) extra.push(key);
+      }
+
+      expect({ missing, extra }).toEqual({ missing: [], extra: [] });
+    },
+  );
+
+  it.each(locales.filter((locale) => locale !== englishLocale))(
+    "%s placeholders match English",
+    (locale) => {
+      const localizedFlat = flattenKeys(messagesByLocale[locale]);
+      const commonKeys = Object.keys(referenceFlat).filter(
+        (key) => key in localizedFlat,
+      );
+      const mismatches: Array<{
+        key: string;
+        reference: string[];
+        localized: string[];
+      }> = [];
+
+      for (const key of commonKeys) {
+        const reference = Array.from(
+          extractPlaceholderSignatures(referenceFlat[key]),
+        ).sort();
+        const localized = Array.from(
+          extractPlaceholderSignatures(localizedFlat[key]),
+        ).sort();
+        if (reference.join("|") !== localized.join("|")) {
+          mismatches.push({ key, reference, localized });
+        }
+      }
+
+      expect(mismatches).toEqual([]);
+    },
+  );
 });

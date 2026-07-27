@@ -8,6 +8,7 @@ const deletePasskeyMock = vi.fn();
 const listPasskeysMock = vi.fn();
 
 vi.mock("next-intl", () => ({
+  useLocale: () => "en",
   useTranslations: () => (key: string) => key,
 }));
 
@@ -56,7 +57,7 @@ describe("PasskeySettingsCard", () => {
       "@/components/passkey-settings-card"
     );
     await act(async () => {
-      root.render(<PasskeySettingsCard />);
+      root.render(<PasskeySettingsCard timeFormat="24h" />);
       await Promise.resolve();
     });
   }

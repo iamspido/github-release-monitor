@@ -7,6 +7,7 @@ import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
 import { sendNewReleaseEmail } from "@/lib/notifications/email";
 import type {
   GithubRelease,
+  Locale,
   NotificationChannel,
   NotificationSettings,
   Repository,
@@ -36,7 +37,7 @@ export function getConfiguredNotificationChannels(): NotificationChannel[] {
 export async function sendNotification(
   repository: Repository,
   release: GithubRelease,
-  locale: string,
+  locale: Locale,
   settings: NotificationSettings,
   requestedChannels = getConfiguredNotificationChannels(),
 ) {

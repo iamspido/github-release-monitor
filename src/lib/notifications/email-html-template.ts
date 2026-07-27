@@ -1,5 +1,6 @@
 interface ReleaseEmailHtmlTemplateData {
   buttonTextHtml: string;
+  directionAttribute: string;
   introHtml: string;
   listDateLabelHtml: string;
   listNameLabelHtml: string;
@@ -20,7 +21,7 @@ export function renderReleaseEmailHtml(
 ): string {
   return `
     <!DOCTYPE html>
-    <html lang="${data.localeAttribute}">
+    <html lang="${data.localeAttribute}" dir="${data.directionAttribute}">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">

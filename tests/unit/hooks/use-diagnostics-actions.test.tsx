@@ -231,6 +231,12 @@ describe("useDiagnosticsActions", () => {
         expect.objectContaining({
           title: "toast_success_title",
           variant: "default",
+          ...(handlerName === "handleSetupTestRepo"
+            ? {
+                "data-result": "success",
+                "data-testid": "test-repository-result",
+              }
+            : {}),
         }),
       );
 
@@ -239,11 +245,19 @@ describe("useDiagnosticsActions", () => {
         message: "Action failed",
       });
       await run(() => controller[handlerName]());
-      expect(mocks.toast).toHaveBeenLastCalledWith({
-        title: "toast_error_title",
-        description: "Action failed",
-        variant: "destructive",
-      });
+      expect(mocks.toast).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          title: "toast_error_title",
+          description: "Action failed",
+          variant: "destructive",
+          ...(handlerName === "handleSetupTestRepo"
+            ? {
+                "data-result": "error",
+                "data-testid": "test-repository-result",
+              }
+            : {}),
+        }),
+      );
     },
   );
 

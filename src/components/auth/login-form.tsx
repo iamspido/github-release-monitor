@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { Locale } from "@/i18n/config";
 import { authClient } from "@/lib/auth/client";
 import {
   type AuthSocialProvider,
@@ -36,7 +37,7 @@ import { startLoginSocialFlow } from "@/lib/auth/client-social-flow";
 type SocialProvider = AuthSocialProvider;
 
 interface LoginFormProps {
-  locale: string;
+  locale: Locale;
   enabledSocialProviders: SocialProvider[];
   passkeyEnabled: boolean;
   signupEnabled: boolean;

@@ -13,6 +13,8 @@ type ToasterToast = ToastProps & {
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: ToastActionElement;
+  "data-result"?: "success" | "error";
+  "data-testid"?: string;
 };
 
 const actionTypes = {

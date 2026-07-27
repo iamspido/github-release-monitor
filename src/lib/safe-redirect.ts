@@ -1,3 +1,4 @@
+import type { Locale } from "@/i18n/config";
 import { stripLocalePrefix } from "@/lib/localized-path";
 
 function containsUnsafePathCharacter(value: string): boolean {
@@ -48,7 +49,7 @@ export function normalizeOptionalSafeRelativePath(
 
 export function normalizeLocalizedRedirectPath(
   value: string | null | undefined,
-  locale: string,
+  locale: Locale,
 ): string {
   return stripLocalePrefix(normalizeSafeRelativePath(value), locale);
 }

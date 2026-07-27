@@ -17,6 +17,7 @@ import {
 import type {
   AppriseFormat,
   GithubRelease,
+  Locale,
   NotificationSettings,
   Repository,
 } from "@/types";
@@ -24,7 +25,7 @@ import type {
 async function generateMarkdownReleaseBody(
   release: GithubRelease,
   repository: Repository,
-  locale: string,
+  locale: Locale,
   settings: NotificationSettings,
   maxChars: number,
 ): Promise<string> {
@@ -47,10 +48,7 @@ async function generateMarkdownReleaseBody(
     tagName: escapeMarkdownText(release.tag_name),
   });
   const repoLink = `**[${escapeMarkdownText(repository.id)}](${escapeMarkdownLinkDestination(repository.url)})**`;
-  const introText = t("text_new_version_of_markdown").replace(
-    "REPO_PLACEHOLDER",
-    repoLink,
-  );
+  const introText = t("text_new_version_of_markdown", { repoId: repoLink });
 
   const header = `
 ## ${title}
@@ -87,7 +85,7 @@ async function generateAppriseBody(
   release: GithubRelease,
   repository: Repository,
   format: AppriseFormat,
-  locale: string,
+  locale: Locale,
   settings: NotificationSettings,
 ): Promise<string> {
   const maxChars = settings.appriseMaxCharacters ?? 0;
@@ -133,7 +131,7 @@ async function generateAppriseBody(
 export async function sendAppriseNotification(
   repository: Repository,
   release: GithubRelease,
-  locale: string,
+  locale: Locale,
   settings: NotificationSettings,
 ) {
   const { APPRISE_URL } = process.env;
@@ -224,7 +222,7 @@ export async function sendAppriseNotification(
 export async function sendTestAppriseNotification(
   repository: Repository,
   release: GithubRelease,
-  locale: string,
+  locale: Locale,
   settings: NotificationSettings,
 ) {
   const t = await getTranslations({ locale, namespace: "Apprise" });

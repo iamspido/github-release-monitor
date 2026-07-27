@@ -58,6 +58,7 @@ function SubmitButton({
 
   return (
     <Button
+      data-testid="add-repositories"
       type="submit"
       className="w-full sm:w-auto"
       disabled={isPending || isDisabled}
@@ -175,6 +176,8 @@ export function RepositoryForm({
 
   const handleJobComplete = React.useCallback(() => {
     toast({
+      "data-result": "success",
+      "data-testid": "repository-update-result",
       title: t("toast_refresh_success_title"),
       description: t("toast_refresh_success_description"),
     });
@@ -183,6 +186,8 @@ export function RepositoryForm({
 
   const handleJobError = React.useCallback(() => {
     toast({
+      "data-result": "error",
+      "data-testid": "repository-update-result",
       title: t("toast_refresh_error_title"),
       description: t("toast_refresh_error_description"),
       variant: "destructive",
@@ -258,6 +263,7 @@ export function RepositoryForm({
                 </Button>
               )}
               <Button
+                data-testid="repository-form-toggle"
                 type="button"
                 variant="ghost"
                 size="icon"

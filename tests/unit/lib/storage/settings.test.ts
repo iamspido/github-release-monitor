@@ -237,6 +237,25 @@ describe("storage/settings failure scenarios", () => {
     await expect(secondModule.getLocaleSetting()).resolves.toBe("en");
   });
 
+  it("refreshes the locale immediately when another route bundle updates the settings file", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-01T12:00:00.000Z"));
+    fsMock.readFile.mockResolvedValueOnce(JSON.stringify({ locale: "en" }));
+    fsMock.stat.mockResolvedValue({ mtimeMs: 1 } satisfies StatResult);
+    const { getLocaleSetting } = await import("@/lib/storage/settings");
+
+    await expect(getLocaleSetting()).resolves.toBe("en");
+
+    fsMock.stat.mockClear();
+    fsMock.readFile.mockClear();
+    fsMock.stat.mockResolvedValueOnce({ mtimeMs: 2 } satisfies StatResult);
+    fsMock.readFile.mockResolvedValueOnce(JSON.stringify({ locale: "de" }));
+
+    await expect(getLocaleSetting()).resolves.toBe("de");
+    expect(fsMock.stat).toHaveBeenCalledTimes(1);
+    expect(fsMock.readFile).toHaveBeenCalledTimes(1);
+  });
+
   it("normalizes sort settings when saving and updates the in-memory cache", async () => {
     const { getSettings, saveSettings } = await import(
       "@/lib/storage/settings"

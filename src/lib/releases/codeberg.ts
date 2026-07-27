@@ -22,7 +22,7 @@ import type {
   RepoSettingsForFetch,
 } from "@/lib/releases/types";
 import { log, normalizeEnvToken } from "@/lib/server-action-helpers";
-import type { AppSettings, FetchError, GithubRelease } from "@/types";
+import type { AppSettings, FetchError, GithubRelease, Locale } from "@/types";
 
 type CodebergReleaseApi = {
   id: number;
@@ -232,7 +232,7 @@ export async function fetchLatestReleaseFromCodeberg(
   repo: string,
   repoSettings: RepoSettingsForFetch,
   globalSettings: AppSettings,
-  locale: string,
+  locale: Locale,
 ): Promise<LatestReleaseFetchResult> {
   log.info(`Fetching Codeberg release for ${owner}/${repo}`);
   const fetchedAtTimestamp = new Date().toISOString();

@@ -1,5 +1,5 @@
 import type { NextRequest, NextResponse } from "next/server";
-import { defaultLocale, locales } from "@/i18n/routing";
+import { type Locale, parseLocale } from "@/i18n/config";
 import { logger } from "@/lib/logger";
 import {
   NEXT_LOCALE_COOKIE,
@@ -8,27 +8,34 @@ import {
   settingsLocaleCookieOptions,
 } from "@/lib/settings-locale-cookie";
 
-export type ProxyLocale = (typeof locales)[number];
-
-const localeSet = new Set<string>(locales as readonly string[]);
 const logSettings = logger.withScope("Settings");
 const SETTINGS_LOCALE_API_PATH = "/api/settings-locale";
 const SETTINGS_LOCALE_FETCH_TIMEOUT_MS = 2000;
 
 export async function fetchSettingsLocale(
   request: NextRequest,
-  options?: { fetchImpl?: typeof fetch },
-): Promise<ProxyLocale> {
+  options?: { fetchImpl?: typeof fetch; timeoutMs?: number },
+): Promise<Locale | null> {
   const fetchImpl = options?.fetchImpl ?? fetch;
+  const timeoutMs = Math.max(
+    1,
+    Math.round(options?.timeoutMs ?? SETTINGS_LOCALE_FETCH_TIMEOUT_MS),
+  );
+  const deadline = Date.now() + timeoutMs;
   const apiUrls = buildSettingsLocaleApiUrls(request);
   const attemptSummaries: string[] = [];
   let lastError: unknown = null;
 
   for (const apiUrl of apiUrls) {
+    const remainingTimeMs = deadline - Date.now();
+    if (remainingTimeMs <= 0) {
+      attemptSummaries.push(`total timeout after ${timeoutMs}ms`);
+      break;
+    }
     try {
       const response = await fetchImpl(apiUrl, {
         cache: "no-store",
-        signal: AbortSignal.timeout(SETTINGS_LOCALE_FETCH_TIMEOUT_MS),
+        signal: AbortSignal.timeout(remainingTimeMs),
         headers: {
           "cache-control": "no-store",
           "x-from-middleware": "1",
@@ -46,8 +53,9 @@ export async function fetchSettingsLocale(
       }
 
       const data = (await response.json()) as { locale?: string | null };
-      if (data.locale && localeSet.has(data.locale)) {
-        return data.locale as ProxyLocale;
+      const locale = parseLocale(data.locale);
+      if (locale) {
+        return locale;
       }
 
       attemptSummaries.push(
@@ -68,33 +76,30 @@ export async function fetchSettingsLocale(
 
   if (apiUrls.length > 0) {
     logSettings.error(
-      `Error fetching settings locale in middleware. Attempts: ${attemptSummaries.join("; ")}. Falling back to default locale.`,
+      `Error fetching settings locale in middleware. Attempts: ${attemptSummaries.join("; ")}. Falling back to the locale cookie or default locale.`,
       lastError || undefined,
     );
   } else {
     logSettings.error(
-      "Error fetching settings locale in middleware. No candidate API origins resolved. Falling back to default locale.",
+      "Error fetching settings locale in middleware. No candidate API origins resolved. Falling back to the locale cookie or default locale.",
       lastError || undefined,
     );
   }
 
-  return defaultLocale;
-}
-
-export function getLocaleFromCookies(request: NextRequest): ProxyLocale | null {
-  const cookieLocale =
-    request.cookies.get(SETTINGS_LOCALE_COOKIE)?.value ??
-    request.cookies.get(NEXT_LOCALE_COOKIE)?.value;
-  if (cookieLocale && localeSet.has(cookieLocale)) {
-    return cookieLocale as ProxyLocale;
-  }
   return null;
 }
 
-export function attachLocaleCookies(
-  response: NextResponse,
-  locale: ProxyLocale,
-) {
+export function getLocaleFromCookies(request: NextRequest): Locale | null {
+  const settingsLocale = parseLocale(
+    request.cookies.get(SETTINGS_LOCALE_COOKIE)?.value,
+  );
+  if (settingsLocale) {
+    return settingsLocale;
+  }
+  return parseLocale(request.cookies.get(NEXT_LOCALE_COOKIE)?.value);
+}
+
+export function attachLocaleCookies(response: NextResponse, locale: Locale) {
   response.cookies.set(
     SETTINGS_LOCALE_COOKIE,
     locale,

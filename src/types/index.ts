@@ -1,3 +1,7 @@
+import type { Locale } from "@/i18n/config";
+
+export type { Locale } from "@/i18n/config";
+
 export type Repository = {
   // Unique identifier for a monitored repository.
   // Uses `<provider>:owner/repo` for GitHub/Codeberg and
@@ -43,7 +47,7 @@ export type PendingReleaseNotification = {
     appriseFormat?: AppriseFormat;
   };
   release: GithubRelease;
-  locale: string;
+  locale: Locale;
   settings: NotificationSettings;
   channels: NotificationChannel[];
   createdAt: string;
@@ -178,7 +182,6 @@ export type AppriseStatus = {
 };
 
 // App Settings
-export type Locale = "en" | "de";
 export type TimeFormat = "12h" | "24h";
 export type ReleaseChannel = "stable" | "prerelease" | "draft";
 export type PreReleaseChannelType =

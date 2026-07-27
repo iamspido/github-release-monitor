@@ -10,12 +10,12 @@ import {
 } from "@/lib/repositories/providers";
 import { toRepositorySettingsSnapshot } from "@/lib/repositories/settings-snapshot";
 import { log } from "@/lib/server-action-helpers";
-import type { AppSettings, EnrichedRelease, Repository } from "@/types";
+import type { AppSettings, EnrichedRelease, Locale, Repository } from "@/types";
 
 export async function getLatestReleasesForRepos(
   repositories: Repository[],
   settings: AppSettings,
-  locale: string,
+  locale: Locale,
   options?: { skipCache?: boolean },
 ): Promise<EnrichedRelease[]> {
   if (repositories.length === 0) {

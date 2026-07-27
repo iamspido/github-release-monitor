@@ -89,6 +89,14 @@ function interpolate(template: string, values?: Record<string, unknown>) {
 }
 
 vi.mock("next-intl", () => ({
+  useFormatter: () => ({
+    relativeTime: (value: Date) => {
+      if (Number.isNaN(value.getTime())) {
+        throw new RangeError("Invalid time value");
+      }
+      return "relative time";
+    },
+  }),
   useTranslations: (namespace: string) => {
     const dict = translationMap[namespace] ?? {};
     const translate = ((key: string, values?: Record<string, unknown>) => {
@@ -334,6 +342,50 @@ function getButtonBySpanText(text: string) {
 }
 
 describe("ReleaseCard component", () => {
+  it("ignores invalid persisted release timestamps", () => {
+    const enrichedRelease = makeRelease();
+    if (!enrichedRelease.release) {
+      throw new Error("Base release missing release payload");
+    }
+    enrichedRelease.release = {
+      ...enrichedRelease.release,
+      created_at: "not-a-date",
+      published_at: "also-not-a-date",
+      fetched_at: "still-not-a-date",
+    };
+
+    expect(() =>
+      render(
+        <ReleaseCardComponent
+          enrichedRelease={enrichedRelease}
+          settings={baseSettings}
+        />,
+      ),
+    ).not.toThrow();
+    expect(container?.textContent).not.toContain("Released");
+    expect(container?.textContent).not.toContain("Checked");
+  });
+
+  it("falls back to the creation time when the publication time is invalid", () => {
+    const enrichedRelease = makeRelease();
+    if (!enrichedRelease.release) {
+      throw new Error("Base release missing release payload");
+    }
+    enrichedRelease.release = {
+      ...enrichedRelease.release,
+      published_at: "not-a-date",
+    };
+
+    render(
+      <ReleaseCardComponent
+        enrichedRelease={enrichedRelease}
+        settings={baseSettings}
+      />,
+    );
+
+    expect(container?.textContent).toContain("Released relative time");
+  });
+
   it("renders a compact row and mounts release notes only when expanded", async () => {
     const actions = await mockedActions();
     render(

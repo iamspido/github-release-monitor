@@ -28,7 +28,7 @@ import type {
   RepoSettingsForFetch,
 } from "@/lib/releases/types";
 import { log, normalizeEnvToken } from "@/lib/server-action-helpers";
-import type { AppSettings, FetchError, GithubRelease } from "@/types";
+import type { AppSettings, FetchError, GithubRelease, Locale } from "@/types";
 
 type GithubTagCandidate = {
   tag: { name: string; commit: { sha: string } };
@@ -164,7 +164,7 @@ export async function fetchLatestReleaseFromGitHub(
   repo: string,
   repoSettings: RepoSettingsForFetch,
   globalSettings: AppSettings,
-  locale: string,
+  locale: Locale,
 ): Promise<LatestReleaseFetchResult> {
   log.info(`Fetching GitHub release for ${owner}/${repo}`);
   const fetchedAtTimestamp = new Date().toISOString();

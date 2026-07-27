@@ -112,6 +112,7 @@ RUN npm install --omit=optional --no-audit --no-fund --production=false \
 
 COPY playwright.config.ts ./
 COPY tests/e2e ./tests/e2e
+COPY src/i18n/config.ts ./src/i18n/config.ts
 
 # Copy built application from builder stage
 COPY --from=builder /app/.next/standalone ./

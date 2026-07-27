@@ -1,15 +1,18 @@
 import { type NextRequest, NextResponse } from "next/server";
 import createIntlMiddleware from "next-intl/middleware";
+import { defaultLocale, type Locale } from "@/i18n/config";
 import {
   canReadHomeUnauthenticated,
   getAuthenticationMethod,
 } from "@/lib/auth/mode";
+import { hasCanonicalLocalePrefix } from "@/lib/localized-path";
 import { logger } from "@/lib/logger";
 import {
   buildRedirectUrl,
   getCurrentLocaleFromResponse,
   getLocalizedLoginPath,
   getRouteKeyForPath,
+  getRouteMatchForPath,
   type ProxyRouteKey,
   resolveLocalizedRestPath,
   splitLocaleFromPath,
@@ -25,11 +28,10 @@ import {
   buildSettingsLocaleApiUrls,
   fetchSettingsLocale,
   getLocaleFromCookies,
-  type ProxyLocale,
 } from "@/lib/proxy/settings-locale";
 import { routing } from "./i18n/routing";
 
-type LocaleKey = ProxyLocale;
+type LocaleKey = Locale;
 type RouteKey = ProxyRouteKey;
 
 export async function proxy(request: NextRequest) {
@@ -38,7 +40,7 @@ export async function proxy(request: NextRequest) {
   const authenticationMethod = getAuthenticationMethod();
 
   const pathname = request.nextUrl.pathname;
-  if (shouldBypassProxy(pathname)) {
+  if (shouldBypassProxy(request)) {
     return NextResponse.next();
   }
   const securityContext = createRequestSecurityContext();
@@ -54,11 +56,17 @@ export async function proxy(request: NextRequest) {
   };
 
   const cookieLocale = getLocaleFromCookies(request);
-  const settingsLocale = cookieLocale ?? (await fetchSettingsLocale(request));
+  const persistedLocale = await fetchSettingsLocale(request, {
+    timeoutMs: cookieLocale ? 500 : 2000,
+  });
+  const settingsLocale = persistedLocale ?? cookieLocale ?? defaultLocale;
   const { locale: requestedLocale, restPath } = splitLocaleFromPath(pathname);
 
   if (!requestedLocale) {
-    const targetRest = resolveLocalizedRestPath(restPath, settingsLocale);
+    const resolvedRest = resolveLocalizedRestPath(restPath, settingsLocale);
+    const targetRest = getRouteMatchForPath(settingsLocale, resolvedRest)
+      ? resolvedRest
+      : "/";
     const redirectUrl = buildRedirectUrl(request, settingsLocale, targetRest);
     if (redirectUrl.pathname !== pathname) {
       const redirectResponse = NextResponse.redirect(redirectUrl);
@@ -66,6 +74,13 @@ export async function proxy(request: NextRequest) {
       return secureResponse(redirectResponse);
     }
   } else if (requestedLocale !== settingsLocale) {
+    const requestedRouteMatch = getRouteMatchForPath(requestedLocale, restPath);
+    if (!requestedRouteMatch) {
+      const redirectUrl = buildRedirectUrl(request, settingsLocale, "/");
+      const redirectResponse = NextResponse.redirect(redirectUrl);
+      attachLocaleCookies(redirectResponse, settingsLocale);
+      return secureResponse(redirectResponse);
+    }
     const targetRest = resolveLocalizedRestPath(
       restPath,
       settingsLocale,
@@ -75,6 +90,32 @@ export async function proxy(request: NextRequest) {
     const redirectResponse = NextResponse.redirect(redirectUrl);
     attachLocaleCookies(redirectResponse, settingsLocale);
     return secureResponse(redirectResponse);
+  } else {
+    const routeMatch = getRouteMatchForPath(requestedLocale, restPath);
+    if (!routeMatch) {
+      const redirectUrl = buildRedirectUrl(request, requestedLocale, "/");
+      const redirectResponse = NextResponse.redirect(redirectUrl);
+      attachLocaleCookies(redirectResponse, requestedLocale);
+      return secureResponse(redirectResponse);
+    }
+    if (
+      routeMatch.isAlias ||
+      !hasCanonicalLocalePrefix(pathname, requestedLocale)
+    ) {
+      const canonicalRest = resolveLocalizedRestPath(
+        restPath,
+        requestedLocale,
+        requestedLocale,
+      );
+      const redirectUrl = buildRedirectUrl(
+        request,
+        requestedLocale,
+        canonicalRest,
+      );
+      const redirectResponse = NextResponse.redirect(redirectUrl, 308);
+      attachLocaleCookies(redirectResponse, requestedLocale);
+      return secureResponse(redirectResponse);
+    }
   }
 
   const handleI18nRouting = createIntlMiddleware(routing);
@@ -148,14 +189,31 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-function shouldBypassProxy(pathname: string): boolean {
-  return (
+const publicAssetPaths = new Set(["/icon.svg", "/robots.txt"]);
+const staticAssetExtension =
+  /\.(?:avif|bmp|css|csv|eot|gif|ico|jpe?g|js|json|map|mjs|mp3|mp4|ogg|otf|pdf|png|svg|txt|wasm|webmanifest|webm|webp|woff2?|xml|zip)$/i;
+
+function isDocumentRequest(request: NextRequest): boolean {
+  const fetchDestination = request.headers.get("sec-fetch-dest");
+  if (fetchDestination) {
+    return fetchDestination === "document";
+  }
+  return request.headers.get("accept")?.includes("text/html") === true;
+}
+
+function shouldBypassProxy(request: NextRequest): boolean {
+  const pathname = request.nextUrl.pathname;
+  if (
     pathname.startsWith("/api/") ||
     pathname.startsWith("/trpc/") ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/_vercel/") ||
-    pathname.includes(".")
-  );
+    publicAssetPaths.has(pathname)
+  ) {
+    return true;
+  }
+
+  return staticAssetExtension.test(pathname) && !isDocumentRequest(request);
 }
 
 async function checkSessionAuthentication(args: {
@@ -247,7 +305,7 @@ function buildLoginRedirectResponse(
 }
 
 export const config = {
-  matcher: ["/((?!api|trpc|_next|_vercel|.*\\..*).*)"],
+  matcher: ["/((?!api(?:/|$)|trpc(?:/|$)|_next(?:/|$)|_vercel(?:/|$)).*)"],
 };
 
 export const __test__ = {

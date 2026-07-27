@@ -1,20 +1,21 @@
 import { expect, test } from "./fixtures/test";
 
-test("invalid locale path falls back to cookie locale and preserves cookie", async ({
+test("invalid locale path uses the configured locale and repairs a stale cookie", async ({
   page,
   context,
 }) => {
-  // Set cookie to DE explicitly
   await context.addCookies([
     { name: "NEXT_LOCALE", value: "de", domain: "localhost", path: "/" },
   ]);
 
-  // Navigate to invalid locale path; middleware should redirect to /de
   await page.goto("/fr");
-  await expect(page).toHaveURL(/\/de(\/|$)/);
+  await expect(page).toHaveURL(/\/en\/login\?next=%2Fen$/);
 
-  // Cookie still de
   const cookies = await context.cookies();
-  const c = cookies.find((c) => c.name === "NEXT_LOCALE");
-  expect(c?.value).toBe("de");
+  expect(cookies.find((cookie) => cookie.name === "NEXT_LOCALE")?.value).toBe(
+    "en",
+  );
+  expect(cookies.find((cookie) => cookie.name === "grm.locale")?.value).toBe(
+    "en",
+  );
 });

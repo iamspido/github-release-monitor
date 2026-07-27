@@ -1,41 +1,21 @@
+import type { Locale } from "../../src/i18n/config";
 import { expect, type Page, test } from "./fixtures/ensureLoggedIn";
 import { waitForAutosave } from "./utils";
 import { ensureAppLocale } from "./utils/locale";
 
-const settingsPathsLocale: Record<"en" | "de", string> = {
-  en: "/en/settings",
-  de: "/de/einstellungen",
-};
-const homePaths: Record<"en" | "de", string> = {
-  en: "/en",
-  de: "/de",
-};
-const timeFormatLabel = (locale: "en" | "de", variant: "12" | "24") => {
-  if (locale === "en") {
-    return variant === "12" ? "12-hour" : "24-hour";
-  }
-  return variant === "12" ? "12-Stunden" : "24-Stunden";
-};
-const lastUpdatedLocator = (page: Page, locale: "en" | "de") =>
-  locale === "en"
-    ? page.locator('span:text-matches("Last updated:", "i")')
-    : page.locator('span:text-matches("Letzte", "i")');
-
 async function setFormatAndRead(
   page: Page,
-  locale: "en" | "de",
+  locale: Locale,
   variant: "12" | "24",
 ) {
-  await page.goto(settingsPathsLocale[locale]);
-  const formatOption = page.getByLabel(timeFormatLabel(locale, variant));
+  await page.goto(`/${locale}/settings`);
+  const formatOption = page.getByTestId(`time-format-${variant}h`);
   if (!(await formatOption.isChecked())) {
     await waitForAutosave(page, () => formatOption.click());
   }
-  await page.goto(homePaths[locale]);
-  await expect(page).toHaveURL(
-    new RegExp(`${locale === "en" ? "/en" : "/de"}(\\/)?$`),
-  );
-  const lastUpdated = lastUpdatedLocator(page, locale);
+  await page.goto(`/${locale}`);
+  await expect.poll(() => new URL(page.url()).pathname).toBe(`/${locale}`);
+  const lastUpdated = page.getByTestId("last-updated");
   await expect(lastUpdated).toBeVisible();
   const text = await lastUpdated.textContent();
   return text || "";

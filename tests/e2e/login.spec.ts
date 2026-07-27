@@ -1,4 +1,6 @@
 import { expect, test } from "./fixtures/test";
+import { login } from "./utils";
+import { ensureAppLocale } from "./utils/locale";
 
 test("can login with valid credentials", async ({ page }) => {
   const username =
@@ -38,18 +40,16 @@ test("test page renders after login", async ({ page, context }) => {
 
 test("localized login with next does not trigger global error boundary", async ({
   page,
-  context,
 }) => {
   const username =
     process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
   const password = process.env.AUTH_PASSWORD || "TestPassword123";
   const authErrors: string[] = [];
 
-  await context.clearCookies();
-  await context.addCookies([
-    { name: "grm.locale", value: "de", domain: "localhost", path: "/" },
-    { name: "NEXT_LOCALE", value: "de", domain: "localhost", path: "/" },
-  ]);
+  await login(page, username, password);
+  await ensureAppLocale(page, "de");
+  await page.getByTestId("logout-button").click();
+  await expect(page).toHaveURL(/\/de\/anmelden$/);
 
   page.on("console", (message) => {
     const text = message.text();
@@ -76,5 +76,6 @@ test("localized login with next does not trigger global error boundary", async (
   const pageText = await page.locator("body").innerText();
   expect(pageText).not.toContain("Something went wrong");
   expect(pageText).toContain("Überwachte Repositories");
+  await ensureAppLocale(page, "en");
   expect(authErrors).toEqual([]);
 });

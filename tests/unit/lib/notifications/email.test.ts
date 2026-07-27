@@ -5,6 +5,9 @@ vi.mock("next-intl/server", () => ({
   getTranslations:
     async () => (key: string, vars?: Record<string, unknown>) => {
       // Return key name plus simple vars representation for assertions if needed.
+      if (key === "html_intro" && vars?.repoId) {
+        return `${vars.repoId} and ${vars.repoId}`;
+      }
       if (vars?.repoId) return `${key}:${vars.repoId}`;
       if (vars?.tagName) return `${key}:${vars.tagName}`;
       return key;
@@ -60,8 +63,25 @@ describe("notifications/email", () => {
 
     const html = await generateHtmlReleaseBody(release, repo, "en", "24h");
     expect(html).toContain("<html");
+    expect(html).toContain('<html lang="en" dir="ltr">');
     // No notes fallback localized key appears
     expect(html).toContain("html_no_notes");
+  });
+
+  it("replaces every repository placeholder in a translated HTML intro", async () => {
+    const html = await generateHtmlReleaseBody(
+      release,
+      repo,
+      "en",
+      "24h",
+    );
+
+    expect(
+      html.match(
+        /href="https:\/\/github\.com\/owner\/repo" style="color: #8c9fe8/g,
+      ),
+    ).toHaveLength(2);
+    expect(html).not.toContain("REPO_PLACEHOLDER");
   });
 
   it("escapes untrusted release and repository fields in HTML output", async () => {
@@ -154,6 +174,7 @@ describe("notifications/email", () => {
   });
 
   it("getFormattedDate respects 12h vs 24h and locale", async () => {
+    process.env.TZ = "UTC";
     const date = new Date("2024-05-17T13:05:07Z");
     const en12 = await getFormattedDate(date, "en", "12h");
     const en24 = await getFormattedDate(date, "en", "24h");
@@ -162,4 +183,41 @@ describe("notifications/email", () => {
     // Ensure German and English differ in HTML composition
     expect(de24.htmlDate).not.toBe(en24.htmlDate);
   });
+
+  it("getFormattedDate uses the configured server timezone and daylight saving time", async () => {
+    process.env.TZ = "Europe/Berlin";
+
+    const winter = await getFormattedDate(
+      new Date("2024-01-15T12:05:07Z"),
+      "en",
+      "24h",
+    );
+    const summer = await getFormattedDate(
+      new Date("2024-07-15T12:05:07Z"),
+      "en",
+      "24h",
+    );
+
+    expect(winter.textDate).toContain("13:05");
+    expect(summer.textDate).toContain("14:05");
+    expect(winter.textDate).not.toMatch(/AM|PM/i);
+  });
+
+  it.each([undefined, "Invalid/Timezone"])(
+    "getFormattedDate falls back safely when TZ is %s",
+    async (timeZone) => {
+      if (timeZone === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = timeZone;
+      }
+
+      await expect(
+        getFormattedDate(new Date("2024-05-17T13:05:07Z"), "en", "24h"),
+      ).resolves.toEqual({
+        textDate: expect.any(String),
+        htmlDate: expect.any(String),
+      });
+    },
+  );
 });

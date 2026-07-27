@@ -201,6 +201,8 @@ function SaveStatusIndicator({ status }: { status: AutosaveStatus }) {
 
   return (
     <div
+      data-status={status}
+      data-testid="autosave-status"
       className={cn(
         "flex items-center justify-end gap-2 text-sm transition-colors",
         current.className,

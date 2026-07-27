@@ -9,7 +9,7 @@ vi.mock("next-intl/server", () => ({
   getTranslations:
     async () => (key: string, vars?: Record<string, unknown>) => {
       if (key === "text_new_version_of_markdown") {
-        return "A new version of REPO_PLACEHOLDER has been released.";
+        return `A new version of ${vars?.repoId ?? ""} has been released.`;
       }
       if (key === "view_on_github_link" && vars?.link) {
         return `[View release](${vars.link})`;
@@ -166,6 +166,10 @@ describe("notifications/index", () => {
     const body = JSON.parse(fetchCallBodyText(call));
     expect(url).toMatch(/\/notify$/);
     expect(body.format).toBe("markdown"); // repo override
+    expect(body.body).toContain(
+      "**[owner/repo](https://github.com/owner/repo)**",
+    );
+    expect(body.body).not.toContain("REPO_PLACEHOLDER");
   });
 
   it("escapes Apprise markdown metadata and unsafe link destinations", async () => {

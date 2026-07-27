@@ -17,8 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useBrowserTimeZone } from "@/hooks/use-browser-time-zone";
 import { useOptimisticSettingsPatch } from "@/hooks/use-optimistic-settings-patch";
 import { useReleaseViewMode } from "@/hooks/use-release-view-mode";
+import type { Locale } from "@/i18n/config";
+import { formatAbsoluteDateTime } from "@/lib/date-time";
 import {
   normalizeReleaseSortOrder,
   sortEnrichedReleases,
@@ -42,7 +45,7 @@ interface HomePageClientProps {
   generalError: string | null;
   errorSummary: Map<Exclude<FetchError["type"], "not_modified">, number> | null;
   lastUpdated: Date;
-  locale: string;
+  locale: Locale;
   initialViewMode: ReleaseViewMode;
   canMutate?: boolean;
   isAppriseConfigured?: boolean;
@@ -79,6 +82,7 @@ export function HomePageClient({
 }: HomePageClientProps) {
   const t = useTranslations("HomePage");
   const tActions = useTranslations("Actions");
+  const browserTimeZone = useBrowserTimeZone();
 
   const [formattedLastUpdated, setFormattedLastUpdated] = React.useState("");
   const [repositoryTagsById, setRepositoryTagsById] = React.useState(
@@ -127,14 +131,20 @@ export function HomePageClient({
   });
 
   React.useEffect(() => {
-    // This effect runs only on the client, after the initial render.
-    // This prevents the hydration mismatch between server and client time.
+    if (!browserTimeZone) return;
     setFormattedLastUpdated(
-      lastUpdated.toLocaleTimeString(locale, {
-        hour12: settings.timeFormat === "12h",
+      formatAbsoluteDateTime(lastUpdated, {
+        locale,
+        timeFormat: settings.timeFormat,
+        timeZone: browserTimeZone,
+        format: {
+          hour: "numeric",
+          minute: "2-digit",
+          second: "2-digit",
+        },
       }),
     );
-  }, [lastUpdated, locale, settings.timeFormat]);
+  }, [browserTimeZone, lastUpdated, locale, settings.timeFormat]);
 
   React.useEffect(() => {
     setRepositoryTagsById(
@@ -320,8 +330,14 @@ export function HomePageClient({
                   count: repositoryStats.securityCount,
                 }),
               ].join(" | ")}
-              {formattedLastUpdated &&
-                ` | ${t("last_updated", { time: formattedLastUpdated })}`}
+              {formattedLastUpdated && (
+                <>
+                  {" | "}
+                  <span data-testid="last-updated">
+                    {t("last_updated", { time: formattedLastUpdated })}
+                  </span>
+                </>
+              )}
             </span>
           </div>
           <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">

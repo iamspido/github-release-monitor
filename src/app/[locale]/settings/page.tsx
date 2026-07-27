@@ -1,14 +1,8 @@
 import { getTranslations } from "next-intl/server";
-import { AccountCredentialsSettingsCard } from "@/components/account-credentials-settings-card";
 import { Header } from "@/components/header";
 import { OfflineInlineNotice } from "@/components/offline-inline-notice";
-import { PasskeySettingsCard } from "@/components/passkey-settings-card";
-import {
-  SettingsDangerZoneCard,
-  SettingsForm,
-} from "@/components/settings-form";
-import { SocialAccountsSettingsCard } from "@/components/social-accounts-settings-card";
-import { TwoFactorSettingsCard } from "@/components/two-factor-settings-card";
+import { SettingsPageContent } from "@/components/settings-page-content";
+import { normalizeLocale } from "@/i18n/config";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { getAuthFeatureConfig } from "@/lib/auth/config";
 import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
@@ -22,8 +16,9 @@ export default async function SettingsPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  const appLocale = normalizeLocale(locale);
   const t = await getTranslations({
-    locale: locale,
+    locale: appLocale,
     namespace: "SettingsPage",
   });
   const { isAppriseConfigured } = getNotificationRuntimeConfig();
@@ -45,7 +40,7 @@ export default async function SettingsPage({
   return (
     <div className="min-h-screen w-full bg-background text-foreground">
       <Header
-        locale={locale}
+        locale={appLocale}
         updateNotice={updateNotice}
         authAccess={authAccess}
       />
@@ -56,24 +51,14 @@ export default async function SettingsPage({
           </h2>
           <OfflineInlineNotice />
           <div className="h-2" />
-          <SettingsForm
+          <SettingsPageContent
             currentSettings={currentSettings}
+            enabledSocialProviders={enabledSocialProviders}
             isAppriseConfigured={isAppriseConfigured}
             isGithubTokenSet={isGithubTokenSet}
+            isPasskeyEnabled={isPasskeyEnabled}
+            showInternalAuthSettings={showInternalAuthSettings}
           />
-          {showInternalAuthSettings && (
-            <>
-              <AccountCredentialsSettingsCard />
-              <TwoFactorSettingsCard />
-              {isPasskeyEnabled && <PasskeySettingsCard />}
-              {enabledSocialProviders.length > 0 && (
-                <SocialAccountsSettingsCard
-                  enabledSocialProviders={enabledSocialProviders}
-                />
-              )}
-            </>
-          )}
-          <SettingsDangerZoneCard />
         </div>
       </main>
     </div>

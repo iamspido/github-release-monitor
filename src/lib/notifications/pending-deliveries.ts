@@ -6,6 +6,7 @@ import {
 import type {
   AppSettings,
   GithubRelease,
+  Locale,
   NotificationChannel,
   PendingReleaseNotification,
   Repository,
@@ -34,7 +35,7 @@ type NotificationDeliveryOutcome = {
 export function enqueuePendingNotification(
   repository: Repository,
   release: GithubRelease,
-  locale: string,
+  locale: Locale,
   settings: AppSettings,
   channels: NotificationChannel[],
 ): boolean {

@@ -18,6 +18,7 @@ const completeSecretRevealStepUpActionMock = vi.fn();
 const verifySecretRevealTotpActionMock = vi.fn();
 const passkeySignInMock = vi.fn();
 const socialSignInMock = vi.fn();
+let browserTimeZone: string | null = "UTC";
 let TestPageClientComponent: typeof import("@/components/test-page-client").TestPageClient;
 
 type PassthroughProps = React.HTMLAttributes<HTMLDivElement> & {
@@ -28,11 +29,16 @@ type DialogRootProps = PassthroughProps & {
 };
 
 vi.mock("next-intl", () => ({
+  useLocale: () => "en",
   useTranslations: () => (key: string) => key,
 }));
 
 vi.mock("@/hooks/use-network", () => ({
   useNetworkStatus: () => ({ isOnline: true }),
+}));
+
+vi.mock("@/hooks/use-browser-time-zone", () => ({
+  useBrowserTimeZone: () => browserTimeZone,
 }));
 
 vi.mock("@/lib/auth/client", () => ({
@@ -143,7 +149,10 @@ const updateNotice: UpdateNotificationState = {
   shouldNotify: false,
 };
 
-async function renderClient(notificationConfig: NotificationConfig) {
+async function renderClient(
+  notificationConfig: NotificationConfig,
+  notice: UpdateNotificationState = updateNotice,
+) {
   const div = document.createElement("div");
   document.body.appendChild(div);
   const root = ReactDOM.createRoot(div);
@@ -156,7 +165,8 @@ async function renderClient(notificationConfig: NotificationConfig) {
         codebergTokenCheck={{ status: "not_set" }}
         notificationConfig={notificationConfig}
         appriseStatus={{ status: "ok" }}
-        updateNotice={updateNotice}
+        updateNotice={notice}
+        timeFormat="24h"
       />,
     );
     await Promise.resolve();
@@ -256,6 +266,7 @@ describe("TestPageClient mail password reveal", () => {
     verifySecretRevealTotpActionMock.mockReset();
     passkeySignInMock.mockReset();
     socialSignInMock.mockReset();
+    browserTimeZone = "UTC";
     window.history.replaceState({}, "", "/test");
     window.sessionStorage.clear();
     getSecretRevealOptionsActionMock.mockResolvedValue({
@@ -267,6 +278,24 @@ describe("TestPageClient mail password reveal", () => {
         socialProviders: [],
       },
     });
+  });
+
+  it("does not report an existing check as never before timezone hydration", async () => {
+    browserTimeZone = null;
+    const { div, cleanup } = await renderClient(
+      makeNotificationConfig("external_click"),
+      {
+        ...updateNotice,
+        lastCheckedAt: "2026-07-27T12:00:00.000Z",
+      },
+    );
+
+    try {
+      expect(div.textContent).toContain("update_last_checked");
+      expect(div.textContent).not.toContain("update_last_checked_never");
+    } finally {
+      cleanup();
+    }
   });
 
   it("reveals MAIL_PASSWORD on one click for external auth mode", async () => {

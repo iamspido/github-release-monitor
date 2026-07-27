@@ -2,6 +2,8 @@ import { getTranslations } from "next-intl/server";
 import { remark } from "remark";
 import remarkGfm from "remark-gfm";
 import remarkHtml from "remark-html";
+import { getLocaleMetadata, type Locale } from "@/i18n/config";
+import { formatAbsoluteDateTime } from "@/lib/date-time";
 import { logger } from "@/lib/logger";
 import { getEmailRuntimeConfig } from "@/lib/notifications/config";
 import {
@@ -11,59 +13,39 @@ import {
 } from "@/lib/notifications/content-safety";
 import { renderReleaseEmailHtml } from "@/lib/notifications/email-html-template";
 import { sendEmailMessage } from "@/lib/notifications/email-transport";
+import { getServerTimeZone } from "@/lib/server-time-zone";
 import type { GithubRelease, Repository, TimeFormat } from "@/types";
 
 export async function getFormattedDate(
   date: Date,
-  locale: string,
+  locale: Locale,
   timeFormat: TimeFormat,
 ): Promise<{ textDate: string; htmlDate: string }> {
-  const t = await getTranslations({ locale, namespace: "Email" });
-
-  const textDateFormattingOptions: Intl.DateTimeFormatOptions = {
+  const timeZone = getServerTimeZone();
+  const commonFormat: Intl.DateTimeFormatOptions = {
     year: "numeric",
     month: "long",
     day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-    second: "numeric",
-    timeZoneName: "short",
-    hour12: timeFormat === "12h",
-  };
-  const textFormattingLocale =
-    locale === "de" ? "de-DE" : timeFormat === "12h" ? "en-US" : "en-GB";
-  const textDate = date.toLocaleString(
-    textFormattingLocale,
-    textDateFormattingOptions,
-  );
-
-  const htmlTimeOptions: Intl.DateTimeFormatOptions = {
     hour: "numeric",
     minute: "2-digit",
-    second: "2-digit",
+    second: "numeric",
     timeZoneName: "short",
-    hour12: timeFormat === "12h",
   };
-  const htmlDatePartsOptions: Intl.DateTimeFormatOptions = {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  };
-  const dateParts = new Intl.DateTimeFormat(locale, htmlDatePartsOptions)
-    .formatToParts(date)
-    .reduce<Record<string, string>>((acc, part) => {
-      acc[part.type] = part.value;
-      return acc;
-    }, {});
-  const timeString = new Intl.DateTimeFormat(locale, htmlTimeOptions).format(
-    date,
-  );
-
-  const htmlDate =
-    timeFormat === "12h"
-      ? `${dateParts.weekday}, ${dateParts.month} ${dateParts.day}, ${dateParts.year} ${t("html_date_conjunction_at")} ${timeString}`
-      : `${dateParts.weekday}, ${dateParts.day}. ${dateParts.month} ${dateParts.year}, ${timeString}`;
+  const textDate = formatAbsoluteDateTime(date, {
+    locale,
+    timeFormat,
+    timeZone,
+    format: commonFormat,
+  });
+  const htmlDate = formatAbsoluteDateTime(date, {
+    locale,
+    timeFormat,
+    timeZone,
+    format: {
+      ...commonFormat,
+      weekday: "long",
+    },
+  });
 
   return { textDate, htmlDate };
 }
@@ -71,7 +53,7 @@ export async function getFormattedDate(
 export async function generatePlainTextReleaseBody(
   release: GithubRelease,
   repository: Repository,
-  locale: string,
+  locale: Locale,
   timeFormat: TimeFormat,
 ): Promise<string> {
   const t = await getTranslations({ locale, namespace: "Email" });
@@ -98,7 +80,7 @@ ${t("text_view_on_github_label")}: ${release.html_url}
 export async function generateHtmlReleaseBody(
   release: GithubRelease,
   repository: Repository,
-  locale: string,
+  locale: Locale,
   timeFormat: TimeFormat,
 ): Promise<string> {
   const t = await getTranslations({ locale, namespace: "Email" });
@@ -113,6 +95,9 @@ export async function generateHtmlReleaseBody(
     timeFormat,
   );
   const safeLocale = escapeHtmlAttribute(locale);
+  const safeDirection = escapeHtmlAttribute(
+    getLocaleMetadata(locale).direction,
+  );
   const safeRepoId = escapeHtml(repository.id);
   const safeRepoUrl = escapeHtmlAttribute(safeExternalUrl(repository.url));
   const safeReleaseTagName = escapeHtml(release.tag_name);
@@ -130,13 +115,13 @@ export async function generateHtmlReleaseBody(
     : `<p style="font-style: italic;">${escapeHtml(t("html_no_notes"))}</p>`;
 
   const repoLink = `<a href="${safeRepoUrl}" style="color: #8c9fe8; text-decoration: none;"><strong style="color: #fafafa;">${safeRepoId}</strong></a>`;
-  const introHtml = t("html_intro", { repoId: "REPO_PLACEHOLDER" }).replace(
-    "REPO_PLACEHOLDER",
-    repoLink,
-  );
+  const introHtml = t("html_intro", {
+    repoId: "REPO_PLACEHOLDER",
+  }).replaceAll("REPO_PLACEHOLDER", () => repoLink);
 
   return renderReleaseEmailHtml({
     buttonTextHtml: escapeHtml(t("html_button_text")),
+    directionAttribute: safeDirection,
     introHtml,
     listDateLabelHtml: escapeHtml(t("html_list_date_label")),
     listNameLabelHtml: escapeHtml(t("html_list_name_label")),
@@ -161,7 +146,7 @@ export async function generateHtmlReleaseBody(
 export async function sendNewReleaseEmail(
   repository: Repository,
   release: GithubRelease,
-  locale: string,
+  locale: Locale,
   timeFormat: TimeFormat,
   toAddress?: string,
 ) {
@@ -225,7 +210,7 @@ export async function sendNewReleaseEmail(
 export async function sendTestEmail(
   repository: Repository,
   release: GithubRelease,
-  locale: string,
+  locale: Locale,
   timeFormat: TimeFormat,
   toAddress?: string,
 ) {

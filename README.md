@@ -170,7 +170,8 @@ Navigate to the `example/` directory. You will need to configure the environment
    ```
 
    **Localization**
-   Set the timezone for date and log formatting.
+   Set the server timezone used by schedules, logs, emails, and background
+   notifications. Interactive UI timestamps use each viewer's browser timezone.
    ```env
    # The timezone for the container (e.g., `Europe/Berlin`).
    TZ=Europe/Berlin
@@ -465,9 +466,10 @@ CODEBERG_ACCESS_TOKEN=your_codeberg_token_here
 ```
 
 #### **Localization**
-Set the timezone for date and log formatting.
+Set the server timezone used by schedules, logs, emails, and background
+notifications. Interactive UI timestamps use each viewer's browser timezone.
 ```env
-# The timezone for the container (e.g., `Europe/Berlin`). Affects log timestamps and date formatting.
+# The timezone for the container (e.g., `Europe/Berlin`).
 TZ=Europe/Berlin
 ```
 
@@ -545,6 +547,24 @@ Version 2.0.0 replaces the old `iron-session` username/password login with Bette
 Admin usernames must be 3-30 characters and may contain letters, numbers, `_`, and `.`. Passwords must be at least 12 characters and include uppercase, lowercase, and a number.
 
 ---
+
+## 🌐 Adding a Locale
+
+Locales are defined centrally in `src/i18n/config.ts`. To publish another
+language:
+
+1. Add its canonical BCP 47 code, native name, and text direction to the locale
+   registry.
+2. Add a complete `src/messages/<locale>.json` dictionary. The test suite
+   compares every configured dictionary and ICU placeholder with English.
+3. Add translated canonical route slugs in `src/i18n/routing.ts`. English
+   slugs are accepted as aliases; keep replaced published slugs as historical
+   aliases.
+4. Verify font coverage and, for right-to-left languages, complete the
+   corresponding RTL layout work before publishing the locale.
+
+The locale switcher, settings validation, cookies, authentication redirects,
+and message loading are derived from the registry.
 
 ## 🔐 Social Login Setup (GitHub + Google)
 
@@ -637,7 +657,7 @@ Here is a complete list of all environment variables used by the application.
 | `MAIL_PORT`           | The port for your SMTP server (e.g., 587 or 465).                                                         | Yes, for email         | -                          |
 | `MAIL_TO_ADDRESS`     | The email address that will receive the notifications.                                                    | Yes, for email         | -                          |
 | `MAIL_USERNAME`       | The username for SMTP authentication.                                                                     | No (depends on server) | -                          |
-| `TZ`                  | The timezone for the container (e.g., `Europe/Berlin`). Affects log timestamps and date formatting.       | No                     | System default             |
+| `TZ`                  | Server timezone for schedules, logs, emails, and background notifications. UI timestamps use the browser timezone. | No                     | System default             |
 
 ## Star History
 

@@ -1,7 +1,6 @@
 "use client";
 
-import { formatDistanceStrict } from "date-fns";
-import { de } from "date-fns/locale";
+import { useFormatter } from "next-intl";
 import * as React from "react";
 
 import { useSharedMinuteTicker } from "@/hooks/use-shared-minute-ticker";
@@ -15,10 +14,14 @@ type ReleaseTimeInput =
   | null
   | undefined;
 
-export function useReleaseRelativeTimes(
-  release: ReleaseTimeInput,
-  locale: string,
-) {
+function parseValidTimestamp(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function useReleaseRelativeTimes(release: ReleaseTimeInput) {
+  const format = useFormatter();
   const [timeAgo, setTimeAgo] = React.useState("");
   const [checkedAgo, setCheckedAgo] = React.useState("");
   const isReleaseTimeUnknown = Boolean(release?.published_at_unknown);
@@ -28,28 +31,23 @@ export function useReleaseRelativeTimes(
     const referenceTime = new Date(currentTime || Date.now());
 
     if (release?.created_at && !isReleaseTimeUnknown) {
-      const dateToUse = release.published_at || release.created_at;
+      const releaseTime =
+        parseValidTimestamp(release.published_at) ??
+        parseValidTimestamp(release.created_at);
       setTimeAgo(
-        formatDistanceStrict(new Date(dateToUse), referenceTime, {
-          addSuffix: true,
-          locale: locale === "de" ? de : undefined,
-        }),
+        releaseTime ? format.relativeTime(releaseTime, referenceTime) : "",
       );
     } else {
       setTimeAgo("");
     }
 
-    if (release?.fetched_at) {
-      setCheckedAgo(
-        formatDistanceStrict(new Date(release.fetched_at), referenceTime, {
-          addSuffix: true,
-          locale: locale === "de" ? de : undefined,
-        }),
-      );
+    const fetchedAt = parseValidTimestamp(release?.fetched_at);
+    if (fetchedAt) {
+      setCheckedAgo(format.relativeTime(fetchedAt, referenceTime));
     } else {
       setCheckedAgo("");
     }
-  }, [release, locale, isReleaseTimeUnknown, currentTime]);
+  }, [release, format, isReleaseTimeUnknown, currentTime]);
 
   return { checkedAgo, isReleaseTimeUnknown, timeAgo };
 }

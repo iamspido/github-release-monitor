@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import type { Locale } from "@/i18n/config";
 
 // This constant holds the non-translatable part of the test data.
 const jsCodeExample = `function greet(name) {
@@ -9,7 +10,7 @@ const jsCodeExample = `function greet(name) {
 greet('World');`;
 
 export async function getComprehensiveMarkdownBody(
-  locale: string,
+  locale: Locale,
 ): Promise<{ title: string; body: string }> {
   const t = await getTranslations({ locale, namespace: "TestRelease" });
 
@@ -103,7 +104,7 @@ ${jsCodeExample}
 }
 
 export async function getBasicAppriseTestBody(
-  locale: string,
+  locale: Locale,
 ): Promise<{ title: string; body: string }> {
   const t = await getTranslations({ locale, namespace: "TestRelease" });
 

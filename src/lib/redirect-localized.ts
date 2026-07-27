@@ -1,10 +1,11 @@
 import { redirect as nextRedirect } from "next/navigation";
+import type { Locale } from "@/i18n/config";
 import { redirect as testRedirect } from "@/i18n/navigation";
 
 type NextRedirect = typeof nextRedirect;
 
 // Keep this synchronous so Next.js handles NEXT_REDIRECT as a Server Action redirect.
-export function redirectLocalized(path: string, locale: string): never {
+export function redirectLocalized(path: string, locale: Locale): never {
   if (process.env.NODE_ENV === "test") {
     // In tests, redirect is mocked to track calls and throw '__REDIRECT__'
     const redirectFn = testRedirect as unknown as NextRedirect;

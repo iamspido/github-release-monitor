@@ -2,7 +2,8 @@ import { getTranslations } from "next-intl/server";
 
 import { LoginForm } from "@/components/auth/login-form";
 import { Logo } from "@/components/logo";
-import { pathnames } from "@/i18n/routing";
+import { normalizeLocale } from "@/i18n/config";
+import { getCanonicalRoutePath } from "@/i18n/routing";
 import { getAuthFeatureConfig } from "@/lib/auth/config";
 import { getAuthenticationMethod } from "@/lib/auth/mode";
 import { redirectLocalized } from "@/lib/redirect-localized";
@@ -13,18 +14,22 @@ export default async function LoginPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  const appLocale = normalizeLocale(locale);
   const authenticationMethod = getAuthenticationMethod();
   if (authenticationMethod === "External") {
-    redirectLocalized("/", locale);
+    redirectLocalized("/", appLocale);
   }
 
-  const t = await getTranslations({ locale, namespace: "LoginPage" });
+  const t = await getTranslations({
+    locale: appLocale,
+    namespace: "LoginPage",
+  });
   const { enabledSocialProviders, passkeyEnabled, signupEnabled } =
     getAuthFeatureConfig();
-  const registerPath = pathnames["/register"][locale as "en" | "de"];
+  const registerPath = getCanonicalRoutePath("/register", appLocale);
   const registerHref =
-    registerPath === "/" ? `/${locale}` : `/${locale}${registerPath}`;
-  const publicHomeHref = `/${locale}`;
+    registerPath === "/" ? `/${appLocale}` : `/${appLocale}${registerPath}`;
+  const publicHomeHref = `/${appLocale}`;
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
@@ -36,7 +41,7 @@ export default async function LoginPage({
           </h1>
         </div>
         <LoginForm
-          locale={locale}
+          locale={appLocale}
           enabledSocialProviders={enabledSocialProviders}
           passkeyEnabled={passkeyEnabled}
           signupEnabled={signupEnabled}

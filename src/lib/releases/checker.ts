@@ -15,7 +15,7 @@ import { scheduleTask } from "@/lib/runtime/task-scheduler";
 import { log } from "@/lib/server-action-helpers";
 import { getRepositories, saveRepositories } from "@/lib/storage/repositories";
 import { getSettings } from "@/lib/storage/settings";
-import type { AppSettings, EnrichedRelease, Repository } from "@/types";
+import type { AppSettings, EnrichedRelease, Locale, Repository } from "@/types";
 
 async function applyReleaseCheckResults({
   originalRepos,
@@ -29,7 +29,7 @@ async function applyReleaseCheckResults({
   originalRepos: Repository[];
   enrichedReleases: EnrichedRelease[];
   settings: AppSettings;
-  effectiveLocale: string;
+  effectiveLocale: Locale;
   backgroundCheckStartedAtIso: string;
   markDueChecks: boolean;
   notificationChannels: ReturnType<typeof getConfiguredNotificationChannels>;
@@ -110,7 +110,7 @@ async function applyReleaseCheckResults({
 }
 
 async function _checkForNewReleasesUnscheduled(options?: {
-  overrideLocale?: string;
+  overrideLocale?: Locale;
   skipCache?: boolean;
   onlyDue?: boolean;
 }) {
@@ -206,7 +206,7 @@ function processPendingNotifications(): Promise<number> {
 }
 
 export async function checkForNewReleases(options?: {
-  overrideLocale?: string;
+  overrideLocale?: Locale;
   skipCache?: boolean;
   onlyDue?: boolean;
 }) {

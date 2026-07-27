@@ -53,6 +53,7 @@ import {
 } from "@/hooks/use-autosave-controller";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { localeMetadata } from "@/i18n/config";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import {
   defaultSecurityHighlightCustomColor,
@@ -231,6 +232,8 @@ function FloatingSaveIndicator({ status }: { status: AutosaveStatus }) {
 
   return (
     <div
+      data-status={status}
+      data-testid="autosave-status"
       className={cn(
         "fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg border bg-background shadow-lg transition-all duration-300 ease-in-out",
         current.className,
@@ -246,12 +249,14 @@ interface SettingsFormProps {
   currentSettings: AppSettings;
   isAppriseConfigured: boolean;
   isGithubTokenSet: boolean;
+  onTimeFormatChange?: (timeFormat: TimeFormat) => void;
 }
 
 export function SettingsForm({
   currentSettings,
   isAppriseConfigured,
   isGithubTokenSet,
+  onTimeFormatChange,
 }: SettingsFormProps) {
   const t = useTranslations("SettingsForm");
   const router = useRouter();
@@ -928,18 +933,29 @@ export function SettingsForm({
               <Label>{t("time_format_label")}</Label>
               <RadioGroup
                 value={timeFormat}
-                onValueChange={(value: TimeFormat) => setTimeFormat(value)}
+                onValueChange={(value: TimeFormat) => {
+                  setTimeFormat(value);
+                  onTimeFormatChange?.(value);
+                }}
                 className="flex items-center gap-4"
                 disabled={!isOnline}
               >
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="12h" id={ids.timeFormat12h} />
+                  <RadioGroupItem
+                    value="12h"
+                    id={ids.timeFormat12h}
+                    data-testid="time-format-12h"
+                  />
                   <Label htmlFor={ids.timeFormat12h}>
                     {t("time_format_12h")}
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="24h" id={ids.timeFormat24h} />
+                  <RadioGroupItem
+                    value="24h"
+                    id={ids.timeFormat24h}
+                    data-testid="time-format-24h"
+                  />
                   <Label htmlFor={ids.timeFormat24h}>
                     {t("time_format_24h")}
                   </Label>
@@ -955,13 +971,21 @@ export function SettingsForm({
               >
                 <SelectTrigger
                   id={ids.languageSelect}
+                  data-testid="language-select"
                   className="w-full sm:w-[180px]"
                 >
                   <SelectValue placeholder={t("language_placeholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="en">{t("language_en")}</SelectItem>
-                  <SelectItem value="de">{t("language_de")}</SelectItem>
+                  {localeMetadata.map(({ code, nativeName }) => (
+                    <SelectItem
+                      key={code}
+                      value={code}
+                      data-testid={`language-option-${code}`}
+                    >
+                      {nativeName}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

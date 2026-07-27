@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import { normalizeLocale } from "@/i18n/config";
 import { authenticatePassword } from "@/lib/auth/password-login";
 import { readJsonPayload, toSafeString } from "@/lib/auth/request-context";
 import { logger } from "@/lib/logger";
@@ -11,14 +12,6 @@ type LoginPayload = {
   next?: unknown;
   locale?: unknown;
 };
-
-const validLocales = new Set(["en", "de"]);
-
-function normalizeLocale(value: unknown) {
-  if (typeof value !== "string") return "en";
-  const locale = value.trim().toLowerCase();
-  return validLocales.has(locale) ? locale : "en";
-}
 
 function getSetCookieHeaders(headers: Headers): string[] {
   const headersWithSetCookie = headers as Headers & {

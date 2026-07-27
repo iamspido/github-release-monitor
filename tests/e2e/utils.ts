@@ -1,49 +1,14 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import type { Locale } from "../../src/i18n/config";
 import {
   hasAuthenticationSessionCookie,
   hasTestRepoBaselineCookie,
 } from "./fixtures/cookies";
 
-// Matches autosave success indicators across EN/DE and short/long variants.
-const AUTOSAVE_SUCCESS_LONG_RE =
-  /All changes saved|Alle Änderungen gespeichert/;
-const AUTOSAVE_SUCCESS_SHORT_RE = /^Saved$|^Gespeichert$/;
-const AUTOSAVE_TOAST_RE =
-  /Settings updated successfully\.|Einstellungen erfolgreich aktualisiert\./;
-
 async function waitForAutosaveIndicator(page: Page, timeoutMs: number) {
-  const statusLocator = page
-    .getByRole("status")
-    .filter({ hasText: AUTOSAVE_SUCCESS_LONG_RE })
-    .first();
-  const candidates = [
-    page.getByRole("dialog").getByText(AUTOSAVE_SUCCESS_LONG_RE),
-    page.getByText(AUTOSAVE_SUCCESS_LONG_RE),
-    page.getByRole("dialog").getByText(AUTOSAVE_SUCCESS_SHORT_RE),
-    page.getByText(AUTOSAVE_SUCCESS_SHORT_RE),
-    page.getByRole("status").filter({ hasText: AUTOSAVE_TOAST_RE }),
-  ];
-
-  const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
-  const endTime = Date.now() + timeoutMs;
-
-  while (Date.now() < endTime) {
-    if (await statusLocator.count()) {
-      const text = await statusLocator.textContent();
-      if (text && AUTOSAVE_SUCCESS_LONG_RE.test(text)) {
-        return;
-      }
-    }
-    const visible = await Promise.all(
-      candidates.map((loc) => loc.isVisible().catch(() => false)),
-    );
-    if (visible.some(Boolean)) {
-      return;
-    }
-    await sleep(200);
-  }
-
-  throw new Error("Autosave indicator not visible within timeout");
+  await expect(
+    page.locator('[data-testid="autosave-status"][data-status="success"]'),
+  ).toBeVisible({ timeout: timeoutMs });
 }
 
 export async function waitForAutosave(
@@ -74,44 +39,18 @@ export async function waitForAutosave(
 }
 
 export async function assertNoAutosave(page: Page, waitMs = 1600) {
-  // Wait slightly longer than the debounce to ensure success does not appear
   await page.waitForTimeout(waitMs);
-  const noneVisible = await Promise.all([
-    page
-      .getByText(AUTOSAVE_SUCCESS_LONG_RE)
-      .isVisible()
-      .catch(() => false),
-    page
-      .getByText(AUTOSAVE_SUCCESS_SHORT_RE)
-      .isVisible()
-      .catch(() => false),
-    page
-      .getByRole("status")
-      .filter({ hasText: AUTOSAVE_TOAST_RE })
-      .isVisible()
-      .catch(() => false),
-  ]);
-  // Not visible anywhere
-  expect(noneVisible.some(Boolean)).toBe(false);
+  await expect(
+    page.locator('[data-testid="autosave-status"][data-status="success"]'),
+  ).toHaveCount(0);
 }
 
 export async function waitForTestRepoReady(page: Page, timeoutMs = 8_000) {
-  await expect
-    .poll(
-      async () => {
-        const en = await page
-          .getByText("The 'test/test' repository is now ready.")
-          .isVisible()
-          .catch(() => false);
-        const de = await page
-          .getByText("Das 'test/test'-Repository ist jetzt bereit.")
-          .isVisible()
-          .catch(() => false);
-        return en || de;
-      },
-      { timeout: timeoutMs, intervals: [200] },
-    )
-    .toBe(true);
+  await expect(
+    page.locator(
+      '[data-testid="test-repository-result"][data-result="success"]',
+    ),
+  ).toBeVisible({ timeout: timeoutMs });
 }
 
 export async function ensureTestRepo(page: Page, timeoutMs = 8_000) {
@@ -119,12 +58,8 @@ export async function ensureTestRepo(page: Page, timeoutMs = 8_000) {
     return;
   }
 
-  await page.goto("/en/test");
-  await page
-    .getByRole("button", {
-      name: /Add\/Reset Test Repo|Test-Repo hinzufügen\/zurücksetzen/,
-    })
-    .click();
+  await page.goto("/test");
+  await page.getByTestId("setup-test-repository").click();
   await waitForTestRepoReady(page, timeoutMs);
 }
 
@@ -140,22 +75,14 @@ export async function waitForRepoLink(
 
 export async function waitForRepositoryUpdate(page: Page) {
   await expect(
-    page.getByText(/^(Update Complete|Aktualisierung abgeschlossen)$/),
+    page.locator(
+      '[data-testid="repository-update-result"][data-result="success"]',
+    ),
   ).toBeVisible();
 }
 
 export async function ensureRepositoryFormExpanded(page: Page) {
-  const toggleName = new RegExp(
-    [
-      "Expand add repositories form",
-      "Collapse add repositories form",
-      "Formular zum Hinzufügen von Repositories ausklappen",
-      "Formular zum Hinzufügen von Repositories einklappen",
-    ].join("|"),
-  );
-  const toggleButton = page.getByRole("button", {
-    name: toggleName,
-  });
+  const toggleButton = page.getByTestId("repository-form-toggle");
 
   await expect(toggleButton).toBeVisible();
 
@@ -165,18 +92,14 @@ export async function ensureRepositoryFormExpanded(page: Page) {
   }
 
   await expect(page.locator('textarea[name="urls"]')).toBeVisible();
-  await expect(
-    page.locator("form").getByRole("button", {
-      name: /Add Repositories|Repositories hinzufügen/,
-    }),
-  ).toBeVisible();
+  await expect(page.getByTestId("add-repositories")).toBeVisible();
 }
 
 export async function removeRepositoriesIfPresent(
   page: Page,
   repositoryIds: readonly string[],
 ) {
-  await page.goto("/en");
+  await page.goto("/");
 
   for (const repositoryId of repositoryIds) {
     const repositoryLink = page.locator("a", { hasText: repositoryId }).first();
@@ -185,15 +108,11 @@ export async function removeRepositoriesIfPresent(
     const repositoryCard = repositoryLink.locator(
       "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' rounded-lg ')][1]",
     );
-    await repositoryCard
-      .getByRole("button", { name: /^(Remove|Entfernen)$/ })
-      .click();
+    await repositoryCard.getByTestId("remove-repository").click();
 
     const confirmationDialog = page.getByRole("alertdialog");
     await expect(confirmationDialog).toBeVisible();
-    await confirmationDialog
-      .getByRole("button", { name: /^(Confirm|Bestätigen)$/ })
-      .click();
+    await confirmationDialog.getByTestId("confirm-remove-repository").click();
     await expect(confirmationDialog).toHaveCount(0);
     await expect(repositoryLink).toHaveCount(0);
   }
@@ -206,7 +125,7 @@ export async function assertNotVisibleFor(locator: Locator, waitMs = 1600) {
 
 export async function waitForLocale(
   page: Page,
-  expected: "en" | "de",
+  expected: Locale,
   timeoutMs = 8000,
 ) {
   await expect
@@ -246,8 +165,10 @@ export async function isLoggedIn(page: Page): Promise<boolean> {
   if (await hasSessionCookie(page)) {
     return true;
   }
-  const logoutButton = page.getByRole("button", { name: /logout|abmelden/i });
-  return logoutButton.isVisible().catch(() => false);
+  return page
+    .getByTestId("logout-button")
+    .isVisible()
+    .catch(() => false);
 }
 
 export async function ensureAuthenticated(page: Page): Promise<void> {
@@ -270,33 +191,42 @@ export async function login(
   const p = password || process.env.AUTH_PASSWORD || "TestPassword123";
   const setupToken = process.env.AUTH_SETUP_TOKEN || "x".repeat(64);
 
-  const loginUrlRegex = /\/(en|de)\/(login|anmelden)/;
-
   if (await isLoggedIn(page)) {
-    await page.goto("/en", { waitUntil: "domcontentloaded" });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     return;
   }
 
   const tryGotoLogin = async () => {
-    await page.goto("/en/login", { waitUntil: "domcontentloaded" });
-    if (loginUrlRegex.test(new URL(page.url()).pathname)) {
-      return;
-    }
-    await page.goto("/de/anmelden", { waitUntil: "domcontentloaded" });
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
   };
 
   await tryGotoLogin();
 
-  const currentPath = new URL(page.url()).pathname;
-  if (!loginUrlRegex.test(currentPath)) {
-    const homeRegex = /\/(en|de)(\/)?$/;
-    if (homeRegex.test(currentPath) || (await isLoggedIn(page))) {
-      return;
-    }
-    throw new Error(`Unable to reach login page, current path: ${currentPath}`);
+  const setupTokenField = page.locator('input[name="setupToken"]');
+  const usernameField = page.locator('input[name="email"]');
+  const passwordField = page.locator('input[name="password"]');
+  try {
+    await expect
+      .poll(
+        async () =>
+          (await isLoggedIn(page)) ||
+          (await setupTokenField.count()) > 0 ||
+          ((await usernameField.count()) > 0 &&
+            (await passwordField.count()) > 0),
+        {
+          timeout: timeoutMs,
+          intervals: [100, 250, 500],
+        },
+      )
+      .toBe(true);
+  } catch (error) {
+    throw new Error(`Unable to reach login page, current URL: ${page.url()}`, {
+      cause: error,
+    });
   }
 
-  const setupTokenField = page.locator('input[name="setupToken"]');
+  if (await isLoggedIn(page)) return;
+
   if ((await setupTokenField.count()) > 0) {
     await setupTokenField.first().fill(setupToken, { timeout: timeoutMs });
     await page
@@ -306,25 +236,18 @@ export async function login(
     await page
       .locator('input[name="password"]')
       .fill(p, { timeout: timeoutMs });
-    await page
-      .getByRole("button", {
-        name: /create admin account|administratorkonto erstellen/i,
-      })
-      .click({
-        timeout: timeoutMs,
-      });
+    await page.locator('button[type="submit"]').first().click({
+      timeout: timeoutMs,
+    });
     await expect(setupTokenField).toHaveCount(0, { timeout: timeoutMs });
   }
-
-  const usernameField = page.locator('input[name="email"]');
-  const passwordField = page.locator('input[name="password"]');
 
   if (
     (await usernameField.count()) === 0 ||
     (await passwordField.count()) === 0
   ) {
     if (await isLoggedIn(page)) {
-      await page.goto("/en", { waitUntil: "domcontentloaded" });
+      await page.goto("/", { waitUntil: "domcontentloaded" });
       return;
     }
     await tryGotoLogin();
@@ -338,5 +261,5 @@ export async function login(
 
   const loginButton = page.locator('button[type="submit"]').first();
   await loginButton.click({ timeout: timeoutMs });
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
+  await expect.poll(() => isLoggedIn(page), { timeout: timeoutMs }).toBe(true);
 }

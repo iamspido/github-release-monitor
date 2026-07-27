@@ -149,6 +149,8 @@ export function useDiagnosticsActions(args: {
       try {
         const result = await setupTestRepositoryAction();
         toast({
+          "data-result": result.success ? "success" : "error",
+          "data-testid": "test-repository-result",
           title: result.success
             ? t("toast_success_title")
             : t("toast_error_title"),
@@ -158,6 +160,8 @@ export function useDiagnosticsActions(args: {
       } catch (error: unknown) {
         if (reloadIfServerActionStale(error)) return;
         toast({
+          "data-result": "error",
+          "data-testid": "test-repository-result",
           title: t("toast_error_title"),
           description: t("toast_setup_test_repo_error"),
           variant: "destructive",

@@ -4,6 +4,7 @@ import { AutoRefresher } from "@/components/auto-refresher";
 import { BackToTopButton } from "@/components/back-to-top-button";
 import { Header } from "@/components/header";
 import { HomePageClient } from "@/components/home-page-client";
+import { normalizeLocale } from "@/i18n/config";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { logger } from "@/lib/logger";
 import { getNotificationRuntimeConfig } from "@/lib/notifications/config";
@@ -29,7 +30,8 @@ export default async function HomePage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: "HomePage" });
+  const appLocale = normalizeLocale(locale);
+  const t = await getTranslations({ locale: appLocale, namespace: "HomePage" });
 
   let repositories: Repository[] = [];
   let releases: EnrichedRelease[] = [];
@@ -77,7 +79,7 @@ export default async function HomePage({
         <AutoRefresher intervalMinutes={settings.refreshInterval} />
       )}
       <Header
-        locale={locale}
+        locale={appLocale}
         updateNotice={updateNotice}
         authAccess={authAccess}
       />
@@ -90,7 +92,7 @@ export default async function HomePage({
           generalError={generalError}
           errorSummary={errorSummary}
           lastUpdated={lastUpdated}
-          locale={locale}
+          locale={appLocale}
           initialViewMode={initialViewMode}
           canMutate={authAccess.canMutate}
           isAppriseConfigured={isAppriseConfigured}

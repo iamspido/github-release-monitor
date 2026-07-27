@@ -8,7 +8,7 @@ import type {
 } from "@/lib/releases/types";
 import type { RepoProvider } from "@/lib/repositories/providers";
 import { getEffectiveCacheIntervalMinutes } from "@/lib/runtime/repository-schedule";
-import type { AppSettings } from "@/types";
+import type { AppSettings, Locale } from "@/types";
 
 export async function fetchLatestReleaseWithCache(
   provider: RepoProvider,
@@ -17,7 +17,7 @@ export async function fetchLatestReleaseWithCache(
   repo: string,
   repoSettings: RepoSettingsForFetch,
   globalSettings: AppSettings,
-  locale: string,
+  locale: Locale,
   options?: { skipCache?: boolean },
 ): Promise<LatestReleaseFetchResult> {
   const fetcher =
@@ -29,7 +29,7 @@ export async function fetchLatestReleaseWithCache(
             repoArg: string,
             repoSettingsArg: RepoSettingsForFetch,
             globalSettingsArg: AppSettings,
-            localeArg: string,
+            localeArg: Locale,
           ) =>
             fetchLatestReleaseFromGitLab(
               providerHost ?? "gitlab.com",

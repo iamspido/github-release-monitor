@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { getLocale } from "next-intl/server";
-import { pathnames } from "@/i18n/routing";
+import { normalizeLocale } from "@/i18n/config";
+import { getCanonicalRoutePath } from "@/i18n/routing";
 import {
   auth,
   ensureAuthDatabaseReady,
@@ -202,7 +203,7 @@ export async function register(
       `Registration successful for ${registrationLabel} from ip='${clientIp}'. Redirecting to login.`,
     );
   const locale = await getLocale();
-  const loginPath = pathnames["/login"][locale as "en" | "de"];
+  const loginPath = getCanonicalRoutePath("/login", normalizeLocale(locale));
   redirectLocalized(`${loginPath}?registered=1`, locale);
 }
 
@@ -231,7 +232,7 @@ export async function logout() {
       `User logged out from ip='${clientIp}' with status=${signOutResponse.status}.`,
     );
 
-  const loginPath = pathnames["/login"][locale as "en" | "de"];
+  const loginPath = getCanonicalRoutePath("/login", normalizeLocale(locale));
   revalidatePath("/");
   redirectLocalized(loginPath, locale);
 }

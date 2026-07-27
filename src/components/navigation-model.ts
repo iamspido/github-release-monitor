@@ -1,5 +1,7 @@
 import { FlaskConical, Home, Settings } from "lucide-react";
-import { pathnames } from "@/i18n/routing";
+import type { Locale } from "@/i18n/config";
+import type { pathnames } from "@/i18n/routing";
+import { getCanonicalRoutePath } from "@/i18n/routing";
 import type { AuthAccess } from "@/lib/auth/mode";
 import { stripLocalePrefix } from "@/lib/localized-path";
 
@@ -54,7 +56,7 @@ export function getNavLinks(
 
 export function normalizeLocalizedPath(
   path: string | null | undefined,
-  locale: string,
+  locale: Locale,
 ): string {
   if (!path) {
     return "/";
@@ -75,7 +77,7 @@ export function normalizeLocalizedPath(
 
 export function isNavLinkActive(args: {
   href: keyof typeof pathnames;
-  locale: string;
+  locale: Locale;
   pathname: string | null | undefined;
 }): boolean {
   const currentPath = normalizeLocalizedPath(args.pathname, args.locale);
@@ -83,11 +85,8 @@ export function isNavLinkActive(args: {
 
   candidates.add(normalizeLocalizedPath(args.href, args.locale));
 
-  const routeConfig = pathnames[args.href];
-  const localizedPath = routeConfig?.[args.locale as "en" | "de"];
-  if (localizedPath) {
-    candidates.add(normalizeLocalizedPath(localizedPath, args.locale));
-  }
+  const localizedPath = getCanonicalRoutePath(args.href, args.locale);
+  candidates.add(normalizeLocalizedPath(localizedPath, args.locale));
 
   return candidates.has(currentPath);
 }

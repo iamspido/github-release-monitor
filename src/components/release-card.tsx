@@ -12,7 +12,7 @@ import {
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import * as React from "react";
 
 import {
@@ -293,6 +293,8 @@ function RemoveRepositoryButton({
 
   const triggerButton = (
     <Button
+      data-repository-id={repoId}
+      data-testid="remove-repository"
       variant={buttonVariant}
       size={iconOnly ? "icon" : "sm"}
       className={cn(iconOnly && "size-8", buttonClassName)}
@@ -338,6 +340,7 @@ function RemoveRepositoryButton({
         <AlertDialogFooter>
           <AlertDialogCancel>{t("cancel_button")}</AlertDialogCancel>
           <AlertDialogAction
+            data-testid="confirm-remove-repository"
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={onRemove}
             disabled={isRemoving || !isOnline}
@@ -605,7 +608,6 @@ export function ReleaseCard({
 }: ReleaseCardProps) {
   const t = useTranslations("ReleaseCard");
   const tActions = useTranslations("Actions");
-  const locale = useLocale();
   const { toast } = useToast();
   const { repoId, repoUrl, release, error, isNew, repoSettings } =
     enrichedRelease;
@@ -630,10 +632,8 @@ export function ReleaseCard({
   const [isRemoving, startRemoveTransition] = React.useTransition();
   const [isAcknowledging, startAcknowledgeTransition] = React.useTransition();
   const [isMarkingAsNew, startMarkingAsNewTransition] = React.useTransition();
-  const { checkedAgo, isReleaseTimeUnknown, timeAgo } = useReleaseRelativeTimes(
-    release,
-    locale,
-  );
+  const { checkedAgo, isReleaseTimeUnknown, timeAgo } =
+    useReleaseRelativeTimes(release);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [isExpanded, setIsExpanded] = React.useState(false);
   const compactDetailsId = React.useId();

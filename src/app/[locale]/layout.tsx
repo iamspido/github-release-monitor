@@ -7,7 +7,7 @@ import { getMessages, getTranslations } from "next-intl/server";
 import { AppClientInitializer } from "@/components/app-client-initializer";
 import { Toaster } from "@/components/ui/toaster";
 import { NetworkStatusProvider } from "@/hooks/use-network";
-import { locales } from "@/i18n/routing";
+import { getLocaleMetadata, parseLocale } from "@/i18n/config";
 import "../globals.css";
 
 const inter = Inter({
@@ -26,7 +26,11 @@ export async function generateMetadata({
 }: {
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
-  const { locale } = await params;
+  const { locale: requestedLocale } = await params;
+  const locale = parseLocale(requestedLocale);
+  if (!locale) {
+    notFound();
+  }
   const t = await getTranslations({ locale, namespace: "Metadata" });
 
   return {
@@ -42,16 +46,22 @@ export default async function LocaleLayout({
   children: React.ReactNode;
   params: Promise<{ locale: string }>;
 }) {
-  const { locale } = await params;
+  const { locale: requestedLocale } = await params;
+  const locale = parseLocale(requestedLocale);
   // Validate that the incoming `locale` parameter is valid
-  if (!locales.includes(locale as never)) {
+  if (!locale) {
     notFound();
   }
 
   const messages = await getMessages();
+  const { direction } = getLocaleMetadata(locale);
 
   return (
-    <html lang={locale} className={`${inter.variable} ${roboto.variable} dark`}>
+    <html
+      lang={locale}
+      dir={direction}
+      className={`${inter.variable} ${roboto.variable} dark`}
+    >
       <body className="font-body antialiased">
         <NextIntlClientProvider locale={locale} messages={messages}>
           <NetworkStatusProvider>

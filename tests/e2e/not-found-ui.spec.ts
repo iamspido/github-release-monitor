@@ -1,20 +1,46 @@
 import { expect, test } from "./fixtures/test";
 
-test("404 shows localized UI text", async ({ page }) => {
-  const username =
-    process.env.AUTH_EMAIL || process.env.AUTH_USERNAME || "test@example.test";
-  const password = process.env.AUTH_PASSWORD || "TestPassword123";
-  await page.goto("/en/login");
-  await page.getByLabel(/email|e-mail/i).fill(username);
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').first().click();
-  await expect(page).toHaveURL(/\/(en|de)(\/)?$/);
+test("a stale locale cookie does not override the configured locale", async ({
+  request,
+}) => {
+  const response = await request.get("/de/sdsadas", {
+    headers: { cookie: "grm.locale=de" },
+    maxRedirects: 0,
+  });
 
-  const resp = await page.goto("/en/this-page-does-not-exist");
-  expect(resp?.status()).toBe(404);
-  // Next.js default 404 content (English); accept either EN or potential localized message
-  const text = page.getByText(
-    /This page could not be found\.|Not Found|Seite konnte nicht gefunden werden/i,
-  );
-  await expect(text).toBeVisible();
+  expect(response.status()).toBe(307);
+  expect(
+    new URL(response.headers().location, "http://localhost").pathname,
+  ).toBe("/en");
+});
+
+test("unknown localized path does not override a different configured locale", async ({
+  request,
+}) => {
+  const mismatchedResponse = await request.get("/de/sdsadas", {
+    maxRedirects: 0,
+  });
+
+  expect(mismatchedResponse.status()).toBe(307);
+  expect(
+    new URL(mismatchedResponse.headers().location, "http://localhost").pathname,
+  ).toBe("/en");
+});
+
+test("unknown dotted document path redirects to the configured home page", async ({
+  request,
+}) => {
+  const response = await request.get("/de/missing.html", {
+    headers: {
+      accept: "text/html",
+      cookie: "grm.locale=de",
+      "sec-fetch-dest": "document",
+    },
+    maxRedirects: 0,
+  });
+
+  expect(response.status()).toBe(307);
+  expect(
+    new URL(response.headers().location, "http://localhost").pathname,
+  ).toBe("/en");
 });

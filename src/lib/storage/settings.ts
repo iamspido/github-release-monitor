@@ -1,6 +1,6 @@
 import type { Stats } from "node:fs";
 import path from "node:path";
-import { defaultLocale, locales } from "@/i18n/routing";
+import { defaultLocale, parseLocale } from "@/i18n/config";
 import {
   normalizeProviderSortOrder,
   normalizeReleaseSortOrder,
@@ -30,7 +30,7 @@ export function createDefaultSettings(
 ): AppSettings {
   return {
     timeFormat: "24h",
-    locale: "en",
+    locale: defaultLocale,
     refreshInterval: 10,
     cacheInterval: 5,
     backgroundCheckCron: undefined,
@@ -83,7 +83,6 @@ function cloneSettings(settings: AppSettings): AppSettings {
   };
 }
 
-const isSupportedLocale = isOneOf(locales);
 const isIntegerInRange = (min: number, max: number) => (value: unknown) =>
   isFiniteNumber(value) &&
   Number.isInteger(value) &&
@@ -197,9 +196,7 @@ export function normalizeSettings(value: unknown): AppSettings {
     ...defaultSettings,
     ...(definedPersisted as Partial<AppSettings>),
   };
-  merged.locale = isSupportedLocale(merged.locale)
-    ? merged.locale
-    : defaultLocale;
+  merged.locale = parseLocale(merged.locale) ?? defaultLocale;
   merged.releaseSortOrder = normalizeReleaseSortOrder(merged.releaseSortOrder);
   merged.releaseSelectionStrategy = normalizeReleaseSelectionStrategy(
     merged.releaseSelectionStrategy,
@@ -228,7 +225,7 @@ async function refreshCache(existingStat?: Stats) {
   lastMtimeCheck = Date.now();
 }
 
-async function ensureCache() {
+async function ensureCache(options: { forceMtimeCheck?: boolean } = {}) {
   await settingsStore.ensureExists();
 
   if (!cachedSettings) {
@@ -237,7 +234,10 @@ async function ensureCache() {
   }
 
   const now = Date.now();
-  if (now - lastMtimeCheck < CACHE_CHECK_INTERVAL_MS) {
+  if (
+    !options.forceMtimeCheck &&
+    now - lastMtimeCheck < CACHE_CHECK_INTERVAL_MS
+  ) {
     return;
   }
 
@@ -263,11 +263,12 @@ export async function getSettings(): Promise<AppSettings> {
 }
 
 export async function getLocaleSetting(): Promise<Locale> {
-  await ensureCache();
+  // The proxy uses this value as the authority over locale cookies. Always
+  // check the file metadata here so a settings update performed by another
+  // Next.js route bundle cannot be hidden by the normal short-lived cache.
+  await ensureCache({ forceMtimeCheck: true });
   const locale = cachedSettings?.locale;
-  return locale && (locales as readonly string[]).includes(locale)
-    ? (locale as Locale)
-    : defaultLocale;
+  return parseLocale(locale) ?? defaultLocale;
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {

@@ -209,7 +209,7 @@ describe("auth/client-flow-utils", () => {
       identifier: "release_user",
       password: "wrong",
       locale: "en",
-    };
+    } satisfies Parameters<typeof submitPasswordLogin>[0];
     await expect(submitPasswordLogin(input)).resolves.toEqual({
       errorKey: "error_locked",
     });

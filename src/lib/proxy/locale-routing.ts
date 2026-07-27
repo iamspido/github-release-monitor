@@ -1,65 +1,113 @@
 import type { NextRequest, NextResponse } from "next/server";
-import { locales, pathnames } from "@/i18n/routing";
+import { type Locale, parseLocale } from "@/i18n/config";
+import {
+  getCanonicalRoutePath,
+  getRouteAliases,
+  locales,
+  pathnames,
+} from "@/i18n/routing";
 import {
   getSupportedLocalePrefix,
   stripLocalePrefix,
 } from "@/lib/localized-path";
-import type { ProxyLocale } from "@/lib/proxy/settings-locale";
 
 export type ProxyRouteKey = keyof typeof pathnames;
+export type ProxyRouteMatch = {
+  routeKey: ProxyRouteKey;
+  isAlias: boolean;
+};
+export type ProxyRoutePathRegistration = ProxyRouteMatch & {
+  locale: Locale;
+  path: string;
+};
 
-const reversePathLookup: Record<
-  ProxyLocale,
-  Record<string, ProxyRouteKey>
-> = locales.reduce(
-  (acc, locale) => {
-    acc[locale] = {};
-    return acc;
-  },
-  {} as Record<ProxyLocale, Record<string, ProxyRouteKey>>,
-);
-
+const routePathRegistrations: ProxyRoutePathRegistration[] = [];
 for (const routeKey of Object.keys(pathnames) as ProxyRouteKey[]) {
-  const localized = pathnames[routeKey] as Record<ProxyLocale, string>;
-  for (const locale of locales as readonly ProxyLocale[]) {
-    const localizedPath = normalizedRestPath(localized[locale]);
-    reversePathLookup[locale][localizedPath] = routeKey;
+  for (const locale of locales) {
+    const localizedPath = normalizedRestPath(
+      getCanonicalRoutePath(routeKey, locale),
+    );
+    routePathRegistrations.push({
+      locale,
+      path: localizedPath,
+      routeKey,
+      isAlias: false,
+    });
+    for (const alias of getRouteAliases(routeKey, locale)) {
+      routePathRegistrations.push({
+        locale,
+        path: normalizedRestPath(alias),
+        routeKey,
+        isAlias: true,
+      });
+    }
   }
 }
 
+export function buildRoutePathLookup(
+  registrations: readonly ProxyRoutePathRegistration[],
+): Record<Locale, Record<string, ProxyRouteMatch>> {
+  const lookup = locales.reduce(
+    (acc, locale) => {
+      acc[locale] = {};
+      return acc;
+    },
+    {} as Record<Locale, Record<string, ProxyRouteMatch>>,
+  );
+
+  for (const { locale, path, ...match } of registrations) {
+    const existing = lookup[locale][path];
+    if (existing && existing.routeKey !== match.routeKey) {
+      throw new Error(
+        `Localized route collision for locale '${locale}' and path '${path}'.`,
+      );
+    }
+    if (!existing || (existing.isAlias && !match.isAlias)) {
+      lookup[locale][path] = match;
+    }
+  }
+  return lookup;
+}
+
+const reversePathLookup = buildRoutePathLookup(routePathRegistrations);
+
 export function getCurrentLocaleFromResponse(
   response: NextResponse,
-  fallbackLocale: ProxyLocale,
-): ProxyLocale {
+  fallbackLocale: Locale,
+): Locale {
   const headerLocale = response.headers.get("x-next-intl-locale");
-  return (locales as readonly string[]).includes(headerLocale || "")
-    ? (headerLocale as ProxyLocale)
-    : fallbackLocale;
+  return parseLocale(headerLocale) ?? fallbackLocale;
 }
 
-export function getLocalizedLoginPath(locale: ProxyLocale): string {
-  const loginPaths = pathnames["/login"];
-  return loginPaths[locale as "en" | "de"] || loginPaths.en;
+export function getLocalizedLoginPath(locale: Locale): string {
+  return getCanonicalRoutePath("/login", locale);
 }
 
-export function getRouteKeyForPath(
-  locale: ProxyLocale,
+export function getRouteMatchForPath(
+  locale: Locale,
   pathname: string,
-): ProxyRouteKey | null {
+): ProxyRouteMatch | null {
   const { restPath } = splitLocaleFromPath(pathname);
   const normalizedPath = normalizedRestPath(restPath);
   return reversePathLookup[locale][normalizedPath] ?? null;
 }
 
+export function getRouteKeyForPath(
+  locale: Locale,
+  pathname: string,
+): ProxyRouteKey | null {
+  return getRouteMatchForPath(locale, pathname)?.routeKey ?? null;
+}
+
 export function splitLocaleFromPath(pathname: string): {
-  locale: ProxyLocale | null;
+  locale: Locale | null;
   restPath: string;
 } {
   const locale = getSupportedLocalePrefix(pathname);
 
   if (locale) {
     return {
-      locale: locale as ProxyLocale,
+      locale,
       restPath: normalizedRestPath(stripLocalePrefix(pathname, locale)),
     };
   }
@@ -79,23 +127,25 @@ export function normalizedRestPath(path: string): string {
 
 export function resolveLocalizedRestPath(
   restPath: string,
-  targetLocale: ProxyLocale,
-  sourceLocale?: ProxyLocale,
+  targetLocale: Locale,
+  sourceLocale?: Locale,
 ): string {
   const normalized = normalizedRestPath(restPath);
 
   if (sourceLocale) {
-    const candidateRoute = reversePathLookup[sourceLocale][normalized];
-    if (candidateRoute) {
-      return normalizedRestPath(pathnames[candidateRoute][targetLocale]);
+    const candidate = reversePathLookup[sourceLocale][normalized];
+    if (candidate) {
+      return normalizedRestPath(
+        getCanonicalRoutePath(candidate.routeKey, targetLocale),
+      );
     }
   }
 
-  for (const locale of locales as readonly ProxyLocale[]) {
-    const candidateRoute = reversePathLookup[locale][normalized];
-    if (candidateRoute) {
-      return normalizedRestPath(pathnames[candidateRoute][targetLocale]);
-    }
+  const targetCandidate = reversePathLookup[targetLocale][normalized];
+  if (targetCandidate) {
+    return normalizedRestPath(
+      getCanonicalRoutePath(targetCandidate.routeKey, targetLocale),
+    );
   }
 
   return normalized;
@@ -103,7 +153,7 @@ export function resolveLocalizedRestPath(
 
 export function buildRedirectUrl(
   request: NextRequest,
-  locale: ProxyLocale,
+  locale: Locale,
   localizedRest: string,
 ): URL {
   const url = new URL(request.url);

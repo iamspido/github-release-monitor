@@ -33,7 +33,7 @@ import {
   getGitlabAuthForHost,
 } from "@/lib/repositories/providers";
 import { log } from "@/lib/server-action-helpers";
-import type { AppSettings, FetchError, GithubRelease } from "@/types";
+import type { AppSettings, FetchError, GithubRelease, Locale } from "@/types";
 
 type GitlabReleaseApi = {
   name?: string | null;
@@ -204,7 +204,7 @@ export async function fetchLatestReleaseFromGitLab(
   repo: string,
   repoSettings: RepoSettingsForFetch,
   globalSettings: AppSettings,
-  locale: string,
+  locale: Locale,
 ): Promise<LatestReleaseFetchResult> {
   const projectPath = `${owner}/${repo}`;
   log.info(`Fetching GitLab release for ${projectPath} on ${gitlabHost}`);
