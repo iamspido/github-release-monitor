@@ -531,7 +531,7 @@ describe("actions fetcher scenarios", () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
       mockFetchResponse({
         status: 200,
-        json: [{ name: "v1", commit: { sha: "sha1" } }],
+        json: [{ name: "release/1.0.0", commit: { sha: "sha1" } }],
       }),
     );
     vi.mocked(global.fetch).mockResolvedValueOnce(
@@ -559,8 +559,73 @@ describe("actions fetcher scenarios", () => {
       { skipCache: true },
     );
     expect(enriched[0].release?.id).toBe(0);
-    expect(enriched[0].release?.tag_name).toBe("v1");
+    expect(enriched[0].release?.tag_name).toBe("release/1.0.0");
+    expect(enriched[0].release?.html_url).toBe(
+      "https://github.com/o/r/releases/tag/release%2F1.0.0",
+    );
+    expect(enriched[0].release?.published_at_unknown).toBe(false);
     expect(enriched[0].error).toBeUndefined();
+    expect(vi.mocked(global.fetch).mock.calls[3][0]).toContain(
+      "/git/ref/tags/release%2F1.0.0",
+    );
+  });
+
+  it("preserves an unknown date when annotated tag metadata has no date", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "o/r",
+      url: "https://github.com/o/r",
+    };
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: [] }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            name: "v1.0.0",
+            commit: {
+              sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            },
+          },
+        ],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: {
+          object: {
+            type: "tag",
+            sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            url: "https://api.github.test/tags/1",
+          },
+        },
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: { message: "Annotated release notes" },
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("v1.0.0");
+    expect(enriched[0].release?.published_at_unknown).toBe(true);
+    expect(enriched[0].release?.body).toContain("Annotated release notes");
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(5);
   });
 
   it("uses GitHub's chronological tags page before its REST tags order", async () => {
@@ -627,6 +692,313 @@ describe("actions fetcher scenarios", () => {
     expect(calls.some(([url]) => String(url).includes("/tags?"))).toBe(false);
   });
 
+  it("selects the highest stable Go version instead of a weekly tag", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "github:golang/go",
+      url: "https://github.com/golang/go",
+      releaseSelectionStrategy: "highest_version",
+    };
+    const selectedSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: [] }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        text: `
+          <a href="/golang/go/releases/tag/go1.27rc2">go1.27rc2</a>
+          <relative-time datetime="2026-07-07T19:42:34Z">Jul 7</relative-time>
+          <a href="/golang/go/commit/cccccccccccccccccccccccccccccccccccccccc">ccccccc</a>
+          <a href="/golang/go/releases/tag/go1.26.5">go1.26.5</a>
+          <relative-time datetime="2026-07-07T19:29:04Z">Jul 7</relative-time>
+          <a href="/golang/go/commit/${selectedSha}">bbbbbbb</a>
+          <a href="/golang/go/releases/tag/go1.25.12">go1.25.12</a>
+          <relative-time datetime="2026-07-07T19:20:04Z">Jul 7</relative-time>
+          <a href="/golang/go/commit/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee">eeeeeee</a>
+        `,
+      }),
+    );
+    // GitHub's REST endpoint is lexicographic for this repository, so its
+    // first page contains only old weekly tags.
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            name: "weekly.2012-03-27",
+            commit: {
+              sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            },
+          },
+          {
+            name: "weekly.2012-03-22",
+            commit: {
+              sha: "dddddddddddddddddddddddddddddddddddddddd",
+            },
+          },
+        ],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: { object: { type: "commit", sha: selectedSha, url: "unused" } },
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: {
+          commit: {
+            message: "go1.26.5",
+            committer: { date: "2026-07-07T19:29:04Z" },
+          },
+        },
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("go1.26.5");
+    expect(enriched[0].error).toBeUndefined();
+    expect(vi.mocked(global.fetch).mock.calls[1][0]).toBe(
+      "https://github.com/golang/go/tags",
+    );
+    expect(vi.mocked(global.fetch).mock.calls[2][0]).toContain("/tags?");
+    expect(vi.mocked(global.fetch).mock.calls[4][0]).toContain(
+      `/commits/${selectedSha}`,
+    );
+  });
+
+  it("uses chronological GitHub tag candidates when the REST tag request fails", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "owner/repo",
+      url: "https://github.com/owner/repo",
+      releaseSelectionStrategy: "highest_version",
+      releasesPerPage: 1,
+    };
+    const selectedSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: [] }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        text: `
+          <a href="/owner/repo/releases/tag/release-v2">release-v2</a>
+          <relative-time datetime="2026-07-07T19:29:04Z">Jul 7</relative-time>
+          <a href="/owner/repo/commit/${selectedSha}">bbbbbbb</a>
+        `,
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 500, statusText: "Internal Server Error" }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: { object: { type: "commit", sha: selectedSha, url: "unused" } },
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: {
+          commit: {
+            message: "release-v2",
+            committer: { date: "2026-07-07T19:29:04Z" },
+          },
+        },
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("release-v2");
+    expect(enriched[0].error).toBeUndefined();
+    expect(vi.mocked(global.fetch).mock.calls[2][0]).toContain("/tags?");
+    expect(vi.mocked(global.fetch).mock.calls[3][0]).toContain(
+      "/git/ref/tags/release-v2",
+    );
+  });
+
+  it("returns an error when a paginated GitHub tag scan remains incomplete", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "owner/repo",
+      url: "https://github.com/owner/repo",
+      releaseSelectionStrategy: "highest_version",
+      releasesPerPage: 150,
+    };
+    const firstPageTags = Array.from({ length: 100 }, (_, index) => ({
+      name: `v${index + 1}.0.0`,
+      commit: {
+        sha: String(index + 1).padStart(40, "0"),
+      },
+    }));
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: [] }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: firstPageTags }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 500, statusText: "Internal Server Error" }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release).toBeUndefined();
+    expect(enriched[0].error?.type).toBe("api_error");
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(4);
+    expect(vi.mocked(global.fetch).mock.calls[2][0]).toContain(
+      "/tags?per_page=100&page=1",
+    );
+    expect(vi.mocked(global.fetch).mock.calls[3][0]).toContain(
+      "/tags?per_page=50&page=2",
+    );
+  });
+
+  it("does not present unordered undated tags as the highest version", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "owner/repo",
+      url: "https://github.com/owner/repo",
+      releaseSelectionStrategy: "highest_version",
+    };
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: [] }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            name: "weekly.2012-03-27",
+            commit: {
+              sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            },
+          },
+          {
+            name: "nightly-main",
+            commit: {
+              sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            },
+          },
+        ],
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release).toBeUndefined();
+    expect(enriched[0].error?.type).toBe("no_matching_releases");
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps merged GitHub tag candidates within the configured limit", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "owner/repo",
+      url: "https://github.com/owner/repo",
+      releaseSelectionStrategy: "highest_version",
+      releasesPerPage: 1,
+    };
+    const selectedSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: [] }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        text: `
+          <a href="/owner/repo/releases/tag/current-build">current-build</a>
+          <relative-time datetime="2026-07-07T19:42:34Z">Jul 7</relative-time>
+          <a href="/owner/repo/commit/${selectedSha}">aaaaaaa</a>
+        `,
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            name: "legacy-99.0.0",
+            commit: {
+              sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            },
+          },
+        ],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: { object: { type: "commit", sha: selectedSha, url: "unused" } },
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: {
+          commit: {
+            message: "current build",
+            committer: { date: "2026-07-07T19:42:34Z" },
+          },
+        },
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("current-build");
+    expect(enriched[0].error).toBeUndefined();
+    expect(vi.mocked(global.fetch).mock.calls[2][0]).toContain(
+      "/tags?per_page=1&page=1",
+    );
+    expect(vi.mocked(global.fetch).mock.calls[3][0]).toContain(
+      "/git/ref/tags/current-build",
+    );
+  });
+
   it("selects the highest version across paginated GitHub tag fallbacks", async () => {
     const actions = await import("@/app/actions");
     const repo: Repository = {
@@ -645,6 +1017,9 @@ describe("actions fetcher scenarios", () => {
 
     vi.mocked(global.fetch).mockResolvedValueOnce(
       mockFetchResponse({ status: 200, json: [] }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
     );
     vi.mocked(global.fetch).mockResolvedValueOnce(
       mockFetchResponse({
@@ -684,13 +1059,16 @@ describe("actions fetcher scenarios", () => {
     );
 
     expect(enriched[0].release?.tag_name).toBe("v999.0.0");
-    expect(vi.mocked(global.fetch).mock.calls[1][0]).toContain(
-      "/tags?per_page=100&page=1",
+    expect(vi.mocked(global.fetch).mock.calls[1][0]).toBe(
+      "https://github.com/owner/repo/tags",
     );
     expect(vi.mocked(global.fetch).mock.calls[2][0]).toContain(
+      "/tags?per_page=100&page=1",
+    );
+    expect(vi.mocked(global.fetch).mock.calls[3][0]).toContain(
       "/tags?per_page=50&page=2",
     );
-    expect(vi.mocked(global.fetch).mock.calls[4][0]).toContain(
+    expect(vi.mocked(global.fetch).mock.calls[5][0]).toContain(
       `/commits/${selectedSha}`,
     );
     expect(
@@ -699,7 +1077,7 @@ describe("actions fetcher scenarios", () => {
         .mock.calls.some(
           ([url]) => String(url) === "https://github.com/owner/repo/tags",
         ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("falls back to the first matching stable tag when newer tags are prereleases", async () => {

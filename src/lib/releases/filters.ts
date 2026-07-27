@@ -1,3 +1,4 @@
+import { parseComparableVersion } from "@/lib/releases/version";
 import { log } from "@/lib/server-action-helpers";
 import type {
   AppSettings,
@@ -14,8 +15,6 @@ const preReleaseMatcherCache = new Map<
   ReturnType<typeof createPreReleaseMatcher>
 >();
 const maxCachedPreReleaseMatchers = 100;
-const semanticPreReleaseTagPattern =
-  /^[vV]?\d+\.\d+\.\d+(?:\.\d+)?-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -276,8 +275,16 @@ export function createEffectiveReleaseMatcher(
     const isTagMarkedPreRelease = matchesAnyPreReleaseChannel(
       versionForChannelClassification,
     );
-    const isSemanticPreRelease = semanticPreReleaseTagPattern.test(
+    const parsedVersion = parseComparableVersion(
       versionForChannelClassification,
+    );
+    // Preserve the established behavior for abbreviated versions while
+    // classifying fully qualified semantic prereleases consistently across all
+    // release-selection strategies.
+    const isSemanticPreRelease = Boolean(
+      parsedVersion &&
+        parsedVersion.core.length >= 3 &&
+        parsedVersion.prerelease.length,
     );
     const isConsideredPreRelease =
       release.prerelease || isTagMarkedPreRelease || isSemanticPreRelease;

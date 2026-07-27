@@ -1,5 +1,9 @@
 import type { EffectiveRepoFilters } from "@/lib/releases/filters";
 import { createEffectiveReleaseMatcher } from "@/lib/releases/filters";
+import {
+  type ParsedVersion,
+  parseComparableVersion,
+} from "@/lib/releases/version";
 import { validateVersionTagPattern } from "@/lib/releases/version-tag-pattern";
 import type {
   FetchError,
@@ -8,14 +12,6 @@ import type {
   Repository,
 } from "@/types";
 import { releaseSelectionStrategies } from "@/types";
-
-type ParsedVersion = {
-  core: bigint[];
-  prerelease: Array<bigint | string>;
-};
-
-const VERSION_PATTERN =
-  /^[vV]?(\d+(?:\.\d+){0,3})(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export function normalizeReleaseSelectionStrategy(
   value: unknown,
@@ -32,22 +28,6 @@ export function resolveEffectiveReleaseSelectionStrategy(
   return repository.releaseSelectionStrategy
     ? normalizeReleaseSelectionStrategy(repository.releaseSelectionStrategy)
     : normalizeReleaseSelectionStrategy(globalStrategy);
-}
-
-function parseVersion(tagName: string): ParsedVersion | null {
-  const match = VERSION_PATTERN.exec(tagName.trim());
-  if (!match) return null;
-
-  return {
-    core: match[1].split(".").map((component) => BigInt(component)),
-    prerelease: match[2]
-      ? match[2]
-          .split(".")
-          .map((identifier) =>
-            /^\d+$/.test(identifier) ? BigInt(identifier) : identifier,
-          )
-      : [],
-  };
 }
 
 function comparePrerelease(
@@ -96,10 +76,29 @@ function getReleaseTime(release: GithubRelease): number {
   return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
 }
 
+function getKnownReleaseTime(release: GithubRelease): number {
+  return release.published_at_unknown
+    ? Number.NEGATIVE_INFINITY
+    : getReleaseTime(release);
+}
+
 function selectNewestRelease(releases: GithubRelease[]): GithubRelease {
   return releases.reduce((selected, release) =>
     getReleaseTime(release) > getReleaseTime(selected) ? release : selected,
   );
+}
+
+function selectNewestKnownRelease(
+  releases: GithubRelease[],
+): GithubRelease | null {
+  const releasesWithKnownDates = releases.filter(
+    (release) =>
+      !release.published_at_unknown &&
+      getReleaseTime(release) !== Number.NEGATIVE_INFINITY,
+  );
+  return releasesWithKnownDates.length > 0
+    ? selectNewestRelease(releasesWithKnownDates)
+    : null;
 }
 
 type VersionedRelease = {
@@ -107,6 +106,53 @@ type VersionedRelease = {
   version: ParsedVersion;
   revision: bigint;
 };
+
+function selectActiveVersionFamily(
+  releases: VersionedRelease[],
+): VersionedRelease[] | null {
+  const families = new Map<
+    string,
+    { releases: VersionedRelease[]; latestTime: number }
+  >();
+
+  for (const candidate of releases) {
+    const family = candidate.version.family;
+    const candidateTime = getKnownReleaseTime(candidate.release);
+    const existing = families.get(family);
+    if (existing) {
+      existing.releases.push(candidate);
+      existing.latestTime = Math.max(existing.latestTime, candidateTime);
+    } else {
+      families.set(family, {
+        releases: [candidate],
+        latestTime: candidateTime,
+      });
+    }
+  }
+
+  const candidates = [...families.values()];
+  let hasUnresolvedTie = false;
+  const selected = candidates.reduce((current, candidate) => {
+    if (candidate.latestTime !== current.latestTime) {
+      if (candidate.latestTime > current.latestTime) {
+        hasUnresolvedTie = false;
+        return candidate;
+      }
+      return current;
+    }
+    if (candidate.releases.length !== current.releases.length) {
+      if (candidate.releases.length > current.releases.length) {
+        hasUnresolvedTie = false;
+        return candidate;
+      }
+      return current;
+    }
+    hasUnresolvedTie = true;
+    return current;
+  });
+
+  return hasUnresolvedTie ? null : selected.releases;
+}
 
 function parseConfiguredVersion(
   release: GithubRelease,
@@ -116,7 +162,7 @@ function parseConfiguredVersion(
   const versionValue = match?.groups?.version;
   if (!versionValue) return null;
 
-  const version = parseVersion(versionValue);
+  const version = parseComparableVersion(versionValue);
   if (!version) return null;
 
   const revisionValue = match.groups?.revision;
@@ -127,7 +173,8 @@ function parseConfiguredVersion(
     version,
     // A concrete revision zero is newer than the otherwise identical base
     // artifact, so an absent revision sorts immediately before r0.
-    revision: revisionValue === undefined ? BigInt(-1) : BigInt(revisionValue),
+    revision:
+      revisionValue === undefined ? version.revision : BigInt(revisionValue),
   };
 }
 
@@ -148,7 +195,7 @@ export function hasComparableVersionTag(
   if (hasConfiguredPattern && !pattern) return false;
   return pattern
     ? releases.some((release) => parseConfiguredVersion(release, pattern))
-    : releases.some((release) => parseVersion(release.tag_name));
+    : releases.some((release) => parseComparableVersion(release.tag_name));
 }
 
 export function getReleaseSelectionErrorType(args: {
@@ -175,15 +222,24 @@ function selectHighestVersion(
       const candidate = parseConfiguredVersion(release, configuredPattern);
       return candidate ? [candidate] : [];
     }
-    const version = parseVersion(release.tag_name);
-    return version ? [{ release, version, revision: BigInt(-1) }] : [];
+    const version = parseComparableVersion(release.tag_name);
+    return version ? [{ release, version, revision: version.revision }] : [];
   });
 
   if (versioned.length === 0) {
-    return hasConfiguredPattern ? null : selectNewestRelease(releases);
+    return hasConfiguredPattern ? null : selectNewestKnownRelease(releases);
   }
 
-  return versioned.reduce((selected, candidate) => {
+  // Prefixes identify independent version families. The most recently active
+  // family wins; versions from legacy or parallel tag schemes are not compared
+  // numerically with it. When tag timestamps are identical placeholders, the
+  // most represented family wins; an unresolved tie produces no selection.
+  const comparableVersioned = hasConfiguredPattern
+    ? versioned
+    : selectActiveVersionFamily(versioned);
+  if (!comparableVersioned) return null;
+
+  return comparableVersioned.reduce((selected, candidate) => {
     const comparison = compareVersions(candidate.version, selected.version);
     if (comparison > 0) return candidate;
     if (comparison === 0 && candidate.revision > selected.revision) {
@@ -192,7 +248,8 @@ function selectHighestVersion(
     if (
       comparison === 0 &&
       candidate.revision === selected.revision &&
-      getReleaseTime(candidate.release) > getReleaseTime(selected.release)
+      getKnownReleaseTime(candidate.release) >
+        getKnownReleaseTime(selected.release)
     ) {
       return candidate;
     }

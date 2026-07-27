@@ -84,11 +84,11 @@ function selectGithubTagCandidate(args: {
   );
 }
 
-async function fetchMatchingTagFromGithubPage(args: {
+async function fetchGithubTagCandidatesFromPage(args: {
   owner: string;
   repo: string;
   filters: ReturnType<typeof resolveEffectiveRepoFilters>;
-}): Promise<GithubTagCandidate | null> {
+}): Promise<GithubTagCandidate[]> {
   try {
     const response = await fetchWithRetry(
       `https://github.com/${args.owner}/${args.repo}/tags`,
@@ -106,7 +106,7 @@ async function fetchMatchingTagFromGithubPage(args: {
 
     if (!response.ok) {
       await discardResponseWithTimeout(response);
-      return null;
+      return [];
     }
 
     const body = await consumeResponseWithTimeout(response, (result) =>
@@ -131,18 +131,32 @@ async function fetchMatchingTagFromGithubPage(args: {
       },
     }));
 
-    return selectGithubTagCandidate({
-      candidates,
-      filters: args.filters,
-      repoIdForLog: `${args.owner}/${args.repo}`,
-    });
+    return candidates;
   } catch (error) {
     log.warn(
       `Could not use the chronological GitHub tags page for ${args.owner}/${args.repo}; falling back to the REST tags endpoint.`,
       error,
     );
-    return null;
+    return [];
   }
+}
+
+function mergeGithubTagCandidates(
+  preferred: GithubTagCandidate[],
+  additional: GithubTagCandidate[],
+  limit: number,
+): GithubTagCandidate[] {
+  const seenTagNames = new Set<string>();
+  const merged: GithubTagCandidate[] = [];
+
+  for (const candidate of [...preferred, ...additional]) {
+    if (seenTagNames.has(candidate.tag.name)) continue;
+    seenTagNames.add(candidate.tag.name);
+    merged.push(candidate);
+    if (merged.length >= limit) break;
+  }
+
+  return merged;
 }
 
 export async function fetchLatestReleaseFromGitHub(
@@ -315,17 +329,28 @@ export async function fetchLatestReleaseFromGitHub(
       newEtag = null;
       let tagReleasesForError: GithubRelease[] = [];
 
+      // GitHub's REST tag order is not chronological for every repository.
+      // Keep the dated candidates from the tags page as an activity signal,
+      // then merge them with the wider REST result for semantic comparison.
+      const chronologicalTagCandidates = await fetchGithubTagCandidatesFromPage(
+        {
+          owner,
+          repo,
+          filters,
+        },
+      );
       let selectedCandidate =
         effectiveReleaseSelectionStrategy === "highest_version"
           ? null
-          : await fetchMatchingTagFromGithubPage({
-              owner,
-              repo,
+          : selectGithubTagCandidate({
+              candidates: chronologicalTagCandidates,
               filters,
+              repoIdForLog: `${owner}/${repo}`,
             });
 
       if (!selectedCandidate) {
         const allTags: { name: string; commit: { sha: string } }[] = [];
+        let tagsFetchErrorType: FetchError["type"] | null = null;
         for (let page = 1; page <= pagesToFetch; page++) {
           const tagsOnThisPage = resolvePageSize({
             maxPerPage: MAX_PER_PAGE,
@@ -354,11 +379,8 @@ export async function fetchLatestReleaseFromGitHub(
                 : tagsResponse.status === 404
                   ? "repo_not_found"
                   : "api_error";
-            return {
-              release: null,
-              error: { type: errorType },
-              newEtag,
-            };
+            tagsFetchErrorType = errorType;
+            break;
           }
 
           if (!pageTags) {
@@ -374,7 +396,14 @@ export async function fetchLatestReleaseFromGitHub(
           }
         }
 
-        if (allTags.length === 0) {
+        if (allTags.length === 0 && chronologicalTagCandidates.length === 0) {
+          if (tagsFetchErrorType) {
+            return {
+              release: null,
+              error: { type: tagsFetchErrorType },
+              newEtag,
+            };
+          }
           log.info(`No tags found for ${owner}/${repo}.`);
           return {
             release: null,
@@ -387,23 +416,40 @@ export async function fetchLatestReleaseFromGitHub(
           tag,
           release: {
             id: 0,
-            html_url: `https://github.com/${owner}/${repo}/releases/tag/${tag.name}`,
+            html_url: `https://github.com/${owner}/${repo}/releases/tag/${encodeURIComponent(tag.name)}`,
             tag_name: tag.name,
             name: `Tag: ${tag.name}`,
             body: "",
             created_at: fetchedAtTimestamp,
             published_at: fetchedAtTimestamp,
+            published_at_unknown: true,
             prerelease: false,
             draft: false,
           },
         }));
-        tagReleasesForError = tagCandidates.map(({ release }) => release);
+        const allTagCandidates = mergeGithubTagCandidates(
+          chronologicalTagCandidates,
+          tagCandidates,
+          totalReleasesToFetch,
+        );
+        tagReleasesForError = allTagCandidates.map(({ release }) => release);
 
         selectedCandidate = selectGithubTagCandidate({
-          candidates: tagCandidates,
+          candidates: allTagCandidates,
           filters,
           repoIdForLog: `${owner}/${repo}`,
         });
+
+        if (
+          tagsFetchErrorType &&
+          allTagCandidates.length < totalReleasesToFetch
+        ) {
+          return {
+            release: null,
+            error: { type: tagsFetchErrorType },
+            newEtag,
+          };
+        }
       }
 
       if (!selectedCandidate) {
@@ -430,13 +476,15 @@ export async function fetchLatestReleaseFromGitHub(
       let publicationDate =
         selectedCandidate.release.published_at ||
         selectedCandidate.release.created_at;
+      let publicationDateUnknown =
+        selectedCandidate.release.published_at_unknown === true;
 
       try {
         const { response: refResponse, data: refData } =
           await fetchJsonResponseWithRetry<{
             object: { type: string; sha: string; url: string };
           }>(
-            `${GITHUB_API_BASE_URL}/git/ref/tags/${latestTag.name}`,
+            `${GITHUB_API_BASE_URL}/git/ref/tags/${encodeURIComponent(latestTag.name)}`,
             { headers, cache: "no-store" },
             {
               description: `Git reference for ${owner}/${repo} tag ${latestTag.name}`,
@@ -464,8 +512,10 @@ export async function fetchLatestReleaseFromGitHub(
                   annotatedTagData.message,
                 );
               }
-              publicationDate =
-                annotatedTagData.tagger?.date || publicationDate;
+              if (annotatedTagData.tagger?.date) {
+                publicationDate = annotatedTagData.tagger.date;
+                publicationDateUnknown = false;
+              }
             } else if (!annotatedTagResponse.ok) {
               await discardResponseWithTimeout(annotatedTagResponse);
             }
@@ -492,6 +542,7 @@ export async function fetchLatestReleaseFromGitHub(
               commitData.commit.message,
             );
             publicationDate = commitData.commit.committer.date;
+            publicationDateUnknown = false;
           } else {
             await discardResponseWithTimeout(commitResponse);
             log.error(
@@ -510,6 +561,7 @@ export async function fetchLatestReleaseFromGitHub(
         body: bodyContent,
         created_at: publicationDate,
         published_at: publicationDate,
+        published_at_unknown: publicationDateUnknown,
       };
       allReleases = [virtualRelease];
     }

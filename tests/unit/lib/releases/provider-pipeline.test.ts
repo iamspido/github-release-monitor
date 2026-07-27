@@ -131,10 +131,27 @@ describe("releases/provider-pipeline", () => {
     ).toBe(highestVersion);
   });
 
+  it("selects prefixed abbreviated versions independently of publication date", () => {
+    const mostRecentlyPublished = release(
+      "release-v1",
+      "2026-07-01T00:00:00Z",
+    );
+    const highestVersion = release("release-v2", "2026-06-01T00:00:00Z");
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [mostRecentlyPublished, highestVersion],
+        filters: stableOnlyFilters,
+        repoIdForLog: "repo",
+        strategy: "highest_version",
+      }),
+    ).toBe(highestVersion);
+  });
+
   it("does not treat unknown semantic prerelease identifiers as stable", () => {
     const stable = release("v2.0.0", "2024-01-01T00:00:00Z");
     const experimental = release(
-      "v3.0.0-experimental.1",
+      "product-3.0.0-experimental.1",
       "2024-02-01T00:00:00Z",
     );
 
@@ -158,6 +175,15 @@ describe("releases/provider-pipeline", () => {
         strategy: "highest_version",
       }),
     ).toBe(experimental);
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [experimental, stable],
+        filters: stableOnlyFilters,
+        repoIdForLog: "repo",
+        strategy: "newest",
+      }),
+    ).toBe(stable);
   });
 
   it("supports abbreviated versions and SemVer prerelease precedence", () => {
@@ -227,6 +253,214 @@ describe("releases/provider-pipeline", () => {
     ).toBe(version);
   });
 
+  it("recognizes prefixed versions without treating dated tags as versions", () => {
+    const datedTag = release(
+      "weekly.2012-03-27",
+      "2026-07-03T00:00:00Z",
+    );
+    const mixedSeparatorDate = release(
+      "weekly.2012-03.27",
+      "2026-07-05T00:00:00Z",
+    );
+    const dottedCalendarDate = release(
+      "weekly-2012.03.27",
+      "2026-07-07T00:00:00Z",
+    );
+    const compactCalendarDate = release(
+      "nightly2026.07.26",
+      "2026-07-08T00:00:00Z",
+    );
+    const pathCalendarDate = release(
+      "build/2026.07.26",
+      "2026-07-09T00:00:00Z",
+    );
+    const tooManyComponents = release(
+      "9.8.7.6.5",
+      "2026-07-06T00:00:00Z",
+    );
+    const olderStable = release("runtime1.25.10", "2026-07-02T00:00:00Z");
+    const latestStable = release("runtime1.26.5", "2026-07-01T00:00:00Z");
+    const legacyVersionFamily = release(
+      "release.r60.3",
+      "2011-10-18T00:00:00Z",
+    );
+    const releaseCandidate = release(
+      "release_candidate_1.27rc2",
+      "2026-07-04T00:00:00Z",
+    );
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [
+          datedTag,
+          mixedSeparatorDate,
+          dottedCalendarDate,
+          compactCalendarDate,
+          pathCalendarDate,
+          tooManyComponents,
+          olderStable,
+          latestStable,
+          legacyVersionFamily,
+          releaseCandidate,
+        ],
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      }),
+    ).toBe(latestStable);
+  });
+
+  it("selects the highest prefixed calendar version", () => {
+    const mostRecentlyPublished = release(
+      "release-2026.07.25",
+      "2026-07-26T00:00:00Z",
+    );
+    const highestVersion = release(
+      "release-2026.07.26",
+      "2026-07-25T00:00:00Z",
+    );
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [mostRecentlyPublished, highestVersion],
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      }),
+    ).toBe(highestVersion);
+  });
+
+  it("selects the highest version from the most recently active tag family", () => {
+    const legacy = release("legacy60.3", "2020-01-01T00:00:00Z");
+    const currentOlder = release("product3-1.25.10", "2026-07-02T00:00:00Z");
+    const currentLatest = release("product3-1.26.5", "2026-07-01T00:00:00Z");
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [legacy, currentOlder, currentLatest],
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      }),
+    ).toBe(currentLatest);
+  });
+
+  it("does not let unknown tag timestamps override a known active family", () => {
+    const current = release("product-1.26.5", "2026-07-07T00:00:00Z");
+    const legacyWithPlaceholderDate = release(
+      "legacy60.3",
+      "2026-07-26T00:00:00Z",
+      { published_at_unknown: true },
+    );
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [legacyWithPlaceholderDate, current],
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      }),
+    ).toBe(current);
+  });
+
+  it("uses the most represented family when tag timestamps are placeholders", () => {
+    const timestamp = "2026-07-01T00:00:00Z";
+    const legacy = release("legacy60.3", timestamp);
+    const currentOlder = release("product3-1.25.10", timestamp);
+    const currentLatest = release("product3-1.26.5", timestamp);
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [legacy, currentOlder, currentLatest],
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      }),
+    ).toBe(currentLatest);
+  });
+
+  it("breaks an active-family date tie independently of provider order", () => {
+    const activeTime = "2026-07-01T00:00:00Z";
+    const olderTime = "2020-01-01T00:00:00Z";
+    const engine = release("engine-2.0.0", activeTime);
+    const runtimeOlder = release("runtime-8.0.0", activeTime);
+    const runtimeLatest = release("runtime-9.0.0", activeTime);
+    const legacy = release("legacy-99.0.0", olderTime);
+
+    const select = (releases: GithubRelease[]) =>
+      selectLatestMatchingRelease({
+        releases,
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      });
+
+    expect(select([engine, runtimeOlder, runtimeLatest, legacy])).toBe(
+      runtimeLatest,
+    );
+    expect(select([legacy, runtimeLatest, runtimeOlder, engine])).toBe(
+      runtimeLatest,
+    );
+  });
+
+  it("returns no match when version families remain tied", () => {
+    const timestamp = "2026-07-01T00:00:00Z";
+    const engine = release("engine-2.0.0", timestamp);
+    const runtime = release("runtime-9.0.0", timestamp);
+
+    const select = (releases: GithubRelease[]) =>
+      selectLatestMatchingRelease({
+        releases,
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      });
+
+    expect(select([engine, runtime])).toBeNull();
+    expect(select([runtime, engine])).toBeNull();
+  });
+
+  it("compares stable package revisions numerically without changing channels", () => {
+    const r2 = release("docker/5.0.0-r2", "2026-07-02T00:00:00Z");
+    const r10 = release("docker/5.0.0-r10", "2026-07-01T00:00:00Z");
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [r2, r10],
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      }),
+    ).toBe(r10);
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [r10],
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "newest",
+      }),
+    ).toBe(r10);
+  });
+
+  it("compares centrally defined compact prereleases with tag prefixes", () => {
+    const b2 = release("runtime1.27b2", "2026-07-02T00:00:00Z");
+    const b10 = release("runtime-1.27b10", "2026-07-01T00:00:00Z");
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [b2, b10],
+        filters: {
+          ...stableOnlyFilters,
+          effectiveReleaseChannels: ["prerelease"],
+          effectivePreReleaseSubChannels: ["b"],
+        },
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      }),
+    ).toBe(b10);
+  });
+
   it("falls back to publication date when no tag is version-like", () => {
     const older = release("autumn", "2024-01-01T00:00:00Z");
     const newer = release("winter", "2024-04-01T00:00:00Z");
@@ -239,6 +473,69 @@ describe("releases/provider-pipeline", () => {
         strategy: "highest_version",
       }),
     ).toBe(newer);
+  });
+
+  it("does not use provider order when non-version tag dates are unknown", () => {
+    const firstApiTag = release("weekly.2012-03-27", "2026-07-26T00:00:00Z", {
+      published_at_unknown: true,
+    });
+    const secondApiTag = release("nightly-main", "2026-07-26T00:00:00Z", {
+      published_at_unknown: true,
+    });
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [firstApiTag, secondApiTag],
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      }),
+    ).toBeNull();
+  });
+
+  it("uses a known publication date instead of an unknown placeholder", () => {
+    const known = release("autumn", "2024-01-01T00:00:00Z");
+    const unknown = release("winter", "2026-07-26T00:00:00Z", {
+      published_at_unknown: true,
+    });
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [unknown, known],
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      }),
+    ).toBe(known);
+  });
+
+  it("does not use an unknown timestamp to break an equal-version tie", () => {
+    const known = release("v1.0.0", "2024-01-01T00:00:00Z");
+    const unknown = release("1.0.0", "2026-07-26T00:00:00Z", {
+      published_at_unknown: true,
+    });
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [unknown, known],
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      }),
+    ).toBe(known);
+  });
+
+  it("does not fall back to a malformed publication date", () => {
+    const malformed = release("autumn", "not-a-date");
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [malformed],
+        filters: stableOnlyFilters,
+        repoIdForLog: "owner/repo",
+        strategy: "highest_version",
+      }),
+    ).toBeNull();
   });
 
   it("selects a Coturn Docker revision through a repository version pattern", () => {
@@ -324,16 +621,13 @@ describe("releases/provider-pipeline", () => {
   });
 
   it("ignores a stored version tag pattern for other selection strategies", () => {
-    const releaseWithPrereleaseLikeVersion = release(
-      "docker/5.0.0-experimental.1-r0",
-      "2026-07-01T00:00:00Z",
-    );
+    const stable = release("docker/5.0.0", "2026-07-01T00:00:00Z");
     const pattern =
       "^docker/(?<version>\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)-r(?<revision>\\d+)$";
 
     expect(
       selectLatestMatchingRelease({
-        releases: [releaseWithPrereleaseLikeVersion],
+        releases: [stable],
         filters: {
           ...stableOnlyFilters,
           effectiveReleaseSelectionStrategy: "newest",
@@ -342,7 +636,7 @@ describe("releases/provider-pipeline", () => {
         repoIdForLog: "repo",
         strategy: "newest",
       }),
-    ).toBe(releaseWithPrereleaseLikeVersion);
+    ).toBe(stable);
   });
 
   it("does not fall back to publication time when a version pattern is configured", () => {
