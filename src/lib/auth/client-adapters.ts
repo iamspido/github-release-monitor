@@ -49,6 +49,9 @@ export function normalizePasskeyList(payload: unknown): PasskeyEntry[] {
 
   return source
     .map((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        return null;
+      }
       const value = entry as Record<string, unknown>;
       const id = typeof value.id === "string" ? value.id : "";
       if (!id) return null;

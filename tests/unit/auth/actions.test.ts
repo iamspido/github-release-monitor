@@ -345,24 +345,24 @@ describe("auth actions", () => {
     expect(signUpEmailMock).not.toHaveBeenCalled();
   });
 
-  it.each([
-    " VeryStrongPass123 ",
-    "Very StrongPass123",
-  ])("register: rejects password whitespace without normalizing it: %j", async (password) => {
-    process.env.AUTH_ENABLE_SIGNUP = "true";
-    const { register } = await import("@/app/auth/actions");
-    const fd = new FormData();
-    fd.set("username", "admin");
-    fd.set("email", "admin@example.test");
-    fd.set("password", password);
+  it.each([" VeryStrongPass123 ", "Very StrongPass123"])(
+    "register: rejects password whitespace without normalizing it: %j",
+    async (password) => {
+      process.env.AUTH_ENABLE_SIGNUP = "true";
+      const { register } = await import("@/app/auth/actions");
+      const fd = new FormData();
+      fd.set("username", "admin");
+      fd.set("email", "admin@example.test");
+      fd.set("password", password);
 
-    const res = await register(undefined, fd);
+      const res = await register(undefined, fd);
 
-    expect(res).toEqual({
-      errorKey: "error_setup_invalid_password_policy",
-    });
-    expect(signUpEmailMock).not.toHaveBeenCalled();
-  });
+      expect(res).toEqual({
+        errorKey: "error_setup_invalid_password_policy",
+      });
+      expect(signUpEmailMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("register: blocks duplicate email before signup API call", async () => {
     process.env.AUTH_ENABLE_SIGNUP = "true";
@@ -391,5 +391,108 @@ describe("auth actions", () => {
 
     expect(res).toEqual({ errorKey: "error_setup_invalid_username" });
     expect(signUpEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("register: rejects requests when public signup is disabled", async () => {
+    process.env.AUTH_ENABLE_SIGNUP = "false";
+    const { register } = await import("@/app/auth/actions");
+    const fd = new FormData();
+    fd.set("username", "release_user");
+    fd.set("email", "user@example.test");
+    fd.set("password", "VeryStrongPass123");
+
+    await expect(register(undefined, fd)).resolves.toEqual({
+      errorKey: "error_setup_unavailable",
+    });
+    expect(ensureAuthDatabaseReadyMock).not.toHaveBeenCalled();
+    expect(signUpEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("register: validates and normalizes email before opening the database", async () => {
+    process.env.AUTH_ENABLE_SIGNUP = "true";
+    const { register } = await import("@/app/auth/actions");
+    const fd = new FormData();
+    fd.set("username", "release_user");
+    fd.set("email", "not-an-email");
+    fd.set("password", "VeryStrongPass123");
+
+    await expect(register(undefined, fd)).resolves.toEqual({
+      errorKey: "error_setup_invalid_email",
+    });
+    expect(ensureAuthDatabaseReadyMock).not.toHaveBeenCalled();
+    expect(signUpEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("register: submits normalized account data and redirects to login", async () => {
+    process.env.AUTH_ENABLE_SIGNUP = "true";
+    const { register } = await import("@/app/auth/actions");
+    const fd = new FormData();
+    fd.set("username", " release_user ");
+    fd.set("email", " USER@EXAMPLE.TEST ");
+    fd.set("password", "VeryStrongPass123");
+    fd.set("name", " ");
+
+    await expect(register(undefined, fd)).rejects.toThrow("__REDIRECT__");
+
+    expect(ensureAuthDatabaseReadyMock).toHaveBeenCalledOnce();
+    expect(findRegistrationConflictMock).toHaveBeenCalledWith(
+      "release_user",
+      "user@example.test",
+    );
+    expect(signUpEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: requestHeaders.current,
+        body: {
+          email: "user@example.test",
+          password: "VeryStrongPass123",
+          username: "release_user",
+          name: "release_user",
+        },
+        asResponse: true,
+      }),
+    );
+    expect(
+      (globalThis as { __redirectCalls?: string[] }).__redirectCalls,
+    ).toEqual(["/login?registered=1"]);
+  });
+
+  it.each([
+    ["EMAIL_ALREADY_IN_USE", "error_setup_email_in_use"],
+    ["username_taken", "error_setup_username_in_use"],
+    ["weak_password", "error_setup_invalid_password_policy"],
+    ["unexpected_error", "error_setup_failed"],
+  ])(
+    "register: maps Better Auth error %s",
+    async (errorCode, expectedErrorKey) => {
+      process.env.AUTH_ENABLE_SIGNUP = "true";
+      signUpEmailMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: errorCode }), { status: 422 }),
+      );
+      const { register } = await import("@/app/auth/actions");
+      const fd = new FormData();
+      fd.set("username", "release_user");
+      fd.set("email", "user@example.test");
+      fd.set("password", "VeryStrongPass123");
+
+      await expect(register(undefined, fd)).resolves.toEqual({
+        errorKey: expectedErrorKey,
+      });
+    },
+  );
+
+  it("register: falls back safely when Better Auth returns malformed error JSON", async () => {
+    process.env.AUTH_ENABLE_SIGNUP = "true";
+    signUpEmailMock.mockResolvedValueOnce(
+      new Response("not-json", { status: 500 }),
+    );
+    const { register } = await import("@/app/auth/actions");
+    const fd = new FormData();
+    fd.set("username", "release_user");
+    fd.set("email", "user@example.test");
+    fd.set("password", "VeryStrongPass123");
+
+    await expect(register(undefined, fd)).resolves.toEqual({
+      errorKey: "error_setup_failed",
+    });
   });
 });

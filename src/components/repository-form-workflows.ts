@@ -41,6 +41,8 @@ export function useRepositoryProviderWorkflow(
   hasProcessedResult: { current: boolean },
   selectedTags: readonly string[],
 ) {
+  const t = useTranslations("RepositoryForm");
+  const { toast } = useToast();
   const [isResolving, startTransition] = React.useTransition();
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [dialogRepo, setDialogRepo] = React.useState<string | null>(null);
@@ -119,24 +121,33 @@ export function useRepositoryProviderWorkflow(
     async (lines: string[]) => {
       const resolutions: ProviderResolution[] = [];
 
-      for (const batch of getProviderResolutionBatches(lines)) {
-        const result = await resolveRepoProvidersBatchAction(batch);
-        resolutions.push(
-          ...result.resolutions.map((resolution) => ({
-            input: resolution.input,
-            candidates: resolution.candidates.map((candidate) => ({
-              provider: candidate.provider,
-              providerHost: candidate.providerHost,
-              canonicalRepoUrl: candidate.canonicalRepoUrl,
+      try {
+        for (const batch of getProviderResolutionBatches(lines)) {
+          const result = await resolveRepoProvidersBatchAction(batch);
+          resolutions.push(
+            ...result.resolutions.map((resolution) => ({
+              input: resolution.input,
+              candidates: resolution.candidates.map((candidate) => ({
+                provider: candidate.provider,
+                providerHost: candidate.providerHost,
+                canonicalRepoUrl: candidate.canonicalRepoUrl,
+              })),
             })),
-          })),
-        );
-        if (!result.success) break;
-      }
+          );
+          if (!result.success) break;
+        }
 
-      processResolvedLines(lines, resolutions);
+        processResolvedLines(lines, resolutions);
+      } catch (error: unknown) {
+        if (reloadIfServerActionStale(error)) return;
+        toast({
+          title: t("toast_fail_title"),
+          description: t("toast_generic_error"),
+          variant: "destructive",
+        });
+      }
     },
-    [processResolvedLines],
+    [processResolvedLines, t, toast],
   );
 
   const submit = React.useCallback(

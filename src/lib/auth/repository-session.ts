@@ -49,7 +49,12 @@ export function hasValidAuthSessionForRequest(request: Request) {
     getCookieValue(rawCookieHeader, "__Secure-better-auth.session_token");
   if (!rawToken) return false;
 
-  const token = decodeURIComponent(rawToken.trim());
+  let token: string;
+  try {
+    token = decodeURIComponent(rawToken.trim());
+  } catch {
+    return false;
+  }
   if (!token) return false;
 
   const queries = [
@@ -75,7 +80,7 @@ export function hasValidAuthSessionForRequest(request: Request) {
       const expiresAtMs = parseExpiryTimestamp(
         row.expiresAt ?? row.expires_at ?? null,
       );
-      if (typeof expiresAtMs === "number" && expiresAtMs <= Date.now()) {
+      if (typeof expiresAtMs !== "number" || expiresAtMs <= Date.now()) {
         return false;
       }
       return true;

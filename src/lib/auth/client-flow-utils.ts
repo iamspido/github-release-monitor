@@ -10,6 +10,15 @@ export {
 
 export type AuthSocialProvider = "github" | "google";
 
+export function navigateToClientPath(
+  path: string,
+  assign: (target: string) => void = window.location.assign.bind(
+    window.location,
+  ),
+) {
+  assign(path);
+}
+
 export function mapOauthErrorToMessageKey(
   errorCode: string | null,
 ): string | null {

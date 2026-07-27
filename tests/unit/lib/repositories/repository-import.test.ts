@@ -64,7 +64,8 @@ describe("repository import metadata", () => {
   });
 
   it("imports only valid version tag patterns with a named version group", () => {
-    const pattern = "^docker/(?<version>\\d+\\.\\d+\\.\\d+)-r(?<revision>\\d+)$";
+    const pattern =
+      "^docker/(?<version>\\d+\\.\\d+\\.\\d+)-r(?<revision>\\d+)$";
     expect(
       parseImportedRepository({
         url: "https://github.com/owner/valid",
@@ -78,5 +79,136 @@ describe("repository import metadata", () => {
         versionTagPattern: "^(\\d+\\.\\d+\\.\\d+)$",
       }),
     ).not.toHaveProperty("versionTagPattern");
+  });
+
+  it.each([
+    null,
+    [],
+    {},
+    { url: 42 },
+    { url: "https://example.test/owner/repo" },
+  ])("rejects unsupported repository payload %j", (payload) => {
+    expect(parseImportedRepository(payload)).toBeNull();
+  });
+
+  it("preserves all supported repository settings from an export", () => {
+    const result = parseImportedRepository({
+      url: "https://github.com/Owner/Repo.git",
+      displayName: " Production ",
+      lastSeenReleaseTag: "v1.0.0",
+      isNew: true,
+      isPinned: true,
+      etag: '"etag-1"',
+      latestRelease: {
+        html_url: "https://github.com/Owner/Repo/releases/tag/v1.1.0",
+        tag_name: "v1.1.0",
+        created_at: "2026-07-01T10:00:00.000Z",
+        name: " Release 1.1 ",
+        body: "Notes",
+        published_at: "2026-07-02T10:00:00.000Z",
+        published_at_unknown: false,
+        fetched_at: "2026-07-03T10:00:00.000Z",
+        source: "release",
+        ignored: "not imported",
+      },
+      tags: [" Production ", "backend"],
+      releaseChannels: ["stable", "prerelease"],
+      preReleaseSubChannels: ["beta", "rc"],
+      releaseSelectionStrategy: "highest_version",
+      versionTagPattern: "^v(?<version>\\d+\\.\\d+\\.\\d+)$",
+      releasesPerPage: 25,
+      refreshInterval: null,
+      cacheInterval: 60,
+      backgroundCheckCron: "0 8 * * *",
+      lastBackgroundCheckAt: "2026-07-04T10:00:00.000Z",
+      includeRegex: "^v",
+      excludeRegex: "-dev$",
+      appriseTags: "release",
+      appriseFormat: "markdown",
+      lastNotificationDelivery: { status: "sent" },
+      unknownSetting: true,
+    });
+
+    expect(result).toEqual({
+      id: "github:owner/repo",
+      url: "https://github.com/Owner/Repo",
+      displayName: "Production",
+      lastSeenReleaseTag: "v1.0.0",
+      isNew: true,
+      isPinned: true,
+      etag: '"etag-1"',
+      latestRelease: {
+        html_url: "https://github.com/Owner/Repo/releases/tag/v1.1.0",
+        tag_name: "v1.1.0",
+        created_at: "2026-07-01T10:00:00.000Z",
+        name: " Release 1.1 ",
+        body: "Notes",
+        published_at: "2026-07-02T10:00:00.000Z",
+        published_at_unknown: false,
+        fetched_at: "2026-07-03T10:00:00.000Z",
+        source: "release",
+      },
+      tags: ["production", "backend"],
+      releaseChannels: ["stable", "prerelease"],
+      preReleaseSubChannels: ["beta", "rc"],
+      releaseSelectionStrategy: "highest_version",
+      versionTagPattern: "^v(?<version>\\d+\\.\\d+\\.\\d+)$",
+      releasesPerPage: 25,
+      refreshInterval: null,
+      cacheInterval: 60,
+      backgroundCheckCron: "0 8 * * *",
+      lastBackgroundCheckAt: "2026-07-04T10:00:00.000Z",
+      includeRegex: "^v",
+      excludeRegex: "-dev$",
+      appriseTags: "release",
+      appriseFormat: "markdown",
+    });
+  });
+
+  it("fills legacy cached release defaults", () => {
+    expect(
+      parseImportedRepository({
+        url: "https://gitlab.com/owner/repo",
+        latestRelease: {
+          html_url: "https://gitlab.com/owner/repo/-/tags/v1",
+          tag_name: "v1",
+          created_at: "2026-07-01T10:00:00.000Z",
+        },
+      }),
+    ).toMatchObject({
+      latestRelease: {
+        html_url: "https://gitlab.com/owner/repo/-/tags/v1",
+        tag_name: "v1",
+        created_at: "2026-07-01T10:00:00.000Z",
+        name: null,
+        body: null,
+        published_at: null,
+      },
+    });
+  });
+
+  it("ignores malformed optional metadata instead of importing partial values", () => {
+    const result = parseImportedRepository({
+      url: "https://codeberg.org/owner/repo",
+      latestRelease: {
+        html_url: "https://codeberg.org/owner/repo/releases/tag/v1",
+        tag_name: "v1",
+      },
+      releaseChannels: ["stable", "unknown"],
+      preReleaseSubChannels: ["beta", "unknown"],
+      releasesPerPage: Number.POSITIVE_INFINITY,
+      refreshInterval: "60",
+      cacheInterval: Number.NaN,
+      backgroundCheckCron: 42,
+      includeRegex: null,
+      excludeRegex: false,
+      appriseTags: [],
+      appriseFormat: "xml",
+    });
+
+    expect(result).toEqual({
+      id: "codeberg:owner/repo",
+      url: "https://codeberg.org/owner/repo",
+    });
   });
 });

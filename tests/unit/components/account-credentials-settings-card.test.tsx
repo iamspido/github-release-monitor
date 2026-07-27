@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 let networkState = { isOnline: true };
 const listAccountsMock = vi.fn();
 const useSessionMock = vi.fn();
+const updateAccountEmailMock = vi.fn();
+const updateAccountPasswordMock = vi.fn();
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -46,8 +48,10 @@ vi.mock("@/hooks/use-network", () => ({
 }));
 
 vi.mock("@/app/auth/settings-actions", () => ({
-  updateAccountEmailAction: vi.fn(async () => ({ ok: true })),
-  updateAccountPasswordAction: vi.fn(async () => ({ ok: true, mode: "set" })),
+  updateAccountEmailAction: (...args: unknown[]) =>
+    updateAccountEmailMock(...args),
+  updateAccountPasswordAction: (...args: unknown[]) =>
+    updateAccountPasswordMock(...args),
 }));
 
 vi.mock("@/lib/auth/client", () => ({
@@ -69,11 +73,15 @@ describe("AccountCredentialsSettingsCard", () => {
     networkState = { isOnline: true };
     listAccountsMock.mockReset();
     useSessionMock.mockReset();
+    updateAccountEmailMock.mockReset();
+    updateAccountPasswordMock.mockReset();
     listAccountsMock.mockResolvedValue({ data: [] });
     useSessionMock.mockReturnValue({
       data: { user: { email: null } },
       isPending: false,
     });
+    updateAccountEmailMock.mockResolvedValue({ ok: true, mode: "updated" });
+    updateAccountPasswordMock.mockResolvedValue({ ok: true, mode: "set" });
   });
 
   afterEach(() => {
@@ -247,5 +255,149 @@ describe("AccountCredentialsSettingsCard", () => {
 
     expect(newPasswordField.value).toBe("StrongPassword123");
     expect(confirmPasswordField.value).toBe("StrongPassword123");
+  });
+
+  it("submits a normalized email and updates the displayed value", async () => {
+    useSessionMock.mockReturnValue({
+      data: { user: { email: "old@example.test" } },
+      isPending: false,
+    });
+    await renderCard();
+
+    const emailInput = container.querySelector(
+      'input[autocomplete="email"]',
+    ) as HTMLInputElement;
+    await act(async () => {
+      setControlledInputValue(emailInput, " NEW@EXAMPLE.TEST ");
+      await Promise.resolve();
+    });
+    const saveButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Save email"),
+    );
+
+    await act(async () => {
+      saveButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(updateAccountEmailMock).toHaveBeenCalledWith({
+      newEmail: "NEW@EXAMPLE.TEST",
+      callbackURL: "/",
+    });
+    expect(container.textContent).toContain("Current email: new@example.test");
+    expect(container.textContent).toContain("account_email_update_success");
+    expect(emailInput.value).toBe("");
+  });
+
+  it.each([
+    [{ ok: false, errorKey: "account_email_in_use" }, "account_email_in_use"],
+    [new Error("offline"), "account_email_update_failed"],
+  ])("shows email update failures", async (result, expectedError) => {
+    if (result instanceof Error) {
+      updateAccountEmailMock.mockRejectedValueOnce(result);
+    } else {
+      updateAccountEmailMock.mockResolvedValueOnce(result);
+    }
+    await renderCard();
+
+    const emailInput = container.querySelector(
+      'input[autocomplete="email"]',
+    ) as HTMLInputElement;
+    await act(async () => {
+      setControlledInputValue(emailInput, "new@example.test");
+      await Promise.resolve();
+    });
+    const saveButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Save email"),
+    );
+    await act(async () => {
+      saveButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain(expectedError);
+  });
+
+  it("sets a password and clears the submitted fields", async () => {
+    await renderCard();
+    const [newPasswordField, confirmPasswordField] = Array.from(
+      container.querySelectorAll('input[autocomplete="new-password"]'),
+    ) as HTMLInputElement[];
+
+    await act(async () => {
+      setControlledInputValue(newPasswordField, "StrongPassword123");
+      setControlledInputValue(confirmPasswordField, "StrongPassword123");
+      await Promise.resolve();
+    });
+    const submitButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Set password"),
+    );
+    await act(async () => {
+      submitButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(updateAccountPasswordMock).toHaveBeenCalledWith({
+      currentPassword: "",
+      newPassword: "StrongPassword123",
+    });
+    expect(container.textContent).toContain("account_password_set_success");
+    expect(newPasswordField.value).toBe("");
+    expect(confirmPasswordField.value).toBe("");
+    expect(container.textContent).toContain("Change password");
+  });
+
+  it("shows backend password errors and preserves the entered password", async () => {
+    updateAccountPasswordMock.mockResolvedValueOnce({
+      ok: false,
+      errorKey: "account_password_current_invalid",
+    });
+    listAccountsMock.mockResolvedValueOnce({
+      data: [{ providerId: "credential" }],
+    });
+    await renderCard();
+
+    const currentPasswordField = container.querySelector(
+      'input[autocomplete="current-password"]',
+    ) as HTMLInputElement;
+    const [newPasswordField, confirmPasswordField] = Array.from(
+      container.querySelectorAll('input[autocomplete="new-password"]'),
+    ) as HTMLInputElement[];
+    await act(async () => {
+      setControlledInputValue(currentPasswordField, "WrongPassword123");
+      setControlledInputValue(newPasswordField, "StrongPassword123");
+      setControlledInputValue(confirmPasswordField, "StrongPassword123");
+      await Promise.resolve();
+    });
+    const submitButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Change password"),
+    );
+    await act(async () => {
+      submitButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("account_password_current_invalid");
+    expect(newPasswordField.value).toBe("StrongPassword123");
+  });
+
+  it("disables credential mutations while offline", async () => {
+    networkState = { isOnline: false };
+    await renderCard();
+
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const emailButton = buttons.find((button) =>
+      button.textContent?.includes("Save email"),
+    );
+    const passwordButton = buttons.find((button) =>
+      button.textContent?.includes("Set password"),
+    );
+
+    expect(emailButton?.disabled).toBe(true);
+    expect(passwordButton?.disabled).toBe(true);
   });
 });

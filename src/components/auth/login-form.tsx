@@ -27,6 +27,7 @@ import {
   isSocialErrorKey,
   isValidSocialUsername,
   mapOauthErrorToMessageKey,
+  navigateToClientPath,
   normalizeOptionalSafeRelativePath,
   submitPasswordLogin,
 } from "@/lib/auth/client-flow-utils";
@@ -129,7 +130,7 @@ export function LoginForm({
 
   React.useEffect(() => {
     if (!passwordLoginState?.redirectTo) return;
-    window.location.assign(passwordLoginState.redirectTo);
+    navigateToClientPath(passwordLoginState.redirectTo);
   }, [passwordLoginState?.redirectTo]);
 
   const errorKey =
@@ -226,7 +227,7 @@ export function LoginForm({
         setClientErrorKey("error_passkey_login_failed");
         return;
       }
-      window.location.assign(safeNext || "/");
+      navigateToClientPath(safeNext || "/");
     } catch {
       setClientErrorKey("error_passkey_login_failed");
     } finally {
@@ -247,7 +248,7 @@ export function LoginForm({
         setClientErrorKey("error_two_factor_invalid");
         return;
       }
-      window.location.assign(safeNext || "/");
+      navigateToClientPath(safeNext || "/");
     } catch {
       setClientErrorKey("error_two_factor_invalid");
     } finally {

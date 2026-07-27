@@ -1,17 +1,27 @@
 import {
+  checkSetupRequired,
   isSocialErrorKey,
   isValidSocialUsername,
   mapOauthErrorToMessageKey,
   mapRegisterSocialPrecheckErrorToMessageKey,
   mapSetupApiErrorToMessageKey,
+  navigateToClientPath,
   normalizeApiErrorCode,
   normalizeLocalizedRedirectPath,
   normalizeOptionalSafeRelativePath,
   normalizeSafeRelativePath,
+  precheckSocialLogin,
   readApiErrorCode,
+  submitPasswordLogin,
+  submitSetup,
+  submitSetupSocialContext,
 } from "@/lib/auth/client-flow-utils";
 
 describe("auth/client-flow-utils", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("maps OAuth callback errors to translation keys", () => {
     expect(mapOauthErrorToMessageKey(null)).toBeNull();
     expect(mapOauthErrorToMessageKey(" signup_disabled ")).toBe(
@@ -23,6 +33,14 @@ describe("auth/client-flow-utils", () => {
     expect(mapOauthErrorToMessageKey("unknown_code")).toBe(
       "error_social_login_failed",
     );
+  });
+
+  it("delegates client navigation to the provided location assigner", () => {
+    const assign = vi.fn();
+
+    navigateToClientPath("/en/settings", assign);
+
+    expect(assign).toHaveBeenCalledWith("/en/settings");
   });
 
   it("recognizes social error translation keys", () => {
@@ -74,9 +92,7 @@ describe("auth/client-flow-utils", () => {
     expect(normalizeLocalizedRedirectPath("/de/settings", "en")).toBe(
       "/de/settings",
     );
-    expect(normalizeLocalizedRedirectPath("https://evil.test", "en")).toBe(
-      "/",
-    );
+    expect(normalizeLocalizedRedirectPath("https://evil.test", "en")).toBe("/");
   });
 
   it("normalizes API error code values", () => {
@@ -124,4 +140,186 @@ describe("auth/client-flow-utils", () => {
       "error_social_login_failed",
     );
   });
+
+  it("checks whether initial setup is still required", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockRejectedValueOnce(new Error("offline"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(checkSetupRequired()).resolves.toBe(true);
+    await expect(checkSetupRequired()).resolves.toBe(false);
+    await expect(checkSetupRequired()).resolves.toBe(false);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/auth/setup", {
+      method: "GET",
+      cache: "no-store",
+    });
+  });
+
+  it("submits password login data and returns successful API state", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          requiresTwoFactor: true,
+          redirectTo: "/settings",
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      submitPasswordLogin({
+        identifier: "release_user",
+        password: "SecretPassword123",
+        next: "/settings",
+        locale: "en",
+      }),
+    ).resolves.toEqual({
+      requiresTwoFactor: true,
+      redirectTo: "/settings",
+    });
+    expect(fetchMock).toHaveBeenCalledWith("/api/login/password", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        identifier: "release_user",
+        password: "SecretPassword123",
+        next: "/settings",
+        locale: "en",
+      }),
+    });
+  });
+
+  it("normalizes password login API and network failures", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ errorKey: "error_locked" }), {
+          status: 429,
+        }),
+      )
+      .mockResolvedValueOnce(new Response("not-json", { status: 401 }))
+      .mockRejectedValueOnce(new Error("offline"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const input = {
+      identifier: "release_user",
+      password: "wrong",
+      locale: "en",
+    };
+    await expect(submitPasswordLogin(input)).resolves.toEqual({
+      errorKey: "error_locked",
+    });
+    await expect(submitPasswordLogin(input)).resolves.toEqual({
+      errorKey: "error_invalid_credentials",
+    });
+    await expect(submitPasswordLogin(input)).resolves.toEqual({
+      errorKey: "error_invalid_credentials",
+    });
+  });
+
+  it.each([
+    [400, {}, "invalid_input"],
+    [503, {}, "failed"],
+    [200, { canProceed: false }, "unavailable"],
+    [200, { canProceed: true }, "allowed"],
+  ] as const)(
+    "maps social login precheck status %s to %s",
+    async (status, body, expected) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response(JSON.stringify(body), { status }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      await expect(
+        precheckSocialLogin({
+          identifier: "release_user",
+          provider: "github",
+        }),
+      ).resolves.toBe(expected);
+      expect(fetchMock).toHaveBeenCalledWith("/api/auth/social/precheck", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          identifier: "release_user",
+          provider: "github",
+        }),
+      });
+    },
+  );
+
+  it.each([
+    [404, {}, "unavailable"],
+    [401, {}, "invalid_token"],
+    [
+      422,
+      { error: "invalid_username" },
+      { errorKey: "error_setup_invalid_username" },
+    ],
+    [200, {}, "success"],
+  ] as const)(
+    "maps setup response status %s",
+    async (status, body, expected) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(JSON.stringify(body), {
+            status,
+          }),
+        ),
+      );
+
+      await expect(
+        submitSetup({
+          token: "setup-token",
+          email: "user@example.test",
+          password: "SecretPassword123",
+          name: "Release User",
+          username: "release_user",
+        }),
+      ).resolves.toEqual(expected);
+    },
+  );
+
+  it.each([
+    [404, {}, "unavailable"],
+    [401, {}, "invalid_token"],
+    [
+      422,
+      { code: "provider_not_configured" },
+      { errorKey: "error_setup_provider_not_configured" },
+    ],
+    [200, {}, "success"],
+  ] as const)(
+    "maps social setup context response status %s",
+    async (status, body, expected) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response(JSON.stringify(body), { status }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      await expect(
+        submitSetupSocialContext({
+          token: "setup-token",
+          provider: "google",
+          username: "release_user",
+          name: "Release User",
+        }),
+      ).resolves.toEqual(expected);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/auth/setup/social-context",
+        expect.objectContaining({
+          body: JSON.stringify({
+            token: "setup-token",
+            provider: "google",
+            username: "release_user",
+            name: "Release User",
+          }),
+        }),
+      );
+    },
+  );
 });
