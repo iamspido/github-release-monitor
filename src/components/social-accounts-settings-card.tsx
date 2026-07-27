@@ -174,9 +174,9 @@ export function SocialAccountsSettingsCard({
                   aria-busy={isPending}
                 >
                   {isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
                   ) : (
-                    <Unlink2 className="mr-2 h-4 w-4" />
+                    <Unlink2 className="me-2 h-4 w-4" />
                   )}
                   {t("social_accounts_unlink_button")}
                 </Button>
@@ -190,9 +190,9 @@ export function SocialAccountsSettingsCard({
                   aria-busy={isPending}
                 >
                   {isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
                   ) : (
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    <CheckCircle2 className="me-2 h-4 w-4" />
                   )}
                   {t("social_accounts_connect_button", {
                     provider: providerLabel[provider],

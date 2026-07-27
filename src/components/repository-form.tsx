@@ -31,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useJobPolling } from "@/hooks/use-job-polling";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { isolateLtrText } from "@/lib/bidi";
 import {
   MAX_REPOSITORY_TAGS,
   normalizeRepositoryTags,
@@ -64,9 +65,9 @@ function SubmitButton({
       disabled={isPending || isDisabled}
     >
       {isPending ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        <Loader2 className="me-2 h-4 w-4 animate-spin" />
       ) : (
-        <Plus className="mr-2 h-4 w-4" />
+        <Plus className="me-2 h-4 w-4" />
       )}
       {t("button_add")}
     </Button>
@@ -257,7 +258,7 @@ export function RepositoryForm({
                   {importWorkflow.isImporting ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Upload className="mr-2 h-4 w-4" />
+                    <Upload className="me-2 h-4 w-4" />
                   )}
                   {t("button_import")}
                 </Button>
@@ -280,7 +281,7 @@ export function RepositoryForm({
                 <ChevronDown
                   className={cn(
                     "size-5 transition-transform duration-200 ease-out",
-                    isExpanded ? "rotate-0" : "rotate-90",
+                    isExpanded ? "rotate-0" : "rotate-90 rtl:-rotate-90",
                   )}
                 />
               </Button>
@@ -335,6 +336,7 @@ export function RepositoryForm({
               >
                 <div className="grid w-full gap-2">
                   <Textarea
+                    dir="ltr"
                     ref={textareaRef}
                     name="urls"
                     placeholder={t("placeholder")}
@@ -363,9 +365,11 @@ export function RepositoryForm({
                         {selectedTags.map((tag) => (
                           <span
                             key={tag}
-                            className="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary py-1 pl-3 pr-1 text-sm text-secondary-foreground"
+                            className="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary py-1 ps-3 pe-1 text-sm text-secondary-foreground"
                           >
-                            <span className="truncate">{tag}</span>
+                            <bdi dir="ltr" className="truncate">
+                              {tag}
+                            </bdi>
                             <button
                               type="button"
                               onClick={() => {
@@ -435,7 +439,7 @@ export function RepositoryForm({
                       {importWorkflow.isImporting ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <Upload className="mr-2 h-4 w-4" />
+                        <Upload className="me-2 h-4 w-4" />
                       )}
                       {t("button_import")}
                     </Button>
@@ -469,12 +473,12 @@ export function RepositoryForm({
             <AlertDialogDescription>
               {providerWorkflow.dialogRepo
                 ? t("provider_select_description", {
-                    repo: providerWorkflow.dialogRepo,
+                    repo: isolateLtrText(providerWorkflow.dialogRepo),
                   })
                 : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between sm:space-x-0">
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-start">
               {providerWorkflow.dialogCandidates.map((candidate) => (
                 <AlertDialogAction
@@ -484,15 +488,22 @@ export function RepositoryForm({
                   }
                   disabled={providerWorkflow.isResolving || isPending}
                 >
-                  {candidate.provider === "codeberg"
-                    ? t("provider_select_codeberg")
-                    : candidate.provider === "gitlab"
-                      ? `${t("provider_select_gitlab")}${
-                          candidate.providerHost
-                            ? ` (${candidate.providerHost})`
-                            : ""
-                        }`
-                      : t("provider_select_github")}
+                  {candidate.provider === "codeberg" ? (
+                    t("provider_select_codeberg")
+                  ) : candidate.provider === "gitlab" ? (
+                    <>
+                      {t("provider_select_gitlab")}
+                      {candidate.providerHost ? (
+                        <>
+                          {" ("}
+                          <bdi dir="ltr">{candidate.providerHost}</bdi>
+                          {")"}
+                        </>
+                      ) : null}
+                    </>
+                  ) : (
+                    t("provider_select_github")
+                  )}
                 </AlertDialogAction>
               ))}
             </div>
@@ -556,7 +567,7 @@ export function RepositoryForm({
                           rel="noreferrer"
                           className="min-w-0 truncate text-sm font-medium text-foreground hover:underline"
                         >
-                          {getRepositoryDisplayName(repo)}
+                          <bdi dir="ltr">{getRepositoryDisplayName(repo)}</bdi>
                         </a>
                       </div>
                       <Badge
@@ -582,7 +593,7 @@ export function RepositoryForm({
               disabled={importWorkflow.isImporting}
             >
               {importWorkflow.isImporting ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="me-2 h-4 w-4 animate-spin" />
               ) : null}
               {t("import_dialog_confirm_button")}
             </Button>

@@ -217,12 +217,13 @@ export function TwoFactorSettingsCard() {
               <div className="relative grow">
                 <Input
                   id={enablePasswordId}
+                  dir="ltr"
                   type={passwordInputType}
                   value={enablePassword}
                   onChange={(event) => setEnablePassword(event.target.value)}
                   placeholder={t("two_factor_enable_password_placeholder")}
                   autoComplete="current-password"
-                  className="pr-10"
+                  className="pe-10"
                 />
                 <Button
                   type="button"
@@ -253,9 +254,9 @@ export function TwoFactorSettingsCard() {
                 aria-busy={enabling}
               >
                 {enabling ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="me-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <ShieldCheck className="mr-2 h-4 w-4" />
+                  <ShieldCheck className="me-2 h-4 w-4" />
                 )}
                 {t("two_factor_enable_button")}
               </Button>
@@ -300,6 +301,7 @@ export function TwoFactorSettingsCard() {
               <Label>{t("two_factor_setup_uri_label")}</Label>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
+                  dir="ltr"
                   value={pendingTotpUri ?? ""}
                   readOnly
                   className="font-mono text-xs"
@@ -309,7 +311,7 @@ export function TwoFactorSettingsCard() {
                   variant="outline"
                   onClick={() => void handleCopyOtpUri()}
                 >
-                  <Copy className="mr-2 h-4 w-4" />
+                  <Copy className="me-2 h-4 w-4" />
                   {copied
                     ? t("two_factor_uri_copied")
                     : t("two_factor_copy_uri_button")}
@@ -319,7 +321,10 @@ export function TwoFactorSettingsCard() {
             {backupCodes.length > 0 && (
               <div className="space-y-2">
                 <Label>{t("two_factor_backup_codes_label")}</Label>
-                <div className="grid grid-cols-1 gap-1 rounded-md border p-2 font-mono text-xs sm:grid-cols-2">
+                <div
+                  dir="ltr"
+                  className="grid grid-cols-1 gap-1 rounded-md border p-2 font-mono text-xs sm:grid-cols-2"
+                >
                   {backupCodes.map((code) => (
                     <span key={code}>{code}</span>
                   ))}
@@ -349,9 +354,9 @@ export function TwoFactorSettingsCard() {
                   aria-busy={verifying}
                 >
                   {verifying ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
                   ) : (
-                    <KeyRound className="mr-2 h-4 w-4" />
+                    <KeyRound className="me-2 h-4 w-4" />
                   )}
                   {t("two_factor_verify_button")}
                 </Button>
@@ -369,12 +374,13 @@ export function TwoFactorSettingsCard() {
               <div className="relative grow">
                 <Input
                   id={disablePasswordId}
+                  dir="ltr"
                   type={passwordInputType}
                   value={disablePassword}
                   onChange={(event) => setDisablePassword(event.target.value)}
                   placeholder={t("two_factor_disable_password_placeholder")}
                   autoComplete="current-password"
-                  className="pr-10"
+                  className="pe-10"
                 />
                 <Button
                   type="button"
@@ -402,9 +408,9 @@ export function TwoFactorSettingsCard() {
                 aria-busy={disabling}
               >
                 {disabling ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="me-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <ShieldOff className="mr-2 h-4 w-4" />
+                  <ShieldOff className="me-2 h-4 w-4" />
                 )}
                 {t("two_factor_disable_button")}
               </Button>

@@ -172,17 +172,13 @@ describe("auth actions", () => {
     expect(result).toEqual({ redirectTo: "/en/enterprise" });
   });
 
-  it("logout: signs out and redirects to login path", async () => {
+  it("logout: signs out and returns the locale-aware login route", async () => {
     const { logout } = await import("@/app/auth/actions");
-    await expect(logout()).rejects.toThrow("__REDIRECT__");
+    const result = await logout();
+
     expect(signOutMock).toHaveBeenCalled();
-    const calls = (globalThis as { __redirectCalls?: string[] })
-      .__redirectCalls;
-    expect(calls).toBeDefined();
-    if (!calls) {
-      throw new Error("Expected redirect call");
-    }
-    expect(calls[calls.length - 1]).toMatch(/\/login|\/anmelden/);
+    expect(result).toEqual({ redirectTo: "/login" });
+    expect((globalThis as Record<string, unknown>).__redirectCalls).toEqual([]);
   });
 
   it("login: applies lockout after too many failed attempts", async () => {

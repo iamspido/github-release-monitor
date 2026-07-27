@@ -17,7 +17,7 @@ A powerful, self-hostable application to automatically monitor GitHub, GitLab, a
     - Clean, intuitive interface built with ShadCN UI and Tailwind CSS.
     - Full dark mode support.
     - Responsive design for both desktop and mobile use.
-- **Internationalization (i18n)**: Supports English and German out of the box.
+- **Internationalization (i18n)**: Supports English, German, and Arabic out of the box, including right-to-left layout.
 - **Data Management**: Easily import or export your list of monitored repositories via JSON.
 - **System Diagnostics**: A built-in test page to verify GitHub API connectivity and notification service (SMTP, Apprise) configuration.
 - **Secure Authentication**: Protects the application with Better Auth, SQLite-backed users/sessions, and one-time bootstrap setup.
@@ -553,18 +553,24 @@ Admin usernames must be 3-30 characters and may contain letters, numbers, `_`, a
 Locales are defined centrally in `src/i18n/config.ts`. To publish another
 language:
 
-1. Add its canonical BCP 47 code, native name, and text direction to the locale
-   registry.
+1. Add its canonical BCP 47 code, native name, text direction, and font profile
+   to the locale registry. Available profiles are `inter`, `noto`,
+   `noto-arabic`, and `noto-hebrew`; CJK font coverage remains a separate
+   integration task.
 2. Add a complete `src/messages/<locale>.json` dictionary. The test suite
    compares every configured dictionary and ICU placeholder with English.
 3. Add translated canonical route slugs in `src/i18n/routing.ts`. English
    slugs are accepted as aliases; keep replaced published slugs as historical
    aliases.
-4. Verify font coverage and, for right-to-left languages, complete the
-   corresponding RTL layout work before publishing the locale.
+4. Verify font coverage and the complete bidirectional layout before publishing
+   the locale. Prefer logical start/end spacing, use `dir="auto"` for user text,
+   and keep URLs, identifiers, versions, email addresses, cron expressions,
+   regular expressions, OTPs, and code explicitly left-to-right.
 
 The locale switcher, settings validation, cookies, authentication redirects,
-and message loading are derived from the registry.
+message loading, document direction, Radix direction, and body font are derived
+from the registry. Arabic (`ar`) is published with Noto Sans Arabic and
+right-to-left layout support.
 
 ## 🔐 Social Login Setup (GitHub + Google)
 

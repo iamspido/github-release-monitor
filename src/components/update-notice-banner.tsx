@@ -7,6 +7,7 @@ import * as React from "react";
 import { dismissUpdateNotificationAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { useActionTransition } from "@/hooks/use-action-transition";
+import { isolateLtrText } from "@/lib/bidi";
 import type { UpdateNotificationState } from "@/types";
 
 type UpdateNoticeBannerProps = {
@@ -59,11 +60,13 @@ export function UpdateNoticeBanner({
           <Megaphone className="mt-1 size-4 shrink-0 text-blue-200" />
           <div className="space-y-1">
             <p className="font-semibold">
-              {t("title", { version: notice.latestVersion ?? "—" })}
+              {t("title", {
+                version: isolateLtrText(notice.latestVersion ?? "—"),
+              })}
             </p>
             <p className="text-blue-200/80">
               {t("description", {
-                currentVersion: notice.currentVersion,
+                currentVersion: isolateLtrText(notice.currentVersion),
               })}
             </p>
           </div>

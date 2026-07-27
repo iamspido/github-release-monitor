@@ -50,6 +50,16 @@ describe("i18n getRequestConfig callback", () => {
     expect(result.messages).toEqual(de);
   });
 
+  it("loads AR messages and returns the canonical locale", async () => {
+    const getRequestConfig = await loadRequestModule();
+    const result = await getRequestConfig({
+      requestLocale: Promise.resolve("AR"),
+    });
+    const ar = (await import("../../../src/messages/ar.json")).default;
+    expect(result.locale).toBe("ar");
+    expect(result.messages).toEqual(ar);
+  });
+
   it("falls back to default locale for invalid locale", async () => {
     const getRequestConfig = await loadRequestModule();
     const result = await getRequestConfig({

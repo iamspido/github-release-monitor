@@ -108,6 +108,8 @@ describe("UpdateNoticeBanner", () => {
     expect(link?.target).toBe("_blank");
     expect(link?.rel).toBe("noopener noreferrer");
     expect(container.querySelector("button")).toBeNull();
+    expect(container.textContent).toContain("\u2066 v2.4.0/rc 1 \u2069");
+    expect(container.textContent).toContain("\u20662.3.0\u2069");
   });
 
   it("hides itself after a successful dismissal", async () => {

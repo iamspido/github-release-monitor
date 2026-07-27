@@ -225,10 +225,10 @@ describe("storage/settings failure scenarios", () => {
   });
 
   it("returns the configured locale only when it is supported", async () => {
-    fsMock.readFile.mockResolvedValueOnce(JSON.stringify({ locale: "de" }));
+    fsMock.readFile.mockResolvedValueOnce(JSON.stringify({ locale: "ar" }));
     const firstModule = await import("@/lib/storage/settings");
 
-    await expect(firstModule.getLocaleSetting()).resolves.toBe("de");
+    await expect(firstModule.getLocaleSetting()).resolves.toBe("ar");
 
     vi.resetModules();
     fsMock.readFile.mockResolvedValueOnce(JSON.stringify({ locale: "fr" }));

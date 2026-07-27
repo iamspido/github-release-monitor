@@ -58,9 +58,9 @@ function LoginButton({ pending }: { pending: boolean }) {
   return (
     <Button type="submit" className="w-full" disabled={pending}>
       {pending ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        <Loader2 className="me-2 h-4 w-4 animate-spin" />
       ) : (
-        <LogIn className="mr-2 h-4 w-4" />
+        <LogIn className="me-2 h-4 w-4 rtl:scale-x-[-1]" />
       )}
       {t("login_button")}
     </Button>
@@ -266,7 +266,7 @@ export function LoginForm({
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-6 text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Loader2 className="me-2 h-4 w-4 animate-spin" />
             <span>{t("checking_setup")}</span>
           </div>
         </CardContent>
@@ -363,6 +363,7 @@ export function LoginForm({
                 <Input
                   id={identifierId}
                   name="email"
+                  dir="ltr"
                   type="text"
                   placeholder={t("identifier_placeholder")}
                   autoComplete="username webauthn"
@@ -379,10 +380,11 @@ export function LoginForm({
                   <Input
                     id={passwordId}
                     name="password"
+                    dir="ltr"
                     type={showLoginPassword ? "text" : "password"}
                     placeholder={t("password_placeholder")}
                     autoComplete="current-password webauthn"
-                    className="pr-10"
+                    className="pe-10"
                     required
                   />
                   <PasswordVisibilityButton
@@ -417,9 +419,9 @@ export function LoginForm({
                     aria-busy={passkeyPending}
                   >
                     {passkeyPending ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="me-2 h-4 w-4 animate-spin" />
                     ) : (
-                      <Fingerprint className="mr-2 h-4 w-4" />
+                      <Fingerprint className="me-2 h-4 w-4" />
                     )}
                     {t("passkey_login_button")}
                   </Button>
@@ -445,6 +447,7 @@ export function LoginForm({
                       <Input
                         id={socialIdentifierId}
                         name="socialIdentifier"
+                        dir="ltr"
                         type="text"
                         autoComplete="username"
                         placeholder={t("social_identifier_placeholder")}
@@ -490,9 +493,9 @@ export function LoginForm({
               aria-busy={twoFactorPending}
             >
               {twoFactorPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="me-2 h-4 w-4 animate-spin" />
               ) : (
-                <KeyRound className="mr-2 h-4 w-4" />
+                <KeyRound className="me-2 h-4 w-4" />
               )}
               {t("two_factor_login_verify_button")}
             </Button>

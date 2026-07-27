@@ -49,6 +49,7 @@ export function NewPasswordField({
         <Input
           id={id}
           name="password"
+          dir="ltr"
           type={visible ? "text" : "password"}
           value={password}
           onChange={(event) =>
@@ -59,7 +60,7 @@ export function NewPasswordField({
           placeholder={placeholder}
           autoComplete="new-password"
           minLength={PASSWORD_MIN_LENGTH}
-          className={["pr-10", validationClass].filter(Boolean).join(" ")}
+          className={["pe-10", validationClass].filter(Boolean).join(" ")}
           required
         />
         <PasswordVisibilityButton

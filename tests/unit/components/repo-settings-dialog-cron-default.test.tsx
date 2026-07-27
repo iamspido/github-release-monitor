@@ -38,6 +38,7 @@ const actionMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next-intl", () => ({
+  useLocale: () => "en",
   useTranslations: () => {
     const translate: MockTranslate = Object.assign((key: string) => key, {
       rich: (key: string) => key,

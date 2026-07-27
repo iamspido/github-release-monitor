@@ -210,7 +210,6 @@ export async function register(
 export async function logout() {
   await ensureAuthDatabaseReady();
   const headerStore = await headers();
-  const locale = await getLocale();
   const clientIp = getClientIpFromHeaders(headerStore);
   logger.withScope("Auth").info(`Logout requested from ip='${clientIp}'.`);
 
@@ -232,7 +231,6 @@ export async function logout() {
       `User logged out from ip='${clientIp}' with status=${signOutResponse.status}.`,
     );
 
-  const loginPath = getCanonicalRoutePath("/login", normalizeLocale(locale));
   revalidatePath("/");
-  redirectLocalized(loginPath, locale);
+  return { redirectTo: "/login" as const };
 }

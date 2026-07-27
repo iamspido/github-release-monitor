@@ -13,14 +13,14 @@ describe("api/settings-locale route", () => {
   });
 
   it("returns the stored locale", async () => {
-    getLocaleSettingMock.mockResolvedValue("de");
+    getLocaleSettingMock.mockResolvedValue("ar");
     const { GET, runtime } = await import("@/app/api/settings-locale/route");
 
     const response = await GET();
 
     expect(runtime).toBe("nodejs");
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ locale: "de" });
+    await expect(response.json()).resolves.toEqual({ locale: "ar" });
   });
 
   it("returns a stable 500 response when settings cannot be read", async () => {

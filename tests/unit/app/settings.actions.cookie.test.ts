@@ -59,7 +59,7 @@ describe("updateSettingsAction cookie and trigger", () => {
     const { updateSettingsAction } = await import("@/app/settings/actions");
     const res = await updateSettingsAction({
       timeFormat: "24h",
-      locale: "de",
+      locale: "ar",
       refreshInterval: 10,
       cacheInterval: 5,
       releasesPerPage: 30,
@@ -72,6 +72,6 @@ describe("updateSettingsAction cookie and trigger", () => {
     expect(cookieSetMock).toHaveBeenCalled();
     const [name, value] = cookieSetMock.mock.calls[0];
     expect(name).toBe("NEXT_LOCALE");
-    expect(value).toBe("de");
+    expect(value).toBe("ar");
   });
 });

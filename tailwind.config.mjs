@@ -14,8 +14,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['var(--font-inter)', 'sans-serif'],
-        headline: ['var(--font-inter)', 'sans-serif'],
+        body: ['var(--font-locale-body)', 'sans-serif'],
+        headline: ['var(--font-locale-body)', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {
@@ -86,12 +86,12 @@ export default {
               content: '""',
             },
             'thead th:not(:last-child)': {
-              borderRightWidth: '1px',
-              borderRightColor: 'var(--tw-prose-td-borders)',
+              borderInlineEndWidth: '1px',
+              borderInlineEndColor: 'var(--tw-prose-td-borders)',
             },
             'tbody td:not(:last-child)': {
-              borderRightWidth: '1px',
-              borderRightColor: 'var(--tw-prose-td-borders)',
+              borderInlineEndWidth: '1px',
+              borderInlineEndColor: 'var(--tw-prose-td-borders)',
             },
           },
         },
@@ -111,12 +111,12 @@ export default {
               content: '""',
             },
             'thead th:not(:last-child)': {
-              borderRightWidth: '1px',
-              borderRightColor: 'var(--tw-prose-td-borders)',
+              borderInlineEndWidth: '1px',
+              borderInlineEndColor: 'var(--tw-prose-td-borders)',
             },
             'tbody td:not(:last-child)': {
-              borderRightWidth: '1px',
-              borderRightColor: 'var(--tw-prose-td-borders)',
+              borderInlineEndWidth: '1px',
+              borderInlineEndColor: 'var(--tw-prose-td-borders)',
             },
           },
         }

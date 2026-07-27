@@ -33,6 +33,7 @@ import {
   listAuthAccounts,
   readAuthSessionSnapshot,
 } from "@/lib/auth/client-adapters";
+import { isolateLtrText } from "@/lib/bidi";
 import {
   isPasswordPolicyValid,
   keepPasswordInputWhitespaceFree,
@@ -96,7 +97,7 @@ export function AccountCredentialsSettingsCard() {
     (newPasswordTouched || confirmPasswordTouched) &&
     !currentPasswordRequirementMet;
   const newPasswordInputClass = [
-    "pr-10",
+    "pe-10",
     newPasswordTouched
       ? newPasswordPolicyMet
         ? "border-emerald-500 focus-visible:ring-emerald-500"
@@ -106,7 +107,7 @@ export function AccountCredentialsSettingsCard() {
     .filter(Boolean)
     .join(" ");
   const confirmPasswordInputClass = [
-    "pr-10",
+    "pe-10",
     confirmPasswordTouched
       ? passwordsMatch
         ? "border-emerald-500 focus-visible:ring-emerald-500"
@@ -262,7 +263,9 @@ export function AccountCredentialsSettingsCard() {
             <Mail className="h-4 w-4" />
             <span>
               {t("account_email_current_value", {
-                value: currentEmail || t("account_email_not_set"),
+                value: currentEmail
+                  ? isolateLtrText(currentEmail)
+                  : t("account_email_not_set"),
               })}
             </span>
           </div>
@@ -284,9 +287,9 @@ export function AccountCredentialsSettingsCard() {
                 aria-busy={emailPending}
               >
                 {emailPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="me-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <Mail className="mr-2 h-4 w-4" />
+                  <Mail className="me-2 h-4 w-4" />
                 )}
                 {t("account_email_save_button")}
               </Button>
@@ -330,6 +333,7 @@ export function AccountCredentialsSettingsCard() {
               <div className="relative">
                 <Input
                   id={currentPasswordId}
+                  dir="ltr"
                   type={passwordInputType}
                   value={currentPassword}
                   onChange={(event) => setCurrentPassword(event.target.value)}
@@ -337,8 +341,8 @@ export function AccountCredentialsSettingsCard() {
                   autoComplete="current-password"
                   className={
                     !currentPasswordMissingForChange
-                      ? "pr-10"
-                      : "pr-10 border-destructive focus-visible:ring-destructive"
+                      ? "pe-10"
+                      : "pe-10 border-destructive focus-visible:ring-destructive"
                   }
                 />
                 <Button
@@ -367,6 +371,7 @@ export function AccountCredentialsSettingsCard() {
             <div className="relative">
               <Input
                 id={newPasswordId}
+                dir="ltr"
                 type={passwordInputType}
                 value={newPassword}
                 onChange={(event) =>
@@ -409,6 +414,7 @@ export function AccountCredentialsSettingsCard() {
             <div className="relative">
               <Input
                 id={confirmPasswordId}
+                dir="ltr"
                 type={passwordInputType}
                 value={confirmPassword}
                 onChange={(event) =>
@@ -454,9 +460,9 @@ export function AccountCredentialsSettingsCard() {
             aria-busy={passwordPending}
           >
             {passwordPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="me-2 h-4 w-4 animate-spin" />
             ) : (
-              <KeyRound className="mr-2 h-4 w-4" />
+              <KeyRound className="me-2 h-4 w-4" />
             )}
             {hasPassword
               ? t("account_password_change_button")

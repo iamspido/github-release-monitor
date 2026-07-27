@@ -37,9 +37,12 @@ export function renderReleaseEmailHtml(
           padding: 0;
           width: 100%;
           background-color: #0d1117;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
           color: #c9d1d9;
           line-height: 1.6;
+        }
+        html[dir="rtl"] body {
+          text-align: right;
         }
         .container {
           background-color: #101928;
@@ -54,6 +57,7 @@ export function renderReleaseEmailHtml(
           border: 1px solid #30363d;
           border-radius: 6px;
           padding: 1px 16px;
+          unicode-bidi: plaintext;
         }
         h1, h2, h3, h4, h5, h6 {
           color: #fafafa;
@@ -69,6 +73,12 @@ export function renderReleaseEmailHtml(
           margin-top: 0;
           margin-bottom: 16px;
           padding-left: 2em;
+          padding-right: 0;
+        }
+        html[dir="rtl"] ul,
+        html[dir="rtl"] ol {
+          padding-left: 0;
+          padding-right: 2em;
         }
         li {
           margin-bottom: 4px;
@@ -93,10 +103,14 @@ export function renderReleaseEmailHtml(
           line-height: 1.45;
           word-break: normal;
           word-wrap: normal;
+          direction: ltr;
+          text-align: left;
         }
         code {
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
           font-size: 85%;
+          direction: ltr;
+          unicode-bidi: isolate;
         }
         pre code {
           background-color: transparent;
@@ -113,9 +127,17 @@ export function renderReleaseEmailHtml(
         }
         blockquote {
           border-left: 4px solid #30363d;
+          border-right: 0;
           padding-left: 16px;
+          padding-right: 0;
           color: #8b949e;
           margin: 0 0 16px;
+        }
+        html[dir="rtl"] blockquote {
+          border-left: 0;
+          border-right: 4px solid #30363d;
+          padding-left: 0;
+          padding-right: 16px;
         }
         table {
           width: 100%;
@@ -146,19 +168,33 @@ export function renderReleaseEmailHtml(
           border-radius: 5px;
           font-weight: 500;
         }
+        .details-list {
+          padding-left: 20px;
+          padding-right: 0;
+          margin-top: 16px;
+          margin-bottom: 24px;
+        }
+        html[dir="rtl"] .details-list {
+          padding-left: 0;
+          padding-right: 20px;
+        }
+        .technical-value {
+          direction: ltr;
+          unicode-bidi: isolate;
+        }
       </style>
     </head>
     <body>
       <div class="container">
-        <h2>${data.titleHtml}</h2>
+        <h2><bdi dir="auto">${data.titleHtml}</bdi></h2>
         <p>${data.introHtml}</p>
-        <ul style="padding-left: 20px; margin-top: 16px; margin-bottom: 24px;">
-          <li><strong style="color: #fafafa;">${data.listVersionLabelHtml}</strong> ${data.releaseTagNameHtml}</li>
-          <li><strong style="color: #fafafa;">${data.listNameLabelHtml}</strong> ${data.releaseNameHtml}</li>
-          <li><strong style="color: #fafafa;">${data.listDateLabelHtml}</strong> ${data.releaseDateHtml}</li>
+        <ul class="details-list">
+          <li><strong style="color: #fafafa;">${data.listVersionLabelHtml}</strong> <bdi dir="ltr" class="technical-value" style="direction: ltr; unicode-bidi: isolate;">${data.releaseTagNameHtml}</bdi></li>
+          <li><strong style="color: #fafafa;">${data.listNameLabelHtml}</strong> <bdi dir="auto">${data.releaseNameHtml}</bdi></li>
+          <li><strong style="color: #fafafa;">${data.listDateLabelHtml}</strong> <bdi dir="auto">${data.releaseDateHtml}</bdi></li>
         </ul>
         <h3>${data.notesTitleHtml}</h3>
-        <div class="release-notes-container">
+        <div class="release-notes-container" dir="auto">
           ${data.releaseBodyHtml}
         </div>
         <p style="margin-top: 24px;">

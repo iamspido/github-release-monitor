@@ -317,7 +317,7 @@ export function HomePageClient({
             <h2 className="min-w-0 text-2xl font-semibold leading-tight">
               {t("monitored_repos_title")}
             </h2>
-            <span className="shrink-0 text-sm text-muted-foreground sm:text-right">
+            <span className="shrink-0 text-sm text-muted-foreground sm:text-end">
               {[
                 isTagFilterActive
                   ? t("filtered_repo_count", {
@@ -444,7 +444,7 @@ export function HomePageClient({
               <AlertTriangle className="size-5 shrink-0" />
               <p>{t("error_summary_title")}</p>
             </div>
-            <ul className="list-disc pl-10 space-y-1">
+            <ul className="list-disc ps-10 space-y-1">
               {Array.from(errorSummary.entries()).map(([type, count]) => (
                 <li key={type}>
                   {t("error_summary_line", {

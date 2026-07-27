@@ -165,7 +165,7 @@ function RepositoryTagBadges({ tags }: { tags: readonly string[] }) {
           variant="outline"
           className="max-w-36 truncate text-xs"
         >
-          {tag}
+          <bdi dir="ltr">{tag}</bdi>
         </Badge>
       ))}
       {remainingTags.length > 0 && (
@@ -187,7 +187,7 @@ function RepositoryTagBadges({ tags }: { tags: readonly string[] }) {
               </button>
             </TooltipTrigger>
             <TooltipContent className="max-w-xs">
-              <p>{remainingTags.join(", ")}</p>
+              <p dir="ltr">{remainingTags.join(", ")}</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -789,7 +789,7 @@ export function ReleaseCard({
                 onToggle={() => setIsExpanded((current) => !current)}
                 repoName={displayRepoId}
               />
-              <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-2 pl-11 pr-1">
+              <div className="pointer-events-none flex min-w-0 flex-1 items-center gap-2 ps-11 pe-1">
                 <AlertTriangle className="size-4 shrink-0 text-destructive" />
                 <div className="min-w-0">
                   <h3
@@ -803,7 +803,9 @@ export function ReleaseCard({
                       className="pointer-events-auto relative z-10 block max-w-full truncate hover:underline"
                       onClick={(event) => event.stopPropagation()}
                     >
-                      {customDisplayName || displayRepoId}
+                      <bdi dir={customDisplayName ? "auto" : "ltr"}>
+                        {customDisplayName || displayRepoId}
+                      </bdi>
                     </a>
                   </h3>
                   {customDisplayName && (
@@ -814,7 +816,7 @@ export function ReleaseCard({
                       className="pointer-events-auto relative z-10 block w-fit max-w-full truncate text-xs text-destructive/80 hover:underline"
                       onClick={(event) => event.stopPropagation()}
                     >
-                      {displayRepoId}
+                      <bdi dir="ltr">{displayRepoId}</bdi>
                     </a>
                   )}
                 </div>
@@ -897,7 +899,9 @@ export function ReleaseCard({
                     rel="noopener noreferrer"
                     className="hover:underline"
                   >
-                    {customDisplayName || displayRepoId}
+                    <bdi dir={customDisplayName ? "auto" : "ltr"}>
+                      {customDisplayName || displayRepoId}
+                    </bdi>
                   </a>
                 </CardTitle>
                 {customDisplayName && (
@@ -907,7 +911,7 @@ export function ReleaseCard({
                     rel="noopener noreferrer"
                     className="text-sm text-red-400/80 hover:underline break-all"
                   >
-                    {displayRepoId}
+                    <bdi dir="ltr">{displayRepoId}</bdi>
                   </a>
                 )}
                 <CardDescription className="text-red-400/80">
@@ -988,13 +992,13 @@ export function ReleaseCard({
                     rel="noopener noreferrer"
                     className="block max-w-full truncate hover:underline"
                   >
-                    {customDisplayName}
+                    <bdi dir="auto">{customDisplayName}</bdi>
                   </a>
                 </h3>
               ) : (
                 <>
                   <h3 id={compactHeadingId} className="sr-only">
-                    {displayRepoId}
+                    <bdi dir="ltr">{displayRepoId}</bdi>
                   </h3>
                   <Skeleton className="h-5 w-48 max-w-full" />
                 </>
@@ -1005,7 +1009,7 @@ export function ReleaseCard({
                 rel="noopener noreferrer"
                 className="block w-fit max-w-full truncate text-xs text-muted-foreground hover:underline"
               >
-                {displayRepoId}
+                <bdi dir="ltr">{displayRepoId}</bdi>
               </a>
             </div>
             <div className="flex items-center justify-end gap-1">
@@ -1065,7 +1069,7 @@ export function ReleaseCard({
                       rel="noopener noreferrer"
                       className="hover:underline"
                     >
-                      {customDisplayName}
+                      <bdi dir="auto">{customDisplayName}</bdi>
                     </a>
                   </CardTitle>
                 ) : (
@@ -1077,7 +1081,7 @@ export function ReleaseCard({
                   rel="noopener noreferrer"
                   className="text-sm text-muted-foreground hover:underline break-all"
                 >
-                  {displayRepoId}
+                  <bdi dir="ltr">{displayRepoId}</bdi>
                 </a>
                 <RepositoryTagBadges tags={repositoryTags} />
               </div>
@@ -1172,7 +1176,7 @@ export function ReleaseCard({
               onToggle={() => setIsExpanded((current) => !current)}
               repoName={displayRepoId}
             />
-            <div className="pointer-events-none min-w-0 flex-1 pl-11 pr-1">
+            <div className="pointer-events-none min-w-0 flex-1 ps-11 pe-1">
               <h3
                 id={compactHeadingId}
                 className="w-fit max-w-full truncate font-semibold"
@@ -1184,7 +1188,7 @@ export function ReleaseCard({
                   className="pointer-events-auto relative z-10 block w-fit max-w-full truncate hover:underline"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  {cardHeading}
+                  <bdi dir="auto">{cardHeading}</bdi>
                   {isNew && showAcknowledgeFeature && (
                     <span className="sr-only"> – {t("new_release_badge")}</span>
                   )}
@@ -1203,7 +1207,7 @@ export function ReleaseCard({
                 className="pointer-events-auto relative z-10 block w-fit max-w-full truncate text-xs text-muted-foreground hover:underline"
                 onClick={(event) => event.stopPropagation()}
               >
-                {displayRepoId}
+                <bdi dir="ltr">{displayRepoId}</bdi>
               </a>
             </div>
             <Badge
@@ -1211,7 +1215,7 @@ export function ReleaseCard({
               className="pointer-events-none hidden max-w-24 shrink-0 truncate sm:inline-flex"
               title={release.tag_name}
             >
-              {release.tag_name}
+              <bdi dir="ltr">{release.tag_name}</bdi>
             </Badge>
             <div className="pointer-events-auto relative z-10 flex shrink-0 items-center justify-end gap-1">
               <CompactRepositoryIndicators
@@ -1264,7 +1268,7 @@ export function ReleaseCard({
                 />
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <Badge variant="secondary" className="max-w-full truncate">
-                    {release.tag_name}
+                    <bdi dir="ltr">{release.tag_name}</bdi>
                   </Badge>
                   <div>
                     {isReleaseTimeUnknown ? (
@@ -1327,7 +1331,7 @@ export function ReleaseCard({
                   rel="noopener noreferrer"
                   className="hover:underline"
                 >
-                  {cardHeading}
+                  <bdi dir="auto">{cardHeading}</bdi>
                 </a>
               </CardTitle>
               <a
@@ -1336,13 +1340,13 @@ export function ReleaseCard({
                 rel="noopener noreferrer"
                 className="text-sm text-muted-foreground hover:underline break-all"
               >
-                {displayRepoId}
+                <bdi dir="ltr">{displayRepoId}</bdi>
               </a>
               <RepositoryTagBadges tags={repositoryTags} />
             </div>
             <div className="flex flex-col items-end gap-1.5 shrink-0">
               <Badge variant="secondary" className="px-3 py-1 text-base">
-                {release.tag_name}
+                <bdi dir="ltr">{release.tag_name}</bdi>
               </Badge>
               <div className="flex items-center gap-2">
                 {isPinned && <PinnedRepositoryBadge />}

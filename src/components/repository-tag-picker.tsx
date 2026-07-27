@@ -156,6 +156,7 @@ export function RepositoryTagPicker({
       <Input
         ref={inputRef}
         id={id}
+        dir="ltr"
         role="combobox"
         aria-autocomplete="list"
         aria-label={ariaLabel}
@@ -262,16 +263,18 @@ export function RepositoryTagPicker({
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => selectTag(tag)}
                 className={cn(
-                  "flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground",
+                  "flex w-full items-center rounded-sm px-2 py-1.5 text-start text-sm outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground",
                   activeIndex === index && "bg-accent text-accent-foreground",
                 )}
               >
                 <Plus
                   aria-hidden="true"
                   data-tag-add-icon="true"
-                  className="mr-2 size-4 shrink-0"
+                  className="me-2 size-4 shrink-0"
                 />
-                <span className="min-w-0 truncate">{tag}</span>
+                <bdi dir="ltr" className="min-w-0 truncate">
+                  {tag}
+                </bdi>
               </button>
             ))}
             {createCandidate && (
@@ -285,7 +288,7 @@ export function RepositoryTagPicker({
                 onMouseEnter={() => setActiveIndex(filteredOptions.length)}
                 onClick={createTag}
                 className={cn(
-                  "flex w-full items-center rounded-sm px-2 py-1.5 text-left text-sm outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground",
+                  "flex w-full items-center rounded-sm px-2 py-1.5 text-start text-sm outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground",
                   activeIndex === filteredOptions.length &&
                     "bg-accent text-accent-foreground",
                 )}
@@ -293,11 +296,11 @@ export function RepositoryTagPicker({
                 <Plus
                   aria-hidden="true"
                   data-tag-add-icon="true"
-                  className="mr-2 size-4 shrink-0"
+                  className="me-2 size-4 shrink-0"
                 />
-                <span className="min-w-0 truncate">
+                <bdi dir="auto" className="min-w-0 truncate">
                   {createOptionLabel(createCandidate)}
-                </span>
+                </bdi>
               </button>
             )}
           </div>,

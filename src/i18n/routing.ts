@@ -10,22 +10,27 @@ export const pathnames = {
   "/": {
     en: "/",
     de: "/",
+    ar: "/",
   },
   "/settings": {
     en: "/settings",
     de: "/einstellungen",
+    ar: "/الإعدادات",
   },
   "/login": {
     en: "/login",
     de: "/anmelden",
+    ar: "/تسجيل-الدخول",
   },
   "/register": {
     en: "/register",
     de: "/registrieren",
+    ar: "/إنشاء-حساب",
   },
   "/test": {
     en: "/test",
     de: "/test",
+    ar: "/اختبار",
   },
 } satisfies Pathnames<typeof locales>;
 

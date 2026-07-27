@@ -235,7 +235,7 @@ function FloatingSaveIndicator({ status }: { status: AutosaveStatus }) {
       data-status={status}
       data-testid="autosave-status"
       className={cn(
-        "fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg border bg-background shadow-lg transition-all duration-300 ease-in-out",
+        "fixed bottom-6 end-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-lg border bg-background shadow-lg transition-all duration-300 ease-in-out",
         current.className,
       )}
     >
@@ -940,7 +940,7 @@ export function SettingsForm({
                 className="flex items-center gap-4"
                 disabled={!isOnline}
               >
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2">
                   <RadioGroupItem
                     value="12h"
                     id={ids.timeFormat12h}
@@ -950,7 +950,7 @@ export function SettingsForm({
                     {t("time_format_12h")}
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2">
                   <RadioGroupItem
                     value="24h"
                     id={ids.timeFormat24h}
@@ -981,6 +981,7 @@ export function SettingsForm({
                     <SelectItem
                       key={code}
                       value={code}
+                      dir="auto"
                       data-testid={`language-option-${code}`}
                     >
                       {nativeName}
@@ -1064,7 +1065,7 @@ export function SettingsForm({
               </div>
             )}
             <div className="space-y-4 pt-2">
-              <div className="flex items-start space-x-3">
+              <div className="flex items-start gap-3">
                 <Checkbox
                   id={ids.showAcknowledge}
                   checked={showAcknowledge}
@@ -1088,13 +1089,13 @@ export function SettingsForm({
               </div>
               <div
                 className={cn(
-                  "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
+                  "ms-6 ps-3 border-s-2 transition-all duration-300 ease-in-out overflow-hidden",
                   showAcknowledge
                     ? "mt-4 max-h-96 opacity-100"
                     : "max-h-0 opacity-0",
                 )}
               >
-                <div className="flex items-start space-x-3">
+                <div className="flex items-start gap-3">
                   <Checkbox
                     id={ids.showMarkAsNew}
                     checked={showMarkAsNew}
@@ -1117,7 +1118,7 @@ export function SettingsForm({
                   </div>
                 </div>
               </div>
-              <div className="flex items-start space-x-3">
+              <div className="flex items-start gap-3">
                 <Checkbox
                   id={ids.showProviderPrefixInRepoId}
                   checked={showProviderPrefixInRepoId}
@@ -1139,7 +1140,7 @@ export function SettingsForm({
                   </p>
                 </div>
               </div>
-              <div className="flex items-start space-x-3">
+              <div className="flex items-start gap-3">
                 <Checkbox
                   id={ids.showProviderDomainInRepoId}
                   checked={showProviderDomainInRepoId}
@@ -1161,7 +1162,7 @@ export function SettingsForm({
                   </p>
                 </div>
               </div>
-              <div className="flex items-start space-x-3">
+              <div className="flex items-start gap-3">
                 <Checkbox
                   id={ids.repositoryFormExpanded}
                   checked={repositoryFormExpanded}
@@ -1195,7 +1196,7 @@ export function SettingsForm({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="flex items-start space-x-3">
+            <div className="flex items-start gap-3">
               <Checkbox
                 id={ids.prioritizeNewSecurityReleases}
                 checked={prioritizeNewSecurityReleases}
@@ -1240,7 +1241,7 @@ export function SettingsForm({
                   return (
                     <div
                       key={option.value}
-                      className="flex items-center space-x-2 rounded-md border p-3"
+                      className="flex items-center gap-2 rounded-md border p-3"
                     >
                       <RadioGroupItem value={option.value} id={optionId} />
                       <span
@@ -1297,6 +1298,7 @@ export function SettingsForm({
                     </Label>
                     <Input
                       id={ids.securityHighlightCustomColor}
+                      dir="ltr"
                       value={securityHighlightCustomColor}
                       onChange={(event) =>
                         setSecurityHighlightCustomColor(event.target.value)
@@ -1322,7 +1324,7 @@ export function SettingsForm({
               )}
             </div>
 
-            <div className="flex items-start space-x-3">
+            <div className="flex items-start gap-3">
               <Checkbox
                 id={ids.confirmSecurityAcknowledge}
                 checked={confirmSecurityAcknowledge}
@@ -1346,7 +1348,7 @@ export function SettingsForm({
             </div>
 
             <div className="space-y-4">
-              <div className="flex items-start space-x-3">
+              <div className="flex items-start gap-3">
                 <Checkbox
                   id={ids.includeDefaultSecurityPatterns}
                   checked={includeDefaultSecurityPatterns}
@@ -1374,6 +1376,7 @@ export function SettingsForm({
                 </Label>
                 <Textarea
                   id={ids.customSecurityPatterns}
+                  dir="ltr"
                   value={customSecurityPatterns}
                   onChange={(event) =>
                     setCustomSecurityPatterns(event.target.value)
@@ -1416,7 +1419,7 @@ export function SettingsForm({
                 {t("release_channel_description_global")}
               </p>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <Checkbox
                 id={ids.stable}
                 checked={channels.includes("stable")}
@@ -1432,7 +1435,7 @@ export function SettingsForm({
             </div>
 
             <div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 <Checkbox
                   id={ids.prerelease}
                   checked={isPreReleaseChecked}
@@ -1449,7 +1452,7 @@ export function SettingsForm({
 
               <div
                 className={cn(
-                  "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
+                  "ms-6 ps-3 border-s-2 transition-all duration-300 ease-in-out overflow-hidden",
                   isPreReleaseChecked
                     ? "mt-4 max-h-[600px] opacity-100"
                     : "max-h-0 opacity-0",
@@ -1481,10 +1484,7 @@ export function SettingsForm({
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-3">
                     {allPreReleaseTypes.map((subType) => (
-                      <div
-                        key={subType}
-                        className="flex items-center space-x-2"
-                      >
+                      <div key={subType} className="flex items-center gap-2">
                         <Checkbox
                           id={`prerelease-${subType}`}
                           checked={preReleaseSubChannels.includes(subType)}
@@ -1506,7 +1506,7 @@ export function SettingsForm({
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <Checkbox
                 id={ids.draft}
                 checked={channels.includes("draft")}
@@ -1530,6 +1530,7 @@ export function SettingsForm({
               </Label>
               <Input
                 id={ids.includeRegex}
+                dir="ltr"
                 value={includeRegex}
                 onChange={(e) => setIncludeRegex(e.target.value)}
                 placeholder={t("regex_placeholder")}
@@ -1551,6 +1552,7 @@ export function SettingsForm({
               </Label>
               <Input
                 id={ids.excludeRegex}
+                dir="ltr"
                 value={excludeRegex}
                 onChange={(e) => setExcludeRegex(e.target.value)}
                 placeholder={t("regex_placeholder")}
@@ -1770,6 +1772,7 @@ export function SettingsForm({
                     </Label>
                     <Input
                       id={ids.cronExpression}
+                      dir="ltr"
                       value={cronExpression}
                       onChange={(event) =>
                         setCronExpression(event.target.value)
@@ -2056,6 +2059,7 @@ export function SettingsForm({
               <Label htmlFor={ids.appriseTags}>{t("apprise_tags_label")}</Label>
               <Input
                 id={ids.appriseTags}
+                dir="ltr"
                 type="text"
                 value={appriseTags}
                 onChange={(e) => setAppriseTags(e.target.value)}

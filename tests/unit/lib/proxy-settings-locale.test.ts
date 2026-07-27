@@ -305,27 +305,19 @@ describe("fetchSettingsLocale", () => {
 
 describe("getLocaleFromCookies", () => {
   it("uses a valid fallback cookie when the preferred cookie is invalid", () => {
-    const request = createRequest(
-      "https://example.test/",
-      undefined,
-      {
-        [SETTINGS_LOCALE_COOKIE]: "unsupported",
-        [NEXT_LOCALE_COOKIE]: "de",
-      },
-    );
+    const request = createRequest("https://example.test/", undefined, {
+      [SETTINGS_LOCALE_COOKIE]: "unsupported",
+      [NEXT_LOCALE_COOKIE]: "de",
+    });
 
     expect(getLocaleFromCookies(request)).toBe("de");
   });
 
   it("keeps a valid settings cookie authoritative", () => {
-    const request = createRequest(
-      "https://example.test/",
-      undefined,
-      {
-        [SETTINGS_LOCALE_COOKIE]: "en",
-        [NEXT_LOCALE_COOKIE]: "de",
-      },
-    );
+    const request = createRequest("https://example.test/", undefined, {
+      [SETTINGS_LOCALE_COOKIE]: "en",
+      [NEXT_LOCALE_COOKIE]: "de",
+    });
 
     expect(getLocaleFromCookies(request)).toBe("en");
   });

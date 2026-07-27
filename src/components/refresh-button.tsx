@@ -51,9 +51,9 @@ export function RefreshButton() {
         disabled={isPending || !isOnline}
       >
         {isPending ? (
-          <Loader2 className="mr-2 size-4 animate-spin" />
+          <Loader2 className="me-2 size-4 animate-spin" />
         ) : (
-          <RefreshCw className="mr-2 size-4" />
+          <RefreshCw className="me-2 size-4" />
         )}
         {t("refresh")}
       </Button>

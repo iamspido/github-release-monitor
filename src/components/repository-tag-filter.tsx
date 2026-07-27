@@ -65,6 +65,7 @@ export function RepositoryTagFilter({
         {options.length > 0 && (
           <div className="px-2 pb-2">
             <Input
+              dir="ltr"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               onKeyDown={(event) => {
@@ -84,8 +85,10 @@ export function RepositoryTagFilter({
               onCheckedChange={() => onTagToggle(tag)}
               onSelect={(event) => event.preventDefault()}
             >
-              <span className="min-w-0 flex-1 truncate">{tag}</span>
-              <span className="ml-3 text-xs tabular-nums text-muted-foreground">
+              <bdi dir="ltr" className="min-w-0 flex-1 truncate">
+                {tag}
+              </bdi>
+              <span className="ms-3 text-xs tabular-nums text-muted-foreground">
                 {count}
               </span>
             </DropdownMenuCheckboxItem>
@@ -104,7 +107,7 @@ export function RepositoryTagFilter({
               <span className="min-w-0 flex-1 truncate">
                 {t("tag_filter_untagged")}
               </span>
-              <span className="ml-3 text-xs tabular-nums text-muted-foreground">
+              <span className="ms-3 text-xs tabular-nums text-muted-foreground">
                 {untaggedCount}
               </span>
             </DropdownMenuCheckboxItem>
@@ -114,7 +117,7 @@ export function RepositoryTagFilter({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onClear}>
-              <X className="mr-2 size-4" />
+              <X className="me-2 size-4" />
               {t("tag_filter_clear")}
             </DropdownMenuItem>
           </>

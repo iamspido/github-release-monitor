@@ -21,7 +21,9 @@ async function setFormatAndRead(
   return text || "";
 }
 
-test("time format toggles AM/PM in EN and updates in DE", async ({ page }) => {
+test("time format follows locale conventions in EN, DE, and AR", async ({
+  page,
+}) => {
   await ensureAppLocale(page, "en");
 
   const en12 = await setFormatAndRead(page, "en", "12");
@@ -38,6 +40,17 @@ test("time format toggles AM/PM in EN and updates in DE", async ({ page }) => {
 
   const de12 = await setFormatAndRead(page, "de", "12");
   expect(de12).not.toBe(de24);
+
+  await ensureAppLocale(page, "ar");
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+
+  const ar12 = await setFormatAndRead(page, "ar", "12");
+  expect(ar12).toMatch(/(?:^|\s)[صم](?:\s|$)/u);
+
+  const ar24 = await setFormatAndRead(page, "ar", "24");
+  expect(ar24).not.toMatch(/(?:^|\s)[صم](?:\s|$)/u);
+  expect(ar24).toMatch(/[0-9٠-٩]{1,2}:[0-9٠-٩]{2}/u);
+  expect(ar24).not.toBe(ar12);
 
   await ensureAppLocale(page, "en");
 });

@@ -76,6 +76,7 @@ const translationMap: Record<string, Record<string, string>> = {
     custom_cache_label: "Custom cache",
     custom_cache_description: "Global cache duration",
     custom_cache_hint: "Set 0 to disable cache",
+    tags_move_left_aria: "Move tag left",
     tags_move_right_aria: "Move tag right",
     tags_create_option: "Add new tag",
   },
@@ -98,7 +99,10 @@ const translationMap: Record<string, Record<string, string>> = {
   },
 };
 
+let mockedLocale = "en";
+
 vi.mock("next-intl", () => ({
+  useLocale: () => mockedLocale,
   useTranslations: (namespace: string) => {
     const dict = translationMap[namespace] ?? {};
     const translate = ((key: string) =>
@@ -242,6 +246,7 @@ describe("RepoSettingsDialog autosave behaviour", () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    mockedLocale = "en";
     networkState = { isOnline: true };
     toastSpy.mockClear();
     updateSettingsMock.mockReset();
@@ -1175,6 +1180,32 @@ describe("RepoSettingsDialog autosave behaviour", () => {
 
     await act(async () => {
       moveRightButtons[0].click();
+    });
+    await advanceAutosaveDelay();
+
+    await expectEventually(() => {
+      expect(updateSettingsMock).toHaveBeenCalledWith(
+        "owner/repo",
+        expect.objectContaining({ tags: ["media", "infra", "retro"] }),
+      );
+    });
+  });
+
+  it("maps repository tag controls to the visible RTL direction", async () => {
+    mockedLocale = "ar";
+    renderDialog({ currentRepositoryTags: ["infra", "media", "retro"] });
+    await flushEffects();
+
+    const moveRightButtons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        'button[aria-label="Move tag right"]',
+      ),
+    );
+    expect(moveRightButtons).toHaveLength(3);
+    expect(moveRightButtons[0].disabled).toBe(true);
+
+    await act(async () => {
+      moveRightButtons[1].click();
     });
     await advanceAutosaveDelay();
 

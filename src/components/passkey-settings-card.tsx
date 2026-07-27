@@ -122,9 +122,9 @@ export function PasskeySettingsCard({
               aria-busy={isCreating}
             >
               {isCreating ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="me-2 h-4 w-4 animate-spin" />
               ) : (
-                <Fingerprint className="mr-2 h-4 w-4" />
+                <Fingerprint className="me-2 h-4 w-4" />
               )}
               {t("passkeys_add_button")}
             </Button>
@@ -136,9 +136,9 @@ export function PasskeySettingsCard({
               aria-busy={isLoading}
             >
               {isLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="me-2 h-4 w-4 animate-spin" />
               ) : (
-                <RefreshCw className="mr-2 h-4 w-4" />
+                <RefreshCw className="me-2 h-4 w-4" />
               )}
               {t("passkeys_refresh_button")}
             </Button>
@@ -165,7 +165,9 @@ export function PasskeySettingsCard({
                 className="flex items-center justify-between rounded-md border p-3"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{entry.name}</p>
+                  <p dir="auto" className="truncate text-sm font-medium">
+                    {entry.name}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {t("passkeys_created_at", {
                       value: (() => {

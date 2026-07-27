@@ -64,7 +64,7 @@ export function MobileMenu({
                 )}
               >
                 <button type="button">
-                  <link.icon className="mr-2 size-4" />
+                  <link.icon className="me-2 size-4" />
                   <span>{t(`menu_${link.page}`)}</span>
                 </button>
               </DropdownMenuItem>
@@ -78,7 +78,7 @@ export function MobileMenu({
               rel="noopener noreferrer"
               className="flex w-full cursor-pointer items-center"
             >
-              <GithubBrandIcon className="mr-2 size-4" />
+              <GithubBrandIcon className="me-2 size-4" />
               <span>{t("menu_github")}</span>
             </a>
           </DropdownMenuItem>
@@ -92,7 +92,7 @@ export function MobileMenu({
                 className="flex w-full cursor-pointer items-center"
               >
                 <button type="button">
-                  <LogIn className="mr-2 size-4" />
+                  <LogIn className="me-2 size-4 rtl:scale-x-[-1]" />
                   <span>{t("menu_login")}</span>
                 </button>
               </DropdownMenuItem>
@@ -111,9 +111,9 @@ export function MobileMenu({
                   className="flex w-full cursor-pointer items-center"
                 >
                   {isLoggingOut ? (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    <Loader2 className="me-2 size-4 animate-spin" />
                   ) : (
-                    <LogOut className="mr-2 size-4" />
+                    <LogOut className="me-2 size-4 rtl:scale-x-[-1]" />
                   )}
                   <span>{t("menu_logout")}</span>
                 </button>

@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { UpdateNoticeBanner } from "@/components/update-notice-banner";
 import { useNetworkStatus } from "@/hooks/use-network";
 import type { Locale } from "@/i18n/config";
-import { Link, usePathname } from "@/i18n/navigation";
+import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import type { AuthAccess } from "@/lib/auth/mode";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
@@ -36,30 +36,16 @@ export function Header({
 }: HeaderProps) {
   const t = useTranslations("HomePage");
   const pathname = usePathname();
+  const router = useRouter();
   const [isLoggingOut, startLogoutTransition] = React.useTransition();
   const { isOnline } = useNetworkStatus();
-  const isNextRedirectError = (error: unknown) => {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-    const digest =
-      typeof (error as { digest?: unknown }).digest === "string"
-        ? (error as { digest?: unknown }).digest
-        : undefined;
-    return (
-      error.message === "NEXT_REDIRECT" ||
-      (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT"))
-    );
-  };
 
   const handleLogout = () => {
     startLogoutTransition(async () => {
       try {
-        await logout();
+        const result = await logout();
+        router.replace(result.redirectTo);
       } catch (error: unknown) {
-        if (isNextRedirectError(error)) {
-          return;
-        }
         if (reloadIfServerActionStale(error)) {
           return;
         }
@@ -115,7 +101,7 @@ export function Header({
             {authAccess.showLogin && (
               <Button asChild variant="ghost" size="icon">
                 <Link href="/login" aria-label={t("login_aria")}>
-                  <LogIn className="size-5" />
+                  <LogIn className="size-5 rtl:scale-x-[-1]" />
                 </Link>
               </Button>
             )}
@@ -131,7 +117,7 @@ export function Header({
                 {isLoggingOut ? (
                   <Loader2 className="size-5 animate-spin" />
                 ) : (
-                  <LogOut className="size-5" />
+                  <LogOut className="size-5 rtl:scale-x-[-1]" />
                 )}
               </Button>
             )}

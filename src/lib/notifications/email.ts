@@ -3,6 +3,7 @@ import { remark } from "remark";
 import remarkGfm from "remark-gfm";
 import remarkHtml from "remark-html";
 import { getLocaleMetadata, type Locale } from "@/i18n/config";
+import { isolateAutoText, isolateLtrText } from "@/lib/bidi";
 import { formatAbsoluteDateTime } from "@/lib/date-time";
 import { logger } from "@/lib/logger";
 import { getEmailRuntimeConfig } from "@/lib/notifications/config";
@@ -62,18 +63,19 @@ export async function generatePlainTextReleaseBody(
     locale,
     timeFormat,
   );
+  const releaseName = release.name || "N/A";
 
   return `
-${t("text_new_version_of", { repoId: repository.id })}
+${t("text_new_version_of", { repoId: isolateLtrText(repository.id) })}
 
-${t("text_version_label")}: ${release.tag_name}
-${t("text_release_name_label")}: ${release.name || "N/A"}
-${t("text_release_date_label")}: ${htmlDate}
+${t("text_version_label")}: ${isolateLtrText(release.tag_name)}
+${t("text_release_name_label")}: ${isolateAutoText(releaseName)}
+${t("text_release_date_label")}: ${isolateAutoText(htmlDate)}
 
 ${t("text_release_notes_label")}:
-${release.body || t("text_no_notes")}
+${release.body ? isolateAutoText(release.body) : t("text_no_notes")}
 
-${t("text_view_on_github_label")}: ${release.html_url}
+${t("text_view_on_github_label")}: ${isolateLtrText(release.html_url)}
 `;
 }
 
@@ -85,8 +87,8 @@ export async function generateHtmlReleaseBody(
 ): Promise<string> {
   const t = await getTranslations({ locale, namespace: "Email" });
   const subject = t("subject", {
-    repoId: repository.id,
-    tagName: release.tag_name,
+    repoId: isolateLtrText(repository.id),
+    tagName: isolateLtrText(release.tag_name),
   });
   const subjectHtml = escapeHtml(subject);
   const { htmlDate } = await getFormattedDate(
@@ -114,10 +116,20 @@ export async function generateHtmlReleaseBody(
       )
     : `<p style="font-style: italic;">${escapeHtml(t("html_no_notes"))}</p>`;
 
-  const repoLink = `<a href="${safeRepoUrl}" style="color: #8c9fe8; text-decoration: none;"><strong style="color: #fafafa;">${safeRepoId}</strong></a>`;
+  const repoLink = `<a href="${safeRepoUrl}" style="color: #8c9fe8; text-decoration: none;"><strong style="color: #fafafa;"><bdi dir="ltr" style="direction: ltr; unicode-bidi: isolate;">${safeRepoId}</bdi></strong></a>`;
   const introHtml = t("html_intro", {
     repoId: "REPO_PLACEHOLDER",
   }).replaceAll("REPO_PLACEHOLDER", () => repoLink);
+  const titleRepoHtml = `<bdi dir="ltr" class="technical-value" style="direction: ltr; unicode-bidi: isolate;">${safeRepoId}</bdi>`;
+  const titleTagHtml = `<bdi dir="ltr" class="technical-value" style="direction: ltr; unicode-bidi: isolate;">${safeReleaseTagName}</bdi>`;
+  const titleHtml = escapeHtml(
+    t("html_title", {
+      repoId: "TITLE_REPO_PLACEHOLDER",
+      tagName: "TITLE_TAG_PLACEHOLDER",
+    }),
+  )
+    .replaceAll("TITLE_REPO_PLACEHOLDER", () => titleRepoHtml)
+    .replaceAll("TITLE_TAG_PLACEHOLDER", () => titleTagHtml);
 
   return renderReleaseEmailHtml({
     buttonTextHtml: escapeHtml(t("html_button_text")),
@@ -134,12 +146,7 @@ export async function generateHtmlReleaseBody(
     releaseTagNameHtml: safeReleaseTagName,
     releaseUrlAttribute: safeReleaseUrl,
     subjectHtml,
-    titleHtml: escapeHtml(
-      t("html_title", {
-        repoId: repository.id,
-        tagName: release.tag_name,
-      }),
-    ),
+    titleHtml,
   });
 }
 
@@ -164,8 +171,8 @@ export async function sendNewReleaseEmail(
   }
 
   const subject = t("subject", {
-    repoId: repository.id,
-    tagName: release.tag_name,
+    repoId: isolateLtrText(repository.id),
+    tagName: isolateLtrText(release.tag_name),
   });
   const textBody = await generatePlainTextReleaseBody(
     release,

@@ -82,9 +82,9 @@ export function ExportButton() {
       onClick={handleExport}
     >
       {isPending ? (
-        <Loader2 className="mr-2 size-4 animate-spin" />
+        <Loader2 className="me-2 size-4 animate-spin" />
       ) : (
-        <Download className="mr-2 size-4" />
+        <Download className="me-2 size-4" />
       )}
       {t("export_button")}
     </Button>

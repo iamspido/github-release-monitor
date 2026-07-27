@@ -51,9 +51,9 @@ export function SocialProviderList({
             aria-busy={isPending}
           >
             {isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="me-2 h-4 w-4 animate-spin" />
             ) : (
-              <GithubBrandIcon className="mr-2 h-4 w-4" />
+              <GithubBrandIcon className="me-2 h-4 w-4" />
             )}
             {buttonLabel}
           </Button>

@@ -24,7 +24,10 @@ export function ReleaseNotesPreview({ body }: { body?: string | null }) {
 
   return (
     <div className="relative w-full max-h-72 overflow-hidden rounded-md border bg-background">
-      <div className="prose prose-sm dark:prose-invert max-w-none h-72 overflow-auto break-words p-4 prose-img:rounded prose-img:max-w-full prose-img:h-auto">
+      <div
+        dir="auto"
+        className="prose prose-sm dark:prose-invert max-w-none h-72 overflow-auto break-words p-4 prose-img:rounded prose-img:max-w-full prose-img:h-auto"
+      >
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkGemoji]}
           rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}

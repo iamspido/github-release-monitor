@@ -52,6 +52,7 @@ import { useDiagnosticsActions } from "@/hooks/use-diagnostics-actions";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
 import { authClient } from "@/lib/auth/client";
+import { isolateLtrText } from "@/lib/bidi";
 import { formatAbsoluteDateTime } from "@/lib/date-time";
 import { reloadIfServerActionStale } from "@/lib/server-action-error";
 import { cn } from "@/lib/utils";
@@ -211,7 +212,9 @@ export function TestPageClient({
       return {
         status: "warning" as const,
         text: t("update_available_status", {
-          version: updateNotice.latestVersion ?? t("not_available"),
+          version: updateNotice.latestVersion
+            ? isolateLtrText(updateNotice.latestVersion)
+            : t("not_available"),
         }),
       };
     }
@@ -228,7 +231,9 @@ export function TestPageClient({
   ]);
 
   const latestVersionText = updateNotice.latestVersion
-    ? t("update_latest_known", { version: updateNotice.latestVersion })
+    ? t("update_latest_known", {
+        version: isolateLtrText(updateNotice.latestVersion),
+      })
     : t("update_latest_known_none");
 
   React.useEffect(() => {
@@ -843,7 +848,7 @@ export function TestPageClient({
             text={isTokenSet ? t("token_set") : t("token_not_set")}
           />
           {!isTokenSet && (
-            <p className="pl-7 text-sm text-muted-foreground">
+            <p className="ps-7 text-sm text-muted-foreground">
               {t("token_advice")}
             </p>
           )}
@@ -858,7 +863,7 @@ export function TestPageClient({
                     : t("unauth_access")
                 }
               />
-              <div className="mt-2 pl-7 text-sm text-muted-foreground space-y-1">
+              <div className="mt-2 ps-7 text-sm text-muted-foreground space-y-1">
                 <p>{t("api_limit", { limit: rateLimit?.limit ?? 0 })}</p>
                 <p>
                   {t("api_remaining", {
@@ -879,7 +884,7 @@ export function TestPageClient({
             />
           )}
           {isTokenSet && rateLimitError === "invalid_token" && (
-            <p className="pl-7 text-sm text-muted-foreground">
+            <p className="ps-7 text-sm text-muted-foreground">
               {t("invalid_token_advice")}
             </p>
           )}
@@ -902,7 +907,7 @@ export function TestPageClient({
             text={gitlabTokenStatusText}
           />
           {gitlabTokenCheck.status === "not_set" && (
-            <p className="pl-7 text-sm text-muted-foreground">
+            <p className="ps-7 text-sm text-muted-foreground">
               {t("gitlab_token_advice")}
             </p>
           )}
@@ -911,7 +916,7 @@ export function TestPageClient({
               status={gitlabAuthStatus.status}
               text={gitlabAuthStatus.text}
             />
-            <div className="mt-2 pl-7 text-sm text-muted-foreground space-y-1">
+            <div className="mt-2 ps-7 text-sm text-muted-foreground space-y-1">
               {gitlabDetails}
             </div>
           </div>
@@ -936,7 +941,7 @@ export function TestPageClient({
             text={codebergTokenStatusText}
           />
           {codebergTokenCheck.status === "not_set" && (
-            <p className="pl-7 text-sm text-muted-foreground">
+            <p className="ps-7 text-sm text-muted-foreground">
               {t("codeberg_token_advice")}
             </p>
           )}
@@ -945,7 +950,7 @@ export function TestPageClient({
               status={codebergAuthStatus.status}
               text={codebergAuthStatus.text}
             />
-            <div className="mt-2 pl-7 text-sm text-muted-foreground space-y-1">
+            <div className="mt-2 ps-7 text-sm text-muted-foreground space-y-1">
               {codebergDetails}
             </div>
           </div>
@@ -967,10 +972,10 @@ export function TestPageClient({
             status={updateStatus.status}
             text={updateStatus.text}
           />
-          <div className="pl-7 text-sm text-muted-foreground space-y-1">
+          <div className="ps-7 text-sm text-muted-foreground space-y-1">
             <p>
               {t("update_current_version", {
-                version: updateNotice.currentVersion,
+                version: isolateLtrText(updateNotice.currentVersion),
               })}
             </p>
             <p>{formattedLastChecked}</p>
@@ -1014,7 +1019,7 @@ export function TestPageClient({
           ) : (
             <div>
               <StatusIndicator status="error" text={t("apprise_error")} />
-              <p className="pl-7 text-sm text-muted-foreground">
+              <p className="ps-7 text-sm text-muted-foreground">
                 {appriseStatus.error}
               </p>
             </div>
@@ -1026,8 +1031,11 @@ export function TestPageClient({
               <p>{t("apprise_url_warning")}</p>
             </div>
           )}
-          <div className="pl-7 flex items-center gap-2">
-            <p className="grow break-all font-mono text-sm text-muted-foreground">
+          <div className="ps-7 flex items-center gap-2">
+            <p
+              dir="ltr"
+              className="grow break-all font-mono text-sm text-muted-foreground"
+            >
               <span className="font-semibold text-foreground">
                 APPRISE_URL=
               </span>
@@ -1142,7 +1150,7 @@ export function TestPageClient({
             }
           />
 
-          <div className="pl-7 pt-4 border-t space-y-3">
+          <div className="ps-7 pt-4 border-t space-y-3">
             <h4 className="font-semibold text-sm">
               {t("email_all_variables_title")}
             </h4>
@@ -1153,7 +1161,10 @@ export function TestPageClient({
                 <p>{t("email_password_warning")}</p>
               </div>
             )}
-            <div className="text-sm text-muted-foreground font-mono space-y-2 break-all">
+            <div
+              dir="ltr"
+              className="text-sm text-muted-foreground font-mono space-y-2 break-all"
+            >
               {notificationConfig.variables.map((variable) => {
                 if (variable.key === "APPRISE_URL") return null;
                 const isMissingAndRequired =
@@ -1279,9 +1290,9 @@ export function TestPageClient({
                 }
               >
                 {isSendingMail ? (
-                  <Loader2 className="mr-2 animate-spin" />
+                  <Loader2 className="me-2 animate-spin" />
                 ) : (
-                  <Mail className="mr-2" />
+                  <Mail className="me-2" />
                 )}
                 {t("send_test_email_button")}
               </Button>
@@ -1320,9 +1331,9 @@ export function TestPageClient({
               disabled={isSettingUpRepo || !isOnline}
             >
               {isSettingUpRepo ? (
-                <Loader2 className="mr-2 animate-spin" />
+                <Loader2 className="me-2 animate-spin" />
               ) : (
-                <PackagePlus className="mr-2" />
+                <PackagePlus className="me-2" />
               )}
               {t("setup_test_repo_button")}
             </Button>
@@ -1343,9 +1354,9 @@ export function TestPageClient({
                 }
               >
                 {isTriggeringCheck ? (
-                  <Loader2 className="mr-2 animate-spin" />
+                  <Loader2 className="me-2 animate-spin" />
                 ) : (
-                  <RefreshCw className="mr-2" />
+                  <RefreshCw className="me-2" />
                 )}
                 {t("trigger_check_button")}
               </Button>

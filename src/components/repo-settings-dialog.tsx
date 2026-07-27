@@ -11,7 +11,7 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 import { createPortal } from "react-dom";
 import {
@@ -63,6 +63,7 @@ import {
 } from "@/hooks/use-autosave-controller";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
+import { getLocaleMetadata } from "@/i18n/config";
 import { validateVersionTagPattern } from "@/lib/releases/version-tag-pattern";
 import {
   formatRepoIdForDisplay,
@@ -290,6 +291,8 @@ export function RepoSettingsDialog({
   globalSettings,
   isAppriseConfigured = false,
 }: RepoSettingsDialogProps) {
+  const locale = useLocale();
+  const isRtl = getLocaleMetadata(locale).direction === "rtl";
   const t = useTranslations("RepoSettingsDialog");
   const tGlobal = useTranslations("SettingsForm");
   const { toast } = useToast();
@@ -1166,7 +1169,10 @@ export function RepoSettingsDialog({
     });
 
     for (const item of closestRow) {
-      if (clientX < item.bounds.left + item.bounds.width / 2) {
+      const isBeforeItemCenter = isRtl
+        ? clientX > item.bounds.left + item.bounds.width / 2
+        : clientX < item.bounds.left + item.bounds.width / 2;
+      if (isBeforeItemCenter) {
         return item.index;
       }
     }
@@ -1543,9 +1549,9 @@ export function RepoSettingsDialog({
             <DialogDescription>
               {t.rich("description_flexible", {
                 repoId: () => (
-                  <span className="font-semibold text-foreground">
+                  <bdi dir="ltr" className="font-semibold text-foreground">
                     {displayRepoId}
-                  </span>
+                  </bdi>
                 ),
               })}
             </DialogDescription>
@@ -1566,7 +1572,7 @@ export function RepoSettingsDialog({
             </div>
           )}
 
-          <div className="space-y-6 pt-2 max-h-[60vh] overflow-y-auto pr-2 -mr-4 pb-4">
+          <div className="space-y-6 pt-2 max-h-[60vh] overflow-y-auto pe-2 -me-4 pb-4">
             <div className="space-y-4 p-4 border rounded-md">
               <div>
                 <h4 className="font-semibold text-base">
@@ -1601,7 +1607,7 @@ export function RepoSettingsDialog({
                   </p>
                 )}
               </div>
-              <div className="flex items-start space-x-2">
+              <div className="flex items-start gap-2">
                 <Checkbox
                   id={isPinnedId}
                   checked={isPinned}
@@ -1693,6 +1699,7 @@ export function RepoSettingsDialog({
                 <div className="flex items-center gap-2">
                   <Input
                     id={versionTagPatternId}
+                    dir="ltr"
                     value={versionTagPattern}
                     onChange={(event) =>
                       setVersionTagPattern(event.target.value)
@@ -1808,7 +1815,7 @@ export function RepoSettingsDialog({
                               }
                               title={t("tags_drag_aria", { tag })}
                               className={cn(
-                                "gap-0 py-1 pl-1 pr-1 select-none",
+                                "gap-0 py-1 ps-1 pe-1 select-none",
                                 isOnline &&
                                   repositoryTags.length > 1 &&
                                   "cursor-grab touch-none active:cursor-grabbing",
@@ -1823,13 +1830,22 @@ export function RepoSettingsDialog({
                                 }
                                 disabled={!isOnline || index === 0}
                                 className="rounded-sm p-0.5 hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30"
-                                aria-label={t("tags_move_left_aria", { tag })}
+                                aria-label={t(
+                                  isRtl
+                                    ? "tags_move_right_aria"
+                                    : "tags_move_left_aria",
+                                  { tag },
+                                )}
                               >
-                                <ChevronLeft className="size-3" />
+                                {isRtl ? (
+                                  <ChevronRight className="size-3" />
+                                ) : (
+                                  <ChevronLeft className="size-3" />
+                                )}
                               </button>
-                              <span className="max-w-64 truncate px-1">
+                              <bdi dir="ltr" className="max-w-64 truncate px-1">
                                 {tag}
-                              </span>
+                              </bdi>
                               <button
                                 type="button"
                                 onClick={() =>
@@ -1840,9 +1856,18 @@ export function RepoSettingsDialog({
                                   index === repositoryTags.length - 1
                                 }
                                 className="rounded-sm p-0.5 hover:bg-muted focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30"
-                                aria-label={t("tags_move_right_aria", { tag })}
+                                aria-label={t(
+                                  isRtl
+                                    ? "tags_move_left_aria"
+                                    : "tags_move_right_aria",
+                                  { tag },
+                                )}
                               >
-                                <ChevronRight className="size-3" />
+                                {isRtl ? (
+                                  <ChevronLeft className="size-3" />
+                                ) : (
+                                  <ChevronRight className="size-3" />
+                                )}
                               </button>
                               <button
                                 type="button"
@@ -1956,7 +1981,7 @@ export function RepoSettingsDialog({
                 {tGlobal("release_channel_description_repo")}
               </p>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 <Checkbox
                   id={stableId}
                   checked={isStableChecked}
@@ -1972,7 +1997,7 @@ export function RepoSettingsDialog({
               </div>
 
               <div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-2">
                   <Checkbox
                     id={prereleaseId}
                     checked={isPreReleaseChecked}
@@ -1989,7 +2014,7 @@ export function RepoSettingsDialog({
 
                 <div
                   className={cn(
-                    "ml-6 pl-3 border-l-2 transition-all duration-300 ease-in-out overflow-hidden",
+                    "ms-6 ps-3 border-s-2 transition-all duration-300 ease-in-out overflow-hidden",
                     isPreReleaseChecked
                       ? "mt-4 max-h-[600px] opacity-100"
                       : "max-h-0 opacity-0",
@@ -2025,7 +2050,7 @@ export function RepoSettingsDialog({
                         return (
                           <div
                             key={subType}
-                            className="flex items-center space-x-2"
+                            className="flex items-center gap-2"
                           >
                             <Checkbox
                               id={subChannelId}
@@ -2051,7 +2076,7 @@ export function RepoSettingsDialog({
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-2">
                 <Checkbox
                   id={draftId}
                   checked={isDraftChecked}
@@ -2077,6 +2102,7 @@ export function RepoSettingsDialog({
                 </Label>
                 <Input
                   id={includeRegexId}
+                  dir="ltr"
                   value={includeRegex}
                   onChange={(e) => setIncludeRegex(e.target.value)}
                   placeholder={
@@ -2100,6 +2126,7 @@ export function RepoSettingsDialog({
                 </Label>
                 <Input
                   id={excludeRegexId}
+                  dir="ltr"
                   value={excludeRegex}
                   onChange={(e) => setExcludeRegex(e.target.value)}
                   placeholder={
@@ -2353,6 +2380,7 @@ export function RepoSettingsDialog({
                       </Label>
                       <Input
                         id={cronExpressionId}
+                        dir="ltr"
                         value={cronExpression}
                         onChange={(e) => setCronExpression(e.target.value)}
                         placeholder={defaultCronExpression}
@@ -2377,7 +2405,7 @@ export function RepoSettingsDialog({
                 </div>
               )}
 
-              <div className="flex items-start space-x-3 border-t pt-4">
+              <div className="flex items-start gap-3 border-t pt-4">
                 <Checkbox
                   id={cacheOverrideId}
                   checked={useCustomCache}
@@ -2631,6 +2659,7 @@ export function RepoSettingsDialog({
                 <div className="flex items-center gap-2">
                   <Input
                     id={appriseTagsId}
+                    dir="ltr"
                     type="text"
                     value={appriseTags}
                     onChange={(e) => setAppriseTags(e.target.value)}
@@ -2680,7 +2709,7 @@ export function RepoSettingsDialog({
                     className="w-full"
                     disabled={isUsingAllGlobalSettings || !isOnline}
                   >
-                    <RotateCcw className="mr-2 size-4" />
+                    <RotateCcw className="me-2 size-4" />
                     {t("reset_all_button_text")}
                   </Button>
                 </AlertDialogTrigger>
@@ -2727,24 +2756,43 @@ export function RepoSettingsDialog({
           >
             <Badge
               variant="secondary"
-              className="h-full w-full gap-0 py-1 pl-1 pr-1 opacity-95 shadow-xl ring-2 ring-primary/50"
+              className="h-full w-full gap-0 py-1 ps-1 pe-1 opacity-95 shadow-xl ring-2 ring-primary/50"
             >
-              <ChevronLeft
-                className={cn(
-                  "size-3",
-                  repositoryTagDragPreview.fromIndex === 0 && "opacity-30",
-                )}
-              />
-              <span className="max-w-64 truncate px-1">
+              {isRtl ? (
+                <ChevronRight
+                  className={cn(
+                    "size-3",
+                    repositoryTagDragPreview.fromIndex === 0 && "opacity-30",
+                  )}
+                />
+              ) : (
+                <ChevronLeft
+                  className={cn(
+                    "size-3",
+                    repositoryTagDragPreview.fromIndex === 0 && "opacity-30",
+                  )}
+                />
+              )}
+              <bdi dir="ltr" className="max-w-64 truncate px-1">
                 {repositoryTagDragPreview.tag}
-              </span>
-              <ChevronRight
-                className={cn(
-                  "size-3",
-                  repositoryTagDragPreview.fromIndex ===
-                    repositoryTags.length - 1 && "opacity-30",
-                )}
-              />
+              </bdi>
+              {isRtl ? (
+                <ChevronLeft
+                  className={cn(
+                    "size-3",
+                    repositoryTagDragPreview.fromIndex ===
+                      repositoryTags.length - 1 && "opacity-30",
+                  )}
+                />
+              ) : (
+                <ChevronRight
+                  className={cn(
+                    "size-3",
+                    repositoryTagDragPreview.fromIndex ===
+                      repositoryTags.length - 1 && "opacity-30",
+                  )}
+                />
+              )}
               <X className="size-3" />
             </Badge>
           </div>,

@@ -119,6 +119,19 @@ describe("AccountCredentialsSettingsCard", () => {
     expect(container.textContent).toContain("Current email: not set");
   });
 
+  it("isolates the current email address as left-to-right text", async () => {
+    useSessionMock.mockReturnValue({
+      data: { user: { email: "user@example.test" } },
+      isPending: false,
+    });
+
+    await renderCard();
+
+    expect(container.textContent).toContain(
+      "Current email: \u2066user@example.test\u2069",
+    );
+  });
+
   it("shows 'Set password' flow when no credential account is linked", async () => {
     listAccountsMock.mockResolvedValueOnce({
       data: [{ providerId: "github" }],
@@ -285,7 +298,9 @@ describe("AccountCredentialsSettingsCard", () => {
       newEmail: "NEW@EXAMPLE.TEST",
       callbackURL: "/",
     });
-    expect(container.textContent).toContain("Current email: new@example.test");
+    expect(container.textContent).toContain(
+      "Current email: \u2066new@example.test\u2069",
+    );
     expect(container.textContent).toContain("account_email_update_success");
     expect(emailInput.value).toBe("");
   });

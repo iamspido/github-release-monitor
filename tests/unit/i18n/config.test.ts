@@ -15,6 +15,7 @@ describe("i18n locale config", () => {
   it("parses configured locales case-insensitively and returns canonical codes", () => {
     expect(parseLocale(" EN ")).toBe("en");
     expect(parseLocale("De")).toBe("de");
+    expect(parseLocale("AR")).toBe("ar");
     expect(parseLocale("fr")).toBeNull();
     expect(parseLocale(null)).toBeNull();
   });
@@ -22,6 +23,7 @@ describe("i18n locale config", () => {
   it("normalizes invalid locale input to the configured default", () => {
     expect(normalizeLocale("unsupported")).toBe(defaultLocale);
     expect(isSupportedLocale("de")).toBe(true);
+    expect(isSupportedLocale("ar")).toBe(true);
     expect(isSupportedLocale("DE")).toBe(false);
     expect(isSupportedLocale("fr")).toBe(false);
   });
@@ -29,12 +31,22 @@ describe("i18n locale config", () => {
   it("provides complete metadata for every locale", () => {
     expect(localeRegistry.map(({ code }) => code)).toEqual(locales);
     expect(localeMetadata.map(({ code }) => code)).toEqual(locales);
-    for (const locale of locales) {
-      expect(getLocaleMetadata(locale)).toMatchObject({
-        code: locale,
-        direction: "ltr",
-      });
-    }
+    expect(getLocaleMetadata("en")).toMatchObject({
+      code: "en",
+      direction: "ltr",
+      fontProfile: "inter",
+    });
+    expect(getLocaleMetadata("de")).toMatchObject({
+      code: "de",
+      direction: "ltr",
+      fontProfile: "inter",
+    });
+    expect(getLocaleMetadata("ar")).toMatchObject({
+      code: "ar",
+      nativeName: "العربية",
+      direction: "rtl",
+      fontProfile: "noto-arabic",
+    });
   });
 
   it("uses unique canonical BCP 47 locale codes", () => {

@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { parseLocale, type Locale } from "../../../src/i18n/config";
+import { type Locale, parseLocale } from "../../../src/i18n/config";
 import { ensureAuthenticated, waitForAutosave } from "../utils";
 
 function extractLocaleFromUrl(urlString: string): Locale | null {

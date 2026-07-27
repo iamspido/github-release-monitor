@@ -49,6 +49,7 @@ type CheckboxProps = Omit<
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("next-intl", () => ({
+  useLocale: () => "en",
   useTranslations: (ns?: string) => {
     const maps: Record<string, Record<string, string>> = {
       RepoSettingsDialog: {

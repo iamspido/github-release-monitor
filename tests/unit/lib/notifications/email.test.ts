@@ -8,6 +8,9 @@ vi.mock("next-intl/server", () => ({
       if (key === "html_intro" && vars?.repoId) {
         return `${vars.repoId} and ${vars.repoId}`;
       }
+      if (vars?.repoId && vars?.tagName) {
+        return `${key}:${vars.repoId}:${vars.tagName}`;
+      }
       if (vars?.repoId) return `${key}:${vars.repoId}`;
       if (vars?.tagName) return `${key}:${vars.tagName}`;
       return key;
@@ -58,8 +61,8 @@ describe("notifications/email", () => {
   it("generatePlainTextReleaseBody and generateHtmlReleaseBody produce content and fallbacks", async () => {
     const txt = await generatePlainTextReleaseBody(release, repo, "en", "24h");
     expect(txt).toContain("text_release_notes_label"); // from mocked translations
-    expect(txt).toContain(release.tag_name);
-    expect(txt).toContain(repo.id);
+    expect(txt).toContain(`\u2066${release.tag_name}\u2069`);
+    expect(txt).toContain(`\u2066${repo.id}\u2069`);
 
     const html = await generateHtmlReleaseBody(release, repo, "en", "24h");
     expect(html).toContain("<html");
@@ -68,13 +71,28 @@ describe("notifications/email", () => {
     expect(html).toContain("html_no_notes");
   });
 
-  it("replaces every repository placeholder in a translated HTML intro", async () => {
-    const html = await generateHtmlReleaseBody(
-      release,
-      repo,
-      "en",
-      "24h",
+  it("renders Arabic email direction, bidi isolation, and RTL spacing", async () => {
+    const html = await generateHtmlReleaseBody(release, repo, "ar", "24h");
+
+    expect(html).toContain('<html lang="ar" dir="rtl">');
+    expect(html).toContain('html[dir="rtl"] .details-list');
+    expect(html).toContain('html[dir="rtl"] blockquote');
+    expect(html).toContain(
+      `<bdi dir="ltr" class="technical-value" style="direction: ltr; unicode-bidi: isolate;">${release.tag_name}</bdi>`,
     );
+    expect(html).toContain(
+      `<bdi dir="ltr" style="direction: ltr; unicode-bidi: isolate;">${repo.id}</bdi>`,
+    );
+    expect(html).toContain(
+      `<bdi dir="ltr" class="technical-value" style="direction: ltr; unicode-bidi: isolate;">${repo.id}</bdi>`,
+    );
+    expect(html).toContain(
+      `<bdi dir="ltr" class="technical-value" style="direction: ltr; unicode-bidi: isolate;">${release.tag_name}</bdi>`,
+    );
+  });
+
+  it("replaces every repository placeholder in a translated HTML intro", async () => {
+    const html = await generateHtmlReleaseBody(release, repo, "en", "24h");
 
     expect(
       html.match(
@@ -141,6 +159,8 @@ describe("notifications/email", () => {
     const arg = sendMailMock.mock.calls[0][0];
     expect(arg).toMatchObject({ to: "to@example.test" });
     expect(arg.subject).toContain("subject"); // key from mocked translations
+    expect(arg.subject).toContain(`\u2066${repo.id}\u2069`);
+    expect(arg.subject).toContain(`\u2066${release.tag_name}\u2069`);
     expect(arg.text).toContain("text_release_notes_label");
     expect(arg.html).toContain("<html");
   });
@@ -182,6 +202,11 @@ describe("notifications/email", () => {
     const de24 = await getFormattedDate(date, "de", "24h");
     // Ensure German and English differ in HTML composition
     expect(de24.htmlDate).not.toBe(en24.htmlDate);
+    const ar12 = await getFormattedDate(date, "ar", "12h");
+    const ar24 = await getFormattedDate(date, "ar", "24h");
+    expect(ar12.htmlDate).toMatch(/[\u0600-\u06ff]/u);
+    expect(ar12.textDate).not.toBe(ar24.textDate);
+    expect(ar24.textDate).not.toMatch(/(?:^|\s)[صم](?:\s|$)/u);
   });
 
   it("getFormattedDate uses the configured server timezone and daylight saving time", async () => {

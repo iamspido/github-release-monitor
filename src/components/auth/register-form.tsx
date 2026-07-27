@@ -43,9 +43,9 @@ function RegisterButton() {
   return (
     <Button type="submit" className="w-full" disabled={pending}>
       {pending ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        <Loader2 className="me-2 h-4 w-4 animate-spin" />
       ) : (
-        <UserPlus className="mr-2 h-4 w-4" />
+        <UserPlus className="me-2 h-4 w-4" />
       )}
       {t("register_button")}
     </Button>
@@ -143,6 +143,7 @@ export function RegisterForm({
             <Label htmlFor={usernameId}>{t("username_label")}</Label>
             <Input
               id={usernameId}
+              dir="ltr"
               name="username"
               type="text"
               placeholder={t("username_placeholder")}
@@ -205,7 +206,7 @@ export function RegisterForm({
           <RegisterButton />
           <Button type="button" variant="outline" className="w-full" asChild>
             <Link href={loginPath}>
-              <LogIn className="mr-2 h-4 w-4" />
+              <LogIn className="me-2 h-4 w-4 rtl:scale-x-[-1]" />
               {t("back_to_login_button")}
             </Link>
           </Button>

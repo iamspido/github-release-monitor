@@ -9,6 +9,7 @@ import {
   getRouteKeyForPath,
   getRouteMatchForPath,
   normalizedRestPath,
+  normalizeRoutePathForLookup,
   resolveLocalizedRestPath,
   splitLocaleFromPath,
 } from "@/lib/proxy/locale-routing";
@@ -28,6 +29,7 @@ describe("proxy/locale-routing", () => {
     ["/de/einstellungen/", { locale: "de", restPath: "/einstellungen" }],
     ["/DE/settings", { locale: "de", restPath: "/settings" }],
     ["/en/login", { locale: "en", restPath: "/login" }],
+    ["/ar/الإعدادات", { locale: "ar", restPath: "/الإعدادات" }],
     ["/settings", { locale: null, restPath: "/settings" }],
     ["", { locale: null, restPath: "/" }],
   ] as const)("splits locale path %j", (pathname, expected) => {
@@ -42,12 +44,19 @@ describe("proxy/locale-routing", () => {
   it("uses English paths as aliases independently of the default locale", () => {
     expect(getRouteAliases("/settings", "de")).toContain("/settings");
     expect(getRouteAliases("/settings", "en")).not.toContain("/settings");
+    expect(getRouteAliases("/settings", "ar")).toContain("/settings");
   });
 
   it("resolves route keys and localized paths in both directions", () => {
     expect(getRouteKeyForPath("de", "/de/einstellungen")).toBe("/settings");
     expect(getRouteKeyForPath("en", "/en/login")).toBe("/login");
     expect(getRouteKeyForPath("en", "/en/unknown")).toBeNull();
+    expect(
+      getRouteKeyForPath(
+        "ar",
+        "/ar/%D8%A7%D9%84%D8%A5%D8%B9%D8%AF%D8%A7%D8%AF%D8%A7%D8%AA",
+      ),
+    ).toBe("/settings");
 
     expect(resolveLocalizedRestPath("/einstellungen", "en", "de")).toBe(
       "/settings",
@@ -56,12 +65,29 @@ describe("proxy/locale-routing", () => {
     expect(resolveLocalizedRestPath("/unknown/", "de", "en")).toBe("/unknown");
     expect(resolveLocalizedRestPath("/", "de", "en")).toBe("/");
     expect(getLocalizedLoginPath("de")).toBe("/anmelden");
+    expect(getLocalizedLoginPath("ar")).toBe("/تسجيل-الدخول");
     expect(getRouteMatchForPath("de", "/de/settings")).toEqual({
       routeKey: "/settings",
       isAlias: true,
     });
     expect(resolveLocalizedRestPath("/settings", "de", "de")).toBe(
       "/einstellungen",
+    );
+  });
+
+  it("normalizes Unicode route segments safely for lookup", () => {
+    expect(normalizeRoutePathForLookup("/الإعدادات/")).toBe("/الإعدادات");
+    expect(
+      normalizeRoutePathForLookup(
+        "/%D8%A7%D9%84%D8%A5%D8%B9%D8%AF%D8%A7%D8%AF%D8%A7%D8%AA",
+      ),
+    ).toBe("/الإعدادات");
+    expect(normalizeRoutePathForLookup("/e\u0301")).toBe("/é");
+    expect(normalizeRoutePathForLookup("/broken%E0%A4%A")).toBeNull();
+    expect(normalizeRoutePathForLookup("/encoded%2Fseparator")).toBeNull();
+    expect(normalizeRoutePathForLookup("/encoded%5Cseparator")).toBeNull();
+    expect(normalizeRoutePathForLookup("/encoded%252Fseparator")).toBe(
+      "/encoded%2Fseparator",
     );
   });
 
@@ -77,6 +103,25 @@ describe("proxy/locale-routing", () => {
         {
           locale: "de",
           path: "/konflikt",
+          routeKey: "/login",
+          isAlias: true,
+        },
+      ]),
+    ).toThrow(/route collision/i);
+  });
+
+  it("detects collisions after Unicode normalization", () => {
+    expect(() =>
+      buildRoutePathLookup([
+        {
+          locale: "ar",
+          path: "/é",
+          routeKey: "/settings",
+          isAlias: false,
+        },
+        {
+          locale: "ar",
+          path: "/e\u0301",
           routeKey: "/login",
           isAlias: true,
         },

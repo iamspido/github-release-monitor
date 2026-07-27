@@ -1,9 +1,11 @@
 export type LocaleDirection = "ltr" | "rtl";
+export type FontProfile = "inter" | "noto" | "noto-arabic" | "noto-hebrew";
 
 type LocaleRegistryEntry = {
   code: string;
   nativeName: string;
   direction: LocaleDirection;
+  fontProfile: FontProfile;
 };
 
 export const localeRegistry = [
@@ -11,11 +13,19 @@ export const localeRegistry = [
     code: "en",
     nativeName: "English",
     direction: "ltr",
+    fontProfile: "inter",
   },
   {
     code: "de",
     nativeName: "Deutsch",
     direction: "ltr",
+    fontProfile: "inter",
+  },
+  {
+    code: "ar",
+    nativeName: "العربية",
+    direction: "rtl",
+    fontProfile: "noto-arabic",
   },
 ] as const satisfies readonly LocaleRegistryEntry[];
 
@@ -24,6 +34,7 @@ export type LocaleMetadata = {
   code: Locale;
   nativeName: string;
   direction: LocaleDirection;
+  fontProfile: FontProfile;
 };
 
 export const locales: readonly Locale[] = localeRegistry.map(

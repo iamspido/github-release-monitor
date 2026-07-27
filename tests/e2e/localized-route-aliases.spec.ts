@@ -31,6 +31,30 @@ test("identical localized slugs do not redirect", async ({ page }) => {
   await ensureAppLocale(page, "en");
 });
 
+test("Arabic route aliases redirect to Unicode canonical paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "ar");
+
+  const response = await page.goto("/ar/settings?tab=notifications#mail");
+  const redirectResponse = await response
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(response?.status()).toBe(200);
+  expect(redirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/ar\/%D8%A7%D9%84%D8%A5%D8%B9%D8%AF%D8%A7%D8%AF%D8%A7%D8%AA\?tab=notifications#mail$/i,
+  );
+
+  const canonicalResponse = await page.goto("/ar/الإعدادات");
+  expect(canonicalResponse?.status()).toBe(200);
+  expect(canonicalResponse?.request().redirectedFrom()).toBeNull();
+
+  await ensureAppLocale(page, "en");
+});
+
 test("locale prefixes are redirected to their canonical casing", async ({
   page,
 }) => {
@@ -57,6 +81,28 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   await ensureAppLocale(page, "de");
   await expect(page.locator("html")).toHaveAttribute("lang", "de");
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+
+  await ensureAppLocale(page, "ar");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "noto-arabic",
+  );
+
+  const fontState = await page.evaluate(async () => {
+    await document.fonts.ready;
+    const fontFamily = getComputedStyle(document.body).fontFamily;
+    const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
+    return {
+      fontFamily,
+      supportsArabic:
+        primaryFontFamily !== undefined &&
+        document.fonts.check(`16px ${primaryFontFamily}`, "العربية"),
+    };
+  });
+  expect(fontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]Arabic/i);
+  expect(fontState.supportsArabic).toBe(true);
 
   await ensureAppLocale(page, "en");
 });

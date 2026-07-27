@@ -24,9 +24,7 @@ export type ProxyRoutePathRegistration = ProxyRouteMatch & {
 const routePathRegistrations: ProxyRoutePathRegistration[] = [];
 for (const routeKey of Object.keys(pathnames) as ProxyRouteKey[]) {
   for (const locale of locales) {
-    const localizedPath = normalizedRestPath(
-      getCanonicalRoutePath(routeKey, locale),
-    );
+    const localizedPath = getCanonicalRoutePath(routeKey, locale);
     routePathRegistrations.push({
       locale,
       path: localizedPath,
@@ -36,7 +34,7 @@ for (const routeKey of Object.keys(pathnames) as ProxyRouteKey[]) {
     for (const alias of getRouteAliases(routeKey, locale)) {
       routePathRegistrations.push({
         locale,
-        path: normalizedRestPath(alias),
+        path: alias,
         routeKey,
         isAlias: true,
       });
@@ -56,14 +54,20 @@ export function buildRoutePathLookup(
   );
 
   for (const { locale, path, ...match } of registrations) {
-    const existing = lookup[locale][path];
+    const normalizedPath = normalizeRoutePathForLookup(path);
+    if (!normalizedPath) {
+      throw new Error(
+        `Invalid localized route path for locale '${locale}': '${path}'.`,
+      );
+    }
+    const existing = lookup[locale][normalizedPath];
     if (existing && existing.routeKey !== match.routeKey) {
       throw new Error(
-        `Localized route collision for locale '${locale}' and path '${path}'.`,
+        `Localized route collision for locale '${locale}' and path '${normalizedPath}'.`,
       );
     }
     if (!existing || (existing.isAlias && !match.isAlias)) {
-      lookup[locale][path] = match;
+      lookup[locale][normalizedPath] = match;
     }
   }
   return lookup;
@@ -88,7 +92,8 @@ export function getRouteMatchForPath(
   pathname: string,
 ): ProxyRouteMatch | null {
   const { restPath } = splitLocaleFromPath(pathname);
-  const normalizedPath = normalizedRestPath(restPath);
+  const normalizedPath = normalizeRoutePathForLookup(restPath);
+  if (!normalizedPath) return null;
   return reversePathLookup[locale][normalizedPath] ?? null;
 }
 
@@ -125,15 +130,42 @@ export function normalizedRestPath(path: string): string {
     : prefixed;
 }
 
+export function normalizeRoutePathForLookup(path: string): string | null {
+  const normalizedPath = normalizedRestPath(path);
+  if (normalizedPath === "/") return "/";
+
+  try {
+    const normalizedSegments = normalizedPath
+      .slice(1)
+      .split("/")
+      .map((segment) => {
+        const decoded = decodeURIComponent(segment);
+        if (
+          decoded.includes("/") ||
+          decoded.includes("\\") ||
+          decoded.includes("\0")
+        ) {
+          throw new Error("Encoded path separator");
+        }
+        return decoded.normalize("NFC");
+      });
+    return `/${normalizedSegments.join("/")}`;
+  } catch {
+    return null;
+  }
+}
+
 export function resolveLocalizedRestPath(
   restPath: string,
   targetLocale: Locale,
   sourceLocale?: Locale,
 ): string {
   const normalized = normalizedRestPath(restPath);
+  const lookupPath = normalizeRoutePathForLookup(normalized);
+  if (!lookupPath) return normalized;
 
   if (sourceLocale) {
-    const candidate = reversePathLookup[sourceLocale][normalized];
+    const candidate = reversePathLookup[sourceLocale][lookupPath];
     if (candidate) {
       return normalizedRestPath(
         getCanonicalRoutePath(candidate.routeKey, targetLocale),
@@ -141,7 +173,7 @@ export function resolveLocalizedRestPath(
     }
   }
 
-  const targetCandidate = reversePathLookup[targetLocale][normalized];
+  const targetCandidate = reversePathLookup[targetLocale][lookupPath];
   if (targetCandidate) {
     return normalizedRestPath(
       getCanonicalRoutePath(targetCandidate.routeKey, targetLocale),

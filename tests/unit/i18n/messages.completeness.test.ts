@@ -1,9 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import {
+  type MessageFormatElement,
   parse,
   TYPE,
-  type MessageFormatElement,
 } from "@formatjs/icu-messageformat-parser";
 import { describe, expect, it } from "vitest";
 import { englishLocale, locales } from "../../../src/i18n/config";
@@ -23,7 +23,7 @@ function flattenKeys(obj: Dict, prefix = ""): Record<string, string> {
   return out;
 }
 
-export function extractPlaceholderSignatures(s: string): Set<string> {
+function extractPlaceholderSignatures(s: string): Set<string> {
   const out = new Set<string>();
 
   const visit = (elements: MessageFormatElement[]) => {
@@ -78,12 +78,41 @@ describe("i18n completeness", () => {
     ]),
   );
   const referenceFlat = flattenKeys(messagesByLocale[englishLocale]);
+  const arabicTechnicalLiteralKeys = new Set([
+    "RepositoryForm.placeholder",
+    "RepositoryForm.provider_select_github",
+    "RepositoryForm.provider_select_gitlab",
+    "RepositoryForm.provider_select_codeberg",
+    "SettingsPage.two_factor_verify_code_placeholder",
+    "SettingsPage.account_email_new_placeholder",
+    "SettingsForm.custom_security_patterns_placeholder",
+    "SettingsForm.provider_github",
+    "SettingsForm.provider_gitlab",
+    "SettingsForm.provider_codeberg",
+    "SettingsForm.apprise_format_html",
+    "SettingsForm.apprise_format_markdown",
+    "RepoSettingsDialog.version_tag_pattern_placeholder",
+    "TestPage.not_available",
+    "LoginPage.setup_token_placeholder",
+    "LoginPage.setup_username_placeholder",
+    "LoginPage.email_placeholder",
+    "LoginPage.social_identifier_placeholder",
+    "LoginPage.social_provider_github",
+    "LoginPage.social_provider_google",
+    "LoginPage.two_factor_login_code_placeholder",
+    "RegisterPage.username_placeholder",
+    "RegisterPage.email_placeholder",
+    "TestRelease.code_inline_code_word",
+    "TestRelease.table_row4_notes",
+  ]);
 
   it("detects nested ICU arguments without treating regex quantifiers as arguments", () => {
     expect(
-      [...extractPlaceholderSignatures(
-        "{count, plural, other {{nested, select, yes {ok} other {no}}}} /x'{4,}'/",
-      )].sort(),
+      [
+        ...extractPlaceholderSignatures(
+          "{count, plural, other {{nested, select, yes {ok} other {no}}}} /x'{4,}'/",
+        ),
+      ].sort(),
     ).toEqual(["plural:count", "select:nested"]);
   });
 
@@ -105,7 +134,8 @@ describe("i18n completeness", () => {
 
     expect(
       parse(
-        (settingsMessages as Dict).custom_security_patterns_placeholder as string,
+        (settingsMessages as Dict)
+          .custom_security_patterns_placeholder as string,
       ),
     ).toEqual([
       {
@@ -115,15 +145,13 @@ describe("i18n completeness", () => {
     ]);
     expect(
       parse(
-        (
-          messagesByLocale[englishLocale].RepoSettingsDialog as Dict
-        ).version_tag_pattern_placeholder as string,
+        (messagesByLocale[englishLocale].RepoSettingsDialog as Dict)
+          .version_tag_pattern_placeholder as string,
       ),
     ).toEqual([
       {
         type: TYPE.literal,
-        value:
-          "^docker/(?<version>\\d+(?:\\.\\d+){2,3})-r(?<revision>\\d+)$",
+        value: "^docker/(?<version>\\d+(?:\\.\\d+){2,3})-r(?<revision>\\d+)$",
       },
     ]);
   });
@@ -186,4 +214,14 @@ describe("i18n completeness", () => {
       expect(mismatches).toEqual([]);
     },
   );
+
+  it("contains Arabic script in every translatable Arabic message", () => {
+    const arabicFlat = flattenKeys(messagesByLocale.ar);
+    const withoutArabic = Object.entries(arabicFlat)
+      .filter(([key]) => !arabicTechnicalLiteralKeys.has(key))
+      .filter(([, value]) => !/[\u0600-\u06ff]/u.test(value))
+      .map(([key]) => key);
+
+    expect(withoutArabic).toEqual([]);
+  });
 });
