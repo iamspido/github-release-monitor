@@ -307,6 +307,8 @@ test("keeps the import preview open when selected tags exceed the limit", async 
 
   await expect(page.getByText("Import Failed", { exact: true })).toBeVisible();
   await expect(failedImportDialog).toBeVisible();
+  await failedImportDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(failedImportDialog).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Remove tag overflow-tag" }),
   ).toBeVisible();

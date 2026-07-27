@@ -571,7 +571,7 @@ export function RepositoryForm({
             <AlertDialogCancel disabled={importWorkflow.isImporting}>
               {t("cancel_button")}
             </AlertDialogCancel>
-            <AlertDialogAction
+            <Button
               onClick={importWorkflow.confirmImport}
               disabled={importWorkflow.isImporting}
             >
@@ -579,7 +579,7 @@ export function RepositoryForm({
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
               {t("import_dialog_confirm_button")}
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
