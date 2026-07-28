@@ -19,6 +19,7 @@ describe("i18n locale config", () => {
     expect(parseLocale("ES")).toBe("es");
     expect(parseLocale("PT-br")).toBe("pt-BR");
     expect(parseLocale("ZH-cn")).toBe("zh-CN");
+    expect(parseLocale("JA")).toBe("ja");
     expect(parseLocale("AR")).toBe("ar");
     expect(parseLocale("it")).toBeNull();
     expect(parseLocale(null)).toBeNull();
@@ -31,6 +32,7 @@ describe("i18n locale config", () => {
     expect(isSupportedLocale("es")).toBe(true);
     expect(isSupportedLocale("pt-BR")).toBe(true);
     expect(isSupportedLocale("zh-CN")).toBe(true);
+    expect(isSupportedLocale("ja")).toBe(true);
     expect(isSupportedLocale("ar")).toBe(true);
     expect(isSupportedLocale("pt-br")).toBe(false);
     expect(isSupportedLocale("zh-cn")).toBe(false);
@@ -73,7 +75,13 @@ describe("i18n locale config", () => {
       code: "zh-CN",
       nativeName: "简体中文",
       direction: "ltr",
-      fontProfile: "noto-cjk",
+      fontProfile: "noto-cjk-sc",
+    });
+    expect(getLocaleMetadata("ja")).toMatchObject({
+      code: "ja",
+      nativeName: "日本語",
+      direction: "ltr",
+      fontProfile: "noto-cjk-jp",
     });
     expect(getLocaleMetadata("ar")).toMatchObject({
       code: "ar",

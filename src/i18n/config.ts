@@ -3,7 +3,8 @@ export type FontProfile =
   | "inter"
   | "noto"
   | "noto-arabic"
-  | "noto-cjk"
+  | "noto-cjk-jp"
+  | "noto-cjk-sc"
   | "noto-hebrew";
 
 type LocaleRegistryEntry = {
@@ -48,7 +49,13 @@ export const localeRegistry = [
     code: "zh-CN",
     nativeName: "简体中文",
     direction: "ltr",
-    fontProfile: "noto-cjk",
+    fontProfile: "noto-cjk-sc",
+  },
+  {
+    code: "ja",
+    nativeName: "日本語",
+    direction: "ltr",
+    fontProfile: "noto-cjk-jp",
   },
   {
     code: "ar",

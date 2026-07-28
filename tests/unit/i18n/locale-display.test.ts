@@ -11,6 +11,7 @@ describe("locale display order", () => {
       "fr",
       "pt-BR",
       "ar",
+      "ja",
       "zh-CN",
     ]);
   });
@@ -23,6 +24,7 @@ describe("locale display order", () => {
       "es",
       "pt-BR",
       "zh-CN",
+      "ja",
       "ar",
     ]);
   });

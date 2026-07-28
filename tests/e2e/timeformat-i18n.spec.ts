@@ -3,6 +3,8 @@ import { expect, type Page, test } from "./fixtures/ensureLoggedIn";
 import { waitForAutosave } from "./utils";
 import { ensureAppLocale } from "./utils/locale";
 
+test.setTimeout(60_000);
+
 async function setFormatAndRead(
   page: Page,
   locale: Locale,
@@ -24,9 +26,9 @@ async function setFormatAndRead(
 test("time format follows locale conventions in every published locale", async ({
   page,
 }) => {
-  expect(new Set(["en", "de", "fr", "es", "pt-BR", "zh-CN", "ar"])).toEqual(
-    new Set(locales),
-  );
+  expect(
+    new Set(["en", "de", "fr", "es", "pt-BR", "zh-CN", "ja", "ar"]),
+  ).toEqual(new Set(locales));
 
   await ensureAppLocale(page, "en");
 
@@ -81,6 +83,16 @@ test("time format follows locale conventions in every published locale", async (
   expect(zhCN24).not.toMatch(/上午|下午/u);
   expect(zhCN24).toMatch(/\d{1,2}:\d{2}/);
   expect(zhCN24).not.toBe(zhCN12);
+
+  await ensureAppLocale(page, "ja");
+
+  const ja12 = await setFormatAndRead(page, "ja", "12");
+  expect(ja12).toMatch(/午前|午後/u);
+
+  const ja24 = await setFormatAndRead(page, "ja", "24");
+  expect(ja24).not.toMatch(/午前|午後/u);
+  expect(ja24).toMatch(/\d{1,2}:\d{2}/);
+  expect(ja24).not.toBe(ja12);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");

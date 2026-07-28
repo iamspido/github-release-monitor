@@ -103,6 +103,12 @@ describe("notifications/email", () => {
     expect(html).toContain('<html lang="zh-CN" dir="ltr">');
   });
 
+  it("renders Japanese email metadata as left-to-right", async () => {
+    const html = await generateHtmlReleaseBody(release, repo, "ja", "24h");
+
+    expect(html).toContain('<html lang="ja" dir="ltr">');
+  });
+
   it("replaces every repository placeholder in a translated HTML intro", async () => {
     const html = await generateHtmlReleaseBody(release, repo, "en", "24h");
 
@@ -224,6 +230,11 @@ describe("notifications/email", () => {
     expect(zhCN12.textDate).toMatch(/上午|下午/u);
     expect(zhCN24.textDate).not.toMatch(/上午|下午/u);
     expect(zhCN12.textDate).not.toBe(zhCN24.textDate);
+    const ja12 = await getFormattedDate(date, "ja", "12h");
+    const ja24 = await getFormattedDate(date, "ja", "24h");
+    expect(ja12.textDate).toMatch(/午前|午後/u);
+    expect(ja24.textDate).not.toMatch(/午前|午後/u);
+    expect(ja12.textDate).not.toBe(ja24.textDate);
     const ar12 = await getFormattedDate(date, "ar", "12h");
     const ar24 = await getFormattedDate(date, "ar", "24h");
     expect(ar12.htmlDate).toMatch(/[\u0600-\u06ff]/u);

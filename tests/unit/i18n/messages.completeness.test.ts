@@ -250,6 +250,36 @@ describe("i18n completeness", () => {
     "TestRelease.code_inline_code_word",
     "TestRelease.table_row4_notes",
   ]);
+  const japaneseSharedOrTechnicalLiteralKeys = new Set([
+    "Metadata.title",
+    "HomePage.title",
+    "RepositoryForm.placeholder",
+    "RepositoryForm.provider_select_github",
+    "RepositoryForm.provider_select_gitlab",
+    "RepositoryForm.provider_select_codeberg",
+    "SettingsPage.two_factor_setup_uri_label",
+    "SettingsPage.two_factor_verify_code_placeholder",
+    "SettingsPage.account_email_new_placeholder",
+    "SettingsForm.provider_github",
+    "SettingsForm.provider_gitlab",
+    "SettingsForm.provider_codeberg",
+    "SettingsForm.custom_security_patterns_placeholder",
+    "SettingsForm.apprise_format_markdown",
+    "SettingsForm.apprise_format_html",
+    "RepoSettingsDialog.version_tag_pattern_placeholder",
+    "Email.from_name_fallback",
+    "LoginPage.setup_token_placeholder",
+    "LoginPage.setup_username_placeholder",
+    "LoginPage.email_placeholder",
+    "LoginPage.social_provider_github",
+    "LoginPage.social_provider_google",
+    "LoginPage.social_identifier_placeholder",
+    "LoginPage.two_factor_login_code_placeholder",
+    "RegisterPage.username_placeholder",
+    "RegisterPage.email_placeholder",
+    "TestRelease.code_inline_code_word",
+    "TestRelease.table_row4_notes",
+  ]);
 
   it("detects nested ICU arguments without treating regex quantifiers as arguments", () => {
     expect(
@@ -427,6 +457,47 @@ describe("i18n completeness", () => {
 
     expect(unchanged).toEqual(
       Array.from(simplifiedChineseSharedOrTechnicalLiteralKeys).sort(),
+    );
+  });
+
+  it("contains Japanese writing in every translatable Japanese message", () => {
+    const japaneseFlat = flattenKeys(messagesByLocale.ja);
+    const withoutJapaneseCharacters = Object.entries(japaneseFlat)
+      .filter(([key]) => !japaneseSharedOrTechnicalLiteralKeys.has(key))
+      .filter(
+        ([, value]) =>
+          !/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(
+            value,
+          ),
+      )
+      .map(([key]) => key);
+
+    expect(withoutJapaneseCharacters).toEqual([]);
+  });
+
+  it("uses kana throughout the Japanese catalog", () => {
+    const japaneseFlat = flattenKeys(messagesByLocale.ja);
+    const translatableValues = Object.entries(japaneseFlat)
+      .filter(([key]) => !japaneseSharedOrTechnicalLiteralKeys.has(key))
+      .map(([, value]) => value);
+    const valuesWithKana = translatableValues.filter((value) =>
+      /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(value),
+    );
+
+    expect(valuesWithKana.length / translatableValues.length).toBeGreaterThan(
+      0.8,
+    );
+  });
+
+  it("keeps only shared or technical Japanese messages identical to English", () => {
+    const japaneseFlat = flattenKeys(messagesByLocale.ja);
+    const unchanged = Object.entries(japaneseFlat)
+      .filter(([key, value]) => referenceFlat[key] === value)
+      .map(([key]) => key)
+      .sort();
+
+    expect(unchanged).toEqual(
+      Array.from(japaneseSharedOrTechnicalLiteralKeys).sort(),
     );
   });
 });

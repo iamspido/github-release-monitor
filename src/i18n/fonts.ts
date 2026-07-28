@@ -3,6 +3,7 @@ import {
   Noto_Sans,
   Noto_Sans_Arabic,
   Noto_Sans_Hebrew,
+  Noto_Sans_JP,
   Noto_Sans_SC,
   Roboto,
 } from "next/font/google";
@@ -43,7 +44,13 @@ const notoHebrew = Noto_Sans_Hebrew({
   preload: false,
 });
 
-const notoCjk = Noto_Sans_SC({
+const notoCjkSc = Noto_Sans_SC({
+  display: "swap",
+  variable: "--font-locale-body",
+  preload: false,
+});
+
+const notoCjkJp = Noto_Sans_JP({
   display: "swap",
   variable: "--font-locale-body",
   preload: false,
@@ -53,7 +60,8 @@ const bodyFontVariableClassByProfile = {
   inter: inter.variable,
   noto: noto.variable,
   "noto-arabic": notoArabic.variable,
-  "noto-cjk": notoCjk.variable,
+  "noto-cjk-jp": notoCjkJp.variable,
+  "noto-cjk-sc": notoCjkSc.variable,
   "noto-hebrew": notoHebrew.variable,
 } satisfies Record<FontProfile, string>;
 

@@ -155,6 +155,42 @@ test("Simplified Chinese route aliases redirect to Unicode canonical paths", asy
   await ensureAppLocale(page, "en");
 });
 
+test("Japanese route aliases redirect to Unicode canonical paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "ja");
+
+  const response = await page.goto("/JA/settings?tab=notifications#mail");
+  const redirectResponse = await response
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(response?.status()).toBe(200);
+  expect(redirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/ja\/%E8%A8%AD%E5%AE%9A\?tab=notifications#mail$/i,
+  );
+
+  const canonicalResponse = await page.goto("/ja/設定");
+  expect(canonicalResponse?.status()).toBe(200);
+  expect(canonicalResponse?.request().redirectedFrom()).toBeNull();
+
+  const testResponse = await page.goto("/ja/test?source=alias#result");
+  const testRedirectResponse = await testResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(testResponse?.status()).toBe(200);
+  expect(testRedirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/ja\/%E3%83%86%E3%82%B9%E3%83%88\?source=alias#result$/i,
+  );
+
+  await ensureAppLocale(page, "en");
+});
+
 test("Arabic route aliases redirect to Unicode canonical paths", async ({
   page,
 }) => {
@@ -235,7 +271,7 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
   await expect(page.locator("html")).toHaveAttribute(
     "data-font-profile",
-    "noto-cjk",
+    "noto-cjk-sc",
   );
 
   const chineseFontState = await page.evaluate(async () => {
@@ -251,6 +287,29 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   });
   expect(chineseFontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]SC/i);
   expect(chineseFontState.supportsSimplifiedChinese).toBe(true);
+
+  await ensureAppLocale(page, "ja");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ja");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "noto-cjk-jp",
+  );
+
+  const japaneseFontState = await page.evaluate(async () => {
+    const fontFamily = getComputedStyle(document.body).fontFamily;
+    const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
+    const loadedFaces =
+      primaryFontFamily === undefined
+        ? []
+        : await document.fonts.load(`16px ${primaryFontFamily}`, "日本語");
+    return {
+      fontFamily,
+      supportsJapanese: loadedFaces.length > 0,
+    };
+  });
+  expect(japaneseFontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]JP/i);
+  expect(japaneseFontState.supportsJapanese).toBe(true);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");
