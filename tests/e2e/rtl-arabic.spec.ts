@@ -70,10 +70,9 @@ test("Arabic desktop and mobile surfaces preserve RTL and isolate technical text
     "",
   );
   await page.keyboard.press("End");
-  await expect(page.getByTestId("language-option-ar")).toHaveAttribute(
-    "data-highlighted",
-    "",
-  );
+  await expect(
+    languageListbox.locator('[data-testid^="language-option-"]').last(),
+  ).toHaveAttribute("data-highlighted", "");
   await page.keyboard.press("Escape");
   await expect(languageSelect).toBeFocused();
 

@@ -1,5 +1,10 @@
 export type LocaleDirection = "ltr" | "rtl";
-export type FontProfile = "inter" | "noto" | "noto-arabic" | "noto-hebrew";
+export type FontProfile =
+  | "inter"
+  | "noto"
+  | "noto-arabic"
+  | "noto-cjk"
+  | "noto-hebrew";
 
 type LocaleRegistryEntry = {
   code: string;
@@ -38,6 +43,12 @@ export const localeRegistry = [
     nativeName: "Português (Brasil)",
     direction: "ltr",
     fontProfile: "inter",
+  },
+  {
+    code: "zh-CN",
+    nativeName: "简体中文",
+    direction: "ltr",
+    fontProfile: "noto-cjk",
   },
   {
     code: "ar",

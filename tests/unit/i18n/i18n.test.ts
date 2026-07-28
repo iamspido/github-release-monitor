@@ -90,6 +90,16 @@ describe("i18n getRequestConfig callback", () => {
     expect(result.messages).toEqual(ptBR);
   });
 
+  it("loads ZH-CN messages and returns the canonical locale", async () => {
+    const getRequestConfig = await loadRequestModule();
+    const result = await getRequestConfig({
+      requestLocale: Promise.resolve("zh-cn"),
+    });
+    const zhCN = (await import("../../../src/messages/zh-CN.json")).default;
+    expect(result.locale).toBe("zh-CN");
+    expect(result.messages).toEqual(zhCN);
+  });
+
   it("falls back to default locale for invalid locale", async () => {
     const getRequestConfig = await loadRequestModule();
     const result = await getRequestConfig({

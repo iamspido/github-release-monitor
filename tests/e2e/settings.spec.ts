@@ -24,7 +24,7 @@ test("language dropdown keeps English first and sorts native names", async ({
   await page.getByTestId("language-select").click();
 
   const options = page.locator('[data-testid^="language-option-"]');
-  await expect(options).toHaveCount(6);
+  await expect(options).toHaveCount(7);
   await expect(options).toHaveText([
     "English",
     "Deutsch",
@@ -32,5 +32,6 @@ test("language dropdown keeps English first and sorts native names", async ({
     "Français",
     "Português (Brasil)",
     "العربية",
+    "简体中文",
   ]);
 });

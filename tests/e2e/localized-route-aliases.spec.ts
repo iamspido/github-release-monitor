@@ -119,6 +119,42 @@ test("Brazilian Portuguese route aliases redirect to canonical translated paths"
   await ensureAppLocale(page, "en");
 });
 
+test("Simplified Chinese route aliases redirect to Unicode canonical paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "zh-CN");
+
+  const response = await page.goto("/zh-cn/settings?tab=notifications#mail");
+  const redirectResponse = await response
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(response?.status()).toBe(200);
+  expect(redirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/zh-CN\/%E8%AE%BE%E7%BD%AE\?tab=notifications#mail$/i,
+  );
+
+  const canonicalResponse = await page.goto("/zh-CN/设置");
+  expect(canonicalResponse?.status()).toBe(200);
+  expect(canonicalResponse?.request().redirectedFrom()).toBeNull();
+
+  const testResponse = await page.goto("/zh-CN/test?source=alias#result");
+  const testRedirectResponse = await testResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(testResponse?.status()).toBe(200);
+  expect(testRedirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/zh-CN\/%E6%B5%8B%E8%AF%95\?source=alias#result$/i,
+  );
+
+  await ensureAppLocale(page, "en");
+});
+
 test("Arabic route aliases redirect to Unicode canonical paths", async ({
   page,
 }) => {
@@ -193,6 +229,28 @@ test("document locale metadata follows the active locale", async ({ page }) => {
     "data-font-profile",
     "inter",
   );
+
+  await ensureAppLocale(page, "zh-CN");
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "noto-cjk",
+  );
+
+  const chineseFontState = await page.evaluate(async () => {
+    await document.fonts.ready;
+    const fontFamily = getComputedStyle(document.body).fontFamily;
+    const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
+    return {
+      fontFamily,
+      supportsSimplifiedChinese:
+        primaryFontFamily !== undefined &&
+        document.fonts.check(`16px ${primaryFontFamily}`, "简体中文"),
+    };
+  });
+  expect(chineseFontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]SC/i);
+  expect(chineseFontState.supportsSimplifiedChinese).toBe(true);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");

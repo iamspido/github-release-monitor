@@ -555,8 +555,7 @@ language:
 
 1. Add its canonical BCP 47 code, native name, text direction, and font profile
    to the locale registry. Available profiles are `inter`, `noto`,
-   `noto-arabic`, and `noto-hebrew`; CJK font coverage remains a separate
-   integration task.
+   `noto-arabic`, `noto-cjk`, and `noto-hebrew`.
 2. Add a complete `src/messages/<locale>.json` dictionary. The test suite
    compares every configured dictionary and ICU placeholder with English.
 3. Add translated canonical route slugs in `src/i18n/routing.ts`. English
@@ -570,7 +569,8 @@ language:
 The locale switcher, settings validation, cookies, authentication redirects,
 message loading, document direction, Radix direction, and body font are derived
 from the registry. Arabic (`ar`) is published with Noto Sans Arabic and
-right-to-left layout support.
+right-to-left layout support. Simplified Chinese (`zh-CN`) is published with
+Noto Sans SC.
 
 ## 🔐 Social Login Setup (GitHub + Google)
 
