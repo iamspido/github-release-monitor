@@ -79,9 +79,16 @@ test("new and existing tags can be selected while adding repositories", async ({
   await page
     .locator('textarea[name="urls"]')
     .fill("https://github.com/add-tag-target/repository");
-  await page
-    .getByRole("button", { name: "Add Repositories", exact: true })
-    .click();
+  const addRepositoriesButton = page.getByTestId("add-repositories");
+  await expect(addRepositoriesButton).toBeEnabled();
+  // The completed server action can replace the form before Playwright's
+  // locator click settles, causing it to retry against the reset button.
+  await addRepositoriesButton.evaluate((element) => {
+    if (!(element instanceof HTMLButtonElement) || element.disabled) {
+      throw new Error("Expected an enabled repository submit button.");
+    }
+    element.click();
+  });
   await expect(
     page.getByText("Repositories Processed", { exact: true }),
   ).toBeVisible();
