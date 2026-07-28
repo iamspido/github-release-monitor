@@ -1,4 +1,4 @@
-import type { Locale } from "../../src/i18n/config";
+import { type Locale, locales } from "../../src/i18n/config";
 import { expect, type Page, test } from "./fixtures/ensureLoggedIn";
 import { waitForAutosave } from "./utils";
 import { ensureAppLocale } from "./utils/locale";
@@ -21,9 +21,13 @@ async function setFormatAndRead(
   return text || "";
 }
 
-test("time format follows locale conventions in EN, DE, FR, ES, and AR", async ({
+test("time format follows locale conventions in every published locale", async ({
   page,
 }) => {
+  expect(new Set(["en", "de", "fr", "es", "pt-BR", "ar"])).toEqual(
+    new Set(locales),
+  );
+
   await ensureAppLocale(page, "en");
 
   const en12 = await setFormatAndRead(page, "en", "12");
@@ -57,6 +61,16 @@ test("time format follows locale conventions in EN, DE, FR, ES, and AR", async (
 
   const es12 = await setFormatAndRead(page, "es", "12");
   expect(es12).toMatch(/[ap]\.?\s*m\.?/iu);
+
+  await ensureAppLocale(page, "pt-BR");
+
+  const ptBR24 = await setFormatAndRead(page, "pt-BR", "24");
+  expect(ptBR24).toMatch(/\d{1,2}:\d{2}/);
+  expect(ptBR24).not.toMatch(/[ap]\.?\s*m\.?/iu);
+
+  const ptBR12 = await setFormatAndRead(page, "pt-BR", "12");
+  expect(ptBR12).toMatch(/[ap]\.?\s*m\.?/iu);
+  expect(ptBR12).not.toBe(ptBR24);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");

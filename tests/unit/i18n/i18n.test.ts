@@ -80,6 +80,16 @@ describe("i18n getRequestConfig callback", () => {
     expect(result.messages).toEqual(es);
   });
 
+  it("loads PT-BR messages and returns the canonical locale", async () => {
+    const getRequestConfig = await loadRequestModule();
+    const result = await getRequestConfig({
+      requestLocale: Promise.resolve("pt-br"),
+    });
+    const ptBR = (await import("../../../src/messages/pt-BR.json")).default;
+    expect(result.locale).toBe("pt-BR");
+    expect(result.messages).toEqual(ptBR);
+  });
+
   it("falls back to default locale for invalid locale", async () => {
     const getRequestConfig = await loadRequestModule();
     const result = await getRequestConfig({

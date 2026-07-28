@@ -91,6 +91,12 @@ describe("notifications/email", () => {
     );
   });
 
+  it("renders Brazilian Portuguese email metadata as left-to-right", async () => {
+    const html = await generateHtmlReleaseBody(release, repo, "pt-BR", "24h");
+
+    expect(html).toContain('<html lang="pt-BR" dir="ltr">');
+  });
+
   it("replaces every repository placeholder in a translated HTML intro", async () => {
     const html = await generateHtmlReleaseBody(release, repo, "en", "24h");
 
@@ -202,6 +208,11 @@ describe("notifications/email", () => {
     const de24 = await getFormattedDate(date, "de", "24h");
     // Ensure German and English differ in HTML composition
     expect(de24.htmlDate).not.toBe(en24.htmlDate);
+    const ptBR12 = await getFormattedDate(date, "pt-BR", "12h");
+    const ptBR24 = await getFormattedDate(date, "pt-BR", "24h");
+    expect(ptBR12.textDate).toMatch(/[ap]\.?\s*m\.?/iu);
+    expect(ptBR24.textDate).not.toMatch(/[ap]\.?\s*m\.?/iu);
+    expect(ptBR12.textDate).not.toBe(ptBR24.textDate);
     const ar12 = await getFormattedDate(date, "ar", "12h");
     const ar24 = await getFormattedDate(date, "ar", "24h");
     expect(ar12.htmlDate).toMatch(/[\u0600-\u06ff]/u);

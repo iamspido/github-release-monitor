@@ -17,6 +17,7 @@ describe("i18n locale config", () => {
     expect(parseLocale("De")).toBe("de");
     expect(parseLocale("FR")).toBe("fr");
     expect(parseLocale("ES")).toBe("es");
+    expect(parseLocale("PT-br")).toBe("pt-BR");
     expect(parseLocale("AR")).toBe("ar");
     expect(parseLocale("it")).toBeNull();
     expect(parseLocale(null)).toBeNull();
@@ -27,7 +28,9 @@ describe("i18n locale config", () => {
     expect(isSupportedLocale("de")).toBe(true);
     expect(isSupportedLocale("fr")).toBe(true);
     expect(isSupportedLocale("es")).toBe(true);
+    expect(isSupportedLocale("pt-BR")).toBe(true);
     expect(isSupportedLocale("ar")).toBe(true);
+    expect(isSupportedLocale("pt-br")).toBe(false);
     expect(isSupportedLocale("DE")).toBe(false);
     expect(isSupportedLocale("it")).toBe(false);
   });
@@ -54,6 +57,12 @@ describe("i18n locale config", () => {
     expect(getLocaleMetadata("es")).toMatchObject({
       code: "es",
       nativeName: "Español",
+      direction: "ltr",
+      fontProfile: "inter",
+    });
+    expect(getLocaleMetadata("pt-BR")).toMatchObject({
+      code: "pt-BR",
+      nativeName: "Português (Brasil)",
       direction: "ltr",
       fontProfile: "inter",
     });

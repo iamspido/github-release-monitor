@@ -9,6 +9,7 @@ describe("locale display order", () => {
       "de",
       "es",
       "fr",
+      "pt-BR",
       "ar",
     ]);
   });
@@ -19,6 +20,7 @@ describe("locale display order", () => {
       "de",
       "fr",
       "es",
+      "pt-BR",
       "ar",
     ]);
   });
