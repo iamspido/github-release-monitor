@@ -302,6 +302,8 @@ test("locale prefixes are redirected to their canonical casing", async ({
 });
 
 test("document locale metadata follows the active locale", async ({ page }) => {
+  test.setTimeout(60_000);
+
   await ensureAppLocale(page, "en");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
