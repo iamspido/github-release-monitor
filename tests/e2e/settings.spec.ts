@@ -15,3 +15,21 @@ test("switch locale to German via settings", async ({ page }) => {
   ).toBeVisible();
   await ensureAppLocale(page, "en");
 });
+
+test("language dropdown keeps English first and sorts native names", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "en");
+  await openSettingsForLocale(page, "en");
+  await page.getByTestId("language-select").click();
+
+  const options = page.locator('[data-testid^="language-option-"]');
+  await expect(options).toHaveCount(5);
+  await expect(options).toHaveText([
+    "English",
+    "Deutsch",
+    "Español",
+    "Français",
+    "العربية",
+  ]);
+});

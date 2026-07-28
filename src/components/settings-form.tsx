@@ -53,7 +53,7 @@ import {
 } from "@/hooks/use-autosave-controller";
 import { useNetworkStatus } from "@/hooks/use-network";
 import { useToast } from "@/hooks/use-toast";
-import { localeMetadata } from "@/i18n/config";
+import { localeDisplayMetadata } from "@/i18n/locale-display";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import {
   defaultSecurityHighlightCustomColor,
@@ -977,7 +977,7 @@ export function SettingsForm({
                   <SelectValue placeholder={t("language_placeholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {localeMetadata.map(({ code, nativeName }) => (
+                  {localeDisplayMetadata.map(({ code, nativeName }) => (
                     <SelectItem
                       key={code}
                       value={code}
