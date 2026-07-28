@@ -9,6 +9,7 @@ describe("localized-path", () => {
     expect(getSupportedLocalePrefix("/de?source=login")).toBe("de");
     expect(getSupportedLocalePrefix("/fr/settings")).toBe("fr");
     expect(getSupportedLocalePrefix("/es/settings")).toBe("es");
+    expect(getSupportedLocalePrefix("/ID/pengaturan")).toBe("id");
     expect(getSupportedLocalePrefix("/it/settings")).toBeNull();
     expect(getSupportedLocalePrefix("/unexpected")).toBeNull();
     expect(getSupportedLocalePrefix("/enterprise")).toBeNull();

@@ -27,7 +27,7 @@ test("time format follows locale conventions in every published locale", async (
   page,
 }) => {
   expect(
-    new Set(["en", "de", "fr", "es", "pt-BR", "zh-CN", "ja", "ar"]),
+    new Set(["en", "de", "fr", "es", "pt-BR", "id", "zh-CN", "ja", "ar"]),
   ).toEqual(new Set(locales));
 
   await ensureAppLocale(page, "en");
@@ -73,6 +73,16 @@ test("time format follows locale conventions in every published locale", async (
   const ptBR12 = await setFormatAndRead(page, "pt-BR", "12");
   expect(ptBR12).toMatch(/[ap]\.?\s*m\.?/iu);
   expect(ptBR12).not.toBe(ptBR24);
+
+  await ensureAppLocale(page, "id");
+
+  const id24 = await setFormatAndRead(page, "id", "24");
+  expect(id24).toMatch(/\d{1,2}\.\d{2}/);
+  expect(id24).not.toMatch(/AM|PM/iu);
+
+  const id12 = await setFormatAndRead(page, "id", "12");
+  expect(id12).toMatch(/AM|PM/iu);
+  expect(id12).not.toBe(id24);
 
   await ensureAppLocale(page, "zh-CN");
 

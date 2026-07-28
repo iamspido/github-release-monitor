@@ -570,7 +570,8 @@ The locale switcher, settings validation, cookies, authentication redirects,
 message loading, document direction, Radix direction, and body font are derived
 from the registry. Arabic (`ar`) is published with Noto Sans Arabic and
 right-to-left layout support. Simplified Chinese (`zh-CN`) is published with
-Noto Sans SC, while Japanese (`ja`) uses Noto Sans JP.
+Noto Sans SC, while Japanese (`ja`) uses Noto Sans JP. Indonesian (`id`) uses
+the existing Inter profile.
 
 ## 🔐 Social Login Setup (GitHub + Google)
 

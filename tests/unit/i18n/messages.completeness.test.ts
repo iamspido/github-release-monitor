@@ -220,6 +220,47 @@ describe("i18n completeness", () => {
     "TestRelease.code_inline_code_word",
     "TestRelease.table_row4_notes",
   ]);
+  const indonesianSharedOrTechnicalLiteralKeys = new Set([
+    "Metadata.title",
+    "HomePage.title",
+    "RepositoryForm.placeholder",
+    "RepositoryForm.provider_select_github",
+    "RepositoryForm.provider_select_gitlab",
+    "RepositoryForm.provider_select_codeberg",
+    "SettingsPage.two_factor_verify_code_placeholder",
+    "SettingsPage.account_email_new_placeholder",
+    "SettingsForm.provider_github",
+    "SettingsForm.provider_gitlab",
+    "SettingsForm.provider_codeberg",
+    "SettingsForm.custom_security_patterns_placeholder",
+    "SettingsForm.automation_mode_interval",
+    "SettingsForm.cron_time_am",
+    "SettingsForm.cron_time_pm",
+    "SettingsForm.apprise_format_markdown",
+    "SettingsForm.apprise_format_html",
+    "RepoSettingsDialog.version_tag_pattern_placeholder",
+    "RepoSettingsDialog.apprise_tags_placeholder",
+    "RepoSettingsDialog.apprise_format_placeholder",
+    "TestPage.not_available",
+    "Email.from_name_fallback",
+    "LoginPage.setup_token_placeholder",
+    "LoginPage.display_name_placeholder",
+    "LoginPage.setup_username_placeholder",
+    "LoginPage.email_label",
+    "LoginPage.email_placeholder",
+    "LoginPage.social_provider_github",
+    "LoginPage.social_provider_google",
+    "LoginPage.social_identifier_placeholder",
+    "LoginPage.two_factor_login_code_placeholder",
+    "RegisterPage.display_name_placeholder",
+    "RegisterPage.username_placeholder",
+    "RegisterPage.email_label",
+    "RegisterPage.email_placeholder",
+    "TestRelease.list_item_1",
+    "TestRelease.list_item_2",
+    "TestRelease.code_inline_code_word",
+    "TestRelease.table_row4_notes",
+  ]);
   const simplifiedChineseSharedOrTechnicalLiteralKeys = new Set([
     "Metadata.title",
     "HomePage.title",
@@ -433,6 +474,18 @@ describe("i18n completeness", () => {
 
     expect(unchanged).toEqual(
       Array.from(brazilianPortugueseSharedOrTechnicalLiteralKeys).sort(),
+    );
+  });
+
+  it("keeps only shared or technical Indonesian messages identical to English", () => {
+    const indonesianFlat = flattenKeys(messagesByLocale.id);
+    const unchanged = Object.entries(indonesianFlat)
+      .filter(([key, value]) => referenceFlat[key] === value)
+      .map(([key]) => key)
+      .sort();
+
+    expect(unchanged).toEqual(
+      Array.from(indonesianSharedOrTechnicalLiteralKeys).sort(),
     );
   });
 

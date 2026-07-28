@@ -119,6 +119,38 @@ test("Brazilian Portuguese route aliases redirect to canonical translated paths"
   await ensureAppLocale(page, "en");
 });
 
+test("Indonesian route aliases redirect to canonical translated paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "id");
+
+  const response = await page.goto("/ID/settings?tab=notifications#mail");
+  const redirectResponse = await response
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(response?.status()).toBe(200);
+  expect(redirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(/\/id\/pengaturan\?tab=notifications#mail$/);
+
+  const canonicalResponse = await page.goto("/id/pengaturan");
+  expect(canonicalResponse?.status()).toBe(200);
+  expect(canonicalResponse?.request().redirectedFrom()).toBeNull();
+
+  const testResponse = await page.goto("/id/test?source=alias#result");
+  const testRedirectResponse = await testResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(testResponse?.status()).toBe(200);
+  expect(testRedirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(/\/id\/uji\?source=alias#result$/);
+
+  await ensureAppLocale(page, "en");
+});
+
 test("Simplified Chinese route aliases redirect to Unicode canonical paths", async ({
   page,
 }) => {
@@ -260,6 +292,14 @@ test("document locale metadata follows the active locale", async ({ page }) => {
 
   await ensureAppLocale(page, "pt-BR");
   await expect(page.locator("html")).toHaveAttribute("lang", "pt-BR");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "inter",
+  );
+
+  await ensureAppLocale(page, "id");
+  await expect(page.locator("html")).toHaveAttribute("lang", "id");
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
   await expect(page.locator("html")).toHaveAttribute(
     "data-font-profile",

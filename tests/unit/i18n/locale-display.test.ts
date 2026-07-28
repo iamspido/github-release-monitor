@@ -6,6 +6,7 @@ describe("locale display order", () => {
   it("keeps English first and sorts the remaining native names", () => {
     expect(localeDisplayMetadata.map(({ code }) => code)).toEqual([
       "en",
+      "id",
       "de",
       "es",
       "fr",
@@ -23,6 +24,7 @@ describe("locale display order", () => {
       "fr",
       "es",
       "pt-BR",
+      "id",
       "zh-CN",
       "ja",
       "ar",

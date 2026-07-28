@@ -90,6 +90,16 @@ describe("i18n getRequestConfig callback", () => {
     expect(result.messages).toEqual(ptBR);
   });
 
+  it("loads Indonesian messages", async () => {
+    const getRequestConfig = await loadRequestModule();
+    const result = await getRequestConfig({
+      requestLocale: Promise.resolve("ID"),
+    });
+    const indonesian = (await import("../../../src/messages/id.json")).default;
+    expect(result.locale).toBe("id");
+    expect(result.messages).toEqual(indonesian);
+  });
+
   it("loads ZH-CN messages and returns the canonical locale", async () => {
     const getRequestConfig = await loadRequestModule();
     const result = await getRequestConfig({

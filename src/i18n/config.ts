@@ -46,6 +46,12 @@ export const localeRegistry = [
     fontProfile: "inter",
   },
   {
+    code: "id",
+    nativeName: "Bahasa Indonesia",
+    direction: "ltr",
+    fontProfile: "inter",
+  },
+  {
     code: "zh-CN",
     nativeName: "简体中文",
     direction: "ltr",
