@@ -105,6 +105,45 @@ describe("i18n completeness", () => {
     "TestRelease.code_inline_code_word",
     "TestRelease.table_row4_notes",
   ]);
+  const frenchSharedOrTechnicalLiteralKeys = new Set([
+    "Metadata.title",
+    "HomePage.title",
+    "HomePage.view_mode_compact",
+    "RepositoryForm.placeholder",
+    "RepositoryForm.provider_select_github",
+    "RepositoryForm.provider_select_gitlab",
+    "RepositoryForm.provider_select_codeberg",
+    "SettingsPage.two_factor_verify_code_placeholder",
+    "SettingsForm.provider_github",
+    "SettingsForm.provider_gitlab",
+    "SettingsForm.provider_codeberg",
+    "SettingsForm.security_highlight_color_orange",
+    "SettingsForm.custom_security_patterns_placeholder",
+    "SettingsForm.refresh_interval_minutes_label",
+    "SettingsForm.cron_time_minute_label",
+    "SettingsForm.cron_time_am",
+    "SettingsForm.cron_time_pm",
+    "SettingsForm.apprise_format_markdown",
+    "SettingsForm.apprise_format_html",
+    "SettingsForm.release_channel_stable",
+    "RepoSettingsDialog.version_tag_pattern_placeholder",
+    "RepoSettingsDialog.apprise_format_placeholder",
+    "Email.from_name_fallback",
+    "Email.text_version_label",
+    "LoginPage.setup_token_placeholder",
+    "LoginPage.setup_username_placeholder",
+    "LoginPage.email_placeholder",
+    "LoginPage.social_provider_github",
+    "LoginPage.social_provider_google",
+    "LoginPage.social_identifier_placeholder",
+    "LoginPage.two_factor_login_code_placeholder",
+    "RegisterPage.username_placeholder",
+    "RegisterPage.email_placeholder",
+    "TestRelease.code_inline_code_word",
+    "TestRelease.table_header_notes",
+    "TestRelease.table_row1_notes",
+    "TestRelease.table_row4_notes",
+  ]);
 
   it("detects nested ICU arguments without treating regex quantifiers as arguments", () => {
     expect(
@@ -223,5 +262,17 @@ describe("i18n completeness", () => {
       .map(([key]) => key);
 
     expect(withoutArabic).toEqual([]);
+  });
+
+  it("keeps only shared or technical French messages identical to English", () => {
+    const frenchFlat = flattenKeys(messagesByLocale.fr);
+    const unchanged = Object.entries(frenchFlat)
+      .filter(([key, value]) => referenceFlat[key] === value)
+      .map(([key]) => key)
+      .sort();
+
+    expect(unchanged).toEqual(
+      Array.from(frenchSharedOrTechnicalLiteralKeys).sort(),
+    );
   });
 });

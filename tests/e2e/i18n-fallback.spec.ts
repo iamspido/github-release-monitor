@@ -8,7 +8,7 @@ test("invalid locale path uses the configured locale and repairs a stale cookie"
     { name: "NEXT_LOCALE", value: "de", domain: "localhost", path: "/" },
   ]);
 
-  await page.goto("/fr");
+  await page.goto("/it");
   await expect(page).toHaveURL(/\/en\/login\?next=%2Fen$/);
 
   const cookies = await context.cookies();

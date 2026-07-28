@@ -21,7 +21,7 @@ async function setFormatAndRead(
   return text || "";
 }
 
-test("time format follows locale conventions in EN, DE, and AR", async ({
+test("time format follows locale conventions in EN, DE, FR, and AR", async ({
   page,
 }) => {
   await ensureAppLocale(page, "en");
@@ -40,6 +40,14 @@ test("time format follows locale conventions in EN, DE, and AR", async ({
 
   const de12 = await setFormatAndRead(page, "de", "12");
   expect(de12).not.toBe(de24);
+
+  await ensureAppLocale(page, "fr");
+
+  const fr24 = await setFormatAndRead(page, "fr", "24");
+  expect(fr24).toMatch(/\d{1,2}:\d{2}/);
+
+  const fr12 = await setFormatAndRead(page, "fr", "12");
+  expect(fr12).not.toBe(fr24);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");

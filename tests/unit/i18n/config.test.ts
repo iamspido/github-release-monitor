@@ -15,17 +15,19 @@ describe("i18n locale config", () => {
   it("parses configured locales case-insensitively and returns canonical codes", () => {
     expect(parseLocale(" EN ")).toBe("en");
     expect(parseLocale("De")).toBe("de");
+    expect(parseLocale("FR")).toBe("fr");
     expect(parseLocale("AR")).toBe("ar");
-    expect(parseLocale("fr")).toBeNull();
+    expect(parseLocale("it")).toBeNull();
     expect(parseLocale(null)).toBeNull();
   });
 
   it("normalizes invalid locale input to the configured default", () => {
     expect(normalizeLocale("unsupported")).toBe(defaultLocale);
     expect(isSupportedLocale("de")).toBe(true);
+    expect(isSupportedLocale("fr")).toBe(true);
     expect(isSupportedLocale("ar")).toBe(true);
     expect(isSupportedLocale("DE")).toBe(false);
-    expect(isSupportedLocale("fr")).toBe(false);
+    expect(isSupportedLocale("it")).toBe(false);
   });
 
   it("provides complete metadata for every locale", () => {
@@ -38,6 +40,12 @@ describe("i18n locale config", () => {
     });
     expect(getLocaleMetadata("de")).toMatchObject({
       code: "de",
+      direction: "ltr",
+      fontProfile: "inter",
+    });
+    expect(getLocaleMetadata("fr")).toMatchObject({
+      code: "fr",
+      nativeName: "Français",
       direction: "ltr",
       fontProfile: "inter",
     });

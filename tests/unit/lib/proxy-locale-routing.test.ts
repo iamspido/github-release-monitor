@@ -30,6 +30,7 @@ describe("proxy/locale-routing", () => {
     ["/DE/settings", { locale: "de", restPath: "/settings" }],
     ["/en/login", { locale: "en", restPath: "/login" }],
     ["/ar/الإعدادات", { locale: "ar", restPath: "/الإعدادات" }],
+    ["/fr/parametres", { locale: "fr", restPath: "/parametres" }],
     ["/settings", { locale: null, restPath: "/settings" }],
     ["", { locale: null, restPath: "/" }],
   ] as const)("splits locale path %j", (pathname, expected) => {
@@ -44,12 +45,16 @@ describe("proxy/locale-routing", () => {
   it("uses English paths as aliases independently of the default locale", () => {
     expect(getRouteAliases("/settings", "de")).toContain("/settings");
     expect(getRouteAliases("/settings", "en")).not.toContain("/settings");
+    expect(getRouteAliases("/settings", "fr")).toContain("/settings");
     expect(getRouteAliases("/settings", "ar")).toContain("/settings");
   });
 
   it("resolves route keys and localized paths in both directions", () => {
     expect(getRouteKeyForPath("de", "/de/einstellungen")).toBe("/settings");
     expect(getRouteKeyForPath("en", "/en/login")).toBe("/login");
+    expect(getRouteKeyForPath("fr", "/fr/parametres")).toBe("/settings");
+    expect(getRouteKeyForPath("fr", "/fr/connexion")).toBe("/login");
+    expect(getRouteKeyForPath("fr", "/fr/inscription")).toBe("/register");
     expect(getRouteKeyForPath("en", "/en/unknown")).toBeNull();
     expect(
       getRouteKeyForPath(
@@ -62,9 +67,12 @@ describe("proxy/locale-routing", () => {
       "/settings",
     );
     expect(resolveLocalizedRestPath("/login", "de")).toBe("/anmelden");
+    expect(resolveLocalizedRestPath("/login", "fr")).toBe("/connexion");
+    expect(resolveLocalizedRestPath("/register", "fr")).toBe("/inscription");
     expect(resolveLocalizedRestPath("/unknown/", "de", "en")).toBe("/unknown");
     expect(resolveLocalizedRestPath("/", "de", "en")).toBe("/");
     expect(getLocalizedLoginPath("de")).toBe("/anmelden");
+    expect(getLocalizedLoginPath("fr")).toBe("/connexion");
     expect(getLocalizedLoginPath("ar")).toBe("/تسجيل-الدخول");
     expect(getRouteMatchForPath("de", "/de/settings")).toEqual({
       routeKey: "/settings",
@@ -169,7 +177,7 @@ describe("proxy/locale-routing", () => {
       headers: new Headers({ "x-next-intl-locale": "de" }),
     } as unknown as NextResponse;
     const invalidResponse = {
-      headers: new Headers({ "x-next-intl-locale": "fr" }),
+      headers: new Headers({ "x-next-intl-locale": "it" }),
     } as unknown as NextResponse;
 
     expect(getCurrentLocaleFromResponse(germanResponse, "en")).toBe("de");

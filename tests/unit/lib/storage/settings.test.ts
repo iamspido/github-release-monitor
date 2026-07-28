@@ -231,7 +231,7 @@ describe("storage/settings failure scenarios", () => {
     await expect(firstModule.getLocaleSetting()).resolves.toBe("ar");
 
     vi.resetModules();
-    fsMock.readFile.mockResolvedValueOnce(JSON.stringify({ locale: "fr" }));
+    fsMock.readFile.mockResolvedValueOnce(JSON.stringify({ locale: "it" }));
     const secondModule = await import("@/lib/storage/settings");
 
     await expect(secondModule.getLocaleSetting()).resolves.toBe("en");

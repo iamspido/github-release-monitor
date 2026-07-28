@@ -7,7 +7,8 @@ describe("localized-path", () => {
   it("classifies only supported full locale path segments", () => {
     expect(getSupportedLocalePrefix("/en/settings")).toBe("en");
     expect(getSupportedLocalePrefix("/de?source=login")).toBe("de");
-    expect(getSupportedLocalePrefix("/fr/settings")).toBeNull();
+    expect(getSupportedLocalePrefix("/fr/settings")).toBe("fr");
+    expect(getSupportedLocalePrefix("/it/settings")).toBeNull();
     expect(getSupportedLocalePrefix("/unexpected")).toBeNull();
     expect(getSupportedLocalePrefix("/enterprise")).toBeNull();
     expect(getSupportedLocalePrefix("en/settings")).toBeNull();

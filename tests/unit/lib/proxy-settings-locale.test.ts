@@ -494,7 +494,7 @@ describe("proxy", () => {
       "/en?source=broken#details",
     ],
     ["https://example.test/sdsadas", "de", "/de"],
-    ["https://example.test/fr/sdsadas", "en", "/en"],
+    ["https://example.test/it/sdsadas", "en", "/en"],
   ])(
     "redirects unknown app path %s to the %s home page",
     async (url, locale, expectedPath) => {
