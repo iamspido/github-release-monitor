@@ -144,14 +144,18 @@ export async function waitForLocale(
     .toBe(expected);
 }
 
-// Simulate browser connectivity events that our app listens to.
-// Debounce in UI is ~350ms; wait slightly longer after toggling.
+// Set the browser state before dispatching the event so a component that
+// hydrates after the event still reads the intended navigator.onLine value.
 export async function goOffline(page: Page, waitMs = 450) {
+  await page.context().setOffline(true);
+  await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(false);
   await page.evaluate(() => window.dispatchEvent(new Event("offline")));
   await page.waitForTimeout(waitMs);
 }
 
 export async function goOnline(page: Page, waitMs = 450) {
+  await page.context().setOffline(false);
+  await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(true);
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await page.waitForTimeout(waitMs);
 }
