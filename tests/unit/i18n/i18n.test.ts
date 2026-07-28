@@ -70,6 +70,16 @@ describe("i18n getRequestConfig callback", () => {
     expect(result.messages).toEqual(fr);
   });
 
+  it("loads ES messages and returns the canonical locale", async () => {
+    const getRequestConfig = await loadRequestModule();
+    const result = await getRequestConfig({
+      requestLocale: Promise.resolve("ES"),
+    });
+    const es = (await import("../../../src/messages/es.json")).default;
+    expect(result.locale).toBe("es");
+    expect(result.messages).toEqual(es);
+  });
+
   it("falls back to default locale for invalid locale", async () => {
     const getRequestConfig = await loadRequestModule();
     const result = await getRequestConfig({

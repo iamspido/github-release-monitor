@@ -31,6 +31,7 @@ describe("proxy/locale-routing", () => {
     ["/en/login", { locale: "en", restPath: "/login" }],
     ["/ar/الإعدادات", { locale: "ar", restPath: "/الإعدادات" }],
     ["/fr/parametres", { locale: "fr", restPath: "/parametres" }],
+    ["/es/configuracion", { locale: "es", restPath: "/configuracion" }],
     ["/settings", { locale: null, restPath: "/settings" }],
     ["", { locale: null, restPath: "/" }],
   ] as const)("splits locale path %j", (pathname, expected) => {
@@ -46,6 +47,7 @@ describe("proxy/locale-routing", () => {
     expect(getRouteAliases("/settings", "de")).toContain("/settings");
     expect(getRouteAliases("/settings", "en")).not.toContain("/settings");
     expect(getRouteAliases("/settings", "fr")).toContain("/settings");
+    expect(getRouteAliases("/settings", "es")).toContain("/settings");
     expect(getRouteAliases("/settings", "ar")).toContain("/settings");
   });
 
@@ -55,6 +57,10 @@ describe("proxy/locale-routing", () => {
     expect(getRouteKeyForPath("fr", "/fr/parametres")).toBe("/settings");
     expect(getRouteKeyForPath("fr", "/fr/connexion")).toBe("/login");
     expect(getRouteKeyForPath("fr", "/fr/inscription")).toBe("/register");
+    expect(getRouteKeyForPath("es", "/es/configuracion")).toBe("/settings");
+    expect(getRouteKeyForPath("es", "/es/iniciar-sesion")).toBe("/login");
+    expect(getRouteKeyForPath("es", "/es/registro")).toBe("/register");
+    expect(getRouteKeyForPath("es", "/es/prueba")).toBe("/test");
     expect(getRouteKeyForPath("en", "/en/unknown")).toBeNull();
     expect(
       getRouteKeyForPath(
@@ -69,10 +75,14 @@ describe("proxy/locale-routing", () => {
     expect(resolveLocalizedRestPath("/login", "de")).toBe("/anmelden");
     expect(resolveLocalizedRestPath("/login", "fr")).toBe("/connexion");
     expect(resolveLocalizedRestPath("/register", "fr")).toBe("/inscription");
+    expect(resolveLocalizedRestPath("/login", "es")).toBe("/iniciar-sesion");
+    expect(resolveLocalizedRestPath("/register", "es")).toBe("/registro");
+    expect(resolveLocalizedRestPath("/test", "es")).toBe("/prueba");
     expect(resolveLocalizedRestPath("/unknown/", "de", "en")).toBe("/unknown");
     expect(resolveLocalizedRestPath("/", "de", "en")).toBe("/");
     expect(getLocalizedLoginPath("de")).toBe("/anmelden");
     expect(getLocalizedLoginPath("fr")).toBe("/connexion");
+    expect(getLocalizedLoginPath("es")).toBe("/iniciar-sesion");
     expect(getLocalizedLoginPath("ar")).toBe("/تسجيل-الدخول");
     expect(getRouteMatchForPath("de", "/de/settings")).toEqual({
       routeKey: "/settings",

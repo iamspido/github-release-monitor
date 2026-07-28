@@ -17,7 +17,7 @@ A powerful, self-hostable application to automatically monitor GitHub, GitLab, a
     - Clean, intuitive interface built with ShadCN UI and Tailwind CSS.
     - Full dark mode support.
     - Responsive design for both desktop and mobile use.
-- **Internationalization (i18n)**: Supports English, German, French, and Arabic out of the box, including right-to-left layout.
+- **Internationalization (i18n)**: Supports English, German, French, Spanish, and Arabic out of the box, including right-to-left layout.
 - **Data Management**: Easily import or export your list of monitored repositories via JSON.
 - **System Diagnostics**: A built-in test page to verify GitHub API connectivity and notification service (SMTP, Apprise) configuration.
 - **Secure Authentication**: Protects the application with Better Auth, SQLite-backed users/sessions, and one-time bootstrap setup.

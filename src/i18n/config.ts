@@ -28,6 +28,12 @@ export const localeRegistry = [
     fontProfile: "inter",
   },
   {
+    code: "es",
+    nativeName: "Español",
+    direction: "ltr",
+    fontProfile: "inter",
+  },
+  {
     code: "ar",
     nativeName: "العربية",
     direction: "rtl",

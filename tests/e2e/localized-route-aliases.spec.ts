@@ -55,6 +55,40 @@ test("French route aliases redirect to canonical translated paths", async ({
   await ensureAppLocale(page, "en");
 });
 
+test("Spanish route aliases redirect to canonical translated paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "es");
+
+  const response = await page.goto("/es/settings?tab=notifications#mail");
+  const redirectResponse = await response
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(response?.status()).toBe(200);
+  expect(redirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/es\/configuracion\?tab=notifications#mail$/,
+  );
+
+  const canonicalResponse = await page.goto("/es/configuracion");
+  expect(canonicalResponse?.status()).toBe(200);
+  expect(canonicalResponse?.request().redirectedFrom()).toBeNull();
+
+  const testResponse = await page.goto("/es/test?source=alias#result");
+  const testRedirectResponse = await testResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(testResponse?.status()).toBe(200);
+  expect(testRedirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(/\/es\/prueba\?source=alias#result$/);
+
+  await ensureAppLocale(page, "en");
+});
+
 test("Arabic route aliases redirect to Unicode canonical paths", async ({
   page,
 }) => {
@@ -108,6 +142,14 @@ test("document locale metadata follows the active locale", async ({ page }) => {
 
   await ensureAppLocale(page, "fr");
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "inter",
+  );
+
+  await ensureAppLocale(page, "es");
+  await expect(page.locator("html")).toHaveAttribute("lang", "es");
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
   await expect(page.locator("html")).toHaveAttribute(
     "data-font-profile",

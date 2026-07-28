@@ -144,6 +144,44 @@ describe("i18n completeness", () => {
     "TestRelease.table_row1_notes",
     "TestRelease.table_row4_notes",
   ]);
+  const spanishSharedOrTechnicalLiteralKeys = new Set([
+    "Metadata.title",
+    "HomePage.title",
+    "RepositoryForm.placeholder",
+    "RepositoryForm.provider_select_github",
+    "RepositoryForm.provider_select_gitlab",
+    "RepositoryForm.provider_select_codeberg",
+    "ReleaseCard.toast_error_title",
+    "SettingsPage.two_factor_verify_code_placeholder",
+    "SettingsForm.provider_github",
+    "SettingsForm.provider_gitlab",
+    "SettingsForm.provider_codeberg",
+    "SettingsForm.custom_security_patterns_placeholder",
+    "SettingsForm.toast_error_title",
+    "SettingsForm.apprise_format_markdown",
+    "SettingsForm.apprise_format_html",
+    "RepoSettingsDialog.version_tag_pattern_placeholder",
+    "RepoSettingsDialog.toast_error_title",
+    "RepoSettingsDialog.autosave_error",
+    "RepoSettingsDialog.apprise_tags_placeholder",
+    "RepoSettingsDialog.apprise_format_placeholder",
+    "TestPage.toast_error_title",
+    "TestPage.toast_apprise_error_title",
+    "Email.from_name_fallback",
+    "LoginPage.setup_token_placeholder",
+    "LoginPage.setup_username_placeholder",
+    "LoginPage.email_placeholder",
+    "LoginPage.social_provider_github",
+    "LoginPage.social_provider_google",
+    "LoginPage.social_identifier_placeholder",
+    "LoginPage.two_factor_login_code_placeholder",
+    "RegisterPage.username_placeholder",
+    "RegisterPage.email_placeholder",
+    "TestRelease.section_emojis",
+    "TestRelease.code_inline_code_word",
+    "TestRelease.table_row1_notes",
+    "TestRelease.table_row4_notes",
+  ]);
 
   it("detects nested ICU arguments without treating regex quantifiers as arguments", () => {
     expect(
@@ -273,6 +311,18 @@ describe("i18n completeness", () => {
 
     expect(unchanged).toEqual(
       Array.from(frenchSharedOrTechnicalLiteralKeys).sort(),
+    );
+  });
+
+  it("keeps only shared or technical Spanish messages identical to English", () => {
+    const spanishFlat = flattenKeys(messagesByLocale.es);
+    const unchanged = Object.entries(spanishFlat)
+      .filter(([key, value]) => referenceFlat[key] === value)
+      .map(([key]) => key)
+      .sort();
+
+    expect(unchanged).toEqual(
+      Array.from(spanishSharedOrTechnicalLiteralKeys).sort(),
     );
   });
 });
