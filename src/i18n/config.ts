@@ -3,6 +3,7 @@ export type FontProfile =
   | "inter"
   | "noto"
   | "noto-arabic"
+  | "noto-devanagari"
   | "noto-cjk-jp"
   | "noto-cjk-sc"
   | "noto-hebrew";
@@ -50,6 +51,12 @@ export const localeRegistry = [
     nativeName: "Bahasa Indonesia",
     direction: "ltr",
     fontProfile: "inter",
+  },
+  {
+    code: "hi",
+    nativeName: "हिन्दी",
+    direction: "ltr",
+    fontProfile: "noto-devanagari",
   },
   {
     code: "zh-CN",

@@ -151,6 +151,42 @@ test("Indonesian route aliases redirect to canonical translated paths", async ({
   await ensureAppLocale(page, "en");
 });
 
+test("Hindi route aliases redirect to Unicode canonical paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "hi");
+
+  const response = await page.goto("/HI/settings?tab=notifications#mail");
+  const redirectResponse = await response
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(response?.status()).toBe(200);
+  expect(redirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/hi\/%E0%A4%B8%E0%A5%87%E0%A4%9F%E0%A4%BF%E0%A4%82%E0%A4%97%E0%A5%8D%E0%A4%B8\?tab=notifications#mail$/i,
+  );
+
+  const canonicalResponse = await page.goto("/hi/सेटिंग्स");
+  expect(canonicalResponse?.status()).toBe(200);
+  expect(canonicalResponse?.request().redirectedFrom()).toBeNull();
+
+  const testResponse = await page.goto("/hi/test?source=alias#result");
+  const testRedirectResponse = await testResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(testResponse?.status()).toBe(200);
+  expect(testRedirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/hi\/%E0%A4%AA%E0%A4%B0%E0%A5%80%E0%A4%95%E0%A5%8D%E0%A4%B7%E0%A4%A3\?source=alias#result$/i,
+  );
+
+  await ensureAppLocale(page, "en");
+});
+
 test("Simplified Chinese route aliases redirect to Unicode canonical paths", async ({
   page,
 }) => {
@@ -281,6 +317,28 @@ test("document locale metadata follows the active locale", async ({ page }) => {
     "data-font-profile",
     "inter",
   );
+
+  await ensureAppLocale(page, "hi");
+  await expect(page.locator("html")).toHaveAttribute("lang", "hi");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "noto-devanagari",
+  );
+
+  const hindiFontState = await page.evaluate(async () => {
+    await document.fonts.ready;
+    const fontFamily = getComputedStyle(document.body).fontFamily;
+    const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
+    return {
+      fontFamily,
+      supportsHindi:
+        primaryFontFamily !== undefined &&
+        document.fonts.check(`16px ${primaryFontFamily}`, "हिन्दी"),
+    };
+  });
+  expect(hindiFontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]Devanagari/i);
+  expect(hindiFontState.supportsHindi).toBe(true);
 
   await ensureAppLocale(page, "es");
   await expect(page.locator("html")).toHaveAttribute("lang", "es");

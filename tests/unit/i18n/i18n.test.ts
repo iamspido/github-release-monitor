@@ -100,6 +100,16 @@ describe("i18n getRequestConfig callback", () => {
     expect(result.messages).toEqual(indonesian);
   });
 
+  it("loads Hindi messages", async () => {
+    const getRequestConfig = await loadRequestModule();
+    const result = await getRequestConfig({
+      requestLocale: Promise.resolve("HI"),
+    });
+    const hindi = (await import("../../../src/messages/hi.json")).default;
+    expect(result.locale).toBe("hi");
+    expect(result.messages).toEqual(hindi);
+  });
+
   it("loads ZH-CN messages and returns the canonical locale", async () => {
     const getRequestConfig = await loadRequestModule();
     const result = await getRequestConfig({

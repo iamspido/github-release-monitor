@@ -103,6 +103,12 @@ describe("notifications/email", () => {
     expect(html).toContain('<html lang="id" dir="ltr">');
   });
 
+  it("renders Hindi email metadata as left-to-right", async () => {
+    const html = await generateHtmlReleaseBody(release, repo, "hi", "24h");
+
+    expect(html).toContain('<html lang="hi" dir="ltr">');
+  });
+
   it("renders Simplified Chinese email metadata as left-to-right", async () => {
     const html = await generateHtmlReleaseBody(release, repo, "zh-CN", "24h");
 
@@ -236,6 +242,11 @@ describe("notifications/email", () => {
     expect(id12.textDate).toMatch(/AM|PM/iu);
     expect(id24.textDate).not.toMatch(/AM|PM/iu);
     expect(id12.textDate).not.toBe(id24.textDate);
+    const hi12 = await getFormattedDate(date, "hi", "12h");
+    const hi24 = await getFormattedDate(date, "hi", "24h");
+    expect(hi12.textDate).toMatch(/AM|PM/iu);
+    expect(hi24.textDate).not.toMatch(/AM|PM/iu);
+    expect(hi12.textDate).not.toBe(hi24.textDate);
     const zhCN12 = await getFormattedDate(date, "zh-CN", "12h");
     const zhCN24 = await getFormattedDate(date, "zh-CN", "24h");
     expect(zhCN12.textDate).toMatch(/上午|下午/u);

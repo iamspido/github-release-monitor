@@ -19,6 +19,7 @@ describe("i18n locale config", () => {
     expect(parseLocale("ES")).toBe("es");
     expect(parseLocale("PT-br")).toBe("pt-BR");
     expect(parseLocale("ID")).toBe("id");
+    expect(parseLocale("HI")).toBe("hi");
     expect(parseLocale("ZH-cn")).toBe("zh-CN");
     expect(parseLocale("JA")).toBe("ja");
     expect(parseLocale("AR")).toBe("ar");
@@ -33,6 +34,7 @@ describe("i18n locale config", () => {
     expect(isSupportedLocale("es")).toBe(true);
     expect(isSupportedLocale("pt-BR")).toBe(true);
     expect(isSupportedLocale("id")).toBe(true);
+    expect(isSupportedLocale("hi")).toBe(true);
     expect(isSupportedLocale("zh-CN")).toBe(true);
     expect(isSupportedLocale("ja")).toBe(true);
     expect(isSupportedLocale("ar")).toBe(true);
@@ -78,6 +80,12 @@ describe("i18n locale config", () => {
       nativeName: "Bahasa Indonesia",
       direction: "ltr",
       fontProfile: "inter",
+    });
+    expect(getLocaleMetadata("hi")).toMatchObject({
+      code: "hi",
+      nativeName: "हिन्दी",
+      direction: "ltr",
+      fontProfile: "noto-devanagari",
     });
     expect(getLocaleMetadata("zh-CN")).toMatchObject({
       code: "zh-CN",

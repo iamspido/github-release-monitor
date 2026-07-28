@@ -2,6 +2,7 @@ import {
   Inter,
   Noto_Sans,
   Noto_Sans_Arabic,
+  Noto_Sans_Devanagari,
   Noto_Sans_Hebrew,
   Noto_Sans_JP,
   Noto_Sans_SC,
@@ -37,6 +38,13 @@ const notoArabic = Noto_Sans_Arabic({
   preload: false,
 });
 
+const notoDevanagari = Noto_Sans_Devanagari({
+  display: "swap",
+  variable: "--font-locale-body",
+  subsets: ["devanagari"],
+  preload: false,
+});
+
 const notoHebrew = Noto_Sans_Hebrew({
   display: "swap",
   variable: "--font-locale-body",
@@ -60,6 +68,7 @@ const bodyFontVariableClassByProfile = {
   inter: inter.variable,
   noto: noto.variable,
   "noto-arabic": notoArabic.variable,
+  "noto-devanagari": notoDevanagari.variable,
   "noto-cjk-jp": notoCjkJp.variable,
   "noto-cjk-sc": notoCjkSc.variable,
   "noto-hebrew": notoHebrew.variable,

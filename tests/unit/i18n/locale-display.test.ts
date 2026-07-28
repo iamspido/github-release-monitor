@@ -12,6 +12,7 @@ describe("locale display order", () => {
       "fr",
       "pt-BR",
       "ar",
+      "hi",
       "ja",
       "zh-CN",
     ]);
@@ -25,6 +26,7 @@ describe("locale display order", () => {
       "es",
       "pt-BR",
       "id",
+      "hi",
       "zh-CN",
       "ja",
       "ar",
