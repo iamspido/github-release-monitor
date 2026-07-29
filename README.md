@@ -577,7 +577,7 @@ Noto Sans SC, Japanese (`ja`) uses Noto Sans JP, Korean (`ko`) uses Noto Sans
 KR, Hindi (`hi`) uses Noto Sans Devanagari, and Turkish (`tr`) uses Noto Sans
 for Latin Extended coverage. Vietnamese (`vi`) also uses Noto Sans for its
 extended Latin diacritics. Italian (`it`) and Indonesian (`id`) use the
-existing Inter profile.
+existing Inter profile, as does Polish (`pl`).
 
 ## 🔐 Social Login Setup (GitHub + Google)
 

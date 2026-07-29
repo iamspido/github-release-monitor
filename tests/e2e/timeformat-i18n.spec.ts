@@ -3,7 +3,7 @@ import { expect, type Page, test } from "./fixtures/ensureLoggedIn";
 import { waitForAutosave } from "./utils";
 import { ensureAppLocale } from "./utils/locale";
 
-test.setTimeout(60_000);
+test.setTimeout(120_000);
 
 async function setFormatAndRead(
   page: Page,
@@ -41,6 +41,7 @@ test("time format follows locale conventions in every published locale", async (
       "tr",
       "vi",
       "it",
+      "pl",
       "ar",
     ]),
   ).toEqual(new Set(locales));
@@ -168,6 +169,16 @@ test("time format follows locale conventions in every published locale", async (
   expect(it24).not.toMatch(/AM|PM/u);
   expect(it24).toMatch(/\d{1,2}:\d{2}/);
   expect(it24).not.toBe(it12);
+
+  await ensureAppLocale(page, "pl");
+
+  const pl12 = await setFormatAndRead(page, "pl", "12");
+  expect(pl12).toMatch(/AM|PM/u);
+
+  const pl24 = await setFormatAndRead(page, "pl", "24");
+  expect(pl24).not.toMatch(/AM|PM/u);
+  expect(pl24).toMatch(/\d{1,2}:\d{2}/);
+  expect(pl24).not.toBe(pl12);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");

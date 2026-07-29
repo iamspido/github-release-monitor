@@ -15,6 +15,7 @@ describe("localized-path", () => {
     expect(getSupportedLocalePrefix("/TR/ayarlar")).toBe("tr");
     expect(getSupportedLocalePrefix("/VI/cai-dat")).toBe("vi");
     expect(getSupportedLocalePrefix("/IT/impostazioni")).toBe("it");
+    expect(getSupportedLocalePrefix("/PL/ustawienia")).toBe("pl");
     expect(getSupportedLocalePrefix("/invalid_locale/settings")).toBeNull();
     expect(getSupportedLocalePrefix("/unexpected")).toBeNull();
     expect(getSupportedLocalePrefix("/enterprise")).toBeNull();

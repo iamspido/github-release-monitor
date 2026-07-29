@@ -433,6 +433,51 @@ test("Italian route aliases redirect to canonical translated paths", async ({
   await ensureAppLocale(page, "en");
 });
 
+test("Polish route aliases redirect to canonical translated paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "pl");
+
+  const settingsResponse = await page.goto(
+    "/PL/settings?tab=notifications#mail",
+  );
+  const settingsRedirectResponse = await settingsResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(settingsResponse?.status()).toBe(200);
+  expect(settingsRedirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/pl\/ustawienia\?tab=notifications#mail$/i,
+  );
+
+  const loginResponse = await page.request.get("/pl/login?next=%2Fpl", {
+    maxRedirects: 0,
+  });
+  expect(loginResponse.status()).toBe(308);
+  const loginLocation = new URL(
+    loginResponse.headers().location,
+    "http://localhost",
+  );
+  expect(loginLocation.pathname).toBe("/pl/logowanie");
+  expect(loginLocation.search).toBe("?next=%2Fpl");
+
+  const registerResponse = await page.request.get("/pl/register", {
+    maxRedirects: 0,
+  });
+  expect(registerResponse.status()).toBe(308);
+  expect(
+    new URL(registerResponse.headers().location, "http://localhost").pathname,
+  ).toBe("/pl/rejestracja");
+
+  const canonicalTestResponse = await page.goto("/pl/test");
+  expect(canonicalTestResponse?.status()).toBe(200);
+  expect(canonicalTestResponse?.request().redirectedFrom()).toBeNull();
+
+  await ensureAppLocale(page, "en");
+});
+
 test("Arabic route aliases redirect to Unicode canonical paths", async ({
   page,
 }) => {
@@ -662,6 +707,17 @@ test("document locale metadata follows the active locale", async ({ page }) => {
 
   await ensureAppLocale(page, "it");
   await expect(page.locator("html")).toHaveAttribute("lang", "it");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "inter",
+  );
+  expect(
+    await page.evaluate(() => getComputedStyle(document.body).fontFamily),
+  ).toMatch(/Inter/i);
+
+  await ensureAppLocale(page, "pl");
+  await expect(page.locator("html")).toHaveAttribute("lang", "pl");
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
   await expect(page.locator("html")).toHaveAttribute(
     "data-font-profile",

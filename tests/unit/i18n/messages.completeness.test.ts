@@ -492,6 +492,38 @@ describe("i18n completeness", () => {
     "TestRelease.code_inline_code_word",
     "TestRelease.table_row4_notes",
   ]);
+  const polishSharedOrTechnicalLiteralKeys = new Set([
+    "Metadata.title",
+    "HomePage.title",
+    "RepositoryForm.placeholder",
+    "RepositoryForm.provider_select_github",
+    "RepositoryForm.provider_select_gitlab",
+    "RepositoryForm.provider_select_codeberg",
+    "SettingsPage.two_factor_verify_code_placeholder",
+    "SettingsForm.provider_github",
+    "SettingsForm.provider_gitlab",
+    "SettingsForm.provider_codeberg",
+    "SettingsForm.custom_security_patterns_placeholder",
+    "SettingsForm.cron_time_am",
+    "SettingsForm.cron_time_pm",
+    "SettingsForm.apprise_format_markdown",
+    "SettingsForm.apprise_format_html",
+    "RepoSettingsDialog.version_tag_pattern_placeholder",
+    "Email.from_name_fallback",
+    "LoginPage.setup_token_placeholder",
+    "LoginPage.display_name_placeholder",
+    "LoginPage.setup_username_placeholder",
+    "LoginPage.email_placeholder",
+    "LoginPage.social_provider_github",
+    "LoginPage.social_provider_google",
+    "LoginPage.social_identifier_placeholder",
+    "LoginPage.two_factor_login_code_placeholder",
+    "RegisterPage.display_name_placeholder",
+    "RegisterPage.username_placeholder",
+    "RegisterPage.email_placeholder",
+    "TestRelease.code_inline_code_word",
+    "TestRelease.table_row4_notes",
+  ]);
 
   it("detects nested ICU arguments without treating regex quantifiers as arguments", () => {
     expect(
@@ -803,5 +835,40 @@ describe("i18n completeness", () => {
     expect(unchanged).toEqual(
       Array.from(italianSharedOrTechnicalLiteralKeys).sort(),
     );
+  });
+
+  it("keeps only shared or technical Polish messages identical to English", () => {
+    const polishFlat = flattenKeys(messagesByLocale.pl);
+    const unchanged = Object.entries(polishFlat)
+      .filter(([key, value]) => referenceFlat[key] === value)
+      .map(([key]) => key)
+      .sort();
+
+    expect(unchanged).toEqual(
+      Array.from(polishSharedOrTechnicalLiteralKeys).sort(),
+    );
+  });
+
+  it("preserves technical syntax examples in Polish messages", () => {
+    const polish = messagesByLocale.pl;
+    const settings = polish.SettingsForm as Dict;
+    const testPage = polish.TestPage as Dict;
+
+    expect(settings.show_provider_prefix_in_repo_id_description).toContain(
+      "provider:owner/repo",
+    );
+    expect(settings.show_provider_domain_in_repo_id_description).toContain(
+      "provider:domain/owner/repo",
+    );
+    expect(settings.custom_security_patterns_hint).toContain("/regex/flags");
+    expect(
+      (messagesByLocale.pl.RepoSettingsDialog as Dict)
+        .version_tag_pattern_hint,
+    ).toContain("version");
+    expect(
+      (messagesByLocale.pl.RepoSettingsDialog as Dict)
+        .version_tag_pattern_hint,
+    ).toContain("revision");
+    expect(testPage.gitlab_token_advice).toContain("host=username:token");
   });
 });

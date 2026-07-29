@@ -96,6 +96,12 @@ export const localeRegistry = [
     fontProfile: "inter",
   },
   {
+    code: "pl",
+    nativeName: "Polski",
+    direction: "ltr",
+    fontProfile: "inter",
+  },
+  {
     code: "ar",
     nativeName: "العربية",
     direction: "rtl",
