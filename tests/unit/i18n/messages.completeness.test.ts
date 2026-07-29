@@ -1004,12 +1004,10 @@ describe("i18n completeness", () => {
     );
     expect(settings.custom_security_patterns_hint).toContain("/regex/flags");
     expect(
-      (messagesByLocale.pl.RepoSettingsDialog as Dict)
-        .version_tag_pattern_hint,
+      (messagesByLocale.pl.RepoSettingsDialog as Dict).version_tag_pattern_hint,
     ).toContain("version");
     expect(
-      (messagesByLocale.pl.RepoSettingsDialog as Dict)
-        .version_tag_pattern_hint,
+      (messagesByLocale.pl.RepoSettingsDialog as Dict).version_tag_pattern_hint,
     ).toContain("revision");
     expect(testPage.gitlab_token_advice).toContain("host=username:token");
   });
@@ -1049,12 +1047,10 @@ describe("i18n completeness", () => {
     );
     expect(settings.custom_security_patterns_hint).toContain("/regex/flags");
     expect(
-      (messagesByLocale.uk.RepoSettingsDialog as Dict)
-        .version_tag_pattern_hint,
+      (messagesByLocale.uk.RepoSettingsDialog as Dict).version_tag_pattern_hint,
     ).toContain("version");
     expect(
-      (messagesByLocale.uk.RepoSettingsDialog as Dict)
-        .version_tag_pattern_hint,
+      (messagesByLocale.uk.RepoSettingsDialog as Dict).version_tag_pattern_hint,
     ).toContain("revision");
     expect(testPage.gitlab_token_advice).toContain("host=username:token");
   });
@@ -1083,19 +1079,17 @@ describe("i18n completeness", () => {
       "provider:domain/owner/repo",
     );
     expect(settings.custom_security_patterns_hint).toContain("/regex/flags");
+    expect(settings.include_default_security_patterns_description).toContain(
+      "security",
+    );
+    expect(settings.include_default_security_patterns_description).toContain(
+      "vulnerability",
+    );
     expect(
-      settings.include_default_security_patterns_description,
-    ).toContain("security");
-    expect(
-      settings.include_default_security_patterns_description,
-    ).toContain("vulnerability");
-    expect(
-      (messagesByLocale.nl.RepoSettingsDialog as Dict)
-        .version_tag_pattern_hint,
+      (messagesByLocale.nl.RepoSettingsDialog as Dict).version_tag_pattern_hint,
     ).toContain("version");
     expect(
-      (messagesByLocale.nl.RepoSettingsDialog as Dict)
-        .version_tag_pattern_hint,
+      (messagesByLocale.nl.RepoSettingsDialog as Dict).version_tag_pattern_hint,
     ).toContain("revision");
     expect(testPage.gitlab_token_advice).toContain("host=username:token");
   });
@@ -1134,19 +1128,17 @@ describe("i18n completeness", () => {
       "provider:domain/owner/repo",
     );
     expect(settings.custom_security_patterns_hint).toContain("/regex/flags");
+    expect(settings.include_default_security_patterns_description).toContain(
+      "security",
+    );
+    expect(settings.include_default_security_patterns_description).toContain(
+      "vulnerability",
+    );
     expect(
-      settings.include_default_security_patterns_description,
-    ).toContain("security");
-    expect(
-      settings.include_default_security_patterns_description,
-    ).toContain("vulnerability");
-    expect(
-      (messagesByLocale.ru.RepoSettingsDialog as Dict)
-        .version_tag_pattern_hint,
+      (messagesByLocale.ru.RepoSettingsDialog as Dict).version_tag_pattern_hint,
     ).toContain("version");
     expect(
-      (messagesByLocale.ru.RepoSettingsDialog as Dict)
-        .version_tag_pattern_hint,
+      (messagesByLocale.ru.RepoSettingsDialog as Dict).version_tag_pattern_hint,
     ).toContain("revision");
     expect(testPage.gitlab_token_advice).toContain("host=username:token");
   });
@@ -1185,12 +1177,12 @@ describe("i18n completeness", () => {
       "provider:domain/owner/repo",
     );
     expect(settings.custom_security_patterns_hint).toContain("/regex/flags");
-    expect(
-      settings.include_default_security_patterns_description,
-    ).toContain("security");
-    expect(
-      settings.include_default_security_patterns_description,
-    ).toContain("vulnerability");
+    expect(settings.include_default_security_patterns_description).toContain(
+      "security",
+    );
+    expect(settings.include_default_security_patterns_description).toContain(
+      "vulnerability",
+    );
     expect(
       (messagesByLocale.he.RepoSettingsDialog as Dict).version_tag_pattern_hint,
     ).toContain("version");

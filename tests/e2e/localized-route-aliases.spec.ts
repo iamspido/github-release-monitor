@@ -308,9 +308,7 @@ test("Turkish route aliases redirect to canonical paths", async ({ page }) => {
 
   expect(settingsResponse?.status()).toBe(200);
   expect(settingsRedirectResponse?.status()).toBe(308);
-  await expect(page).toHaveURL(
-    /\/tr\/ayarlar\?tab=notifications#mail$/i,
-  );
+  await expect(page).toHaveURL(/\/tr\/ayarlar\?tab=notifications#mail$/i);
 
   const loginResponse = await page.request.get("/tr/login?next=%2Ftr", {
     maxRedirects: 0,
@@ -353,9 +351,7 @@ test("Vietnamese route aliases redirect to canonical translated paths", async ({
 
   expect(settingsResponse?.status()).toBe(200);
   expect(settingsRedirectResponse?.status()).toBe(308);
-  await expect(page).toHaveURL(
-    /\/vi\/cai-dat\?tab=notifications#mail$/i,
-  );
+  await expect(page).toHaveURL(/\/vi\/cai-dat\?tab=notifications#mail$/i);
 
   const loginResponse = await page.request.get("/vi/login?next=%2Fvi", {
     maxRedirects: 0,
@@ -403,9 +399,7 @@ test("Italian route aliases redirect to canonical translated paths", async ({
 
   expect(settingsResponse?.status()).toBe(200);
   expect(settingsRedirectResponse?.status()).toBe(308);
-  await expect(page).toHaveURL(
-    /\/it\/impostazioni\?tab=notifications#mail$/i,
-  );
+  await expect(page).toHaveURL(/\/it\/impostazioni\?tab=notifications#mail$/i);
 
   const loginResponse = await page.request.get("/it/login?next=%2Fit", {
     maxRedirects: 0,
@@ -448,9 +442,7 @@ test("Polish route aliases redirect to canonical translated paths", async ({
 
   expect(settingsResponse?.status()).toBe(200);
   expect(settingsRedirectResponse?.status()).toBe(308);
-  await expect(page).toHaveURL(
-    /\/pl\/ustawienia\?tab=notifications#mail$/i,
-  );
+  await expect(page).toHaveURL(/\/pl\/ustawienia\?tab=notifications#mail$/i);
 
   const loginResponse = await page.request.get("/pl/login?next=%2Fpl", {
     maxRedirects: 0,
@@ -516,8 +508,7 @@ test("Ukrainian route aliases redirect to Unicode canonical paths", async ({
   expect(registerResponse.status()).toBe(308);
   expect(
     decodeURIComponent(
-      new URL(registerResponse.headers().location, "http://localhost")
-        .pathname,
+      new URL(registerResponse.headers().location, "http://localhost").pathname,
     ),
   ).toBe("/uk/реєстрація");
 
@@ -543,9 +534,7 @@ test("Dutch route aliases redirect to canonical translated paths", async ({
 
   expect(settingsResponse?.status()).toBe(200);
   expect(settingsRedirectResponse?.status()).toBe(308);
-  await expect(page).toHaveURL(
-    /\/nl\/instellingen\?tab=notifications#mail$/i,
-  );
+  await expect(page).toHaveURL(/\/nl\/instellingen\?tab=notifications#mail$/i);
 
   const loginResponse = await page.request.get("/nl/login?next=%2Fnl", {
     maxRedirects: 0,
@@ -611,8 +600,7 @@ test("Russian route aliases redirect to Unicode canonical paths", async ({
   expect(registerResponse.status()).toBe(308);
   expect(
     decodeURIComponent(
-      new URL(registerResponse.headers().location, "http://localhost")
-        .pathname,
+      new URL(registerResponse.headers().location, "http://localhost").pathname,
     ),
   ).toBe("/ru/регистрация");
 
@@ -659,8 +647,7 @@ test("Hebrew route aliases redirect to Unicode canonical paths", async ({
   expect(registerResponse.status()).toBe(308);
   expect(
     decodeURIComponent(
-      new URL(registerResponse.headers().location, "http://localhost")
-        .pathname,
+      new URL(registerResponse.headers().location, "http://localhost").pathname,
     ),
   ).toBe("/he/הרשמה");
 
@@ -860,10 +847,7 @@ test("document locale metadata follows the active locale", async ({ page }) => {
     const loadedFaces =
       primaryFontFamily === undefined
         ? []
-        : await document.fonts.load(
-            `16px ${primaryFontFamily}`,
-            "Türkçe ğşıİ",
-          );
+        : await document.fonts.load(`16px ${primaryFontFamily}`, "Türkçe ğşıİ");
     return {
       fontFamily,
       supportsTurkish: loadedFaces.length > 0,

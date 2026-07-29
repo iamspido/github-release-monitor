@@ -42,6 +42,7 @@ RUN npm ci && npm cache clean --force
 COPY biome.json ./
 COPY tsconfig.json ./
 COPY src/ ./src/
+COPY tests/ ./tests/
 
 RUN npm run lint
 
@@ -57,8 +58,10 @@ RUN npm ci && npm cache clean --force
 
 COPY tsconfig.json ./
 COPY src/ ./src/
+COPY tests/ ./tests/
 
 RUN npm run typecheck
+RUN npm run typecheck:tests
 
 # Test Stage (runs unit tests with Vitest)
 FROM node:24-alpine AS tester
