@@ -623,6 +623,54 @@ test("Russian route aliases redirect to Unicode canonical paths", async ({
   await ensureAppLocale(page, "en");
 });
 
+test("Hebrew route aliases redirect to Unicode canonical paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "he");
+
+  const settingsResponse = await page.goto(
+    "/HE/settings?tab=notifications#mail",
+  );
+  const settingsRedirectResponse = await settingsResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(settingsResponse?.status()).toBe(200);
+  expect(settingsRedirectResponse?.status()).toBe(308);
+  expect(decodeURIComponent(new URL(page.url()).pathname)).toBe("/he/הגדרות");
+  expect(new URL(page.url()).search).toBe("?tab=notifications");
+  expect(new URL(page.url()).hash).toBe("#mail");
+
+  const loginResponse = await page.request.get("/he/login?next=%2Fhe", {
+    maxRedirects: 0,
+  });
+  expect(loginResponse.status()).toBe(308);
+  const loginLocation = new URL(
+    loginResponse.headers().location,
+    "http://localhost",
+  );
+  expect(decodeURIComponent(loginLocation.pathname)).toBe("/he/התחברות");
+  expect(loginLocation.search).toBe("?next=%2Fhe");
+
+  const registerResponse = await page.request.get("/he/register", {
+    maxRedirects: 0,
+  });
+  expect(registerResponse.status()).toBe(308);
+  expect(
+    decodeURIComponent(
+      new URL(registerResponse.headers().location, "http://localhost")
+        .pathname,
+    ),
+  ).toBe("/he/הרשמה");
+
+  const canonicalTestResponse = await page.goto("/he/בדיקה");
+  expect(canonicalTestResponse?.status()).toBe(200);
+  expect(canonicalTestResponse?.request().redirectedFrom()).toBeNull();
+
+  await ensureAppLocale(page, "en");
+});
+
 test("Arabic route aliases redirect to Unicode canonical paths", async ({
   page,
 }) => {
@@ -931,6 +979,28 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   });
   expect(russianFontState.fontFamily).toMatch(/Noto[_ ]Sans/i);
   expect(russianFontState.supportsRussian).toBe(true);
+
+  await ensureAppLocale(page, "he");
+  await expect(page.locator("html")).toHaveAttribute("lang", "he");
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "noto-hebrew",
+  );
+
+  const hebrewFontState = await page.evaluate(async () => {
+    await document.fonts.ready;
+    const fontFamily = getComputedStyle(document.body).fontFamily;
+    const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
+    return {
+      fontFamily,
+      supportsHebrew:
+        primaryFontFamily !== undefined &&
+        document.fonts.check(`16px ${primaryFontFamily}`, "עברית אבג"),
+    };
+  });
+  expect(hebrewFontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]Hebrew/i);
+  expect(hebrewFontState.supportsHebrew).toBe(true);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");

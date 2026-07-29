@@ -18,6 +18,7 @@ describe("locale display order", () => {
       "tr",
       "ru",
       "uk",
+      "he",
       "ar",
       "hi",
       "ko",
@@ -45,6 +46,7 @@ describe("locale display order", () => {
       "uk",
       "nl",
       "ru",
+      "he",
       "ar",
     ]);
   });

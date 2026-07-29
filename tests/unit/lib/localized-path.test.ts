@@ -19,6 +19,7 @@ describe("localized-path", () => {
     expect(getSupportedLocalePrefix("/UK/налаштування")).toBe("uk");
     expect(getSupportedLocalePrefix("/NL/instellingen")).toBe("nl");
     expect(getSupportedLocalePrefix("/RU/настройки")).toBe("ru");
+    expect(getSupportedLocalePrefix("/HE/הגדרות")).toBe("he");
     expect(getSupportedLocalePrefix("/invalid_locale/settings")).toBeNull();
     expect(getSupportedLocalePrefix("/unexpected")).toBeNull();
     expect(getSupportedLocalePrefix("/enterprise")).toBeNull();

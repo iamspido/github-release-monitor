@@ -91,6 +91,20 @@ describe("notifications/email", () => {
     );
   });
 
+  it("renders Hebrew email direction, bidi isolation, and RTL spacing", async () => {
+    const html = await generateHtmlReleaseBody(release, repo, "he", "24h");
+
+    expect(html).toContain('<html lang="he" dir="rtl">');
+    expect(html).toContain('html[dir="rtl"] .details-list');
+    expect(html).toContain('html[dir="rtl"] blockquote');
+    expect(html).toContain(
+      `<bdi dir="ltr" class="technical-value" style="direction: ltr; unicode-bidi: isolate;">${release.tag_name}</bdi>`,
+    );
+    expect(html).toContain(
+      `<bdi dir="ltr" style="direction: ltr; unicode-bidi: isolate;">${repo.id}</bdi>`,
+    );
+  });
+
   it("renders Brazilian Portuguese email metadata as left-to-right", async () => {
     const html = await generateHtmlReleaseBody(release, repo, "pt-BR", "24h");
 
@@ -345,6 +359,12 @@ describe("notifications/email", () => {
     expect(ru12.textDate).toMatch(/AM|PM/iu);
     expect(ru24.textDate).not.toMatch(/AM|PM/iu);
     expect(ru12.textDate).not.toBe(ru24.textDate);
+    const he12 = await getFormattedDate(date, "he", "12h");
+    const he24 = await getFormattedDate(date, "he", "24h");
+    expect(he12.htmlDate).toMatch(/\p{Script=Hebrew}/u);
+    expect(he12.textDate).toMatch(/לפנה״צ|אחה״צ|AM|PM/u);
+    expect(he24.textDate).not.toMatch(/לפנה״צ|אחה״צ|AM|PM/u);
+    expect(he12.textDate).not.toBe(he24.textDate);
     const ar12 = await getFormattedDate(date, "ar", "12h");
     const ar24 = await getFormattedDate(date, "ar", "24h");
     expect(ar12.htmlDate).toMatch(/[\u0600-\u06ff]/u);

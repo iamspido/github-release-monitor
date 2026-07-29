@@ -638,7 +638,35 @@ describe("i18n completeness", () => {
     ...russianSharedOrTechnicalLiteralKeys,
     "SettingsPage.two_factor_setup_uri_label",
   ]);
-
+  const hebrewSharedOrTechnicalLiteralKeys = new Set([
+    "Metadata.title",
+    "HomePage.title",
+    "RepositoryForm.placeholder",
+    "RepositoryForm.provider_select_github",
+    "RepositoryForm.provider_select_gitlab",
+    "RepositoryForm.provider_select_codeberg",
+    "SettingsPage.two_factor_verify_code_placeholder",
+    "SettingsPage.account_email_new_placeholder",
+    "SettingsForm.provider_github",
+    "SettingsForm.provider_gitlab",
+    "SettingsForm.provider_codeberg",
+    "SettingsForm.custom_security_patterns_placeholder",
+    "SettingsForm.apprise_format_markdown",
+    "SettingsForm.apprise_format_html",
+    "RepoSettingsDialog.version_tag_pattern_placeholder",
+    "Email.from_name_fallback",
+    "LoginPage.setup_token_placeholder",
+    "LoginPage.setup_username_placeholder",
+    "LoginPage.email_placeholder",
+    "LoginPage.social_provider_github",
+    "LoginPage.social_provider_google",
+    "LoginPage.social_identifier_placeholder",
+    "LoginPage.two_factor_login_code_placeholder",
+    "RegisterPage.username_placeholder",
+    "RegisterPage.email_placeholder",
+    "TestRelease.code_inline_code_word",
+    "TestRelease.table_row4_notes",
+  ]);
   it("detects nested ICU arguments without treating regex quantifiers as arguments", () => {
     expect(
       [
@@ -1119,6 +1147,55 @@ describe("i18n completeness", () => {
     expect(
       (messagesByLocale.ru.RepoSettingsDialog as Dict)
         .version_tag_pattern_hint,
+    ).toContain("revision");
+    expect(testPage.gitlab_token_advice).toContain("host=username:token");
+  });
+
+  it("contains Hebrew script in every translatable Hebrew message", () => {
+    const hebrewFlat = flattenKeys(messagesByLocale.he);
+    const withoutHebrew = Object.entries(hebrewFlat)
+      .filter(([key]) => !hebrewSharedOrTechnicalLiteralKeys.has(key))
+      .filter(([, value]) => !/\p{Script=Hebrew}/u.test(value))
+      .map(([key]) => key);
+
+    expect(withoutHebrew).toEqual([]);
+  });
+
+  it("keeps only shared or technical Hebrew messages identical to English", () => {
+    const hebrewFlat = flattenKeys(messagesByLocale.he);
+    const unchanged = Object.entries(hebrewFlat)
+      .filter(([key, value]) => referenceFlat[key] === value)
+      .map(([key]) => key)
+      .sort();
+
+    expect(unchanged).toEqual(
+      Array.from(hebrewSharedOrTechnicalLiteralKeys).sort(),
+    );
+  });
+
+  it("preserves technical syntax examples in Hebrew messages", () => {
+    const hebrew = messagesByLocale.he;
+    const settings = hebrew.SettingsForm as Dict;
+    const testPage = hebrew.TestPage as Dict;
+
+    expect(settings.show_provider_prefix_in_repo_id_description).toContain(
+      "provider:owner/repo",
+    );
+    expect(settings.show_provider_domain_in_repo_id_description).toContain(
+      "provider:domain/owner/repo",
+    );
+    expect(settings.custom_security_patterns_hint).toContain("/regex/flags");
+    expect(
+      settings.include_default_security_patterns_description,
+    ).toContain("security");
+    expect(
+      settings.include_default_security_patterns_description,
+    ).toContain("vulnerability");
+    expect(
+      (messagesByLocale.he.RepoSettingsDialog as Dict).version_tag_pattern_hint,
+    ).toContain("version");
+    expect(
+      (messagesByLocale.he.RepoSettingsDialog as Dict).version_tag_pattern_hint,
     ).toContain("revision");
     expect(testPage.gitlab_token_advice).toContain("host=username:token");
   });
