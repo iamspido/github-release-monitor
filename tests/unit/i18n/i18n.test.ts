@@ -130,6 +130,16 @@ describe("i18n getRequestConfig callback", () => {
     expect(result.messages).toEqual(japanese);
   });
 
+  it("loads Korean messages", async () => {
+    const getRequestConfig = await loadRequestModule();
+    const result = await getRequestConfig({
+      requestLocale: Promise.resolve("KO"),
+    });
+    const korean = (await import("../../../src/messages/ko.json")).default;
+    expect(result.locale).toBe("ko");
+    expect(result.messages).toEqual(korean);
+  });
+
   it("falls back to default locale for invalid locale", async () => {
     const getRequestConfig = await loadRequestModule();
     const result = await getRequestConfig({

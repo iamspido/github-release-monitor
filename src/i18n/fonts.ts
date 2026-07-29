@@ -5,6 +5,7 @@ import {
   Noto_Sans_Devanagari,
   Noto_Sans_Hebrew,
   Noto_Sans_JP,
+  Noto_Sans_KR,
   Noto_Sans_SC,
   Roboto,
 } from "next/font/google";
@@ -64,12 +65,19 @@ const notoCjkJp = Noto_Sans_JP({
   preload: false,
 });
 
+const notoCjkKr = Noto_Sans_KR({
+  display: "swap",
+  variable: "--font-locale-body",
+  preload: false,
+});
+
 const bodyFontVariableClassByProfile = {
   inter: inter.variable,
   noto: noto.variable,
   "noto-arabic": notoArabic.variable,
   "noto-devanagari": notoDevanagari.variable,
   "noto-cjk-jp": notoCjkJp.variable,
+  "noto-cjk-kr": notoCjkKr.variable,
   "noto-cjk-sc": notoCjkSc.variable,
   "noto-hebrew": notoHebrew.variable,
 } satisfies Record<FontProfile, string>;

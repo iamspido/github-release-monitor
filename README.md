@@ -18,8 +18,8 @@ A powerful, self-hostable application to automatically monitor GitHub, GitLab, a
     - Full dark mode support.
     - Responsive design for both desktop and mobile use.
 - **Internationalization (i18n)**: Supports English, German, French, Spanish,
-  Brazilian Portuguese, Indonesian, Hindi, Simplified Chinese, Japanese, and
-  Arabic out of the box, including right-to-left layout.
+  Brazilian Portuguese, Indonesian, Hindi, Simplified Chinese, Japanese,
+  Korean, and Arabic out of the box, including right-to-left layout.
 - **Data Management**: Easily import or export your list of monitored repositories via JSON.
 - **System Diagnostics**: A built-in test page to verify GitHub API connectivity and notification service (SMTP, Apprise) configuration.
 - **Secure Authentication**: Protects the application with Better Auth, SQLite-backed users/sessions, and one-time bootstrap setup.
@@ -557,8 +557,8 @@ language:
 
 1. Add its canonical BCP 47 code, native name, text direction, and font profile
    to the locale registry. Available profiles are `inter`, `noto`,
-   `noto-arabic`, `noto-devanagari`, `noto-cjk-jp`, `noto-cjk-sc`, and
-   `noto-hebrew`.
+   `noto-arabic`, `noto-devanagari`, `noto-cjk-jp`, `noto-cjk-kr`,
+   `noto-cjk-sc`, and `noto-hebrew`.
 2. Add a complete `src/messages/<locale>.json` dictionary. The test suite
    compares every configured dictionary and ICU placeholder with English.
 3. Add translated canonical route slugs in `src/i18n/routing.ts`. English
@@ -573,8 +573,9 @@ The locale switcher, settings validation, cookies, authentication redirects,
 message loading, document direction, Radix direction, and body font are derived
 from the registry. Arabic (`ar`) is published with Noto Sans Arabic and
 right-to-left layout support. Simplified Chinese (`zh-CN`) is published with
-Noto Sans SC, Japanese (`ja`) uses Noto Sans JP, and Hindi (`hi`) uses Noto
-Sans Devanagari. Indonesian (`id`) uses the existing Inter profile.
+Noto Sans SC, Japanese (`ja`) uses Noto Sans JP, Korean (`ko`) uses Noto Sans
+KR, and Hindi (`hi`) uses Noto Sans Devanagari. Indonesian (`id`) uses the
+existing Inter profile.
 
 ## 🔐 Social Login Setup (GitHub + Google)
 

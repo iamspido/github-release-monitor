@@ -259,6 +259,42 @@ test("Japanese route aliases redirect to Unicode canonical paths", async ({
   await ensureAppLocale(page, "en");
 });
 
+test("Korean route aliases redirect to Unicode canonical paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "ko");
+
+  const response = await page.goto("/KO/settings?tab=notifications#mail");
+  const redirectResponse = await response
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(response?.status()).toBe(200);
+  expect(redirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/ko\/%EC%84%A4%EC%A0%95\?tab=notifications#mail$/i,
+  );
+
+  const canonicalResponse = await page.goto("/ko/설정");
+  expect(canonicalResponse?.status()).toBe(200);
+  expect(canonicalResponse?.request().redirectedFrom()).toBeNull();
+
+  const testResponse = await page.goto("/ko/test?source=alias#result");
+  const testRedirectResponse = await testResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(testResponse?.status()).toBe(200);
+  expect(testRedirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/ko\/%ED%85%8C%EC%8A%A4%ED%8A%B8\?source=alias#result$/i,
+  );
+
+  await ensureAppLocale(page, "en");
+});
+
 test("Arabic route aliases redirect to Unicode canonical paths", async ({
   page,
 }) => {
@@ -410,6 +446,29 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   });
   expect(japaneseFontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]JP/i);
   expect(japaneseFontState.supportsJapanese).toBe(true);
+
+  await ensureAppLocale(page, "ko");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "noto-cjk-kr",
+  );
+
+  const koreanFontState = await page.evaluate(async () => {
+    const fontFamily = getComputedStyle(document.body).fontFamily;
+    const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
+    const loadedFaces =
+      primaryFontFamily === undefined
+        ? []
+        : await document.fonts.load(`16px ${primaryFontFamily}`, "한국어");
+    return {
+      fontFamily,
+      supportsKorean: loadedFaces.length > 0,
+    };
+  });
+  expect(koreanFontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]KR/i);
+  expect(koreanFontState.supportsKorean).toBe(true);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");

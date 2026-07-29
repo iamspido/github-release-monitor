@@ -5,6 +5,7 @@ export type FontProfile =
   | "noto-arabic"
   | "noto-devanagari"
   | "noto-cjk-jp"
+  | "noto-cjk-kr"
   | "noto-cjk-sc"
   | "noto-hebrew";
 
@@ -69,6 +70,12 @@ export const localeRegistry = [
     nativeName: "日本語",
     direction: "ltr",
     fontProfile: "noto-cjk-jp",
+  },
+  {
+    code: "ko",
+    nativeName: "한국어",
+    direction: "ltr",
+    fontProfile: "noto-cjk-kr",
   },
   {
     code: "ar",

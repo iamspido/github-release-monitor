@@ -37,6 +37,7 @@ test("time format follows locale conventions in every published locale", async (
       "hi",
       "zh-CN",
       "ja",
+      "ko",
       "ar",
     ]),
   ).toEqual(new Set(locales));
@@ -124,6 +125,16 @@ test("time format follows locale conventions in every published locale", async (
   expect(ja24).not.toMatch(/午前|午後/u);
   expect(ja24).toMatch(/\d{1,2}:\d{2}/);
   expect(ja24).not.toBe(ja12);
+
+  await ensureAppLocale(page, "ko");
+
+  const ko12 = await setFormatAndRead(page, "ko", "12");
+  expect(ko12).toMatch(/오전|오후/u);
+
+  const ko24 = await setFormatAndRead(page, "ko", "24");
+  expect(ko24).not.toMatch(/오전|오후/u);
+  expect(ko24).toMatch(/\d{1,2}:\d{2}/);
+  expect(ko24).not.toBe(ko12);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
