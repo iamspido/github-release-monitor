@@ -4,6 +4,8 @@
 
 Always use an English commit title and an English commit description for Git commits. Do not create title-only commits.
 
+For dependency version updates, the English commit description must explicitly state each updated package's previous and new version (for example, `Update foo from 1.2.3 to 1.2.4`).
+
 ## Build / Lint / Test (Docker)
 
 Prefer Docker for lint/typecheck/tests. Avoid running `node`/`npm` directly on the host unless explicitly requested (some environments may have snap/permission issues).
