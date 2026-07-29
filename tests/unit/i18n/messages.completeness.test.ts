@@ -559,6 +559,50 @@ describe("i18n completeness", () => {
     ...ukrainianSharedOrTechnicalLiteralKeys,
     "SettingsPage.two_factor_setup_uri_label",
   ]);
+  const dutchSharedOrTechnicalLiteralKeys = new Set([
+    "Metadata.title",
+    "HomePage.title",
+    "HomePage.sort_repo_az",
+    "HomePage.sort_repo_za",
+    "HomePage.view_mode_compact",
+    "HomePage.tag_filter_label",
+    "HomePage.tag_filter_active",
+    "RepositoryForm.placeholder",
+    "RepositoryForm.provider_select_github",
+    "RepositoryForm.provider_select_gitlab",
+    "RepositoryForm.provider_select_codeberg",
+    "ReleaseCard.offline_tooltip",
+    "SettingsPage.passkeys_title",
+    "SettingsPage.two_factor_verify_code_placeholder",
+    "SettingsForm.release_sort_repo_az",
+    "SettingsForm.release_sort_repo_za",
+    "SettingsForm.provider_github",
+    "SettingsForm.provider_gitlab",
+    "SettingsForm.provider_codeberg",
+    "SettingsForm.custom_security_patterns_placeholder",
+    "SettingsForm.automation_mode_interval",
+    "SettingsForm.cron_time_am",
+    "SettingsForm.cron_time_pm",
+    "SettingsForm.apprise_format_markdown",
+    "SettingsForm.apprise_format_html",
+    "SettingsForm.release_channel_prerelease",
+    "RepoSettingsDialog.version_tag_pattern_placeholder",
+    "Email.from_name_fallback",
+    "LoginPage.setup_token_placeholder",
+    "LoginPage.setup_username_placeholder",
+    "LoginPage.email_placeholder",
+    "LoginPage.social_provider_github",
+    "LoginPage.social_provider_google",
+    "LoginPage.social_identifier_placeholder",
+    "LoginPage.two_factor_login_code_placeholder",
+    "RegisterPage.username_placeholder",
+    "RegisterPage.email_placeholder",
+    "TestRelease.list_item_1",
+    "TestRelease.list_item_2",
+    "TestRelease.section_links",
+    "TestRelease.code_inline_code_word",
+    "TestRelease.table_row4_notes",
+  ]);
 
   it("detects nested ICU arguments without treating regex quantifiers as arguments", () => {
     expect(
@@ -947,6 +991,47 @@ describe("i18n completeness", () => {
     ).toContain("version");
     expect(
       (messagesByLocale.uk.RepoSettingsDialog as Dict)
+        .version_tag_pattern_hint,
+    ).toContain("revision");
+    expect(testPage.gitlab_token_advice).toContain("host=username:token");
+  });
+
+  it("keeps only shared or technical Dutch messages identical to English", () => {
+    const dutchFlat = flattenKeys(messagesByLocale.nl);
+    const unchanged = Object.entries(dutchFlat)
+      .filter(([key, value]) => referenceFlat[key] === value)
+      .map(([key]) => key)
+      .sort();
+
+    expect(unchanged).toEqual(
+      Array.from(dutchSharedOrTechnicalLiteralKeys).sort(),
+    );
+  });
+
+  it("preserves technical syntax examples in Dutch messages", () => {
+    const dutch = messagesByLocale.nl;
+    const settings = dutch.SettingsForm as Dict;
+    const testPage = dutch.TestPage as Dict;
+
+    expect(settings.show_provider_prefix_in_repo_id_description).toContain(
+      "provider:owner/repo",
+    );
+    expect(settings.show_provider_domain_in_repo_id_description).toContain(
+      "provider:domain/owner/repo",
+    );
+    expect(settings.custom_security_patterns_hint).toContain("/regex/flags");
+    expect(
+      settings.include_default_security_patterns_description,
+    ).toContain("security");
+    expect(
+      settings.include_default_security_patterns_description,
+    ).toContain("vulnerability");
+    expect(
+      (messagesByLocale.nl.RepoSettingsDialog as Dict)
+        .version_tag_pattern_hint,
+    ).toContain("version");
+    expect(
+      (messagesByLocale.nl.RepoSettingsDialog as Dict)
         .version_tag_pattern_hint,
     ).toContain("revision");
     expect(testPage.gitlab_token_advice).toContain("host=username:token");

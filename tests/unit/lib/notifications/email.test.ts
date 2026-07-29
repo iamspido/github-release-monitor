@@ -157,6 +157,12 @@ describe("notifications/email", () => {
     expect(html).toContain('<html lang="uk" dir="ltr">');
   });
 
+  it("renders Dutch email metadata as left-to-right", async () => {
+    const html = await generateHtmlReleaseBody(release, repo, "nl", "24h");
+
+    expect(html).toContain('<html lang="nl" dir="ltr">');
+  });
+
   it("replaces every repository placeholder in a translated HTML intro", async () => {
     const html = await generateHtmlReleaseBody(release, repo, "en", "24h");
 
@@ -323,6 +329,11 @@ describe("notifications/email", () => {
     expect(uk12.textDate).toMatch(/дп|пп/iu);
     expect(uk24.textDate).not.toMatch(/дп|пп/iu);
     expect(uk12.textDate).not.toBe(uk24.textDate);
+    const nl12 = await getFormattedDate(date, "nl", "12h");
+    const nl24 = await getFormattedDate(date, "nl", "24h");
+    expect(nl12.textDate).toMatch(/[ap]\.?\s*m\.?/iu);
+    expect(nl24.textDate).not.toMatch(/[ap]\.?\s*m\.?/iu);
+    expect(nl12.textDate).not.toBe(nl24.textDate);
     const ar12 = await getFormattedDate(date, "ar", "12h");
     const ar24 = await getFormattedDate(date, "ar", "24h");
     expect(ar12.htmlDate).toMatch(/[\u0600-\u06ff]/u);

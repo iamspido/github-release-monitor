@@ -528,6 +528,51 @@ test("Ukrainian route aliases redirect to Unicode canonical paths", async ({
   await ensureAppLocale(page, "en");
 });
 
+test("Dutch route aliases redirect to canonical translated paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "nl");
+
+  const settingsResponse = await page.goto(
+    "/NL/settings?tab=notifications#mail",
+  );
+  const settingsRedirectResponse = await settingsResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(settingsResponse?.status()).toBe(200);
+  expect(settingsRedirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/nl\/instellingen\?tab=notifications#mail$/i,
+  );
+
+  const loginResponse = await page.request.get("/nl/login?next=%2Fnl", {
+    maxRedirects: 0,
+  });
+  expect(loginResponse.status()).toBe(308);
+  const loginLocation = new URL(
+    loginResponse.headers().location,
+    "http://localhost",
+  );
+  expect(loginLocation.pathname).toBe("/nl/inloggen");
+  expect(loginLocation.search).toBe("?next=%2Fnl");
+
+  const registerResponse = await page.request.get("/nl/register", {
+    maxRedirects: 0,
+  });
+  expect(registerResponse.status()).toBe(308);
+  expect(
+    new URL(registerResponse.headers().location, "http://localhost").pathname,
+  ).toBe("/nl/registreren");
+
+  const canonicalTestResponse = await page.goto("/nl/test");
+  expect(canonicalTestResponse?.status()).toBe(200);
+  expect(canonicalTestResponse?.request().redirectedFrom()).toBeNull();
+
+  await ensureAppLocale(page, "en");
+});
+
 test("Arabic route aliases redirect to Unicode canonical paths", async ({
   page,
 }) => {
@@ -802,6 +847,17 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   });
   expect(ukrainianFontState.fontFamily).toMatch(/Noto[_ ]Sans/i);
   expect(ukrainianFontState.supportsUkrainian).toBe(true);
+
+  await ensureAppLocale(page, "nl");
+  await expect(page.locator("html")).toHaveAttribute("lang", "nl");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "inter",
+  );
+  expect(
+    await page.evaluate(() => getComputedStyle(document.body).fontFamily),
+  ).toMatch(/Inter/i);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");

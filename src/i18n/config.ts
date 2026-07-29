@@ -108,6 +108,12 @@ export const localeRegistry = [
     fontProfile: "noto",
   },
   {
+    code: "nl",
+    nativeName: "Nederlands",
+    direction: "ltr",
+    fontProfile: "inter",
+  },
+  {
     code: "ar",
     nativeName: "العربية",
     direction: "rtl",

@@ -23,6 +23,7 @@ export const pathnames = {
     it: "/",
     pl: "/",
     uk: "/",
+    nl: "/",
     ar: "/",
   },
   "/settings": {
@@ -41,6 +42,7 @@ export const pathnames = {
     it: "/impostazioni",
     pl: "/ustawienia",
     uk: "/налаштування",
+    nl: "/instellingen",
     ar: "/الإعدادات",
   },
   "/login": {
@@ -59,6 +61,7 @@ export const pathnames = {
     it: "/accesso",
     pl: "/logowanie",
     uk: "/вхід",
+    nl: "/inloggen",
     ar: "/تسجيل-الدخول",
   },
   "/register": {
@@ -77,6 +80,7 @@ export const pathnames = {
     it: "/registrazione",
     pl: "/rejestracja",
     uk: "/реєстрація",
+    nl: "/registreren",
     ar: "/إنشاء-حساب",
   },
   "/test": {
@@ -95,6 +99,7 @@ export const pathnames = {
     it: "/test",
     pl: "/test",
     uk: "/тест",
+    nl: "/test",
     ar: "/اختبار",
   },
 } satisfies Pathnames<typeof locales>;
