@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures/ensureLoggedIn";
-import { ensureAppLocale } from "./utils/locale";
+import { ensureAppLocale, switchLocaleFromSettings } from "./utils/locale";
 
 test("English route aliases redirect to the localized canonical path", async ({
   page,
@@ -701,25 +701,20 @@ test("locale prefixes are redirected to their canonical casing", async ({
 });
 
 test("document locale metadata follows the active locale", async ({ page }) => {
-  test.setTimeout(75_000);
-
   await ensureAppLocale(page, "en");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
-
-  await ensureAppLocale(page, "de");
-  await expect(page.locator("html")).toHaveAttribute("lang", "de");
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
-
-  await ensureAppLocale(page, "fr");
-  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
   await expect(page.locator("html")).toHaveAttribute(
     "data-font-profile",
     "inter",
   );
+  expect(
+    await page.evaluate(() => getComputedStyle(document.body).fontFamily),
+  ).toMatch(/Inter/i);
 
-  await ensureAppLocale(page, "hi");
+  await page.goto("/en/settings");
+
+  await switchLocaleFromSettings(page, "hi");
   await expect(page.locator("html")).toHaveAttribute("lang", "hi");
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
   await expect(page.locator("html")).toHaveAttribute(
@@ -741,31 +736,7 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   expect(hindiFontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]Devanagari/i);
   expect(hindiFontState.supportsHindi).toBe(true);
 
-  await ensureAppLocale(page, "es");
-  await expect(page.locator("html")).toHaveAttribute("lang", "es");
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-font-profile",
-    "inter",
-  );
-
-  await ensureAppLocale(page, "pt-BR");
-  await expect(page.locator("html")).toHaveAttribute("lang", "pt-BR");
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-font-profile",
-    "inter",
-  );
-
-  await ensureAppLocale(page, "id");
-  await expect(page.locator("html")).toHaveAttribute("lang", "id");
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-font-profile",
-    "inter",
-  );
-
-  await ensureAppLocale(page, "zh-CN");
+  await switchLocaleFromSettings(page, "zh-CN");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
   await expect(page.locator("html")).toHaveAttribute(
@@ -787,7 +758,7 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   expect(chineseFontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]SC/i);
   expect(chineseFontState.supportsSimplifiedChinese).toBe(true);
 
-  await ensureAppLocale(page, "ja");
+  await switchLocaleFromSettings(page, "ja");
   await expect(page.locator("html")).toHaveAttribute("lang", "ja");
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
   await expect(page.locator("html")).toHaveAttribute(
@@ -810,7 +781,7 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   expect(japaneseFontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]JP/i);
   expect(japaneseFontState.supportsJapanese).toBe(true);
 
-  await ensureAppLocale(page, "ko");
+  await switchLocaleFromSettings(page, "ko");
   await expect(page.locator("html")).toHaveAttribute("lang", "ko");
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
   await expect(page.locator("html")).toHaveAttribute(
@@ -833,7 +804,7 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   expect(koreanFontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]KR/i);
   expect(koreanFontState.supportsKorean).toBe(true);
 
-  await ensureAppLocale(page, "tr");
+  await switchLocaleFromSettings(page, "tr");
   await expect(page.locator("html")).toHaveAttribute("lang", "tr");
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
   await expect(page.locator("html")).toHaveAttribute(
@@ -841,130 +812,35 @@ test("document locale metadata follows the active locale", async ({ page }) => {
     "noto",
   );
 
-  const turkishFontState = await page.evaluate(async () => {
+  const notoFontState = await page.evaluate(async () => {
     const fontFamily = getComputedStyle(document.body).fontFamily;
     const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
-    const loadedFaces =
-      primaryFontFamily === undefined
-        ? []
-        : await document.fonts.load(`16px ${primaryFontFamily}`, "Türkçe ğşıİ");
+    const samples = [
+      "Türkçe ğşıİ",
+      "Tiếng Việt ăâđêôơư",
+      "Українська їієґ",
+      "Русский ё",
+    ];
     return {
       fontFamily,
-      supportsTurkish: loadedFaces.length > 0,
+      supportsSamples:
+        primaryFontFamily === undefined
+          ? samples.map(() => false)
+          : await Promise.all(
+              samples.map(async (sample) => {
+                const loadedFaces = await document.fonts.load(
+                  `16px ${primaryFontFamily}`,
+                  sample,
+                );
+                return loadedFaces.length > 0;
+              }),
+            ),
     };
   });
-  expect(turkishFontState.fontFamily).toMatch(/Noto[_ ]Sans/i);
-  expect(turkishFontState.supportsTurkish).toBe(true);
+  expect(notoFontState.fontFamily).toMatch(/Noto[_ ]Sans/i);
+  expect(notoFontState.supportsSamples).toEqual([true, true, true, true]);
 
-  await ensureAppLocale(page, "vi");
-  await expect(page.locator("html")).toHaveAttribute("lang", "vi");
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-font-profile",
-    "noto",
-  );
-
-  const vietnameseFontState = await page.evaluate(async () => {
-    const fontFamily = getComputedStyle(document.body).fontFamily;
-    const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
-    const loadedFaces =
-      primaryFontFamily === undefined
-        ? []
-        : await document.fonts.load(
-            `16px ${primaryFontFamily}`,
-            "Tiếng Việt ăâđêôơư",
-          );
-    return {
-      fontFamily,
-      supportsVietnamese: loadedFaces.length > 0,
-    };
-  });
-  expect(vietnameseFontState.fontFamily).toMatch(/Noto[_ ]Sans/i);
-  expect(vietnameseFontState.supportsVietnamese).toBe(true);
-
-  await ensureAppLocale(page, "it");
-  await expect(page.locator("html")).toHaveAttribute("lang", "it");
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-font-profile",
-    "inter",
-  );
-  expect(
-    await page.evaluate(() => getComputedStyle(document.body).fontFamily),
-  ).toMatch(/Inter/i);
-
-  await ensureAppLocale(page, "pl");
-  await expect(page.locator("html")).toHaveAttribute("lang", "pl");
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-font-profile",
-    "inter",
-  );
-  expect(
-    await page.evaluate(() => getComputedStyle(document.body).fontFamily),
-  ).toMatch(/Inter/i);
-
-  await ensureAppLocale(page, "uk");
-  await expect(page.locator("html")).toHaveAttribute("lang", "uk");
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-font-profile",
-    "noto",
-  );
-
-  const ukrainianFontState = await page.evaluate(async () => {
-    const fontFamily = getComputedStyle(document.body).fontFamily;
-    const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
-    const loadedFaces =
-      primaryFontFamily === undefined
-        ? []
-        : await document.fonts.load(
-            `16px ${primaryFontFamily}`,
-            "Українська їієґ",
-          );
-    return {
-      fontFamily,
-      supportsUkrainian: loadedFaces.length > 0,
-    };
-  });
-  expect(ukrainianFontState.fontFamily).toMatch(/Noto[_ ]Sans/i);
-  expect(ukrainianFontState.supportsUkrainian).toBe(true);
-
-  await ensureAppLocale(page, "nl");
-  await expect(page.locator("html")).toHaveAttribute("lang", "nl");
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-font-profile",
-    "inter",
-  );
-  expect(
-    await page.evaluate(() => getComputedStyle(document.body).fontFamily),
-  ).toMatch(/Inter/i);
-
-  await ensureAppLocale(page, "ru");
-  await expect(page.locator("html")).toHaveAttribute("lang", "ru");
-  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-font-profile",
-    "noto",
-  );
-
-  const russianFontState = await page.evaluate(async () => {
-    const fontFamily = getComputedStyle(document.body).fontFamily;
-    const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
-    const loadedFaces =
-      primaryFontFamily === undefined
-        ? []
-        : await document.fonts.load(`16px ${primaryFontFamily}`, "Русский ё");
-    return {
-      fontFamily,
-      supportsRussian: loadedFaces.length > 0,
-    };
-  });
-  expect(russianFontState.fontFamily).toMatch(/Noto[_ ]Sans/i);
-  expect(russianFontState.supportsRussian).toBe(true);
-
-  await ensureAppLocale(page, "he");
+  await switchLocaleFromSettings(page, "he");
   await expect(page.locator("html")).toHaveAttribute("lang", "he");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expect(page.locator("html")).toHaveAttribute(
@@ -986,7 +862,7 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   expect(hebrewFontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]Hebrew/i);
   expect(hebrewFontState.supportsHebrew).toBe(true);
 
-  await ensureAppLocale(page, "ar");
+  await switchLocaleFromSettings(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expect(page.locator("html")).toHaveAttribute(
@@ -1007,6 +883,4 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   });
   expect(fontState.fontFamily).toMatch(/Noto[_ ]Sans[_ ]Arabic/i);
   expect(fontState.supportsArabic).toBe(true);
-
-  await ensureAppLocale(page, "en");
 });

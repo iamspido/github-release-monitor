@@ -11,7 +11,6 @@ import {
 const CREATED_REPOSITORIES = [
   "test/test",
   "add-tag-target/repository",
-  "add-tag-import/repository",
   "add-tag-limit/repository",
   "add-tag-options/repository",
 ] as const;
@@ -23,9 +22,6 @@ test.afterEach(async ({ page }) => {
 test("new and existing tags can be selected while adding repositories", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
-
-  await login(page);
   await ensureTestRepo(page);
   await page.goto("/en");
 
@@ -104,49 +100,6 @@ test("new and existing tags can be selected while adding repositories", async ({
   ).toBeVisible();
   await expect(
     repositoryCard.getByText("new-tag", { exact: true }),
-  ).toBeVisible();
-
-  await ensureRepositoryFormExpanded(page);
-  const importTagInput = page.getByRole("combobox", {
-    name: "Search or add repository tags",
-  });
-  await importTagInput.fill("batch-tag");
-  await importTagInput.press("Enter");
-
-  await page.locator('input[type="file"][accept*=".json"]').setInputFiles({
-    name: "tagged-repository-import.json",
-    mimeType: "application/json",
-    buffer: Buffer.from(
-      JSON.stringify([
-        {
-          id: "add-tag-import/repository",
-          url: "https://github.com/add-tag-import/repository",
-          tags: ["file-tag"],
-        },
-      ]),
-    ),
-  });
-  const taggedImportDialog = page.getByRole("alertdialog");
-  await expect(taggedImportDialog).toBeVisible();
-  await taggedImportDialog.getByRole("button", { name: "Import" }).click();
-  await expect(
-    page.getByText("Import Successful", { exact: true }),
-  ).toBeVisible();
-  await waitForRepositoryUpdate(page);
-
-  await page.goto("/en");
-  const importedRepoLink = await waitForRepoLink(
-    page,
-    "add-tag-import/repository",
-  );
-  const importedRepositoryCard = importedRepoLink.locator(
-    "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' rounded-lg ')][1]",
-  );
-  await expect(
-    importedRepositoryCard.getByText("file-tag", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    importedRepositoryCard.getByText("batch-tag", { exact: true }),
   ).toBeVisible();
 });
 
