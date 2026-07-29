@@ -39,6 +39,7 @@ describe("proxy/locale-routing", () => {
     ["/JA/設定", { locale: "ja", restPath: "/設定" }],
     ["/KO/설정", { locale: "ko", restPath: "/설정" }],
     ["/TR/ayarlar", { locale: "tr", restPath: "/ayarlar" }],
+    ["/VI/cai-dat", { locale: "vi", restPath: "/cai-dat" }],
     ["/settings", { locale: null, restPath: "/settings" }],
     ["", { locale: null, restPath: "/" }],
   ] as const)("splits locale path %j", (pathname, expected) => {
@@ -62,6 +63,7 @@ describe("proxy/locale-routing", () => {
     expect(getRouteAliases("/settings", "ja")).toContain("/settings");
     expect(getRouteAliases("/settings", "ko")).toContain("/settings");
     expect(getRouteAliases("/settings", "tr")).toContain("/settings");
+    expect(getRouteAliases("/settings", "vi")).toContain("/settings");
     expect(getRouteAliases("/settings", "ar")).toContain("/settings");
     expect(getRouteAliases("/test", "tr")).not.toContain("/test");
   });
@@ -106,6 +108,10 @@ describe("proxy/locale-routing", () => {
     expect(getRouteKeyForPath("tr", "/tr/giriş")).toBe("/login");
     expect(getRouteKeyForPath("tr", "/tr/kayıt")).toBe("/register");
     expect(getRouteKeyForPath("tr", "/tr/test")).toBe("/test");
+    expect(getRouteKeyForPath("vi", "/vi/cai-dat")).toBe("/settings");
+    expect(getRouteKeyForPath("vi", "/vi/dang-nhap")).toBe("/login");
+    expect(getRouteKeyForPath("vi", "/vi/dang-ky")).toBe("/register");
+    expect(getRouteKeyForPath("vi", "/vi/kiem-tra")).toBe("/test");
     expect(getRouteKeyForPath("en", "/en/unknown")).toBeNull();
     expect(
       getRouteKeyForPath(
@@ -144,6 +150,9 @@ describe("proxy/locale-routing", () => {
     expect(resolveLocalizedRestPath("/login", "tr")).toBe("/giriş");
     expect(resolveLocalizedRestPath("/register", "tr")).toBe("/kayıt");
     expect(resolveLocalizedRestPath("/test", "tr")).toBe("/test");
+    expect(resolveLocalizedRestPath("/login", "vi")).toBe("/dang-nhap");
+    expect(resolveLocalizedRestPath("/register", "vi")).toBe("/dang-ky");
+    expect(resolveLocalizedRestPath("/test", "vi")).toBe("/kiem-tra");
     expect(resolveLocalizedRestPath("/unknown/", "de", "en")).toBe("/unknown");
     expect(resolveLocalizedRestPath("/", "de", "en")).toBe("/");
     expect(getLocalizedLoginPath("de")).toBe("/anmelden");
@@ -156,6 +165,7 @@ describe("proxy/locale-routing", () => {
     expect(getLocalizedLoginPath("ja")).toBe("/ログイン");
     expect(getLocalizedLoginPath("ko")).toBe("/로그인");
     expect(getLocalizedLoginPath("tr")).toBe("/giriş");
+    expect(getLocalizedLoginPath("vi")).toBe("/dang-nhap");
     expect(getLocalizedLoginPath("ar")).toBe("/تسجيل-الدخول");
     expect(getRouteMatchForPath("de", "/de/settings")).toEqual({
       routeKey: "/settings",

@@ -338,6 +338,56 @@ test("Turkish route aliases redirect to canonical paths", async ({ page }) => {
   await ensureAppLocale(page, "en");
 });
 
+test("Vietnamese route aliases redirect to canonical translated paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "vi");
+
+  const settingsResponse = await page.goto(
+    "/VI/settings?tab=notifications#mail",
+  );
+  const settingsRedirectResponse = await settingsResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(settingsResponse?.status()).toBe(200);
+  expect(settingsRedirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(
+    /\/vi\/cai-dat\?tab=notifications#mail$/i,
+  );
+
+  const loginResponse = await page.request.get("/vi/login?next=%2Fvi", {
+    maxRedirects: 0,
+  });
+  expect(loginResponse.status()).toBe(308);
+  const loginLocation = new URL(
+    loginResponse.headers().location,
+    "http://localhost",
+  );
+  expect(loginLocation.pathname).toBe("/vi/dang-nhap");
+  expect(loginLocation.search).toBe("?next=%2Fvi");
+
+  const registerResponse = await page.request.get("/vi/register", {
+    maxRedirects: 0,
+  });
+  expect(registerResponse.status()).toBe(308);
+  expect(
+    new URL(registerResponse.headers().location, "http://localhost").pathname,
+  ).toBe("/vi/dang-ky");
+
+  const testResponse = await page.goto("/vi/test?source=alias#result");
+  const testRedirectResponse = await testResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+  expect(testResponse?.status()).toBe(200);
+  expect(testRedirectResponse?.status()).toBe(308);
+  await expect(page).toHaveURL(/\/vi\/kiem-tra\?source=alias#result$/);
+
+  await ensureAppLocale(page, "en");
+});
+
 test("Arabic route aliases redirect to Unicode canonical paths", async ({
   page,
 }) => {
@@ -538,6 +588,32 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   });
   expect(turkishFontState.fontFamily).toMatch(/Noto[_ ]Sans/i);
   expect(turkishFontState.supportsTurkish).toBe(true);
+
+  await ensureAppLocale(page, "vi");
+  await expect(page.locator("html")).toHaveAttribute("lang", "vi");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "noto",
+  );
+
+  const vietnameseFontState = await page.evaluate(async () => {
+    const fontFamily = getComputedStyle(document.body).fontFamily;
+    const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
+    const loadedFaces =
+      primaryFontFamily === undefined
+        ? []
+        : await document.fonts.load(
+            `16px ${primaryFontFamily}`,
+            "Tiếng Việt ăâđêôơư",
+          );
+    return {
+      fontFamily,
+      supportsVietnamese: loadedFaces.length > 0,
+    };
+  });
+  expect(vietnameseFontState.fontFamily).toMatch(/Noto[_ ]Sans/i);
+  expect(vietnameseFontState.supportsVietnamese).toBe(true);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");

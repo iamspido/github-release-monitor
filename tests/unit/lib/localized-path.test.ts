@@ -13,6 +13,7 @@ describe("localized-path", () => {
     expect(getSupportedLocalePrefix("/HI/सेटिंग्स")).toBe("hi");
     expect(getSupportedLocalePrefix("/KO/설정")).toBe("ko");
     expect(getSupportedLocalePrefix("/TR/ayarlar")).toBe("tr");
+    expect(getSupportedLocalePrefix("/VI/cai-dat")).toBe("vi");
     expect(getSupportedLocalePrefix("/it/settings")).toBeNull();
     expect(getSupportedLocalePrefix("/unexpected")).toBeNull();
     expect(getSupportedLocalePrefix("/enterprise")).toBeNull();

@@ -19,6 +19,7 @@ export const pathnames = {
     ja: "/",
     ko: "/",
     tr: "/",
+    vi: "/",
     ar: "/",
   },
   "/settings": {
@@ -33,6 +34,7 @@ export const pathnames = {
     ja: "/設定",
     ko: "/설정",
     tr: "/ayarlar",
+    vi: "/cai-dat",
     ar: "/الإعدادات",
   },
   "/login": {
@@ -47,6 +49,7 @@ export const pathnames = {
     ja: "/ログイン",
     ko: "/로그인",
     tr: "/giriş",
+    vi: "/dang-nhap",
     ar: "/تسجيل-الدخول",
   },
   "/register": {
@@ -61,6 +64,7 @@ export const pathnames = {
     ja: "/登録",
     ko: "/회원가입",
     tr: "/kayıt",
+    vi: "/dang-ky",
     ar: "/إنشاء-حساب",
   },
   "/test": {
@@ -75,6 +79,7 @@ export const pathnames = {
     ja: "/テスト",
     ko: "/테스트",
     tr: "/test",
+    vi: "/kiem-tra",
     ar: "/اختبار",
   },
 } satisfies Pathnames<typeof locales>;
