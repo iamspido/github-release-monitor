@@ -14,7 +14,8 @@ describe("localized-path", () => {
     expect(getSupportedLocalePrefix("/KO/설정")).toBe("ko");
     expect(getSupportedLocalePrefix("/TR/ayarlar")).toBe("tr");
     expect(getSupportedLocalePrefix("/VI/cai-dat")).toBe("vi");
-    expect(getSupportedLocalePrefix("/it/settings")).toBeNull();
+    expect(getSupportedLocalePrefix("/IT/impostazioni")).toBe("it");
+    expect(getSupportedLocalePrefix("/invalid_locale/settings")).toBeNull();
     expect(getSupportedLocalePrefix("/unexpected")).toBeNull();
     expect(getSupportedLocalePrefix("/enterprise")).toBeNull();
     expect(getSupportedLocalePrefix("en/settings")).toBeNull();

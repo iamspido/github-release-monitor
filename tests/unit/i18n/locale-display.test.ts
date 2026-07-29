@@ -10,6 +10,7 @@ describe("locale display order", () => {
       "de",
       "es",
       "fr",
+      "it",
       "pt-BR",
       "vi",
       "tr",
@@ -35,6 +36,7 @@ describe("locale display order", () => {
       "ko",
       "tr",
       "vi",
+      "it",
       "ar",
     ]);
   });

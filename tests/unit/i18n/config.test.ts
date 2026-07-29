@@ -25,8 +25,9 @@ describe("i18n locale config", () => {
     expect(parseLocale("KO")).toBe("ko");
     expect(parseLocale("TR")).toBe("tr");
     expect(parseLocale("VI")).toBe("vi");
+    expect(parseLocale("IT")).toBe("it");
     expect(parseLocale("AR")).toBe("ar");
-    expect(parseLocale("it")).toBeNull();
+    expect(parseLocale("invalid_locale")).toBeNull();
     expect(parseLocale(null)).toBeNull();
   });
 
@@ -43,11 +44,12 @@ describe("i18n locale config", () => {
     expect(isSupportedLocale("ko")).toBe(true);
     expect(isSupportedLocale("tr")).toBe(true);
     expect(isSupportedLocale("vi")).toBe(true);
+    expect(isSupportedLocale("it")).toBe(true);
     expect(isSupportedLocale("ar")).toBe(true);
     expect(isSupportedLocale("pt-br")).toBe(false);
     expect(isSupportedLocale("zh-cn")).toBe(false);
     expect(isSupportedLocale("DE")).toBe(false);
-    expect(isSupportedLocale("it")).toBe(false);
+    expect(isSupportedLocale("invalid_locale")).toBe(false);
   });
 
   it("provides complete metadata for every locale", () => {
@@ -122,6 +124,12 @@ describe("i18n locale config", () => {
       nativeName: "Tiếng Việt",
       direction: "ltr",
       fontProfile: "noto",
+    });
+    expect(getLocaleMetadata("it")).toMatchObject({
+      code: "it",
+      nativeName: "Italiano",
+      direction: "ltr",
+      fontProfile: "inter",
     });
     expect(getLocaleMetadata("ar")).toMatchObject({
       code: "ar",

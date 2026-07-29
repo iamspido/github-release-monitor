@@ -576,7 +576,8 @@ right-to-left layout support. Simplified Chinese (`zh-CN`) is published with
 Noto Sans SC, Japanese (`ja`) uses Noto Sans JP, Korean (`ko`) uses Noto Sans
 KR, Hindi (`hi`) uses Noto Sans Devanagari, and Turkish (`tr`) uses Noto Sans
 for Latin Extended coverage. Vietnamese (`vi`) also uses Noto Sans for its
-extended Latin diacritics. Indonesian (`id`) uses the existing Inter profile.
+extended Latin diacritics. Italian (`it`) and Indonesian (`id`) use the
+existing Inter profile.
 
 ## 🔐 Social Login Setup (GitHub + Google)
 

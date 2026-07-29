@@ -40,6 +40,7 @@ test("time format follows locale conventions in every published locale", async (
       "ko",
       "tr",
       "vi",
+      "it",
       "ar",
     ]),
   ).toEqual(new Set(locales));
@@ -157,6 +158,16 @@ test("time format follows locale conventions in every published locale", async (
   expect(vi24).not.toMatch(/SA|CH/u);
   expect(vi24).toMatch(/\d{1,2}:\d{2}/);
   expect(vi24).not.toBe(vi12);
+
+  await ensureAppLocale(page, "it");
+
+  const it12 = await setFormatAndRead(page, "it", "12");
+  expect(it12).toMatch(/AM|PM/u);
+
+  const it24 = await setFormatAndRead(page, "it", "24");
+  expect(it24).not.toMatch(/AM|PM/u);
+  expect(it24).toMatch(/\d{1,2}:\d{2}/);
+  expect(it24).not.toBe(it12);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");

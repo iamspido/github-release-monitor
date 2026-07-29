@@ -33,6 +33,12 @@ Use this to regenerate `package-lock.json` in a clean Node 24 Alpine container w
 Use this to check for outdated packages in a temporary container setup.
 - `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app node:24-alpine sh -c "npm ci --ignore-scripts --no-audit --no-fund && npm outdated && rm -rf node_modules"`
 
+## Translations
+
+The agent must author translations directly and locally. Do not use external
+translation services, translation APIs, or third-party translation tools, and
+do not upload or send repository message catalogs to them.
+
 ## Project Structure for Codex Navigation
 
 - `/src`: Next.js application source
@@ -56,7 +62,7 @@ Use this to check for outdated packages in a temporary container setup.
     - `/settings`: Settings form models, change detection, schedule fields, and update commands
     - `/storage`: JSON-backed repository/settings/status/job persistence
     - Root utilities remain for small shared helpers such as logging, release sorting, security release detection, and server action errors
-  - `/messages`: Translation dictionaries (`en.json`, `de.json`)
+  - `/messages`: One translation dictionary per registered locale
   - `/types`: Shared TypeScript types used across server/client
   - `proxy.ts`: Middleware-style routing/auth/security headers logic
 - `/tests`: Test suite
