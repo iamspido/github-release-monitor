@@ -478,6 +478,56 @@ test("Polish route aliases redirect to canonical translated paths", async ({
   await ensureAppLocale(page, "en");
 });
 
+test("Ukrainian route aliases redirect to Unicode canonical paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "uk");
+
+  const settingsResponse = await page.goto(
+    "/UK/settings?tab=notifications#mail",
+  );
+  const settingsRedirectResponse = await settingsResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(settingsResponse?.status()).toBe(200);
+  expect(settingsRedirectResponse?.status()).toBe(308);
+  expect(decodeURIComponent(new URL(page.url()).pathname)).toBe(
+    "/uk/налаштування",
+  );
+  expect(new URL(page.url()).search).toBe("?tab=notifications");
+  expect(new URL(page.url()).hash).toBe("#mail");
+
+  const loginResponse = await page.request.get("/uk/login?next=%2Fuk", {
+    maxRedirects: 0,
+  });
+  expect(loginResponse.status()).toBe(308);
+  const loginLocation = new URL(
+    loginResponse.headers().location,
+    "http://localhost",
+  );
+  expect(decodeURIComponent(loginLocation.pathname)).toBe("/uk/вхід");
+  expect(loginLocation.search).toBe("?next=%2Fuk");
+
+  const registerResponse = await page.request.get("/uk/register", {
+    maxRedirects: 0,
+  });
+  expect(registerResponse.status()).toBe(308);
+  expect(
+    decodeURIComponent(
+      new URL(registerResponse.headers().location, "http://localhost")
+        .pathname,
+    ),
+  ).toBe("/uk/реєстрація");
+
+  const canonicalTestResponse = await page.goto("/uk/тест");
+  expect(canonicalTestResponse?.status()).toBe(200);
+  expect(canonicalTestResponse?.request().redirectedFrom()).toBeNull();
+
+  await ensureAppLocale(page, "en");
+});
+
 test("Arabic route aliases redirect to Unicode canonical paths", async ({
   page,
 }) => {
@@ -521,7 +571,7 @@ test("locale prefixes are redirected to their canonical casing", async ({
 });
 
 test("document locale metadata follows the active locale", async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(75_000);
 
   await ensureAppLocale(page, "en");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
@@ -726,6 +776,32 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   expect(
     await page.evaluate(() => getComputedStyle(document.body).fontFamily),
   ).toMatch(/Inter/i);
+
+  await ensureAppLocale(page, "uk");
+  await expect(page.locator("html")).toHaveAttribute("lang", "uk");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "noto",
+  );
+
+  const ukrainianFontState = await page.evaluate(async () => {
+    const fontFamily = getComputedStyle(document.body).fontFamily;
+    const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
+    const loadedFaces =
+      primaryFontFamily === undefined
+        ? []
+        : await document.fonts.load(
+            `16px ${primaryFontFamily}`,
+            "Українська їієґ",
+          );
+    return {
+      fontFamily,
+      supportsUkrainian: loadedFaces.length > 0,
+    };
+  });
+  expect(ukrainianFontState.fontFamily).toMatch(/Noto[_ ]Sans/i);
+  expect(ukrainianFontState.supportsUkrainian).toBe(true);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");

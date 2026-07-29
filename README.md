@@ -19,7 +19,8 @@ A powerful, self-hostable application to automatically monitor GitHub, GitLab, a
     - Responsive design for both desktop and mobile use.
 - **Internationalization (i18n)**: Supports English, German, French, Spanish,
   Brazilian Portuguese, Indonesian, Hindi, Simplified Chinese, Japanese,
-  Korean, Turkish, and Arabic out of the box, including right-to-left layout.
+  Korean, Turkish, Vietnamese, Italian, Polish, Ukrainian, and Arabic out of
+  the box, including right-to-left layout.
 - **Data Management**: Easily import or export your list of monitored repositories via JSON.
 - **System Diagnostics**: A built-in test page to verify GitHub API connectivity and notification service (SMTP, Apprise) configuration.
 - **Secure Authentication**: Protects the application with Better Auth, SQLite-backed users/sessions, and one-time bootstrap setup.
@@ -575,9 +576,10 @@ from the registry. Arabic (`ar`) is published with Noto Sans Arabic and
 right-to-left layout support. Simplified Chinese (`zh-CN`) is published with
 Noto Sans SC, Japanese (`ja`) uses Noto Sans JP, Korean (`ko`) uses Noto Sans
 KR, Hindi (`hi`) uses Noto Sans Devanagari, and Turkish (`tr`) uses Noto Sans
-for Latin Extended coverage. Vietnamese (`vi`) also uses Noto Sans for its
-extended Latin diacritics. Italian (`it`) and Indonesian (`id`) use the
-existing Inter profile, as does Polish (`pl`).
+for Latin Extended coverage. Vietnamese (`vi`) uses Noto Sans for its extended
+Latin diacritics, while Ukrainian (`uk`) uses it for Cyrillic coverage.
+Italian (`it`), Indonesian (`id`), and Polish (`pl`) use the existing Inter
+profile.
 
 ## 🔐 Social Login Setup (GitHub + Google)
 
