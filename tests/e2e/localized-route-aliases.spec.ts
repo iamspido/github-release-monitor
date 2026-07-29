@@ -573,6 +573,56 @@ test("Dutch route aliases redirect to canonical translated paths", async ({
   await ensureAppLocale(page, "en");
 });
 
+test("Russian route aliases redirect to Unicode canonical paths", async ({
+  page,
+}) => {
+  await ensureAppLocale(page, "ru");
+
+  const settingsResponse = await page.goto(
+    "/RU/settings?tab=notifications#mail",
+  );
+  const settingsRedirectResponse = await settingsResponse
+    ?.request()
+    .redirectedFrom()
+    ?.response();
+
+  expect(settingsResponse?.status()).toBe(200);
+  expect(settingsRedirectResponse?.status()).toBe(308);
+  expect(decodeURIComponent(new URL(page.url()).pathname)).toBe(
+    "/ru/настройки",
+  );
+  expect(new URL(page.url()).search).toBe("?tab=notifications");
+  expect(new URL(page.url()).hash).toBe("#mail");
+
+  const loginResponse = await page.request.get("/ru/login?next=%2Fru", {
+    maxRedirects: 0,
+  });
+  expect(loginResponse.status()).toBe(308);
+  const loginLocation = new URL(
+    loginResponse.headers().location,
+    "http://localhost",
+  );
+  expect(decodeURIComponent(loginLocation.pathname)).toBe("/ru/вход");
+  expect(loginLocation.search).toBe("?next=%2Fru");
+
+  const registerResponse = await page.request.get("/ru/register", {
+    maxRedirects: 0,
+  });
+  expect(registerResponse.status()).toBe(308);
+  expect(
+    decodeURIComponent(
+      new URL(registerResponse.headers().location, "http://localhost")
+        .pathname,
+    ),
+  ).toBe("/ru/регистрация");
+
+  const canonicalTestResponse = await page.goto("/ru/тест");
+  expect(canonicalTestResponse?.status()).toBe(200);
+  expect(canonicalTestResponse?.request().redirectedFrom()).toBeNull();
+
+  await ensureAppLocale(page, "en");
+});
+
 test("Arabic route aliases redirect to Unicode canonical paths", async ({
   page,
 }) => {
@@ -858,6 +908,29 @@ test("document locale metadata follows the active locale", async ({ page }) => {
   expect(
     await page.evaluate(() => getComputedStyle(document.body).fontFamily),
   ).toMatch(/Inter/i);
+
+  await ensureAppLocale(page, "ru");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ru");
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-font-profile",
+    "noto",
+  );
+
+  const russianFontState = await page.evaluate(async () => {
+    const fontFamily = getComputedStyle(document.body).fontFamily;
+    const primaryFontFamily = fontFamily.split(",", 1)[0]?.trim();
+    const loadedFaces =
+      primaryFontFamily === undefined
+        ? []
+        : await document.fonts.load(`16px ${primaryFontFamily}`, "Русский ё");
+    return {
+      fontFamily,
+      supportsRussian: loadedFaces.length > 0,
+    };
+  });
+  expect(russianFontState.fontFamily).toMatch(/Noto[_ ]Sans/i);
+  expect(russianFontState.supportsRussian).toBe(true);
 
   await ensureAppLocale(page, "ar");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");

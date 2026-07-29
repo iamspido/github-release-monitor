@@ -29,6 +29,7 @@ describe("i18n locale config", () => {
     expect(parseLocale("PL")).toBe("pl");
     expect(parseLocale("UK")).toBe("uk");
     expect(parseLocale("NL")).toBe("nl");
+    expect(parseLocale("RU")).toBe("ru");
     expect(parseLocale("AR")).toBe("ar");
     expect(parseLocale("invalid_locale")).toBeNull();
     expect(parseLocale(null)).toBeNull();
@@ -51,6 +52,7 @@ describe("i18n locale config", () => {
     expect(isSupportedLocale("pl")).toBe(true);
     expect(isSupportedLocale("uk")).toBe(true);
     expect(isSupportedLocale("nl")).toBe(true);
+    expect(isSupportedLocale("ru")).toBe(true);
     expect(isSupportedLocale("ar")).toBe(true);
     expect(isSupportedLocale("pt-br")).toBe(false);
     expect(isSupportedLocale("zh-cn")).toBe(false);
@@ -154,6 +156,12 @@ describe("i18n locale config", () => {
       nativeName: "Nederlands",
       direction: "ltr",
       fontProfile: "inter",
+    });
+    expect(getLocaleMetadata("ru")).toMatchObject({
+      code: "ru",
+      nativeName: "Русский",
+      direction: "ltr",
+      fontProfile: "noto",
     });
     expect(getLocaleMetadata("ar")).toMatchObject({
       code: "ar",

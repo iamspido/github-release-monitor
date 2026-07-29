@@ -603,6 +603,41 @@ describe("i18n completeness", () => {
     "TestRelease.code_inline_code_word",
     "TestRelease.table_row4_notes",
   ]);
+  const russianSharedOrTechnicalLiteralKeys = new Set([
+    "Metadata.title",
+    "HomePage.title",
+    "RepositoryForm.placeholder",
+    "RepositoryForm.provider_select_github",
+    "RepositoryForm.provider_select_gitlab",
+    "RepositoryForm.provider_select_codeberg",
+    "SettingsPage.two_factor_verify_code_placeholder",
+    "SettingsPage.account_email_new_placeholder",
+    "SettingsForm.provider_github",
+    "SettingsForm.provider_gitlab",
+    "SettingsForm.provider_codeberg",
+    "SettingsForm.custom_security_patterns_placeholder",
+    "SettingsForm.cron_time_am",
+    "SettingsForm.cron_time_pm",
+    "SettingsForm.apprise_format_markdown",
+    "SettingsForm.apprise_format_html",
+    "RepoSettingsDialog.version_tag_pattern_placeholder",
+    "Email.from_name_fallback",
+    "LoginPage.setup_token_placeholder",
+    "LoginPage.setup_username_placeholder",
+    "LoginPage.email_placeholder",
+    "LoginPage.social_provider_github",
+    "LoginPage.social_provider_google",
+    "LoginPage.social_identifier_placeholder",
+    "LoginPage.two_factor_login_code_placeholder",
+    "RegisterPage.username_placeholder",
+    "RegisterPage.email_placeholder",
+    "TestRelease.code_inline_code_word",
+    "TestRelease.table_row4_notes",
+  ]);
+  const russianTechnicalWithoutCyrillicKeys = new Set([
+    ...russianSharedOrTechnicalLiteralKeys,
+    "SettingsPage.two_factor_setup_uri_label",
+  ]);
 
   it("detects nested ICU arguments without treating regex quantifiers as arguments", () => {
     expect(
@@ -1032,6 +1067,57 @@ describe("i18n completeness", () => {
     ).toContain("version");
     expect(
       (messagesByLocale.nl.RepoSettingsDialog as Dict)
+        .version_tag_pattern_hint,
+    ).toContain("revision");
+    expect(testPage.gitlab_token_advice).toContain("host=username:token");
+  });
+
+  it("contains Cyrillic in every translatable Russian message", () => {
+    const russianFlat = flattenKeys(messagesByLocale.ru);
+    const withoutCyrillic = Object.entries(russianFlat)
+      .filter(([key]) => !russianTechnicalWithoutCyrillicKeys.has(key))
+      .filter(([, value]) => !/\p{Script=Cyrillic}/u.test(value))
+      .map(([key]) => key);
+
+    expect(withoutCyrillic).toEqual([]);
+  });
+
+  it("keeps only shared or technical Russian messages identical to English", () => {
+    const russianFlat = flattenKeys(messagesByLocale.ru);
+    const unchanged = Object.entries(russianFlat)
+      .filter(([key, value]) => referenceFlat[key] === value)
+      .map(([key]) => key)
+      .sort();
+
+    expect(unchanged).toEqual(
+      Array.from(russianSharedOrTechnicalLiteralKeys).sort(),
+    );
+  });
+
+  it("preserves technical syntax examples in Russian messages", () => {
+    const russian = messagesByLocale.ru;
+    const settings = russian.SettingsForm as Dict;
+    const testPage = russian.TestPage as Dict;
+
+    expect(settings.show_provider_prefix_in_repo_id_description).toContain(
+      "provider:owner/repo",
+    );
+    expect(settings.show_provider_domain_in_repo_id_description).toContain(
+      "provider:domain/owner/repo",
+    );
+    expect(settings.custom_security_patterns_hint).toContain("/regex/flags");
+    expect(
+      settings.include_default_security_patterns_description,
+    ).toContain("security");
+    expect(
+      settings.include_default_security_patterns_description,
+    ).toContain("vulnerability");
+    expect(
+      (messagesByLocale.ru.RepoSettingsDialog as Dict)
+        .version_tag_pattern_hint,
+    ).toContain("version");
+    expect(
+      (messagesByLocale.ru.RepoSettingsDialog as Dict)
         .version_tag_pattern_hint,
     ).toContain("revision");
     expect(testPage.gitlab_token_advice).toContain("host=username:token");
