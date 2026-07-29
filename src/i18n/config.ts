@@ -78,6 +78,12 @@ export const localeRegistry = [
     fontProfile: "noto-cjk-kr",
   },
   {
+    code: "tr",
+    nativeName: "Türkçe",
+    direction: "ltr",
+    fontProfile: "noto",
+  },
+  {
     code: "ar",
     nativeName: "العربية",
     direction: "rtl",

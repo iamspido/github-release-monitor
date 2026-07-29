@@ -127,6 +127,12 @@ describe("notifications/email", () => {
     expect(html).toContain('<html lang="ko" dir="ltr">');
   });
 
+  it("renders Turkish email metadata as left-to-right", async () => {
+    const html = await generateHtmlReleaseBody(release, repo, "tr", "24h");
+
+    expect(html).toContain('<html lang="tr" dir="ltr">');
+  });
+
   it("replaces every repository placeholder in a translated HTML intro", async () => {
     const html = await generateHtmlReleaseBody(release, repo, "en", "24h");
 
@@ -268,6 +274,11 @@ describe("notifications/email", () => {
     expect(ko12.textDate).toMatch(/오전|오후/u);
     expect(ko24.textDate).not.toMatch(/오전|오후/u);
     expect(ko12.textDate).not.toBe(ko24.textDate);
+    const tr12 = await getFormattedDate(date, "tr", "12h");
+    const tr24 = await getFormattedDate(date, "tr", "24h");
+    expect(tr12.textDate).toMatch(/ÖÖ|ÖS/u);
+    expect(tr24.textDate).not.toMatch(/ÖÖ|ÖS/u);
+    expect(tr12.textDate).not.toBe(tr24.textDate);
     const ar12 = await getFormattedDate(date, "ar", "12h");
     const ar24 = await getFormattedDate(date, "ar", "24h");
     expect(ar12.htmlDate).toMatch(/[\u0600-\u06ff]/u);
