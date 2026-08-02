@@ -1,3 +1,4 @@
+import { afterEach } from "vitest";
 import { waitForBackgroundTasks } from "./src/lib/runtime/background-tasks";
 
 // Global test setup executed before test files

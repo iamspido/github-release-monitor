@@ -56,7 +56,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY package*.json ./
 RUN npm ci && npm cache clean --force
 
-COPY tsconfig.json ./
+COPY tsconfig.json \
+     vitest.setup.ts \
+     ./
 COPY src/ ./src/
 COPY tests/ ./tests/
 
