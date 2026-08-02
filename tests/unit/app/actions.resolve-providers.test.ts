@@ -33,6 +33,8 @@ describe("resolveRepoProvidersAction", () => {
     delete process.env.GITLAB_ACCESS_TOKENS;
     delete process.env.GITLAB_DEPLOY_TOKENS;
     delete process.env.GITLAB_ADDITIONAL_HOSTS;
+    delete process.env.FORGEJO_ADDITIONAL_BASE_URLS;
+    delete process.env.FORGEJO_ACCESS_TOKENS;
   });
 
   it("returns only the provider that exists", async () => {
@@ -228,5 +230,114 @@ describe("resolveRepoProvidersAction", () => {
     expect(res.success).toBe(true);
     expect(res.candidates).toEqual([]);
     expect(vi.mocked(global.fetch).mock.calls.length).toBe(0);
+  });
+
+  it("returns an allowed Forgejo subpath candidate with its base URL", async () => {
+    process.env.FORGEJO_ADDITIONAL_BASE_URLS =
+      "http://forgejo.internal.test:3000/code";
+    process.env.FORGEJO_ACCESS_TOKENS =
+      "http://forgejo.internal.test:3000/code=forgejo-token";
+    const actions = await import("@/app/actions");
+    vi.mocked(global.fetch).mockImplementation(async (input) => {
+      const isForgejo = String(input).startsWith(
+        "http://forgejo.internal.test:3000/code/",
+      );
+      return mockFetchResponse(
+        isForgejo
+          ? {
+              status: 200,
+              json: {
+                name: "repo",
+                full_name: "owner/repo",
+                owner: { login: "owner" },
+              },
+            }
+          : { status: 404 },
+      );
+    });
+
+    const result = await actions.resolveRepoProvidersAction("owner/repo");
+
+    expect(result.candidates).toContainEqual({
+      provider: "forgejo",
+      providerHost: "forgejo.internal.test:3000",
+      providerBaseUrl: "http://forgejo.internal.test:3000/code",
+      id: "forgejo:forgejo.internal.test:3000/code/owner/repo",
+      canonicalRepoUrl: "http://forgejo.internal.test:3000/code/owner/repo",
+    });
+    const forgejoCall = vi
+      .mocked(global.fetch)
+      .mock.calls.find((call) =>
+        String(call[0]).startsWith("http://forgejo.internal.test:3000/code/"),
+      );
+    expect(forgejoCall).toBeTruthy();
+    if (!forgejoCall) {
+      throw new Error("Expected Forgejo lookup call");
+    }
+    expect(String(forgejoCall[0])).toBe(
+      "http://forgejo.internal.test:3000/code/api/v1/repos/owner/repo",
+    );
+    expect(headerRecord(fetchCallHeaders(forgejoCall)).Authorization).toBe(
+      "token forgejo-token",
+    );
+    expect(forgejoCall[1]).toMatchObject({ redirect: "manual" });
+  });
+
+  it("checks multiple Forgejo instances with bounded parallelism", async () => {
+    const forgejoBaseUrls = Array.from(
+      { length: 6 },
+      (_, index) => `https://forgejo-${index + 1}.example.test/code`,
+    );
+    process.env.FORGEJO_ADDITIONAL_BASE_URLS = forgejoBaseUrls.join(",");
+    const actions = await import("@/app/actions");
+    let activeForgejoRequests = 0;
+    let maxActiveForgejoRequests = 0;
+
+    vi.mocked(global.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (!url.includes(".example.test/code/api/v1/repos/owner/repo")) {
+        return mockFetchResponse({ status: 404 });
+      }
+
+      activeForgejoRequests += 1;
+      maxActiveForgejoRequests = Math.max(
+        maxActiveForgejoRequests,
+        activeForgejoRequests,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      activeForgejoRequests -= 1;
+      return mockFetchResponse({
+        status: 200,
+        json: {
+          name: "repo",
+          full_name: "owner/repo",
+          owner: { login: "owner" },
+        },
+      });
+    });
+
+    const result = await actions.resolveRepoProvidersAction("owner/repo");
+
+    expect(result.candidates).toHaveLength(6);
+    expect(
+      result.candidates.map((candidate) => candidate.providerBaseUrl),
+    ).toEqual(forgejoBaseUrls);
+    expect(maxActiveForgejoRequests).toBeGreaterThan(1);
+    expect(maxActiveForgejoRequests).toBeLessThanOrEqual(4);
+  });
+
+  it("ignores successful Forgejo responses that are not repository payloads", async () => {
+    process.env.FORGEJO_ADDITIONAL_BASE_URLS =
+      "https://forgejo.example.test/code";
+    const actions = await import("@/app/actions");
+    vi.mocked(global.fetch).mockImplementation(async (input) =>
+      String(input).startsWith("https://forgejo.example.test/code/")
+        ? mockFetchResponse({ status: 200, text: "<html>Sign in</html>" })
+        : mockFetchResponse({ status: 404 }),
+    );
+
+    const result = await actions.resolveRepoProvidersAction("owner/repo");
+
+    expect(result.candidates).toEqual([]);
   });
 });

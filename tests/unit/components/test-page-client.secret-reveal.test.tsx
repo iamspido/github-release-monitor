@@ -4,7 +4,11 @@ import { act } from "react";
 import ReactDOM from "react-dom/client";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { SECRET_REVEAL_TARGET_STORAGE_KEY } from "@/components/diagnostics/secret-reveal-model";
-import type { NotificationConfig, UpdateNotificationState } from "@/types";
+import type {
+  ForgejoTokenCheckResult,
+  NotificationConfig,
+  UpdateNotificationState,
+} from "@/types";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -152,6 +156,7 @@ const updateNotice: UpdateNotificationState = {
 async function renderClient(
   notificationConfig: NotificationConfig,
   notice: UpdateNotificationState = updateNotice,
+  forgejoTokenChecks: ForgejoTokenCheckResult[] = [],
 ) {
   const div = document.createElement("div");
   document.body.appendChild(div);
@@ -163,6 +168,7 @@ async function renderClient(
         isTokenSet={false}
         gitlabTokenCheck={{ status: "not_set" }}
         codebergTokenCheck={{ status: "not_set" }}
+        forgejoTokenChecks={forgejoTokenChecks}
         notificationConfig={notificationConfig}
         appriseStatus={{ status: "ok" }}
         updateNotice={notice}
@@ -293,6 +299,53 @@ describe("TestPageClient mail password reveal", () => {
     try {
       expect(div.textContent).toContain("update_last_checked");
       expect(div.textContent).not.toContain("update_last_checked_never");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("renders every Forgejo diagnostics status for configured instances", async () => {
+    const checks: ForgejoTokenCheckResult[] = [
+      { baseUrl: "https://public.example.test", status: "not_set" },
+      {
+        baseUrl: "https://unreachable.example.test",
+        status: "not_set",
+        connectivityError: true,
+      },
+      {
+        baseUrl: "https://limited.example.test/code",
+        status: "valid",
+        login: null,
+        fullName: null,
+        diagnosticsLimited: true,
+      },
+      {
+        baseUrl: "https://valid.example.test",
+        status: "valid",
+        login: "forgejo-user",
+        fullName: "Forgejo User",
+      },
+      { baseUrl: "https://invalid.example.test", status: "invalid_token" },
+      { baseUrl: "https://offline.example.test", status: "api_error" },
+    ];
+    const { div, cleanup } = await renderClient(
+      makeNotificationConfig("external_click"),
+      updateNotice,
+      checks,
+    );
+
+    try {
+      expect(div.textContent).toContain("https://public.example.test");
+      expect(div.textContent).toContain("forgejo_token_not_set");
+      expect(div.textContent).toContain("forgejo_token_advice");
+      expect(div.textContent).toContain("forgejo_connectivity_confirmed");
+      expect(div.textContent).toContain("forgejo_token_check_error");
+      expect(div.textContent).toContain("https://limited.example.test/code");
+      expect(div.textContent).toContain("forgejo_token_valid_limited_advice");
+      expect(div.textContent).toContain("forgejo_authenticated_as");
+      expect(div.textContent).toContain("Forgejo User");
+      expect(div.textContent).toContain("forgejo_invalid_token_advice");
+      expect(div.textContent).toContain("forgejo_token_check_error_advice");
     } finally {
       cleanup();
     }

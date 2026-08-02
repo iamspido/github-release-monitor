@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from "@/lib/concurrency";
 import {
   consumeResponseWithTimeout,
   discardResponseWithTimeout,
@@ -5,15 +6,19 @@ import {
 import {
   fetchJsonResponseWithRetry,
   fetchWithRetry,
+  isRateLimitedResponse,
 } from "@/lib/releases/fetch";
 import {
+  getAllowedForgejoBaseUrls,
   getAllowedGitlabHosts,
+  getForgejoAccessTokensByBaseUrl,
   getGitlabAccessTokensByHost,
   getGitlabDeployTokensByHost,
 } from "@/lib/repositories/providers";
 import { log, normalizeEnvToken } from "@/lib/server-action-helpers";
 import type {
   CodebergTokenCheckResult,
+  ForgejoTokenCheckResult,
   GitlabTokenCheckResult,
   RateLimitResult,
 } from "@/types";
@@ -65,6 +70,23 @@ type CodebergUserApi = {
   username?: string;
   full_name?: string;
 };
+
+function parseForgejoUserIdentity(
+  data: CodebergUserApi | undefined,
+): { login: string; fullName: string | null } | null {
+  const loginRaw =
+    typeof data?.login === "string"
+      ? data.login
+      : typeof data?.username === "string"
+        ? data.username
+        : "";
+  const login = loginRaw.trim();
+  if (!login) return null;
+
+  const fullNameRaw =
+    typeof data?.full_name === "string" ? data.full_name.trim() : "";
+  return { login, fullName: fullNameRaw || null };
+}
 
 type GitlabUserApi = {
   username?: string;
@@ -343,4 +365,185 @@ export async function getCodebergTokenCheck(): Promise<CodebergTokenCheckResult>
     log.error("Failed to validate Codeberg token:", error);
     return { status: "api_error" };
   }
+}
+
+async function checkForgejoToken(
+  baseUrl: string,
+  token: string,
+): Promise<ForgejoTokenCheckResult> {
+  const userUrl = `${baseUrl}/api/v1/user`;
+  const baseHeaders: HeadersInit = {
+    Accept: "application/json",
+    "User-Agent": "GitHubReleaseMonitorApp",
+  };
+
+  try {
+    const attempts: Array<{
+      scheme: "token" | "bearer";
+      headers: HeadersInit;
+    }> = [
+      {
+        scheme: "token",
+        headers: { ...baseHeaders, Authorization: `token ${token}` },
+      },
+      {
+        scheme: "bearer",
+        headers: { ...baseHeaders, Authorization: `Bearer ${token}` },
+      },
+    ];
+
+    for (const attempt of attempts) {
+      const response = await fetchWithRetry(
+        userUrl,
+        {
+          headers: attempt.headers,
+          cache: "no-store",
+        },
+        {
+          description: `Forgejo user endpoint on ${baseUrl} (${attempt.scheme})`,
+          allowedRedirectBaseUrl: baseUrl,
+        },
+      );
+
+      let bodyText: string | undefined;
+      if (!response.ok) {
+        try {
+          bodyText = await consumeResponseWithTimeout(response, (result) =>
+            result.text(),
+          );
+        } catch {
+          bodyText = undefined;
+        }
+
+        if (isRateLimitedResponse(response)) {
+          log.error(
+            `Forgejo token check was rate limited on ${baseUrl} (${attempt.scheme}): ${response.status} ${response.statusText}`,
+          );
+          return { baseUrl, status: "api_error" };
+        }
+
+        if (response.status === 403 && /read:user/i.test(bodyText ?? "")) {
+          return {
+            baseUrl,
+            status: "valid",
+            login: null,
+            fullName: null,
+            diagnosticsLimited: true,
+          };
+        }
+        if (response.status === 401 || response.status === 403) continue;
+        log.error(
+          `Forgejo token check failed on ${baseUrl} (${attempt.scheme}): ${response.status} ${response.statusText}`,
+        );
+        return { baseUrl, status: "api_error" };
+      }
+
+      let data: CodebergUserApi | undefined;
+      try {
+        data = await consumeResponseWithTimeout(
+          response,
+          async (result) => (await result.json()) as CodebergUserApi,
+        );
+      } catch (error) {
+        log.error(
+          `Forgejo token check returned invalid JSON on ${baseUrl} (${attempt.scheme}).`,
+          error,
+        );
+        return { baseUrl, status: "api_error" };
+      }
+
+      const identity = parseForgejoUserIdentity(data);
+      if (!identity) {
+        log.error(
+          `Forgejo token check returned an invalid user payload on ${baseUrl} (${attempt.scheme}).`,
+        );
+        return { baseUrl, status: "api_error" };
+      }
+      return { baseUrl, status: "valid", ...identity };
+    }
+
+    return { baseUrl, status: "invalid_token" };
+  } catch (error) {
+    log.error(`Failed to validate Forgejo token on ${baseUrl}:`, error);
+    return { baseUrl, status: "api_error" };
+  }
+}
+
+async function checkForgejoConnectivity(
+  baseUrl: string,
+): Promise<ForgejoTokenCheckResult> {
+  try {
+    const response = await fetchWithRetry(
+      `${baseUrl}/api/v1/user`,
+      {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "GitHubReleaseMonitorApp",
+        },
+        cache: "no-store",
+      },
+      {
+        description: `Forgejo user endpoint on ${baseUrl} (anonymous)`,
+        allowedRedirectBaseUrl: baseUrl,
+      },
+    );
+    const status = response.status;
+    const statusText = response.statusText;
+    if (isRateLimitedResponse(response)) {
+      await discardResponseWithTimeout(response);
+      log.error(
+        `Forgejo connectivity check was rate limited on ${baseUrl}: ${status} ${statusText}`,
+      );
+      return { baseUrl, status: "not_set", connectivityError: true };
+    }
+    if (status === 401 || status === 403) {
+      await discardResponseWithTimeout(response);
+      return { baseUrl, status: "not_set" };
+    }
+    if (response.ok) {
+      let data: CodebergUserApi | undefined;
+      try {
+        data = await consumeResponseWithTimeout(
+          response,
+          async (result) => (await result.json()) as CodebergUserApi,
+        );
+      } catch (error) {
+        log.error(
+          `Forgejo connectivity check returned invalid JSON on ${baseUrl}.`,
+          error,
+        );
+        return { baseUrl, status: "not_set", connectivityError: true };
+      }
+      if (parseForgejoUserIdentity(data)) {
+        return { baseUrl, status: "not_set" };
+      }
+      log.error(
+        `Forgejo connectivity check returned an invalid user payload on ${baseUrl}.`,
+      );
+      return { baseUrl, status: "not_set", connectivityError: true };
+    }
+
+    await discardResponseWithTimeout(response);
+
+    log.error(
+      `Forgejo connectivity check failed on ${baseUrl}: ${status} ${statusText}`,
+    );
+    return { baseUrl, status: "not_set", connectivityError: true };
+  } catch (error) {
+    log.error(`Failed to check Forgejo connectivity on ${baseUrl}:`, error);
+    return { baseUrl, status: "not_set", connectivityError: true };
+  }
+}
+
+export async function getForgejoTokenChecks(): Promise<
+  ForgejoTokenCheckResult[]
+> {
+  const baseUrls = getAllowedForgejoBaseUrls();
+  const tokens = getForgejoAccessTokensByBaseUrl();
+  return mapWithConcurrency(baseUrls, 4, async (baseUrl) => {
+    const token = tokens.get(baseUrl);
+    if (!token) return checkForgejoConnectivity(baseUrl);
+    log.info(`Validating Forgejo token for ${baseUrl}.`);
+    return checkForgejoToken(baseUrl, token);
+  });
 }

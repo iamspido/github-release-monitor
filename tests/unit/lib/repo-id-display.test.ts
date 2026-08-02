@@ -42,6 +42,15 @@ describe("formatRepoIdForDisplay", () => {
       }),
     ).toBe("gitlab:owner/repo");
   });
+
+  it("hides a Forgejo host and base path while keeping owner/repo", () => {
+    expect(
+      formatRepoIdForDisplay(
+        "forgejo:forgejo.internal.test:3000/code/owner/repo",
+        { showProviderPrefix: true, showProviderDomain: false },
+      ),
+    ).toBe("forgejo:owner/repo");
+  });
 });
 
 describe("getRepositoryNameFromId", () => {

@@ -10,20 +10,24 @@ export function formatRepoIdForDisplay(
   const [, provider, fullPath] = prefixedMatch;
   let displayPath = fullPath;
 
-  // GitLab repo IDs are stored as `gitlab:<host>/<group>/<repo>`.
-  // Optionally remove the host segment for a shorter label.
+  // Self-hosted provider IDs contain their instance location. Forgejo has no
+  // nested owner groups, so its final two segments are always owner/repo.
   if (
-    provider.toLowerCase() === "gitlab" &&
+    (provider.toLowerCase() === "gitlab" ||
+      provider.toLowerCase() === "forgejo") &&
     options?.showProviderDomain === false
   ) {
     const segments = fullPath.split("/");
-    const host = segments[0];
-    const hasEnoughSegments = segments.length >= 3;
-    const looksLikeHost =
-      host === "localhost" || host.includes(".") || host.includes(":");
-
-    if (hasEnoughSegments && looksLikeHost) {
-      displayPath = segments.slice(1).join("/");
+    if (provider.toLowerCase() === "forgejo" && segments.length >= 3) {
+      displayPath = segments.slice(-2).join("/");
+    } else if (provider.toLowerCase() === "gitlab") {
+      const host = segments[0];
+      const hasEnoughSegments = segments.length >= 3;
+      const looksLikeHost =
+        host === "localhost" || host.includes(".") || host.includes(":");
+      if (hasEnoughSegments && looksLikeHost) {
+        displayPath = segments.slice(1).join("/");
+      }
     }
   }
 

@@ -7,6 +7,7 @@ import { getCurrentAuthAccess } from "@/lib/auth/access";
 import { buildNotificationConfig } from "@/lib/diagnostics/notification-config";
 import {
   getCodebergTokenCheck,
+  getForgejoTokenChecks,
   getGitHubRateLimit,
   getGitlabTokenCheck,
 } from "@/lib/diagnostics/provider-checks";
@@ -46,6 +47,7 @@ export default async function TestPage({
     rateLimitResult,
     gitlabTokenCheck,
     codebergTokenCheck,
+    forgejoTokenChecks,
     updateNotice,
     authAccess,
     appriseStatus,
@@ -54,6 +56,7 @@ export default async function TestPage({
     RateLimitResult,
     Awaited<ReturnType<typeof getGitlabTokenCheck>>,
     Awaited<ReturnType<typeof getCodebergTokenCheck>>,
+    Awaited<ReturnType<typeof getForgejoTokenChecks>>,
     UpdateNotificationState,
     Awaited<ReturnType<typeof getCurrentAuthAccess>>,
     AppriseStatus,
@@ -62,6 +65,7 @@ export default async function TestPage({
     getGitHubRateLimit(),
     getGitlabTokenCheck(),
     getCodebergTokenCheck(),
+    getForgejoTokenChecks(),
     getUpdateNotificationStateOrFallback(),
     getCurrentAuthAccess(),
     appriseStatusPromise,
@@ -84,6 +88,7 @@ export default async function TestPage({
           isTokenSet={githubTokenSet}
           gitlabTokenCheck={gitlabTokenCheck}
           codebergTokenCheck={codebergTokenCheck}
+          forgejoTokenChecks={forgejoTokenChecks}
           notificationConfig={notificationConfig}
           appriseStatus={appriseStatus}
           updateNotice={updateNotice}

@@ -84,7 +84,9 @@ function getKnownReleaseTime(release: GithubRelease): number {
 
 function selectNewestRelease(releases: GithubRelease[]): GithubRelease {
   return releases.reduce((selected, release) =>
-    getReleaseTime(release) > getReleaseTime(selected) ? release : selected,
+    getKnownReleaseTime(release) > getKnownReleaseTime(selected)
+      ? release
+      : selected,
   );
 }
 

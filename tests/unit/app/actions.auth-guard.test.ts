@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   getGitHubRateLimit: vi.fn(),
   getGitlabTokenCheck: vi.fn(),
   getCodebergTokenCheck: vi.fn(),
+  getForgejoTokenChecks: vi.fn(),
   getUpdateNotificationState: vi.fn(),
   refreshMultipleRepositoriesAction: vi.fn(),
   getRepositoriesForExport: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock("@/lib/diagnostics/provider-checks", () => ({
   getGitHubRateLimit: mocks.getGitHubRateLimit,
   getGitlabTokenCheck: mocks.getGitlabTokenCheck,
   getCodebergTokenCheck: mocks.getCodebergTokenCheck,
+  getForgejoTokenChecks: mocks.getForgejoTokenChecks,
 }));
 
 vi.mock("@/lib/runtime/app-update-notice", () => ({
@@ -102,6 +104,7 @@ describe("app action auth guards", () => {
     mocks.getGitHubRateLimit.mockReset();
     mocks.getGitlabTokenCheck.mockReset();
     mocks.getCodebergTokenCheck.mockReset();
+    mocks.getForgejoTokenChecks.mockReset();
     mocks.getUpdateNotificationState.mockReset();
     mocks.refreshMultipleRepositoriesAction.mockReset();
     mocks.getRepositoriesForExport.mockReset();
@@ -151,6 +154,7 @@ describe("app action auth guards", () => {
     await expect(actions.getCodebergTokenCheck()).resolves.toEqual({
       status: "api_error",
     });
+    await expect(actions.getForgejoTokenChecks()).resolves.toEqual([]);
     await expect(actions.getUpdateNotificationState()).resolves.toMatchObject({
       latestVersion: null,
       hasUpdate: false,
@@ -160,6 +164,7 @@ describe("app action auth guards", () => {
     expect(mocks.getGitHubRateLimit).not.toHaveBeenCalled();
     expect(mocks.getGitlabTokenCheck).not.toHaveBeenCalled();
     expect(mocks.getCodebergTokenCheck).not.toHaveBeenCalled();
+    expect(mocks.getForgejoTokenChecks).not.toHaveBeenCalled();
     expect(mocks.getUpdateNotificationState).not.toHaveBeenCalled();
   });
 });

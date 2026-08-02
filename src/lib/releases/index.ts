@@ -5,6 +5,7 @@ import {
   toGithubReleaseFromCache,
 } from "@/lib/releases/filters";
 import {
+  hasAnyForgejoToken,
   hasAnyGitlabTokenForAllowedHosts,
   parseSupportedRepoUrl,
 } from "@/lib/repositories/providers";
@@ -26,9 +27,10 @@ export async function getLatestReleasesForRepos(
   const effectiveBatchSize = Math.min(configuredParallel, repositories.length);
   const tokenConfigured = !!process.env.GITHUB_ACCESS_TOKEN?.trim();
   const codebergTokenConfigured = !!process.env.CODEBERG_ACCESS_TOKEN?.trim();
+  const forgejoTokenConfigured = hasAnyForgejoToken();
   const gitlabTokenConfigured = hasAnyGitlabTokenForAllowedHosts();
   log.info(
-    `Fetching ${repositories.length} repositories with parallel batch size ${effectiveBatchSize} (configured=${configuredParallel}, GitHub token=${tokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}, GitLab token=${gitlabTokenConfigured ? "yes" : "no"}).`,
+    `Fetching ${repositories.length} repositories with parallel batch size ${effectiveBatchSize} (configured=${configuredParallel}, GitHub token=${tokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}, Forgejo token=${forgejoTokenConfigured ? "yes" : "no"}, GitLab token=${gitlabTokenConfigured ? "yes" : "no"}).`,
   );
 
   const buildEnrichedRelease = async (
@@ -43,7 +45,12 @@ export async function getLatestReleasesForRepos(
     };
 
     const parsed = parseSupportedRepoUrl(repo.url);
-    if (!parsed) {
+    const storedAsForgejo = repo.id.startsWith("forgejo:");
+    if (
+      !parsed ||
+      (storedAsForgejo &&
+        (parsed.provider !== "forgejo" || parsed.id !== repo.id))
+    ) {
       log.warn(`Skipping invalid repository URL for repoId=${repo.id}`);
       return {
         repoId: repo.id,
@@ -60,7 +67,7 @@ export async function getLatestReleasesForRepos(
       newEtag,
     } = await fetchLatestReleaseWithCache(
       parsed.provider,
-      parsed.providerHost,
+      parsed.providerBaseUrl ?? parsed.providerHost,
       parsed.owner,
       parsed.repo,
       fetchRepoSettings,

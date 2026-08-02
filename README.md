@@ -1,10 +1,10 @@
 # GitHub Release Monitor
 
-A powerful, self-hostable application to automatically monitor GitHub, GitLab, and Codeberg repository releases and receive instant email or Apprise notifications. Keep track of your favorite projects without manually checking for updates.
+A powerful, self-hostable application to automatically monitor GitHub, GitLab, Codeberg, and self-hosted Forgejo repository releases and receive instant email or Apprise notifications. Keep track of your favorite projects without manually checking for updates.
 
 ## ✨ Key Features
 
-- **Automated Release Monitoring**: Add public GitHub, GitLab, and Codeberg repositories and let the app automatically check for new releases in the background.
+- **Automated Release Monitoring**: Add public GitHub, GitLab, Codeberg, and self-hosted Forgejo repositories and let the app automatically check for new releases in the background.
 - **Flexible Notifications**:
   - **Email**: Configure SMTP settings to receive detailed email notifications.
   - **Apprise**: Integrate with [Apprise](https://github.com/caronc/apprise) to send notifications to over 70 services like Discord, Telegram, Slack, and more.
@@ -170,6 +170,16 @@ Navigate to the `example/` directory. You will need to configure the environment
    - API limit: 2000 requests per 5 minutes (applies with or without a token).
    ```env
    CODEBERG_ACCESS_TOKEN=your_codeberg_token_here
+   ```
+
+   **Self-hosted Forgejo API (Optional)**
+   Configure every Forgejo instance that repository URLs may target. Full base URLs support HTTPS, HTTP, ports, and subpath installations. Redirects are followed only while they remain within the configured origin and base path; using the final directly reachable base URL is recommended.
+   - Public repositories work without a token.
+   - Private repositories typically require `read:repository`.
+   - `read:user` is only needed to show account details on the diagnostics page.
+   ```env
+   FORGEJO_ADDITIONAL_BASE_URLS=https://forgejo.example.test,http://forgejo.internal.test:3000,https://scm.example.test/code
+   FORGEJO_ACCESS_TOKENS=https://forgejo.example.test=token1,http://forgejo.internal.test:3000=token2
    ```
 
    **Localization**
@@ -468,6 +478,19 @@ Codeberg runs on Gitea/Forgejo and exposes a Gitea-compatible REST API. If you w
 CODEBERG_ACCESS_TOKEN=your_codeberg_token_here
 ```
 
+#### **Self-hosted Forgejo API (Optional)**
+
+Allow each Forgejo base URL explicitly. Base URLs may use HTTPS or HTTP, include a port, and include the instance subpath. Redirects are followed only while every target remains within the configured origin and base path, so credentials cannot be forwarded to another server or installation. Configure the final directly reachable URL whenever possible.
+
+Base URLs must not contain credentials, a query, or a fragment. Encoded slash and backslash characters are rejected because they make the configured path boundary ambiguous. Base paths remain case-sensitive and are de-duplicated by authority plus exact subpath, so HTTP and HTTPS variants of the same instance cannot be configured together. Token entries are used only when their normalized base URL exactly matches an allowed instance.
+
+```env
+FORGEJO_ADDITIONAL_BASE_URLS=https://forgejo.example.test,http://forgejo.internal.test:3000,https://scm.example.test/code
+FORGEJO_ACCESS_TOKENS=https://forgejo.example.test=token1,http://forgejo.internal.test:3000=token2
+```
+
+Tokens for private repositories typically need `read:repository`. The optional `read:user` scope is used only to display account information on the diagnostics page. Support targets Forgejo's v1 REST API and does not imply compatibility with arbitrary Gitea versions. Self-signed TLS certificates are not supported; use a trusted certificate or an explicitly configured internal HTTP base URL.
+
 #### **Localization**
 Set the server timezone used by schedules, logs, emails, and background
 notifications. Interactive UI timestamps use each viewer's browser timezone.
@@ -661,6 +684,8 @@ Here is a complete list of all environment variables used by the application.
 | `BETTER_AUTH_SECRET`  | Better Auth secret key (minimum 32 characters).                                                          | **Yes**                | -                          |
 | `BETTER_AUTH_URL`     | Base URL used by Better Auth (e.g. `http://localhost:3000`).                                            | **Yes**                | -                          |
 | `CODEBERG_ACCESS_TOKEN` | A Codeberg access token (Gitea API) for private repos. Typically needs `read:repository`; `read:user` only for diagnostics. | No                     | -                          |
+| `FORGEJO_ADDITIONAL_BASE_URLS` | Allowed self-hosted Forgejo base URLs, comma-separated. Supports HTTP/HTTPS, ports, and subpaths. | No | - |
+| `FORGEJO_ACCESS_TOKENS` | Base-URL-based Forgejo tokens as comma-separated `base-url=token` pairs for private repos. | No | - |
 | `GITHUB_ACCESS_TOKEN` | A GitHub Personal Access Token to increase the API rate limit. A token with no scopes is sufficient.      | No (but recommended)   | -                          |
 | `GITLAB_ADDITIONAL_HOSTS` | Additional GitLab hosts (without schema/port), comma-separated. `gitlab.com` is always allowed.       | No                     | -                          |
 | `GITLAB_ACCESS_TOKENS` | Host-based GitLab tokens as comma-separated `host=token` pairs for private repos.                         | No                     | -                          |

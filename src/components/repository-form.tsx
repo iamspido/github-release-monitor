@@ -488,7 +488,18 @@ export function RepositoryForm({
                   }
                   disabled={providerWorkflow.isResolving || isPending}
                 >
-                  {candidate.provider === "codeberg" ? (
+                  {candidate.provider === "forgejo" ? (
+                    <>
+                      {t("provider_select_forgejo")}
+                      {candidate.providerBaseUrl ? (
+                        <>
+                          {" ("}
+                          <bdi dir="ltr">{candidate.providerBaseUrl}</bdi>
+                          {")"}
+                        </>
+                      ) : null}
+                    </>
+                  ) : candidate.provider === "codeberg" ? (
                     t("provider_select_codeberg")
                   ) : candidate.provider === "gitlab" ? (
                     <>

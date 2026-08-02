@@ -111,6 +111,21 @@ describe("releases/provider-pipeline", () => {
     expect(releases).toEqual([older, newer, ignored]);
   });
 
+  it("does not select an unknown placeholder over a known newest date", () => {
+    const unknown = release("v1.1.0", "2026-07-26T00:00:00Z", {
+      published_at_unknown: true,
+    });
+    const known = release("v1.0.0", "2024-03-01T00:00:00Z");
+
+    expect(
+      selectLatestMatchingRelease({
+        releases: [unknown, known],
+        filters: stableOnlyFilters,
+        repoIdForLog: "repo",
+      }),
+    ).toBe(known);
+  });
+
   it("selects the highest semantic version independently of publication date", () => {
     const mostRecentlyPublished = release("v2.9.0", "2024-04-01T00:00:00Z");
     const highestVersion = release("v2.10.0", "2024-01-01T00:00:00Z");

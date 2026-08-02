@@ -181,4 +181,32 @@ describe("sortEnrichedReleases", () => {
       "unknown:owner/no-release",
     ]);
   });
+
+  it("groups Forgejo with Codeberg and ignores its instance path for name sorting", () => {
+    const input = [
+      release(
+        "forgejo:forgejo.internal.test:3000/code/a-owner/repo",
+        "2024-03-01T00:00:00.000Z",
+      ),
+      release("gitlab:gitlab.com/b-owner/repo", "2024-02-01T00:00:00.000Z"),
+      release("codeberg:c-owner/repo", "2024-01-01T00:00:00.000Z"),
+    ];
+
+    expect(
+      ids(
+        sortEnrichedReleases(input, "provider_grouped", [
+          "codeberg",
+          "gitlab",
+          "github",
+        ]),
+      ),
+    ).toEqual([
+      "forgejo:forgejo.internal.test:3000/code/a-owner/repo",
+      "codeberg:c-owner/repo",
+      "gitlab:gitlab.com/b-owner/repo",
+    ]);
+    expect(ids(sortEnrichedReleases(input, "repo_az", undefined))[0]).toBe(
+      "forgejo:forgejo.internal.test:3000/code/a-owner/repo",
+    );
+  });
 });

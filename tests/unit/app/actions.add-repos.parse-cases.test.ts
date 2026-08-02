@@ -28,6 +28,11 @@ describe("addRepositoriesAction parsing cases", () => {
   beforeEach(() => {
     vi.resetModules();
     mem.repos = [];
+    delete process.env.FORGEJO_ADDITIONAL_BASE_URLS;
+  });
+
+  afterEach(() => {
+    delete process.env.FORGEJO_ADDITIONAL_BASE_URLS;
   });
 
   it("parses owner/repo with dots and underscores and ignores blank/invalid lines", async () => {
@@ -53,6 +58,23 @@ describe("addRepositoriesAction parsing cases", () => {
       "github:owner---/r_e.p.o",
       "github:owner-name/re.po",
       "github:owner.name/my_repo",
+    ]);
+  });
+
+  it("adds a repository from a configured Forgejo subpath", async () => {
+    process.env.FORGEJO_ADDITIONAL_BASE_URLS = "https://scm.example.test/code";
+    const { addRepositoriesAction } = await import("@/app/actions");
+    const fd = new FormData();
+    fd.set("urls", "https://scm.example.test/code/Owner/Repo.git");
+
+    const res = await addRepositoriesAction({}, fd);
+
+    expect(res.success).toBe(true);
+    expect(mem.repos).toEqual([
+      {
+        id: "forgejo:scm.example.test/code/owner/repo",
+        url: "https://scm.example.test/code/Owner/Repo",
+      },
     ]);
   });
 });

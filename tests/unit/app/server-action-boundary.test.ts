@@ -38,6 +38,7 @@ describe("server action boundary", () => {
       ["getGitHubRateLimit", "runExposedRestrictedActionWithFallback"],
       ["getGitlabTokenCheck", "runExposedRestrictedActionWithFallback"],
       ["getCodebergTokenCheck", "runExposedRestrictedActionWithFallback"],
+      ["getForgejoTokenChecks", "runExposedRestrictedActionWithFallback"],
       ["getRepositoriesForExport", "runExposedRestrictedActionWithFallback"],
       ["revalidateReleasesAction", "runExposedRestrictedActionWithFallback"],
       ["getJobStatusAction", "runExposedRestrictedActionWithFallback"],

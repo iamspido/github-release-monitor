@@ -3,12 +3,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const fetchMocks = vi.hoisted(() => ({
   fetchJsonResponseWithRetry: vi.fn(),
   fetchWithRetry: vi.fn(),
+  isRateLimitedResponse: vi.fn((response: Response | null | undefined) =>
+    Boolean(
+      response &&
+        (response.status === 429 ||
+          (response.status === 403 && response.headers.get("retry-after"))),
+    ),
+  ),
 }));
 
 const providerMocks = vi.hoisted(() => ({
   getAllowedGitlabHosts: vi.fn(),
   getGitlabAccessTokensByHost: vi.fn(),
   getGitlabDeployTokensByHost: vi.fn(),
+  getAllowedForgejoBaseUrls: vi.fn(),
+  getForgejoAccessTokensByBaseUrl: vi.fn(),
 }));
 
 const logMock = vi.hoisted(() => ({
@@ -39,11 +48,16 @@ vi.mock("@/lib/server-action-helpers", () => ({
   },
 }));
 
-function textResponse(status: number, body: string) {
+function textResponse(
+  status: number,
+  body: string,
+  headers?: Record<string, string>,
+) {
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: status === 200 ? "OK" : "Error",
+    headers: new Headers(headers),
     text: vi.fn(async () => body),
   } as unknown as Response;
 }
@@ -67,6 +81,11 @@ function configureNoGitlabTokens() {
   providerMocks.getGitlabDeployTokensByHost.mockReturnValue(new Map());
 }
 
+function configureNoForgejoInstances() {
+  providerMocks.getAllowedForgejoBaseUrls.mockReturnValue([]);
+  providerMocks.getForgejoAccessTokensByBaseUrl.mockReturnValue(new Map());
+}
+
 describe("diagnostics/provider-checks", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -75,6 +94,7 @@ describe("diagnostics/provider-checks", () => {
     delete process.env.GITHUB_ACCESS_TOKEN;
     delete process.env.CODEBERG_ACCESS_TOKEN;
     configureNoGitlabTokens();
+    configureNoForgejoInstances();
   });
 
   afterEach(() => {
@@ -451,6 +471,262 @@ describe("diagnostics/provider-checks", () => {
       await expect(getCodebergTokenCheck()).resolves.toEqual({
         status: "api_error",
       });
+    });
+  });
+
+  describe("getForgejoTokenChecks", () => {
+    it("returns one result per configured instance and checks connectivity without tokens", async () => {
+      providerMocks.getAllowedForgejoBaseUrls.mockReturnValue([
+        "https://forgejo.example.test",
+        "http://forgejo.internal.test:3000/code",
+      ]);
+      providerMocks.getForgejoAccessTokensByBaseUrl.mockReturnValue(
+        new Map([["https://forgejo.example.test", "forgejo-token"]]),
+      );
+      fetchMocks.fetchWithRetry.mockResolvedValue(
+        jsonResponse(200, { username: "forgejo", full_name: "Forge Jo" }),
+      );
+      const { getForgejoTokenChecks } = await import(
+        "@/lib/diagnostics/provider-checks"
+      );
+
+      await expect(getForgejoTokenChecks()).resolves.toEqual([
+        {
+          baseUrl: "https://forgejo.example.test",
+          status: "valid",
+          login: "forgejo",
+          fullName: "Forge Jo",
+        },
+        {
+          baseUrl: "http://forgejo.internal.test:3000/code",
+          status: "not_set",
+        },
+      ]);
+      expect(fetchMocks.fetchWithRetry).toHaveBeenCalledWith(
+        "https://forgejo.example.test/api/v1/user",
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: "token forgejo-token",
+          }),
+        }),
+        expect.objectContaining({
+          allowedRedirectBaseUrl: "https://forgejo.example.test",
+        }),
+      );
+      expect(fetchMocks.fetchWithRetry).toHaveBeenCalledWith(
+        "http://forgejo.internal.test:3000/code/api/v1/user",
+        expect.objectContaining({
+          headers: expect.not.objectContaining({
+            Authorization: expect.anything(),
+          }),
+        }),
+        expect.objectContaining({
+          allowedRedirectBaseUrl: "http://forgejo.internal.test:3000/code",
+        }),
+      );
+    });
+
+    it("reports connectivity errors for instances without tokens", async () => {
+      providerMocks.getAllowedForgejoBaseUrls.mockReturnValue([
+        "https://offline.example.test/forgejo",
+      ]);
+      providerMocks.getForgejoAccessTokensByBaseUrl.mockReturnValue(new Map());
+      fetchMocks.fetchWithRetry.mockRejectedValue(new Error("offline"));
+      const { getForgejoTokenChecks } = await import(
+        "@/lib/diagnostics/provider-checks"
+      );
+
+      await expect(getForgejoTokenChecks()).resolves.toEqual([
+        {
+          baseUrl: "https://offline.example.test/forgejo",
+          status: "not_set",
+          connectivityError: true,
+        },
+      ]);
+    });
+
+    it("reports an anonymous rate-limited forbidden response as a connectivity error", async () => {
+      providerMocks.getAllowedForgejoBaseUrls.mockReturnValue([
+        "https://forgejo.example.test/code",
+      ]);
+      providerMocks.getForgejoAccessTokensByBaseUrl.mockReturnValue(new Map());
+      fetchMocks.fetchWithRetry.mockResolvedValue(
+        textResponse(403, "rate limited", { "retry-after": "60" }),
+      );
+      const { getForgejoTokenChecks } = await import(
+        "@/lib/diagnostics/provider-checks"
+      );
+
+      await expect(getForgejoTokenChecks()).resolves.toEqual([
+        {
+          baseUrl: "https://forgejo.example.test/code",
+          status: "not_set",
+          connectivityError: true,
+        },
+      ]);
+      expect(fetchMocks.fetchWithRetry).toHaveBeenCalledOnce();
+    });
+
+    it("rejects successful non-Forgejo payloads during connectivity checks", async () => {
+      providerMocks.getAllowedForgejoBaseUrls.mockReturnValue([
+        "https://forgejo.example.test/code",
+      ]);
+      providerMocks.getForgejoAccessTokensByBaseUrl.mockReturnValue(new Map());
+      fetchMocks.fetchWithRetry.mockResolvedValue(jsonResponse(200, {}));
+      const { getForgejoTokenChecks } = await import(
+        "@/lib/diagnostics/provider-checks"
+      );
+
+      await expect(getForgejoTokenChecks()).resolves.toEqual([
+        {
+          baseUrl: "https://forgejo.example.test/code",
+          status: "not_set",
+          connectivityError: true,
+        },
+      ]);
+    });
+
+    it("retries bearer and reports a missing read:user scope as limited", async () => {
+      providerMocks.getAllowedForgejoBaseUrls.mockReturnValue([
+        "https://forgejo.example.test/code",
+      ]);
+      providerMocks.getForgejoAccessTokensByBaseUrl.mockReturnValue(
+        new Map([["https://forgejo.example.test/code", "forgejo-token"]]),
+      );
+      fetchMocks.fetchWithRetry
+        .mockResolvedValueOnce(textResponse(401, "bad token"))
+        .mockResolvedValueOnce(textResponse(403, "missing [read:user]"));
+      const { getForgejoTokenChecks } = await import(
+        "@/lib/diagnostics/provider-checks"
+      );
+
+      await expect(getForgejoTokenChecks()).resolves.toEqual([
+        {
+          baseUrl: "https://forgejo.example.test/code",
+          status: "valid",
+          login: null,
+          fullName: null,
+          diagnosticsLimited: true,
+        },
+      ]);
+      expect(fetchMocks.fetchWithRetry).toHaveBeenCalledTimes(2);
+    });
+
+    it("retries bearer after a generic forbidden token-scheme response", async () => {
+      providerMocks.getAllowedForgejoBaseUrls.mockReturnValue([
+        "https://forgejo.example.test/code",
+      ]);
+      providerMocks.getForgejoAccessTokensByBaseUrl.mockReturnValue(
+        new Map([["https://forgejo.example.test/code", "forgejo-token"]]),
+      );
+      fetchMocks.fetchWithRetry
+        .mockResolvedValueOnce(textResponse(403, "forbidden"))
+        .mockResolvedValueOnce(
+          jsonResponse(200, { login: "forgejo", full_name: "Forge Jo" }),
+        );
+      const { getForgejoTokenChecks } = await import(
+        "@/lib/diagnostics/provider-checks"
+      );
+
+      await expect(getForgejoTokenChecks()).resolves.toEqual([
+        {
+          baseUrl: "https://forgejo.example.test/code",
+          status: "valid",
+          login: "forgejo",
+          fullName: "Forge Jo",
+        },
+      ]);
+      expect(fetchMocks.fetchWithRetry).toHaveBeenCalledTimes(2);
+    });
+
+    it("stops before bearer fallback when the token scheme is rate limited", async () => {
+      providerMocks.getAllowedForgejoBaseUrls.mockReturnValue([
+        "https://forgejo.example.test/code",
+      ]);
+      providerMocks.getForgejoAccessTokensByBaseUrl.mockReturnValue(
+        new Map([["https://forgejo.example.test/code", "forgejo-token"]]),
+      );
+      fetchMocks.fetchWithRetry.mockResolvedValueOnce(
+        textResponse(403, "rate limited", { "retry-after": "60" }),
+      );
+      const { getForgejoTokenChecks } = await import(
+        "@/lib/diagnostics/provider-checks"
+      );
+
+      await expect(getForgejoTokenChecks()).resolves.toEqual([
+        {
+          baseUrl: "https://forgejo.example.test/code",
+          status: "api_error",
+        },
+      ]);
+      expect(fetchMocks.fetchWithRetry).toHaveBeenCalledOnce();
+    });
+
+    it("does not classify a rate-limited bearer response as an invalid token", async () => {
+      providerMocks.getAllowedForgejoBaseUrls.mockReturnValue([
+        "https://forgejo.example.test/code",
+      ]);
+      providerMocks.getForgejoAccessTokensByBaseUrl.mockReturnValue(
+        new Map([["https://forgejo.example.test/code", "forgejo-token"]]),
+      );
+      fetchMocks.fetchWithRetry
+        .mockResolvedValueOnce(textResponse(401, "unauthorized"))
+        .mockResolvedValueOnce(
+          textResponse(403, "rate limited", { "retry-after": "60" }),
+        );
+      const { getForgejoTokenChecks } = await import(
+        "@/lib/diagnostics/provider-checks"
+      );
+
+      await expect(getForgejoTokenChecks()).resolves.toEqual([
+        {
+          baseUrl: "https://forgejo.example.test/code",
+          status: "api_error",
+        },
+      ]);
+      expect(fetchMocks.fetchWithRetry).toHaveBeenCalledTimes(2);
+    });
+
+    it("classifies rejected token and bearer schemes as an invalid token", async () => {
+      providerMocks.getAllowedForgejoBaseUrls.mockReturnValue([
+        "https://forgejo.example.test",
+      ]);
+      providerMocks.getForgejoAccessTokensByBaseUrl.mockReturnValue(
+        new Map([["https://forgejo.example.test", "forgejo-token"]]),
+      );
+      fetchMocks.fetchWithRetry
+        .mockResolvedValueOnce(textResponse(401, "unauthorized"))
+        .mockResolvedValueOnce(textResponse(403, "forbidden"));
+      const { getForgejoTokenChecks } = await import(
+        "@/lib/diagnostics/provider-checks"
+      );
+
+      await expect(getForgejoTokenChecks()).resolves.toEqual([
+        {
+          baseUrl: "https://forgejo.example.test",
+          status: "invalid_token",
+        },
+      ]);
+    });
+
+    it("rejects token checks with a successful but invalid user payload", async () => {
+      providerMocks.getAllowedForgejoBaseUrls.mockReturnValue([
+        "https://forgejo.example.test",
+      ]);
+      providerMocks.getForgejoAccessTokensByBaseUrl.mockReturnValue(
+        new Map([["https://forgejo.example.test", "forgejo-token"]]),
+      );
+      fetchMocks.fetchWithRetry.mockResolvedValue(jsonResponse(200, {}));
+      const { getForgejoTokenChecks } = await import(
+        "@/lib/diagnostics/provider-checks"
+      );
+
+      await expect(getForgejoTokenChecks()).resolves.toEqual([
+        {
+          baseUrl: "https://forgejo.example.test",
+          status: "api_error",
+        },
+      ]);
     });
   });
 });

@@ -5,12 +5,16 @@ import {
   buildGitlabAuthChain,
 } from "@/lib/releases/auth-chains";
 import {
+  fetchJsonResponseWithRetryAuthChain,
   fetchResponseWithRetryAuthChain,
   fetchWithRetry,
 } from "@/lib/releases/fetch";
 import { MAX_PROVIDER_RESOLUTION_BATCH_SIZE } from "@/lib/repositories/provider-resolution-limits";
 import {
+  buildForgejoRepoId,
+  getAllowedForgejoBaseUrls,
   getAllowedGitlabHosts,
+  getForgejoAccessTokensByBaseUrl,
   getGitlabAuthForHost,
   hasAnyGitlabTokenForAllowedHosts,
   normalizeRepoName,
@@ -24,7 +28,7 @@ import {
 
 type RepoProviderResolutionCandidate = Pick<
   ParsedRepoUrl,
-  "provider" | "providerHost" | "id" | "canonicalRepoUrl"
+  "provider" | "providerHost" | "providerBaseUrl" | "id" | "canonicalRepoUrl"
 >;
 
 export type RepoProviderResolution = {
@@ -34,6 +38,15 @@ export type RepoProviderResolution = {
 
 const PROVIDER_RESOLUTION_CONCURRENCY = 4;
 const MAX_PROVIDER_RESOLUTION_INPUT_LENGTH = 256;
+
+type ForgejoRepositoryApi = {
+  name?: unknown;
+  full_name?: unknown;
+  owner?: {
+    login?: unknown;
+    username?: unknown;
+  } | null;
+};
 
 export { MAX_PROVIDER_RESOLUTION_BATCH_SIZE } from "@/lib/repositories/provider-resolution-limits";
 
@@ -135,6 +148,69 @@ async function lookupCodebergCandidate(
   }
 }
 
+async function lookupForgejoCandidate(
+  owner: string,
+  repo: string,
+  baseUrl: string,
+  token: string | null,
+): Promise<RepoProviderResolutionCandidate | null> {
+  try {
+    const headersWithoutAuth: Record<string, string> = {
+      Accept: "application/json",
+      "User-Agent": "GitHubReleaseMonitorApp",
+    };
+    const chain = buildCodebergAuthChain(headersWithoutAuth, token);
+    const url = `${baseUrl}/api/v1/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    const { response, data, mode } =
+      await fetchJsonResponseWithRetryAuthChain<ForgejoRepositoryApi>(
+        url,
+        chain,
+        {
+          description: `Forgejo repo lookup for ${owner}/${repo} on ${baseUrl}`,
+          allowedRedirectBaseUrl: baseUrl,
+        },
+      );
+    log.debug(
+      `Forgejo repo lookup for ${owner}/${repo} on ${baseUrl}: ${response.status} ${response.statusText} (auth=${mode})`,
+    );
+    if (!response.ok) {
+      await discardResponseWithTimeout(response);
+      return null;
+    }
+
+    const expectedOwner = owner.toLowerCase();
+    const expectedRepo = repo.toLowerCase();
+    const fullName =
+      typeof data?.full_name === "string" ? data.full_name.trim() : "";
+    const apiOwner =
+      typeof data?.owner?.login === "string"
+        ? data.owner.login.trim()
+        : typeof data?.owner?.username === "string"
+          ? data.owner.username.trim()
+          : "";
+    const apiRepo = typeof data?.name === "string" ? data.name.trim() : "";
+    const matchesRequestedRepository = fullName
+      ? fullName.toLowerCase() === `${expectedOwner}/${expectedRepo}`
+      : apiOwner.toLowerCase() === expectedOwner &&
+        apiRepo.toLowerCase() === expectedRepo;
+    if (!matchesRequestedRepository) return null;
+
+    return {
+      provider: "forgejo",
+      providerHost: new URL(baseUrl).host,
+      providerBaseUrl: baseUrl,
+      id: buildForgejoRepoId(baseUrl, owner, repo),
+      canonicalRepoUrl: `${baseUrl}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+    };
+  } catch (error) {
+    log.debug(
+      `Forgejo repo lookup threw for ${owner}/${repo} on ${baseUrl}:`,
+      error,
+    );
+    return null;
+  }
+}
+
 async function lookupGitlabCandidate(
   owner: string,
   repo: string,
@@ -197,20 +273,47 @@ async function resolveRepoProviders(
   );
   const gitlabTokenConfigured = hasAnyGitlabTokenForAllowedHosts();
   const gitlabHosts = getAllowedGitlabHosts();
+  const forgejoBaseUrls = getAllowedForgejoBaseUrls();
+  const forgejoTokens = getForgejoAccessTokensByBaseUrl();
+  const forgejoTokenConfigured = forgejoTokens.size > 0;
 
   log.debug(
-    `Resolving providers for shorthand repo ${owner}/${repo} (GitHub token=${githubTokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}, GitLab token=${gitlabTokenConfigured ? "yes" : "no"}, GitLab hosts=${gitlabHosts.join(",")}).`,
+    `Resolving providers for shorthand repo ${owner}/${repo} (GitHub token=${githubTokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}, Forgejo token=${forgejoTokenConfigured ? "yes" : "no"}, Forgejo instances=${forgejoBaseUrls.join(",") || "none"}, GitLab token=${gitlabTokenConfigured ? "yes" : "no"}, GitLab hosts=${gitlabHosts.join(",")}).`,
   );
 
-  const candidates = (
-    await Promise.all([
-      lookupGithubCandidate(owner, repo),
-      lookupCodebergCandidate(owner, repo),
-      ...gitlabHosts.map((gitlabHost) =>
+  const forgejoCandidatesPromise = mapWithConcurrency(
+    forgejoBaseUrls,
+    PROVIDER_RESOLUTION_CONCURRENCY,
+    (baseUrl) =>
+      lookupForgejoCandidate(
+        owner,
+        repo,
+        baseUrl,
+        forgejoTokens.get(baseUrl) ?? null,
+      ),
+  );
+
+  const [
+    githubCandidate,
+    codebergCandidate,
+    forgejoCandidates,
+    gitlabCandidates,
+  ] = await Promise.all([
+    lookupGithubCandidate(owner, repo),
+    lookupCodebergCandidate(owner, repo),
+    forgejoCandidatesPromise,
+    Promise.all(
+      gitlabHosts.map((gitlabHost) =>
         lookupGitlabCandidate(owner, repo, gitlabHost),
       ),
-    ])
-  ).filter((candidate): candidate is RepoProviderResolutionCandidate =>
+    ),
+  ]);
+  const candidates = [
+    githubCandidate,
+    codebergCandidate,
+    ...forgejoCandidates,
+    ...gitlabCandidates,
+  ].filter((candidate): candidate is RepoProviderResolutionCandidate =>
     Boolean(candidate),
   );
 

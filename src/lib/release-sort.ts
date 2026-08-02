@@ -49,6 +49,8 @@ export function getRepoProviderSortKey(
     ? repoId.slice(0, repoId.indexOf(":")).toLowerCase()
     : "github";
 
+  if (provider === "forgejo") return "codeberg";
+
   return repoProviderSortKeys.includes(provider as ReleaseProviderSortKey)
     ? (provider as ReleaseProviderSortKey)
     : "unknown";
@@ -56,6 +58,9 @@ export function getRepoProviderSortKey(
 
 function getRepoNameSortKey(repoId: string): string {
   const provider = getRepoProviderSortKey(repoId);
+  const rawProvider = repoId.includes(":")
+    ? repoId.slice(0, repoId.indexOf(":")).toLowerCase()
+    : "github";
   const path = repoId.includes(":")
     ? repoId.slice(repoId.indexOf(":") + 1)
     : repoId;
@@ -70,6 +75,10 @@ function getRepoNameSortKey(repoId: string): string {
         firstSegment.includes(":"));
 
     return includesGitlabHost ? segments.slice(1).join("/") : path;
+  }
+
+  if (rawProvider === "forgejo") {
+    return path.split("/").slice(-2).join("/");
   }
 
   return path;

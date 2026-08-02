@@ -1,6 +1,10 @@
 import { parseImportedRepository } from "@/lib/repositories/repository-import";
 
 describe("repository import metadata", () => {
+  afterEach(() => {
+    delete process.env.FORGEJO_ADDITIONAL_BASE_URLS;
+  });
+
   it("imports and normalizes a valid repository display name", () => {
     expect(
       parseImportedRepository({
@@ -19,6 +23,19 @@ describe("repository import metadata", () => {
     ).toMatchObject({
       id: "github:owner/repo",
       tags: ["infra", "media"],
+    });
+  });
+
+  it("imports repositories from configured Forgejo base URLs", () => {
+    process.env.FORGEJO_ADDITIONAL_BASE_URLS = "https://scm.example.test/code";
+
+    expect(
+      parseImportedRepository({
+        url: "https://scm.example.test/code/Owner/Repo.git",
+      }),
+    ).toEqual({
+      id: "forgejo:scm.example.test/code/owner/repo",
+      url: "https://scm.example.test/code/Owner/Repo",
     });
   });
 

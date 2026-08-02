@@ -87,7 +87,10 @@ export function buildCodebergAuthChain(
 
   chain.push({
     mode: "none",
-    options: { headers: headersWithoutAuth, cache: "no-store" },
+    options: {
+      headers: headersWithoutAuth,
+      cache: "no-store",
+    },
   });
 
   return chain;

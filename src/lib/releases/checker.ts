@@ -7,7 +7,10 @@ import {
 } from "@/lib/notifications/pending-deliveries";
 import { getLatestReleasesForRepos } from "@/lib/releases";
 import { resolveParallelRepoFetches } from "@/lib/releases/filters";
-import { hasAnyGitlabTokenForAllowedHosts } from "@/lib/repositories/providers";
+import {
+  hasAnyForgejoToken,
+  hasAnyGitlabTokenForAllowedHosts,
+} from "@/lib/repositories/providers";
 import { applyReleaseFetchResultToRepository } from "@/lib/repositories/release-cache-update";
 import { scheduleProcessTask } from "@/lib/runtime/process-task-queue";
 import { filterRepositoriesDueForBackgroundCheck } from "@/lib/runtime/repository-schedule";
@@ -122,9 +125,10 @@ async function _checkForNewReleasesUnscheduled(options?: {
   const parallelLimit = resolveParallelRepoFetches(settings);
   const tokenConfigured = !!process.env.GITHUB_ACCESS_TOKEN?.trim();
   const codebergTokenConfigured = !!process.env.CODEBERG_ACCESS_TOKEN?.trim();
+  const forgejoTokenConfigured = hasAnyForgejoToken();
   const gitlabTokenConfigured = hasAnyGitlabTokenForAllowedHosts();
   log.info(
-    `Parallel fetch batch size set to ${parallelLimit} (GitHub token=${tokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}, GitLab token=${gitlabTokenConfigured ? "yes" : "no"}).`,
+    `Parallel fetch batch size set to ${parallelLimit} (GitHub token=${tokenConfigured ? "yes" : "no"}, Codeberg token=${codebergTokenConfigured ? "yes" : "no"}, Forgejo token=${forgejoTokenConfigured ? "yes" : "no"}, GitLab token=${gitlabTokenConfigured ? "yes" : "no"}).`,
   );
 
   const originalRepos = await getRepositories();

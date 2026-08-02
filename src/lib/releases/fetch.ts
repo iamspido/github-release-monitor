@@ -2,6 +2,7 @@ import { isRetryableFetchError } from "@/lib/fetch-retry";
 import {
   consumeResponseWithTimeout,
   discardResponseWithTimeout,
+  fetchWithAllowedRedirects,
   fetchWithTimeout,
 } from "@/lib/http/fetch-with-timeout";
 import { log } from "@/lib/server-action-helpers";
@@ -22,6 +23,7 @@ export type FetchRetryContext = {
   initialDelayMs?: number;
   parseAttempts?: number;
   timeoutMs?: number;
+  allowedRedirectBaseUrl?: string;
 };
 
 export async function fetchWithRetry(
@@ -36,7 +38,14 @@ export async function fetchWithRetry(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      return await fetchWithTimeout(url, options, context?.timeoutMs);
+      return context?.allowedRedirectBaseUrl
+        ? await fetchWithAllowedRedirects(
+            url,
+            options,
+            context.allowedRedirectBaseUrl,
+            context.timeoutMs,
+          )
+        : await fetchWithTimeout(url, options, context?.timeoutMs);
     } catch (error) {
       const shouldRetry =
         attempt < maxAttempts &&
@@ -107,6 +116,16 @@ export async function fetchJsonResponseWithRetry<T>(
 
 export type AuthMode = "none" | "token" | "bearer" | "basic";
 
+export function isRateLimitedResponse(
+  response: Response | null | undefined,
+): boolean {
+  return Boolean(
+    response &&
+      (response.status === 429 ||
+        (response.status === 403 && response.headers.get("retry-after"))),
+  );
+}
+
 export async function fetchJsonResponseWithRetryAuthChain<T>(
   url: string,
   chain: Array<{ mode: AuthMode; options: RequestInit }>,
@@ -139,7 +158,9 @@ export async function fetchJsonResponseWithRetryAuthChain<T>(
     // For auth-related errors, try the next candidate (if any).
     if (
       !isLast &&
-      (result.response.status === 401 || result.response.status === 403)
+      (result.response.status === 401 ||
+        (result.response.status === 403 &&
+          !isRateLimitedResponse(result.response)))
     ) {
       await discardResponseWithTimeout(result.response);
       continue;
@@ -185,7 +206,11 @@ export async function fetchResponseWithRetryAuthChain(
     }
 
     // For auth-related errors, try the next candidate (if any).
-    if (!isLast && (response.status === 401 || response.status === 403)) {
+    if (
+      !isLast &&
+      (response.status === 401 ||
+        (response.status === 403 && !isRateLimitedResponse(response)))
+    ) {
       await discardResponseWithTimeout(response);
       continue;
     }

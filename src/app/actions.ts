@@ -15,6 +15,7 @@ import {
 } from "@/lib/diagnostics/notification-config";
 import {
   getCodebergTokenCheck as getCodebergTokenCheckImpl,
+  getForgejoTokenChecks as getForgejoTokenChecksImpl,
   getGitHubRateLimit as getGitHubRateLimitImpl,
   getGitlabTokenCheck as getGitlabTokenCheckImpl,
 } from "@/lib/diagnostics/provider-checks";
@@ -210,6 +211,15 @@ export async function getCodebergTokenCheck(
     {
       status: "api_error" as const,
     },
+  );
+}
+
+export async function getForgejoTokenChecks(
+  ...args: Parameters<typeof getForgejoTokenChecksImpl>
+) {
+  return runExposedRestrictedActionWithFallback(
+    () => getForgejoTokenChecksImpl(...args),
+    [],
   );
 }
 

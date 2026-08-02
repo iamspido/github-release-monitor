@@ -2,8 +2,9 @@ import { MAX_PROVIDER_RESOLUTION_BATCH_SIZE } from "@/lib/repositories/provider-
 import type { Repository } from "@/types";
 
 export type ProviderChoiceCandidate = {
-  provider: "github" | "codeberg" | "gitlab";
+  provider: "github" | "codeberg" | "forgejo" | "gitlab";
   providerHost?: string;
+  providerBaseUrl?: string;
   canonicalRepoUrl: string;
 };
 
@@ -24,6 +25,7 @@ const providerChoiceOrder: Record<ProviderChoiceCandidate["provider"], number> =
     github: 0,
     gitlab: 1,
     codeberg: 2,
+    forgejo: 3,
   };
 
 export const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim());
@@ -94,6 +96,7 @@ export function parseRepositoryImportJson(content: string): Repository[] {
 export const getRepositoryDisplayName = (repo: Repository) => {
   if (repo.id.startsWith("github:")) return repo.id.slice("github:".length);
   if (repo.id.startsWith("codeberg:")) return repo.id.slice("codeberg:".length);
+  if (repo.id.startsWith("forgejo:")) return repo.id.slice("forgejo:".length);
   if (repo.id.startsWith("gitlab:")) return repo.id.slice("gitlab:".length);
   return repo.id;
 };
@@ -101,6 +104,7 @@ export const getRepositoryDisplayName = (repo: Repository) => {
 export const getRepositoryProviderName = (repo: Repository) => {
   if (repo.id.startsWith("github:")) return "GitHub";
   if (repo.id.startsWith("codeberg:")) return "Codeberg";
+  if (repo.id.startsWith("forgejo:")) return "Forgejo";
   if (repo.id.startsWith("gitlab:")) return "GitLab";
   return null;
 };
@@ -111,7 +115,9 @@ export function sortProviderChoiceCandidates(
   return [...candidates].sort(
     (a, b) =>
       providerChoiceOrder[a.provider] - providerChoiceOrder[b.provider] ||
-      (a.providerHost ?? "").localeCompare(b.providerHost ?? ""),
+      (a.providerBaseUrl ?? a.providerHost ?? "").localeCompare(
+        b.providerBaseUrl ?? b.providerHost ?? "",
+      ),
   );
 }
 

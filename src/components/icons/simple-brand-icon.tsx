@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { siCodeberg } from "simple-icons";
+import { siCodeberg, siForgejo } from "simple-icons";
 
 export type SimpleBrandIconProps = React.SVGProps<SVGSVGElement>;
 
@@ -41,6 +41,14 @@ export function CodebergBrandIcon(props: SimpleBrandIconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
       <path d={siCodeberg.path} />
+    </svg>
+  );
+}
+
+export function ForgejoBrandIcon(props: SimpleBrandIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
+      <path d={siForgejo.path} />
     </svg>
   );
 }

@@ -130,6 +130,7 @@ export function useRepositoryProviderWorkflow(
               candidates: resolution.candidates.map((candidate) => ({
                 provider: candidate.provider,
                 providerHost: candidate.providerHost,
+                providerBaseUrl: candidate.providerBaseUrl,
                 canonicalRepoUrl: candidate.canonicalRepoUrl,
               })),
             })),

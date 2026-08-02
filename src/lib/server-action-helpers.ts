@@ -13,6 +13,7 @@ export function normalizeEnvToken(value?: string): string | null {
 export function updateReleaseCacheTags(): void {
   updateTag("github-releases");
   updateTag("codeberg-releases");
+  updateTag("forgejo-releases");
   updateTag("gitlab-releases");
 }
 

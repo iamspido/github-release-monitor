@@ -34,6 +34,7 @@ import {
 import { StatusIndicator } from "@/components/diagnostics/status-indicator";
 import {
   CodebergBrandIcon,
+  ForgejoBrandIcon,
   GithubBrandIcon,
   GitlabBrandIcon,
 } from "@/components/icons/simple-brand-icon";
@@ -59,6 +60,7 @@ import { cn } from "@/lib/utils";
 import type {
   AppriseStatus,
   CodebergTokenCheckResult,
+  ForgejoTokenCheckResult,
   GitlabTokenCheckResult,
   NotificationConfig,
   RateLimitResult,
@@ -71,6 +73,7 @@ interface TestPageClientProps {
   isTokenSet: boolean;
   gitlabTokenCheck: GitlabTokenCheckResult;
   codebergTokenCheck: CodebergTokenCheckResult;
+  forgejoTokenChecks: ForgejoTokenCheckResult[];
   notificationConfig: NotificationConfig;
   appriseStatus: AppriseStatus;
   updateNotice: UpdateNotificationState;
@@ -82,6 +85,7 @@ export function TestPageClient({
   isTokenSet,
   gitlabTokenCheck,
   codebergTokenCheck,
+  forgejoTokenChecks,
   notificationConfig,
   appriseStatus: initialAppriseStatus,
   updateNotice: initialUpdateNotice,
@@ -954,6 +958,111 @@ export function TestPageClient({
               {codebergDetails}
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <ForgejoBrandIcon className="size-8 text-muted-foreground" />
+            <div>
+              <CardTitle>{t("forgejo_card_title")}</CardTitle>
+              <CardDescription>{t("forgejo_card_description")}</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {forgejoTokenChecks.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {t("forgejo_no_instances")}
+            </p>
+          ) : (
+            forgejoTokenChecks.map((check) => {
+              const authStatus = (() => {
+                switch (check.status) {
+                  case "not_set":
+                    return check.connectivityError
+                      ? {
+                          status: "error" as const,
+                          text: t("forgejo_token_check_error"),
+                        }
+                      : {
+                          status: "success" as const,
+                          text: t("forgejo_connectivity_confirmed"),
+                        };
+                  case "valid":
+                    return check.diagnosticsLimited
+                      ? {
+                          status: "warning" as const,
+                          text: t("auth_access_confirmed"),
+                        }
+                      : {
+                          status: "success" as const,
+                          text: t("auth_access_confirmed"),
+                        };
+                  case "invalid_token":
+                    return {
+                      status: "error" as const,
+                      text: t("codeberg_token_invalid"),
+                    };
+                  case "api_error":
+                    return {
+                      status: "error" as const,
+                      text: t("forgejo_token_check_error"),
+                    };
+                }
+              })();
+
+              return (
+                <div
+                  key={check.baseUrl}
+                  className="space-y-3 border-t pt-4 first:border-t-0 first:pt-0"
+                >
+                  <p className="font-medium break-all">
+                    <bdi dir="ltr">{check.baseUrl}</bdi>
+                  </p>
+                  <StatusIndicator
+                    status={check.status === "not_set" ? "warning" : "success"}
+                    text={t(
+                      check.status === "not_set"
+                        ? "forgejo_token_not_set"
+                        : "forgejo_token_set",
+                    )}
+                  />
+                  {check.status === "not_set" && (
+                    <p className="ps-7 text-sm text-muted-foreground">
+                      {t("forgejo_token_advice")}
+                    </p>
+                  )}
+                  <StatusIndicator
+                    status={authStatus.status}
+                    text={authStatus.text}
+                  />
+                  <div className="ps-7 text-sm text-muted-foreground space-y-1">
+                    {check.status === "valid" && check.login ? (
+                      <p>
+                        {t("forgejo_authenticated_as", {
+                          login: check.login,
+                        })}
+                      </p>
+                    ) : null}
+                    {check.status === "valid" && check.fullName ? (
+                      <p>{check.fullName}</p>
+                    ) : null}
+                    {check.status === "valid" && check.diagnosticsLimited ? (
+                      <p>{t("forgejo_token_valid_limited_advice")}</p>
+                    ) : null}
+                    {check.status === "invalid_token" ? (
+                      <p>{t("forgejo_invalid_token_advice")}</p>
+                    ) : null}
+                    {check.status === "api_error" ? (
+                      <p>{t("forgejo_token_check_error_advice")}</p>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </CardContent>
       </Card>
 

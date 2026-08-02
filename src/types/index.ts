@@ -4,8 +4,8 @@ export type { Locale } from "@/i18n/config";
 
 export type Repository = {
   // Unique identifier for a monitored repository.
-  // Uses `<provider>:owner/repo` for GitHub/Codeberg and
-  // `gitlab:<host>/owner/repo` for GitLab.
+  // Uses `<provider>:owner/repo` for GitHub/Codeberg and includes the
+  // configured instance location for self-hosted GitLab/Forgejo repositories.
   id: string;
   url: string;
   // Optional user-defined label used as the repository card heading.
@@ -151,6 +151,18 @@ export type CodebergTokenCheckResult =
     }
   | { status: "invalid_token" }
   | { status: "api_error" };
+
+export type ForgejoTokenCheckResult = { baseUrl: string } & (
+  | { status: "not_set"; connectivityError?: boolean }
+  | {
+      status: "valid";
+      login: string | null;
+      fullName: string | null;
+      diagnosticsLimited?: boolean;
+    }
+  | { status: "invalid_token" }
+  | { status: "api_error" }
+);
 
 export type GitlabTokenCheckResult =
   | { status: "not_set" }

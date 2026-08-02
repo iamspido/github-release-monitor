@@ -14,6 +14,7 @@ describe("simple actions", () => {
     await revalidateReleasesAction();
     expect(cacheMocks.updateTag).toHaveBeenCalledWith("github-releases");
     expect(cacheMocks.updateTag).toHaveBeenCalledWith("codeberg-releases");
+    expect(cacheMocks.updateTag).toHaveBeenCalledWith("forgejo-releases");
     expect(cacheMocks.updateTag).toHaveBeenCalledWith("gitlab-releases");
   });
 
