@@ -33,7 +33,7 @@ Use this to regenerate `package-lock.json` in a clean Node 24 Alpine container w
 ### Check Outdated Packages
 
 Use this to check for outdated packages in a temporary container setup.
-- `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app node:24-alpine sh -c "npm ci --ignore-scripts --no-audit --no-fund && npm outdated && rm -rf node_modules"`
+- `docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/app -w /app node:24-alpine sh -c "npm ci --ignore-scripts --no-audit --no-fund && npm outdated; rm -rf node_modules"`
 
 ## Translations
 
