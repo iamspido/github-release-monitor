@@ -13,6 +13,7 @@ type NotificationVariableKey =
   | "MAIL_FROM_ADDRESS"
   | "MAIL_FROM_NAME"
   | "MAIL_TO_ADDRESS"
+  | "MAIL_TLS_REJECT_UNAUTHORIZED"
   | "APPRISE_URL";
 
 type NotificationVariableSpec = {
@@ -29,6 +30,7 @@ const NOTIFICATION_VARIABLE_SPECS: readonly NotificationVariableSpec[] = [
   { key: "MAIL_FROM_ADDRESS", isRequired: true },
   { key: "MAIL_FROM_NAME", isRequired: false },
   { key: "MAIL_TO_ADDRESS", isRequired: true },
+  { key: "MAIL_TLS_REJECT_UNAUTHORIZED", isRequired: false },
   { key: "APPRISE_URL", isRequired: false, isSensitive: true },
 ];
 

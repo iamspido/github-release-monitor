@@ -57,6 +57,18 @@ describe("secret environment values", () => {
     },
   );
 
+  it("uses fail-safe SMTP TLS certificate verification defaults", () => {
+    expect(getAuthSmtpConfig({}).tlsRejectUnauthorized).toBe(true);
+    expect(
+      getAuthSmtpConfig({ MAIL_TLS_REJECT_UNAUTHORIZED: "invalid" })
+        .tlsRejectUnauthorized,
+    ).toBe(true);
+    expect(
+      getAuthSmtpConfig({ MAIL_TLS_REJECT_UNAUTHORIZED: "false" })
+        .tlsRejectUnauthorized,
+    ).toBe(false);
+  });
+
   it.each([
     ["  github-token  ", "github-token"],
     [' "github-token" ', "github-token"],

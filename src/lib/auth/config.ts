@@ -1,5 +1,8 @@
 import { readSecretEnvValue } from "@/lib/secret-env";
-import { parseSmtpPort } from "@/lib/smtp-config";
+import {
+  parseSmtpPort,
+  parseSmtpTlsRejectUnauthorized,
+} from "@/lib/smtp-config";
 
 export type AuthSocialProvider = "github" | "google";
 
@@ -86,6 +89,9 @@ export function getAuthSmtpConfig(env: AuthEnv = process.env) {
     fromName: env.MAIL_FROM_NAME?.trim() || "GitHub Release Monitor",
     username: env.MAIL_USERNAME?.trim() || "",
     password: readSecretEnvValue(env.MAIL_PASSWORD) ?? "",
+    tlsRejectUnauthorized: parseSmtpTlsRejectUnauthorized(
+      env.MAIL_TLS_REJECT_UNAUTHORIZED,
+    ),
     emailVerificationEnabled:
       smtpHost.length > 0 &&
       Number.isFinite(smtpPort) &&

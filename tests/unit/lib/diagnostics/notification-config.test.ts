@@ -54,4 +54,26 @@ describe("diagnostics notification config", () => {
       "http://<hidden>:<hidden>@apprise:8000/notify/<hidden>?token=<hidden>#hidden",
     );
   });
+
+  it("lists the optional SMTP TLS certificate verification variable", () => {
+    const config = buildNotificationConfig({
+      MAIL_HOST: "smtp.example.test",
+      MAIL_PORT: "587",
+      MAIL_FROM_ADDRESS: "from@example.test",
+      MAIL_TO_ADDRESS: "to@example.test",
+      MAIL_TLS_REJECT_UNAUTHORIZED: "false",
+    });
+
+    expect(config.isSmtpConfigured).toBe(true);
+    expect(
+      config.variables.find(
+        (variable) => variable.key === "MAIL_TLS_REJECT_UNAUTHORIZED",
+      ),
+    ).toMatchObject({
+      displayValue: "false",
+      isSet: true,
+      isRequired: false,
+      isSensitive: false,
+    });
+  });
 });

@@ -9,3 +9,9 @@ export function parseSmtpPort(value: string | undefined): number {
     ? port
     : Number.NaN;
 }
+
+export function parseSmtpTlsRejectUnauthorized(
+  value: string | undefined,
+): boolean {
+  return value !== "false";
+}

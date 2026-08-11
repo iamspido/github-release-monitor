@@ -509,12 +509,28 @@ MAIL_HOST=smtp.example.test
 MAIL_PORT=587
 MAIL_USERNAME=your-email@example.test
 MAIL_PASSWORD=your_email_password_or_app_token
+MAIL_TLS_REJECT_UNAUTHORIZED=true
 
 # The "from" and "to" addresses for notifications.
 MAIL_FROM_ADDRESS=notifications@your-domain.test
 MAIL_FROM_NAME=GitHub Release Monitor
 MAIL_TO_ADDRESS=your-personal-email@example.test
 ```
+
+SMTP TLS certificates are verified by default. For a relay signed by an
+internal certificate authority, prefer mounting the CA certificate into the
+container and setting `NODE_EXTRA_CA_CERTS=/path/to/ca.pem`. This extends the
+trusted CA list while keeping certificate and hostname verification enabled.
+
+As a last resort for a relay in a controlled internal network, set
+`MAIL_TLS_REJECT_UNAUTHORIZED=false`. Only the exact value `false` disables
+verification. This accepts all invalid SMTP TLS certificates, including
+self-signed, expired, and hostname-mismatched certificates, and therefore
+reduces protection against man-in-the-middle attacks. Restart the application
+after changing either environment variable. See the
+[Nodemailer TLS options](https://nodemailer.com/smtp#tls-options) and
+[`NODE_EXTRA_CA_CERTS` documentation](https://nodejs.org/api/cli.html#node_extra_ca_certsfile)
+for details.
 
 #### **Apprise Configuration (Optional)**
 
@@ -697,6 +713,7 @@ Here is a complete list of all environment variables used by the application.
 | `MAIL_HOST`           | The hostname or IP address of your SMTP server.                                                           | Yes, for email         | -                          |
 | `MAIL_PASSWORD`       | The password or app token for SMTP authentication.                                                        | No (depends on server) | -                          |
 | `MAIL_PORT`           | The port for your SMTP server (e.g., 587 or 465).                                                         | Yes, for email         | -                          |
+| `MAIL_TLS_REJECT_UNAUTHORIZED` | Verifies SMTP TLS certificates. Only `false` disables verification for invalid or self-signed certificates. | No | `true` |
 | `MAIL_TO_ADDRESS`     | The email address that will receive the notifications.                                                    | Yes, for email         | -                          |
 | `MAIL_USERNAME`       | The username for SMTP authentication.                                                                     | No (depends on server) | -                          |
 | `TZ`                  | Server timezone for schedules, logs, emails, and background notifications. UI timestamps use the browser timezone. | No                     | System default             |

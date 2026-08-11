@@ -24,7 +24,11 @@ describe("notifications/email-transport", () => {
 
   it("configures finite SMTP connection and socket timeouts", async () => {
     await sendEmailMessage(
-      { host: "smtp.example.test", port: 587 },
+      {
+        host: "smtp.example.test",
+        port: 587,
+        tlsRejectUnauthorized: true,
+      },
       {
         fromName: "Release Monitor",
         fromAddress: "from@example.test",
@@ -40,6 +44,36 @@ describe("notifications/email-transport", () => {
         connectionTimeout: 15_000,
         greetingTimeout: 15_000,
         socketTimeout: 30_000,
+        tls: {
+          rejectUnauthorized: true,
+        },
+      }),
+    );
+  });
+
+  it("allows explicitly disabling SMTP certificate verification", async () => {
+    await sendEmailMessage(
+      {
+        host: "smtp.internal.test",
+        port: 465,
+        tlsRejectUnauthorized: false,
+      },
+      {
+        fromName: "Release Monitor",
+        fromAddress: "from@example.test",
+        to: "to@example.test",
+        subject: "New release",
+        text: "text",
+        html: "<p>text</p>",
+      },
+    );
+
+    expect(createTransportMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secure: true,
+        tls: {
+          rejectUnauthorized: false,
+        },
       }),
     );
   });

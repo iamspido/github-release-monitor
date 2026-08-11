@@ -19,6 +19,7 @@ export type EmailTransportConfig = {
   port: number;
   username?: string;
   password?: string;
+  tlsRejectUnauthorized: boolean;
 };
 
 export async function sendEmailMessage(
@@ -32,6 +33,9 @@ export async function sendEmailMessage(
     connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
     greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
     socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
+    tls: {
+      rejectUnauthorized: config.tlsRejectUnauthorized,
+    },
     auth: {
       user: config.username,
       pass: config.password,

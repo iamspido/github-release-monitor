@@ -1,4 +1,7 @@
-import { parseSmtpPort } from "@/lib/smtp-config";
+import {
+  parseSmtpPort,
+  parseSmtpTlsRejectUnauthorized,
+} from "@/lib/smtp-config";
 
 type NotificationEnv = Partial<NodeJS.ProcessEnv>;
 
@@ -35,6 +38,9 @@ export function getEmailRuntimeConfig(
     fromAddress: env.MAIL_FROM_ADDRESS?.trim() || "",
     fromName: env.MAIL_FROM_NAME?.trim() || "",
     recipient,
+    tlsRejectUnauthorized: parseSmtpTlsRejectUnauthorized(
+      env.MAIL_TLS_REJECT_UNAUTHORIZED,
+    ),
     isComplete:
       hasValue(env.MAIL_HOST) &&
       Number.isFinite(port) &&

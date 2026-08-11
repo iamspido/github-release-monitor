@@ -194,6 +194,7 @@ export async function sendNewReleaseEmail(
         port: emailConfig.port,
         username: emailConfig.username,
         password: emailConfig.password,
+        tlsRejectUnauthorized: emailConfig.tlsRejectUnauthorized,
       },
       {
         fromName: emailConfig.fromName || t("from_name_fallback"),

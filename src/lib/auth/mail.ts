@@ -10,6 +10,7 @@ const smtpFromAddress = smtpConfig.fromAddress;
 const smtpFromName = smtpConfig.fromName;
 const smtpUsername = smtpConfig.username;
 const smtpPassword = smtpConfig.password;
+const smtpTlsRejectUnauthorized = smtpConfig.tlsRejectUnauthorized;
 
 export const authEmailVerificationEnabled = smtpConfig.emailVerificationEnabled;
 
@@ -60,6 +61,9 @@ function getAuthEmailTransporter() {
     host: smtpHost,
     port: smtpPort,
     secure: smtpPort === 465,
+    tls: {
+      rejectUnauthorized: smtpTlsRejectUnauthorized,
+    },
     ...authConfig,
   });
   return authEmailTransporter;
