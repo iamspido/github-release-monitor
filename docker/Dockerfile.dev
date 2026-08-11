@@ -86,7 +86,7 @@ RUN NODE_ENV=production \
     npm run build
 
 # E2E Stage (Playwright)
-FROM mcr.microsoft.com/playwright:v1.62.0-resolute AS e2e
+FROM mcr.microsoft.com/playwright:v1.62.1-resolute AS e2e
 
 WORKDIR /app
 

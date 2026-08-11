@@ -95,7 +95,7 @@ COPY tests/ ./tests/
 RUN npm test
 
 # E2E Stage (Playwright)
-FROM mcr.microsoft.com/playwright:v1.62.0-resolute AS e2e
+FROM mcr.microsoft.com/playwright:v1.62.1-resolute AS e2e
 
 WORKDIR /app
 
