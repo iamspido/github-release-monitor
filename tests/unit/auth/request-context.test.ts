@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getClientIpFromHeaders,
+  getExplicitlyTrustedClientIpFromRequest,
   getLoginIdentifierLogLabel,
   getLoginRequestContext,
 } from "@/lib/auth/request-context";
@@ -43,6 +44,23 @@ describe("auth request context", () => {
     });
 
     expect(getClientIpFromHeaders(headers)).toBe("unknown");
+  });
+
+  it("uses proxy addresses for security limits only when explicitly trusted", () => {
+    const request = new Request("http://localhost", {
+      headers: { "x-forwarded-for": "203.0.113.10" },
+    });
+
+    delete process.env.AUTH_TRUST_PROXY_HEADERS;
+    expect(getExplicitlyTrustedClientIpFromRequest(request)).toBe("unknown");
+
+    process.env.AUTH_TRUST_PROXY_HEADERS = "false";
+    expect(getExplicitlyTrustedClientIpFromRequest(request)).toBe("unknown");
+
+    process.env.AUTH_TRUST_PROXY_HEADERS = "true";
+    expect(getExplicitlyTrustedClientIpFromRequest(request)).toBe(
+      "203.0.113.10",
+    );
   });
 
   it("does not store or log the raw login identifier", () => {

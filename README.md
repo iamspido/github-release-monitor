@@ -115,6 +115,8 @@ Navigate to the `example/` directory. You will need to configure the environment
    AUTH_ENABLE_SIGNUP=false
    # Enable passkeys (WebAuthn) for passwordless login
    AUTH_ENABLE_PASSKEY=true
+   # Password reset link lifetime in seconds (60-86400)
+   AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS=900
    # Optional social login providers
    AUTH_GITHUB_CLIENT_ID=
    AUTH_GITHUB_CLIENT_SECRET=
@@ -127,7 +129,7 @@ Navigate to the `example/` directory. You will need to configure the environment
    AUTH_SECRET=your_super_secret_better_auth_key_here
    ```
 
-   For backward compatibility, version 2.x continues to trust proxy client-address headers when `AUTH_TRUST_PROXY_HEADERS` is unset. Set the value explicitly: use `true` only when a trusted reverse proxy overwrites these headers, and `false` when the app is exposed directly. The default will change to `false` in the next major release.
+   For backward compatibility, version 2.x continues to trust proxy client-address headers for logging and login limits when `AUTH_TRUST_PROXY_HEADERS` is unset. Password-reset IP limits are stricter: they use `X-Forwarded-For` or `X-Real-IP` only when this option is explicitly set to `true`. Otherwise, password-reset requests are limited by a hashed account identifier without storing the submitted username or email address. Set the value explicitly: use `true` only when a trusted reverse proxy overwrites these headers, and `false` when the app is exposed directly. The general compatibility default will change to `false` in the next major release.
 
    **Protocol (HTTP/HTTPS)**
    By default, the application runs in secure (HTTPS) mode. If you are not using a reverse proxy and need to run the app on plain HTTP, you must set this variable.
@@ -414,6 +416,8 @@ AUTH_SETUP_TOKEN=your_one_time_setup_token_here
 AUTH_ENABLE_SIGNUP=false
 # Enable passkeys (WebAuthn) for passwordless login
 AUTH_ENABLE_PASSKEY=true
+# Password reset link lifetime in seconds (60-86400)
+AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS=900
 # Optional social login providers
 AUTH_GITHUB_CLIENT_ID=
 AUTH_GITHUB_CLIENT_SECRET=
@@ -425,7 +429,7 @@ AUTH_TRUST_SOCIAL_LINKING=true
 AUTH_SECRET=your_super_secret_better_auth_key_here
 ```
 
-Version 2.x retains the previous trusted-header behavior when `AUTH_TRUST_PROXY_HEADERS` is unset. Configure it explicitly so a future major upgrade does not change the deployment's client-address handling unexpectedly.
+Version 2.x retains the previous trusted-header behavior for logging and login limits when `AUTH_TRUST_PROXY_HEADERS` is unset. Password-reset IP limits use proxy client-address headers only when this option is explicitly `true`; otherwise, they fall back to a hashed account identifier. Configure the option explicitly so a future major upgrade does not change the deployment's general client-address handling unexpectedly.
 
 #### **Protocol (HTTP/HTTPS)**
 
@@ -586,7 +590,114 @@ Version 2.0.0 replaces the old `iron-session` username/password login with Bette
 4. Start the updated app and open the login page. The first run shows the setup form; enter `AUTH_SETUP_TOKEN` and create the initial admin account. The old `AUTH_USERNAME`/`AUTH_PASSWORD` credentials are not imported automatically.
 5. Optional: configure `AUTH_ENABLE_PASSKEY`, `AUTH_ENABLE_SIGNUP`, or the GitHub/Google OAuth variables after the first account exists.
 
-Admin usernames must be 3-30 characters and may contain letters, numbers, `_`, and `.`. Passwords must be at least 12 characters and include uppercase, lowercase, and a number.
+Admin usernames must be 3-30 characters and may contain letters, numbers, `_`, and `.`. Passwords must contain 12-128 characters, include uppercase, lowercase, and a number, and contain no whitespace.
+
+---
+
+## 🔑 Password Recovery and User Administration
+
+When SMTP is configured (`MAIL_HOST`, `MAIL_PORT`, and `MAIL_FROM_ADDRESS`),
+the login page provides a **Forgot password?** flow that accepts either the
+username or email address. Reset links are single-use, expire after
+`AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS` (15 minutes by default), and revoke all
+existing sessions after a successful reset.
+
+An administrator with access to the installation host can generate the same
+Better Auth reset link without SMTP. The account can be selected by username
+or email.
+
+For a Docker deployment:
+
+```bash
+docker exec -it github-release-monitor \
+  node /app/grm-cli.mjs auth reset-password --user admin
+```
+
+For a manual installation, run the CLI from the project root after
+`npm run build`. Node must load the same `.env` file as the application so the
+CLI uses the configured Better Auth secret, public URL, and token lifetime:
+
+```bash
+node --env-file=.env .next/cli/grm-cli.mjs \
+  auth reset-password --user admin
+```
+
+If the application has not been built yet, `npm run build:cli` is sufficient
+to create `.next/cli/grm-cli.mjs`.
+
+Create another internal account and print a one-time password setup link:
+
+```bash
+docker exec -it github-release-monitor \
+  node /app/grm-cli.mjs auth create-user \
+  --username second_admin --email user@example.com --name "Second administrator"
+```
+
+Manual installation equivalent:
+
+```bash
+node --env-file=.env .next/cli/grm-cli.mjs \
+  auth create-user \
+  --username second_admin --email user@example.com --name "Second administrator"
+```
+
+Alternatively, set the initial password through a hidden, repeated TTY prompt:
+
+```bash
+docker exec -it github-release-monitor \
+  node /app/grm-cli.mjs auth create-user \
+  --username second_admin --email user@example.com --prompt-password
+```
+
+Manual installation equivalent (run it in an interactive terminal):
+
+```bash
+node --env-file=.env .next/cli/grm-cli.mjs \
+  auth create-user \
+  --username second_admin --email user@example.com --prompt-password
+```
+
+Permanently delete an internal account by username or email. To reduce the
+risk of deleting the wrong account, the interactive command displays the
+resolved account and requires its exact username as confirmation:
+
+```bash
+docker exec -it github-release-monitor \
+  node /app/grm-cli.mjs auth delete-user --user former_admin
+```
+
+Manual installation equivalent:
+
+```bash
+node --env-file=.env .next/cli/grm-cli.mjs \
+  auth delete-user --user former_admin
+```
+
+For deliberate non-interactive automation, `--yes` skips the confirmation:
+
+```bash
+docker exec github-release-monitor \
+  node /app/grm-cli.mjs auth delete-user --user former_admin --yes
+```
+
+Deletion removes the account and its authentication data, including active
+sessions and linked login methods, and cannot be undone. The final remaining
+account cannot be deleted.
+
+Passwords are never accepted as command-line values. All internal accounts
+currently have the same full application permissions; `create-user` does not
+implement or imply a separate role model. Treat CLI access as administrative
+access because these commands can print credential-recovery links to the terminal.
+For manual installations, run the command from the project root as a user with
+write access to `data/`; this ensures it opens the same `data/auth.db` as the
+application.
+
+The CLI uses exit code `2` for invalid input, `3` when an account is not found,
+`4` for ambiguous identifiers, account conflicts, or last-account protection,
+and `5` for database or other runtime failures.
+
+`BETTER_AUTH_URL` must be the browser-facing canonical URL. CLI-generated links
+use that origin and the locale stored in the application settings.
 
 ---
 
@@ -686,10 +797,11 @@ Here is a complete list of all environment variables used by the application.
 | `AUTH_LOGIN_LOCKOUT_SECONDS` | Lockout duration (seconds) after too many failed login attempts.                                   | No                     | `900`                      |
 | `AUTH_LOGIN_WINDOW_SECONDS` | Time window (seconds) used to count failed login attempts.                                          | No                     | `900`                      |
 | `AUTH_MAX_LOGIN_ATTEMPTS` | Maximum failed login attempts before a temporary lockout is applied.                                 | No                     | `5`                        |
-| `AUTH_TRUST_PROXY_HEADERS` | Trusts `X-Forwarded-For`/`X-Real-IP` for per-client login limits. Set to `true` only behind a proxy that overwrites these headers; use `false` for direct exposure. Version 2.x preserves the trusted-header behavior when unset; the next major will default to `false`. | No | `true` (2.x compatibility) |
+| `AUTH_TRUST_PROXY_HEADERS` | Trusts `X-Forwarded-For`/`X-Real-IP` for per-client login limits and, only when explicitly `true`, password-reset IP limits. Without explicit trust, password resets use a hashed account-identifier limit instead. Set to `true` only behind a proxy that overwrites these headers; use `false` for direct exposure. Version 2.x preserves the general trusted-header behavior when unset; the next major will default to `false`. | No | `true` (2.x compatibility; explicit `true` required for reset IP limits) |
 | `AUTH_TRUSTED_PROXY_HOPS` | Number of trusted proxy entries counted from the right side of `X-Forwarded-For` (1-10).                | No                     | `1`                        |
 | `AUTH_ENABLE_SIGNUP`  | Enables self-service signup when set to `true`. Keep `false` for single-user mode.                     | No                     | `false`                    |
 | `AUTH_ENABLE_PASSKEY` | Enables WebAuthn passkey features when set to `true`.                                                   | No                     | `true`                     |
+| `AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS` | Lifetime of single-use password reset links in seconds (60-86400).                              | No                     | `900`                      |
 | `AUTH_TRUST_SOCIAL_LINKING` | Trusts configured social providers for automatic account linking by email (`github`, `google`).         | No                     | `true`                     |
 | `AUTH_SETUP_TOKEN`    | One-time setup token used to create the first user when no users exist yet.                             | Recommended            | -                          |
 | `AUTH_SECRET`         | Backward-compatible fallback for `BETTER_AUTH_SECRET`.                                                   | No                     | -                          |

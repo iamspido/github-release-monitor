@@ -693,6 +693,14 @@
     "error_config_incomplete": "电子邮件配置不完整。请检查 .env 文件。",
     "error_send_failed": "处理并发送电子邮件失败：{details}"
   },
+  "PasswordResetEmail": {
+    "subject": "重置您的 GitHub Release Monitor 密码",
+    "title": "重置密码",
+    "intro": "有人请求重置您的 GitHub Release Monitor 帐户密码。",
+    "button": "重置密码",
+    "expiry_notice": "此链接将在 {duration} 后过期，并且只能使用一次。",
+    "ignore_notice": "如果这不是您发起的请求，可以放心忽略此邮件。"
+  },
   "LoginPage": {
     "title": "登录 GitHub Release Monitor",
     "form_title": "欢迎回来",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "初始设置不再可用。",
     "setup_success_login_now": "初始设置已完成。请使用新账户登录。",
     "signup_success_login_now": "注册成功。请使用新账户登录。"
+  },
+  "ForgotPasswordPage": {
+    "title": "忘记密码？",
+    "description": "输入用户名或邮箱，我们会发送密码重置链接。",
+    "cli_description": "尚未配置邮件发送。管理员可以从容器控制台生成重置链接。",
+    "identifier_label": "用户名或邮箱",
+    "identifier_placeholder": "admin 或 admin@example.test",
+    "success": "如果该用户名或邮箱对应的账户存在，密码重置链接已发送。",
+    "cli_notice": "请让有权访问 Docker 主机的管理员运行：",
+    "network_error": "无法提交请求，请重试。",
+    "submit": "发送重置链接",
+    "back_to_login": "返回登录",
+    "login_link": "忘记密码？"
+  },
+  "ResetPasswordPage": {
+    "title": "重置密码",
+    "description": "为账户选择新密码。",
+    "success": "密码已重置，所有现有会话均已退出。",
+    "invalid_or_expired": "此重置链接无效、已过期或已被使用。",
+    "password_label": "新密码",
+    "confirm_label": "确认新密码",
+    "show_password": "显示密码",
+    "hide_password": "隐藏密码",
+    "password_requirements": "至少 12 个字符，包含大写字母、小写字母和数字，且不含空格。",
+    "password_mismatch": "两次输入的密码不一致。",
+    "reset_failed": "无法重置密码，请申请新链接。",
+    "submit": "重置密码",
+    "back_to_login": "返回登录"
   },
   "RegisterPage": {
     "title": "注册 GitHub Release Monitor",

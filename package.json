@@ -7,7 +7,8 @@
   "author": "Timo Hohmann",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && npm run build:cli",
+    "build:cli": "node scripts/build-cli.mjs",
     "start": "next start",
     "lint": "biome check --max-diagnostics=200",
     "lint:fix": "biome check --write",
@@ -15,7 +16,7 @@
     "format:fix": "biome format --write",
     "typecheck": "tsc --noEmit",
     "typecheck:tests": "tsc -p tests/tsconfig.json --noEmit",
-    "test": "vitest run --reporter=dot",
+    "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
@@ -69,6 +70,7 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react-swc": "^4.3.3",
     "@vitest/coverage-v8": "^4.1.10",
+    "esbuild": "^0.28.2",
     "jsdom": "^30.0.1",
     "playwright": "^1.62.1",
     "postcss": "^8.5.26",

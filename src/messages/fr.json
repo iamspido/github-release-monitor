@@ -693,6 +693,14 @@
     "error_config_incomplete": "La configuration de la messagerie est incomplète. Vérifiez votre fichier .env.",
     "error_send_failed": "Échec du traitement et de l’envoi de l’e-mail : {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "Réinitialisez votre mot de passe GitHub Release Monitor",
+    "title": "Réinitialisez votre mot de passe",
+    "intro": "Une réinitialisation du mot de passe de votre compte GitHub Release Monitor a été demandée.",
+    "button": "Réinitialiser le mot de passe",
+    "expiry_notice": "Ce lien expire dans {duration} et ne peut être utilisé qu’une seule fois.",
+    "ignore_notice": "Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet e-mail."
+  },
   "LoginPage": {
     "title": "Connexion à GitHub Release Monitor",
     "form_title": "Bon retour parmi nous",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "La configuration initiale n’est plus disponible.",
     "setup_success_login_now": "Configuration initiale terminée. Connectez-vous avec votre nouveau compte.",
     "signup_success_login_now": "Inscription réussie. Connectez-vous avec votre nouveau compte."
+  },
+  "ForgotPasswordPage": {
+    "title": "Mot de passe oublié ?",
+    "description": "Saisissez votre nom d’utilisateur ou votre adresse e-mail pour recevoir un lien de réinitialisation.",
+    "cli_description": "L’envoi d’e-mails n’est pas configuré. Un administrateur peut générer un lien depuis la console du conteneur.",
+    "identifier_label": "Nom d’utilisateur ou e-mail",
+    "identifier_placeholder": "admin ou admin@example.test",
+    "success": "Si un compte correspond à ce nom d’utilisateur ou à cette adresse e-mail, un lien de réinitialisation a été envoyé.",
+    "cli_notice": "Demandez à un administrateur ayant accès à l’hôte Docker d’exécuter :",
+    "network_error": "La demande n’a pas pu être envoyée. Réessayez.",
+    "submit": "Envoyer le lien",
+    "back_to_login": "Retour à la connexion",
+    "login_link": "Mot de passe oublié ?"
+  },
+  "ResetPasswordPage": {
+    "title": "Réinitialiser le mot de passe",
+    "description": "Choisissez un nouveau mot de passe pour votre compte.",
+    "success": "Votre mot de passe a été réinitialisé. Toutes les sessions existantes ont été déconnectées.",
+    "invalid_or_expired": "Ce lien est invalide, expiré ou a déjà été utilisé.",
+    "password_label": "Nouveau mot de passe",
+    "confirm_label": "Confirmer le nouveau mot de passe",
+    "show_password": "Afficher le mot de passe",
+    "hide_password": "Masquer le mot de passe",
+    "password_requirements": "Au moins 12 caractères avec majuscule, minuscule, chiffre et sans espace.",
+    "password_mismatch": "Les mots de passe ne correspondent pas.",
+    "reset_failed": "Le mot de passe n’a pas pu être réinitialisé. Demandez un nouveau lien.",
+    "submit": "Réinitialiser le mot de passe",
+    "back_to_login": "Retour à la connexion"
   },
   "RegisterPage": {
     "title": "Inscription à GitHub Release Monitor",

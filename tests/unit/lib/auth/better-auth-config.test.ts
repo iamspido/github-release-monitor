@@ -1,4 +1,5 @@
 const mocks = vi.hoisted(() => ({
+  emailDeliveryEnabled: false,
   emailVerificationEnabled: false,
   featureConfig: {
     passkeyEnabled: false,
@@ -12,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   secret: "a".repeat(32),
   sendCurrentEmailConfirmation: vi.fn(),
   sendNewEmailVerification: vi.fn(),
+  sendPasswordReset: vi.fn(),
+  trackBackgroundTask: vi.fn((task: Promise<unknown>) => task),
   twoFactor: vi.fn((..._args: unknown[]) => ({ id: "two-factor" })),
   username: vi.fn((..._args: unknown[]) => ({ id: "username" })),
 }));
@@ -45,11 +48,18 @@ vi.mock("@/lib/auth/email-delivery-status", () => ({
 }));
 
 vi.mock("@/lib/auth/mail", () => ({
-  authEmailVerificationEnabled: mocks.emailVerificationEnabled,
+  get authEmailDeliveryEnabled() {
+    return mocks.emailDeliveryEnabled;
+  },
+  get authEmailVerificationEnabled() {
+    return mocks.emailVerificationEnabled;
+  },
   sendChangeEmailConfirmationToCurrentEmail: (...args: unknown[]) =>
     mocks.sendCurrentEmailConfirmation(...args),
   sendNewEmailVerificationEmail: (...args: unknown[]) =>
     mocks.sendNewEmailVerification(...args),
+  sendPasswordResetEmail: (...args: unknown[]) =>
+    mocks.sendPasswordReset(...args),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -67,6 +77,11 @@ vi.mock("@/lib/secret-env", () => ({
   readSecretEnvValue: (value: string | undefined) => value?.trim(),
 }));
 
+vi.mock("@/lib/runtime/background-tasks", () => ({
+  trackBackgroundTask: (task: Promise<unknown>) =>
+    mocks.trackBackgroundTask(task),
+}));
+
 describe("auth/better-auth-config", () => {
   const originalEnv = { ...process.env };
 
@@ -81,8 +96,10 @@ describe("auth/better-auth-config", () => {
     delete process.env.BETTER_AUTH_URL;
     delete process.env.BETTER_AUTH_BASE_URL;
     delete process.env.HTTPS;
+    delete process.env.AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS;
     mocks.secret = "a".repeat(32);
     mocks.emailVerificationEnabled = false;
+    mocks.emailDeliveryEnabled = false;
     mocks.featureConfig = {
       passkeyEnabled: false,
       signupEnabled: false,
@@ -94,6 +111,10 @@ describe("auth/better-auth-config", () => {
     );
     mocks.sendCurrentEmailConfirmation.mockResolvedValue(undefined);
     mocks.sendNewEmailVerification.mockResolvedValue(undefined);
+    mocks.sendPasswordReset.mockResolvedValue(undefined);
+    mocks.trackBackgroundTask.mockImplementation(
+      (task: Promise<unknown>) => task,
+    );
   });
 
   afterEach(() => {
@@ -121,7 +142,17 @@ describe("auth/better-auth-config", () => {
     expect(first).toBe(second);
     expect(first).toMatchObject({
       baseURL: "https://releases.example.test",
-      emailAndPassword: { enabled: true, disableSignUp: true },
+      emailAndPassword: {
+        enabled: true,
+        disableSignUp: true,
+        minPasswordLength: 12,
+        maxPasswordLength: 128,
+        resetPasswordTokenExpiresIn: 900,
+        revokeSessionsOnPasswordReset: true,
+      },
+      rateLimit: {
+        customRules: { "/request-password-reset": false },
+      },
       advanced: {
         useSecureCookies: true,
         defaultCookieAttributes: {
@@ -141,6 +172,80 @@ describe("auth/better-auth-config", () => {
     expect(first).not.toHaveProperty("socialProviders");
     expect(mocks.passkey).not.toHaveBeenCalled();
     expect(mocks.getAuthDb).toHaveBeenCalledOnce();
+  });
+
+  it("delivers reset emails with the configured expiry", async () => {
+    mocks.emailDeliveryEnabled = true;
+    process.env.AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS = "3600";
+    const { getBetterAuthConfig } = await import(
+      "@/lib/auth/better-auth-config"
+    );
+    const config = getBetterAuthConfig();
+
+    expect(config.emailAndPassword.resetPasswordTokenExpiresIn).toBe(3600);
+    await expect(
+      config.emailAndPassword.sendResetPassword({
+        user: { email: "admin@example.test" },
+        url: "https://example.test/reset?token=secret",
+        token: "secret",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(mocks.sendPasswordReset).toHaveBeenCalledWith({
+      email: "admin@example.test",
+      resetUrl: "https://example.test/reset?token=secret",
+      expiresInSeconds: 3600,
+    });
+    expect(mocks.trackBackgroundTask).toHaveBeenCalledOnce();
+  });
+
+  it("keeps reset requests account-neutral when SMTP delivery fails", async () => {
+    mocks.emailDeliveryEnabled = true;
+    mocks.sendPasswordReset.mockRejectedValueOnce(
+      new Error("SMTP unavailable"),
+    );
+    const { getBetterAuthConfig } = await import(
+      "@/lib/auth/better-auth-config"
+    );
+    const config = getBetterAuthConfig();
+
+    await expect(
+      config.emailAndPassword.sendResetPassword({
+        user: { email: "admin@example.test" },
+        url: "https://example.test/reset?token=secret",
+        token: "secret",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      mocks.trackBackgroundTask.mock.calls[0]?.[0],
+    ).resolves.toBeUndefined();
+  });
+
+  it("returns before a pending reset email delivery completes", async () => {
+    mocks.emailDeliveryEnabled = true;
+    let finishDelivery: (() => void) | undefined;
+    mocks.sendPasswordReset.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishDelivery = resolve;
+      }),
+    );
+    const { getBetterAuthConfig } = await import(
+      "@/lib/auth/better-auth-config"
+    );
+    const config = getBetterAuthConfig();
+
+    const callback = config.emailAndPassword.sendResetPassword({
+      user: { email: "admin@example.test" },
+      url: "https://example.test/reset?token=secret",
+      token: "secret",
+    });
+    await expect(callback).resolves.toBeUndefined();
+    expect(mocks.trackBackgroundTask).toHaveBeenCalledOnce();
+
+    finishDelivery?.();
+    await expect(
+      mocks.trackBackgroundTask.mock.calls[0]?.[0],
+    ).resolves.toBeUndefined();
   });
 
   it("enables passkeys, signup, and insecure development cookies explicitly", async () => {

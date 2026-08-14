@@ -693,6 +693,14 @@
     "error_config_incomplete": "Konfiguracja poczty e-mail jest niekompletna. Sprawdź plik .env.",
     "error_send_failed": "Nie udało się przetworzyć i wysłać wiadomości e-mail: {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "Zresetuj hasło do GitHub Release Monitor",
+    "title": "Zresetuj hasło",
+    "intro": "Poproszono o zresetowanie hasła do Twojego konta GitHub Release Monitor.",
+    "button": "Zresetuj hasło",
+    "expiry_notice": "Ten link wygaśnie za {duration} i może zostać użyty tylko raz.",
+    "ignore_notice": "Jeśli to nie Ty wysłałeś tę prośbę, możesz bezpiecznie zignorować tę wiadomość."
+  },
   "LoginPage": {
     "title": "Logowanie do GitHub Release Monitor",
     "form_title": "Witaj ponownie",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "Konfiguracja początkowa nie jest już dostępna.",
     "setup_success_login_now": "Konfiguracja początkowa została zakończona. Zaloguj się do nowego konta.",
     "signup_success_login_now": "Rejestracja zakończona pomyślnie. Zaloguj się do nowego konta."
+  },
+  "ForgotPasswordPage": {
+    "title": "Nie pamiętasz hasła?",
+    "description": "Podaj nazwę użytkownika lub adres e-mail, a wyślemy link do zresetowania hasła.",
+    "cli_description": "Wysyłanie e-maili nie jest skonfigurowane. Administrator może wygenerować link w konsoli kontenera.",
+    "identifier_label": "Nazwa użytkownika lub e-mail",
+    "identifier_placeholder": "admin lub admin@example.test",
+    "success": "Jeśli konto z tą nazwą użytkownika lub adresem e-mail istnieje, wysłano link do zresetowania hasła.",
+    "cli_notice": "Poproś administratora z dostępem do hosta Docker o wykonanie polecenia:",
+    "network_error": "Nie udało się wysłać żądania. Spróbuj ponownie.",
+    "submit": "Wyślij link",
+    "back_to_login": "Wróć do logowania",
+    "login_link": "Nie pamiętasz hasła?"
+  },
+  "ResetPasswordPage": {
+    "title": "Zresetuj hasło",
+    "description": "Wybierz nowe hasło dla swojego konta.",
+    "success": "Hasło zostało zresetowane. Wszystkie istniejące sesje zostały wylogowane.",
+    "invalid_or_expired": "Ten link jest nieprawidłowy, wygasł lub został już użyty.",
+    "password_label": "Nowe hasło",
+    "confirm_label": "Potwierdź nowe hasło",
+    "show_password": "Pokaż hasło",
+    "hide_password": "Ukryj hasło",
+    "password_requirements": "Co najmniej 12 znaków, wielka i mała litera, cyfra oraz bez spacji.",
+    "password_mismatch": "Hasła nie są zgodne.",
+    "reset_failed": "Nie udało się zresetować hasła. Poproś o nowy link.",
+    "submit": "Zresetuj hasło",
+    "back_to_login": "Wróć do logowania"
   },
   "RegisterPage": {
     "title": "Rejestracja w GitHub Release Monitor",

@@ -4,6 +4,16 @@ export function getAuthActionFromPathname(pathname: string) {
   return pathname.slice(prefix.length) || "(root)";
 }
 
+export function getSafeAuthActionForLog(action: string) {
+  return action.startsWith("reset-password/")
+    ? "reset-password/[redacted]"
+    : action;
+}
+
+export function isPasswordResetTokenBearingAction(action: string) {
+  return action === "reset-password" || action.startsWith("reset-password/");
+}
+
 export function getOAuthProviderFromAction(action: string) {
   if (!action.startsWith("callback/")) return null;
   return action.split("/")[1] || null;
@@ -76,6 +86,15 @@ export async function getPasskeyIdFromDeleteRequest(request: Request) {
   try {
     const data = (await request.clone().json()) as { id?: unknown };
     return typeof data.id === "string" ? data.id.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+export async function getNewPasswordFromResetRequest(request: Request) {
+  try {
+    const data = (await request.clone().json()) as { newPassword?: unknown };
+    return typeof data.newPassword === "string" ? data.newPassword : "";
   } catch {
     return "";
   }

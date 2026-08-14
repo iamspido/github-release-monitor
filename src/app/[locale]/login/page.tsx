@@ -30,6 +30,11 @@ export default async function LoginPage({
   const registerHref =
     registerPath === "/" ? `/${appLocale}` : `/${appLocale}${registerPath}`;
   const publicHomeHref = `/${appLocale}`;
+  const forgotPasswordPath = getCanonicalRoutePath(
+    "/forgot-password",
+    appLocale,
+  );
+  const forgotPasswordHref = `/${appLocale}${forgotPasswordPath}`;
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
@@ -46,6 +51,7 @@ export default async function LoginPage({
           passkeyEnabled={passkeyEnabled}
           signupEnabled={signupEnabled}
           registerPath={registerHref}
+          forgotPasswordPath={forgotPasswordHref}
           allowUnauthenticatedAccess={
             authenticationMethod === "AllowUnauthenticated"
           }

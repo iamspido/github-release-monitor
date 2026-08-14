@@ -23,9 +23,10 @@ COPY components.json \
 # Copy source files
 COPY public/ ./public/
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 
 # Build the application
-RUN BETTER_AUTH_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+RUN BETTER_AUTH_SECRET=9f3c7a1e5b8d2f604a9c1e7b3d5f8062c4a8e1b7d9f3056c2e4a8b1d7f9c3e50 \
     BETTER_AUTH_URL=http://localhost:3000 \
     npm run build
 
@@ -43,6 +44,7 @@ COPY biome.json ./
 COPY tsconfig.json ./
 COPY src/ ./src/
 COPY tests/ ./tests/
+COPY scripts/ ./scripts/
 
 RUN npm run lint
 
@@ -65,8 +67,8 @@ COPY tests/ ./tests/
 RUN npm run typecheck
 RUN npm run typecheck:tests
 
-# Test Stage (runs unit tests with Vitest)
-FROM node:24-alpine AS tester
+# Shared unit test stage
+FROM node:24-alpine AS test-base
 
 WORKDIR /app
 
@@ -91,8 +93,15 @@ COPY public/ ./public/
 COPY src/ ./src/
 COPY tests/ ./tests/
 
-# Run tests during image build; build fails if tests fail
-RUN npm test
+# Test Stage (full output for CI and manual runs)
+FROM test-base AS tester
+
+RUN npm test -- --reporter=dot
+
+# Agent Test Stage (only report failed tests and their errors)
+FROM test-base AS tester-agent
+
+RUN npm test -- --reporter=minimal
 
 # E2E Stage (Playwright)
 FROM mcr.microsoft.com/playwright:v1.62.1-resolute AS e2e
@@ -149,6 +158,7 @@ RUN addgroup -g 1001 -S nodejs && \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/cli/grm-cli.mjs ./grm-cli.mjs
 
 # Switch to non-root user
 USER nextjs

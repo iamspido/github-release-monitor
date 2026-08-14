@@ -693,6 +693,14 @@
     "error_config_incomplete": "Cấu hình email chưa đầy đủ. Hãy kiểm tra tệp .env.",
     "error_send_failed": "Không thể xử lý và gửi email: {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "Đặt lại mật khẩu GitHub Release Monitor của bạn",
+    "title": "Đặt lại mật khẩu",
+    "intro": "Đã có yêu cầu đặt lại mật khẩu cho tài khoản GitHub Release Monitor của bạn.",
+    "button": "Đặt lại mật khẩu",
+    "expiry_notice": "Liên kết này sẽ hết hạn sau {duration} và chỉ có thể sử dụng một lần.",
+    "ignore_notice": "Nếu bạn không yêu cầu việc này, bạn có thể bỏ qua email này một cách an toàn."
+  },
   "LoginPage": {
     "title": "Đăng nhập vào GitHub Release Monitor",
     "form_title": "Chào mừng trở lại",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "Thiết lập ban đầu không còn khả dụng.",
     "setup_success_login_now": "Đã hoàn tất thiết lập ban đầu. Vui lòng đăng nhập bằng tài khoản mới.",
     "signup_success_login_now": "Đăng ký thành công. Vui lòng đăng nhập bằng tài khoản mới."
+  },
+  "ForgotPasswordPage": {
+    "title": "Quên mật khẩu?",
+    "description": "Nhập tên người dùng hoặc email và chúng tôi sẽ gửi liên kết đặt lại mật khẩu.",
+    "cli_description": "Chưa cấu hình gửi email. Quản trị viên có thể tạo liên kết từ bảng điều khiển container.",
+    "identifier_label": "Tên người dùng hoặc email",
+    "identifier_placeholder": "admin hoặc admin@example.test",
+    "success": "Nếu có tài khoản với tên người dùng hoặc email này, liên kết đặt lại mật khẩu đã được gửi.",
+    "cli_notice": "Hãy nhờ quản trị viên có quyền truy cập máy chủ Docker chạy lệnh:",
+    "network_error": "Không thể gửi yêu cầu. Vui lòng thử lại.",
+    "submit": "Gửi liên kết đặt lại",
+    "back_to_login": "Quay lại đăng nhập",
+    "login_link": "Quên mật khẩu?"
+  },
+  "ResetPasswordPage": {
+    "title": "Đặt lại mật khẩu",
+    "description": "Chọn mật khẩu mới cho tài khoản của bạn.",
+    "success": "Mật khẩu đã được đặt lại. Tất cả phiên hiện có đã đăng xuất.",
+    "invalid_or_expired": "Liên kết này không hợp lệ, đã hết hạn hoặc đã được sử dụng.",
+    "password_label": "Mật khẩu mới",
+    "confirm_label": "Xác nhận mật khẩu mới",
+    "show_password": "Hiện mật khẩu",
+    "hide_password": "Ẩn mật khẩu",
+    "password_requirements": "Tối thiểu 12 ký tự, gồm chữ hoa, chữ thường, số và không có khoảng trắng.",
+    "password_mismatch": "Mật khẩu không khớp.",
+    "reset_failed": "Không thể đặt lại mật khẩu. Hãy yêu cầu liên kết mới.",
+    "submit": "Đặt lại mật khẩu",
+    "back_to_login": "Quay lại đăng nhập"
   },
   "RegisterPage": {
     "title": "Đăng ký GitHub Release Monitor",

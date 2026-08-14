@@ -2,11 +2,19 @@ import {
   containsPasswordWhitespace,
   isPasswordPolicyValid,
   keepPasswordInputWhitespaceFree,
+  PASSWORD_MAX_LENGTH,
 } from "@/lib/password-policy";
 
 describe("password policy", () => {
   it("accepts a strong password without whitespace", () => {
     expect(isPasswordPolicyValid("VerySecurePass123")).toBe(true);
+  });
+
+  it("rejects passwords above Better Auth's maximum length", () => {
+    const password = `Aa1${"x".repeat(PASSWORD_MAX_LENGTH - 2)}`;
+
+    expect(password).toHaveLength(PASSWORD_MAX_LENGTH + 1);
+    expect(isPasswordPolicyValid(password)).toBe(false);
   });
 
   it.each([

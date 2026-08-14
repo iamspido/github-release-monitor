@@ -693,6 +693,14 @@
     "error_config_incomplete": "メール設定が不完全です。.env ファイルを確認してください。",
     "error_send_failed": "メールの処理と送信に失敗しました：{details}"
   },
+  "PasswordResetEmail": {
+    "subject": "GitHub Release Monitor のパスワードをリセット",
+    "title": "パスワードをリセット",
+    "intro": "GitHub Release Monitor アカウントのパスワードリセットがリクエストされました。",
+    "button": "パスワードをリセット",
+    "expiry_notice": "このリンクは {duration} 後に期限切れとなり、一度だけ使用できます。",
+    "ignore_notice": "このリクエストに心当たりがない場合は、このメールを無視してください。"
+  },
   "LoginPage": {
     "title": "GitHub Release Monitor にログイン",
     "form_title": "おかえりなさい",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "初期設定はすでに利用できません。",
     "setup_success_login_now": "初期設定が完了しました。新しいアカウントでログインしてください。",
     "signup_success_login_now": "登録が完了しました。新しいアカウントでログインしてください。"
+  },
+  "ForgotPasswordPage": {
+    "title": "パスワードをお忘れですか？",
+    "description": "ユーザー名またはメールアドレスを入力すると、パスワード再設定リンクを送信します。",
+    "cli_description": "メール送信が設定されていません。管理者はコンテナのコンソールから再設定リンクを生成できます。",
+    "identifier_label": "ユーザー名またはメールアドレス",
+    "identifier_placeholder": "admin または admin@example.test",
+    "success": "このユーザー名またはメールアドレスのアカウントが存在する場合、再設定リンクを送信しました。",
+    "cli_notice": "Docker ホストにアクセスできる管理者に次のコマンドの実行を依頼してください：",
+    "network_error": "リクエストを送信できませんでした。もう一度お試しください。",
+    "submit": "再設定リンクを送信",
+    "back_to_login": "ログインに戻る",
+    "login_link": "パスワードをお忘れですか？"
+  },
+  "ResetPasswordPage": {
+    "title": "パスワードを再設定",
+    "description": "アカウントの新しいパスワードを選択してください。",
+    "success": "パスワードを再設定しました。既存のすべてのセッションからログアウトしました。",
+    "invalid_or_expired": "このリンクは無効、期限切れ、または使用済みです。",
+    "password_label": "新しいパスワード",
+    "confirm_label": "新しいパスワードを確認",
+    "show_password": "パスワードを表示",
+    "hide_password": "パスワードを隠す",
+    "password_requirements": "12文字以上で、大文字、小文字、数字を含み、空白は使用できません。",
+    "password_mismatch": "パスワードが一致しません。",
+    "reset_failed": "パスワードを再設定できませんでした。新しいリンクを取得してください。",
+    "submit": "パスワードを再設定",
+    "back_to_login": "ログインに戻る"
   },
   "RegisterPage": {
     "title": "GitHub Release Monitor に登録",

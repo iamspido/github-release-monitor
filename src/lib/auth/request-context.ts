@@ -53,6 +53,13 @@ export function getClientIpFromRequest(request: Request | undefined): string {
   return request ? getClientIpFromHeaders(request.headers) : "unknown";
 }
 
+export function getExplicitlyTrustedClientIpFromRequest(
+  request: Request | undefined,
+): string {
+  if (process.env.AUTH_TRUST_PROXY_HEADERS !== "true") return "unknown";
+  return getClientIpFromRequest(request);
+}
+
 export function getLoginRequestContext(
   headerStore: Headers,
   identifier: string,

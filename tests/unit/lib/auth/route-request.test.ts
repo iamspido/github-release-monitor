@@ -1,10 +1,13 @@
 import {
   getAccountSelectionFromUnlinkRequest,
   getAuthActionFromPathname,
+  getNewPasswordFromResetRequest,
   getOAuthErrorFromResponseLocation,
   getOAuthProviderFromAction,
   getPasskeyIdFromDeleteRequest,
+  getSafeAuthActionForLog,
   getSocialProviderFromSignInRequest,
+  isPasswordResetTokenBearingAction,
   isSocialAuthAction,
   isSocialSignInAction,
 } from "@/lib/auth/route-request";
@@ -19,6 +22,19 @@ describe("auth route request parsing", () => {
     expect(getOAuthProviderFromAction("sign-in/social")).toBeNull();
     expect(isSocialAuthAction("callback/google")).toBe(true);
     expect(isSocialSignInAction("sign-in/social")).toBe(true);
+    expect(getSafeAuthActionForLog("reset-password/secret-token")).toBe(
+      "reset-password/[redacted]",
+    );
+    expect(getSafeAuthActionForLog("request-password-reset")).toBe(
+      "request-password-reset",
+    );
+    expect(isPasswordResetTokenBearingAction("reset-password")).toBe(true);
+    expect(
+      isPasswordResetTokenBearingAction("reset-password/secret-token"),
+    ).toBe(true);
+    expect(isPasswordResetTokenBearingAction("request-password-reset")).toBe(
+      false,
+    );
   });
 
   it("reads social providers from supported request bodies", async () => {
@@ -64,6 +80,18 @@ describe("auth route request parsing", () => {
       accountId: "account-1",
     });
     expect(await getPasskeyIdFromDeleteRequest(passkeyRequest)).toBe("key-1");
+  });
+
+  it("reads password reset bodies without normalizing the password", async () => {
+    const request = new Request("http://localhost/api/auth/reset-password", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ newPassword: " SecretPassword123 " }),
+    });
+
+    expect(await getNewPasswordFromResetRequest(request)).toBe(
+      " SecretPassword123 ",
+    );
   });
 
   it("extracts OAuth errors only from valid response locations", () => {

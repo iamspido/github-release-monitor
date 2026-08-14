@@ -1,4 +1,5 @@
 export const PASSWORD_MIN_LENGTH = 12;
+export const PASSWORD_MAX_LENGTH = 128;
 
 const PASSWORD_HAS_LOWERCASE_REGEX = /[a-z]/;
 const PASSWORD_HAS_UPPERCASE_REGEX = /[A-Z]/;
@@ -23,6 +24,7 @@ export function isPasswordPolicyValid(password: string): boolean {
     trimmedPassword === password &&
     !containsPasswordWhitespace(trimmedPassword) &&
     trimmedPassword.length >= PASSWORD_MIN_LENGTH &&
+    trimmedPassword.length <= PASSWORD_MAX_LENGTH &&
     PASSWORD_HAS_LOWERCASE_REGEX.test(trimmedPassword) &&
     PASSWORD_HAS_UPPERCASE_REGEX.test(trimmedPassword) &&
     PASSWORD_HAS_NUMBER_REGEX.test(trimmedPassword)

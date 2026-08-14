@@ -689,6 +689,14 @@
     "error_config_incomplete": "La configuración del correo está incompleta. Comprueba el archivo .env.",
     "error_send_failed": "No se pudo procesar y enviar el correo: {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "Restablece tu contraseña de GitHub Release Monitor",
+    "title": "Restablece tu contraseña",
+    "intro": "Se ha solicitado restablecer la contraseña de tu cuenta de GitHub Release Monitor.",
+    "button": "Restablecer contraseña",
+    "expiry_notice": "Este enlace caduca en {duration} y solo puede utilizarse una vez.",
+    "ignore_notice": "Si no has solicitado esto, puedes ignorar este correo de forma segura."
+  },
   "LoginPage": {
     "title": "Iniciar sesión en GitHub Release Monitor",
     "form_title": "Te damos la bienvenida de nuevo",
@@ -756,6 +764,34 @@
     "error_setup_unavailable": "La configuración inicial ya no está disponible.",
     "setup_success_login_now": "Configuración inicial completada. Inicia sesión con tu cuenta nueva.",
     "signup_success_login_now": "Registro correcto. Inicia sesión con tu cuenta nueva."
+  },
+  "ForgotPasswordPage": {
+    "title": "¿Olvidaste tu contraseña?",
+    "description": "Introduce tu nombre de usuario o correo electrónico y te enviaremos un enlace para restablecer la contraseña.",
+    "cli_description": "El envío de correo no está configurado. Un administrador puede generar un enlace desde la consola del contenedor.",
+    "identifier_label": "Usuario o correo electrónico",
+    "identifier_placeholder": "admin o admin@example.test",
+    "success": "Si existe una cuenta con este usuario o correo electrónico, se ha enviado un enlace para restablecer la contraseña.",
+    "cli_notice": "Pide a un administrador con acceso al host Docker que ejecute:",
+    "network_error": "No se pudo enviar la solicitud. Inténtalo de nuevo.",
+    "submit": "Enviar enlace",
+    "back_to_login": "Volver al inicio de sesión",
+    "login_link": "¿Olvidaste tu contraseña?"
+  },
+  "ResetPasswordPage": {
+    "title": "Restablecer contraseña",
+    "description": "Elige una nueva contraseña para tu cuenta.",
+    "success": "Tu contraseña se ha restablecido. Se cerraron todas las sesiones existentes.",
+    "invalid_or_expired": "Este enlace no es válido, ha caducado o ya se utilizó.",
+    "password_label": "Nueva contraseña",
+    "confirm_label": "Confirmar nueva contraseña",
+    "show_password": "Mostrar contraseña",
+    "hide_password": "Ocultar contraseña",
+    "password_requirements": "Mínimo 12 caracteres, con mayúscula, minúscula, número y sin espacios.",
+    "password_mismatch": "Las contraseñas no coinciden.",
+    "reset_failed": "No se pudo restablecer la contraseña. Solicita un nuevo enlace.",
+    "submit": "Restablecer contraseña",
+    "back_to_login": "Volver al inicio de sesión"
   },
   "RegisterPage": {
     "title": "Registrarse en GitHub Release Monitor",

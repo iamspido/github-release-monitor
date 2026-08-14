@@ -693,6 +693,14 @@
     "error_config_incomplete": "이메일 구성이 완전하지 않습니다. .env 파일을 확인하세요.",
     "error_send_failed": "이메일 처리 및 전송 실패: {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "GitHub Release Monitor 비밀번호 재설정",
+    "title": "비밀번호 재설정",
+    "intro": "GitHub Release Monitor 계정의 비밀번호 재설정이 요청되었습니다.",
+    "button": "비밀번호 재설정",
+    "expiry_notice": "이 링크는 {duration} 후 만료되며 한 번만 사용할 수 있습니다.",
+    "ignore_notice": "요청한 적이 없다면 이 이메일을 무시하셔도 됩니다."
+  },
   "LoginPage": {
     "title": "GitHub Release Monitor 로그인",
     "form_title": "다시 오신 것을 환영합니다",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "초기 설정을 더 이상 사용할 수 없습니다.",
     "setup_success_login_now": "초기 설정이 완료되었습니다. 새 계정으로 로그인하세요.",
     "signup_success_login_now": "회원가입이 완료되었습니다. 새 계정으로 로그인하세요."
+  },
+  "ForgotPasswordPage": {
+    "title": "비밀번호를 잊으셨나요?",
+    "description": "사용자 이름 또는 이메일을 입력하면 비밀번호 재설정 링크를 보내드립니다.",
+    "cli_description": "이메일 전송이 설정되지 않았습니다. 관리자가 컨테이너 콘솔에서 재설정 링크를 생성할 수 있습니다.",
+    "identifier_label": "사용자 이름 또는 이메일",
+    "identifier_placeholder": "admin 또는 admin@example.test",
+    "success": "이 사용자 이름 또는 이메일의 계정이 존재하면 비밀번호 재설정 링크가 전송되었습니다.",
+    "cli_notice": "Docker 호스트에 접근할 수 있는 관리자에게 다음 명령 실행을 요청하세요:",
+    "network_error": "요청을 제출할 수 없습니다. 다시 시도하세요.",
+    "submit": "재설정 링크 보내기",
+    "back_to_login": "로그인으로 돌아가기",
+    "login_link": "비밀번호를 잊으셨나요?"
+  },
+  "ResetPasswordPage": {
+    "title": "비밀번호 재설정",
+    "description": "계정의 새 비밀번호를 선택하세요.",
+    "success": "비밀번호가 재설정되었으며 기존의 모든 세션에서 로그아웃되었습니다.",
+    "invalid_or_expired": "이 링크는 유효하지 않거나 만료되었거나 이미 사용되었습니다.",
+    "password_label": "새 비밀번호",
+    "confirm_label": "새 비밀번호 확인",
+    "show_password": "비밀번호 표시",
+    "hide_password": "비밀번호 숨기기",
+    "password_requirements": "12자 이상이며 대문자, 소문자, 숫자를 포함하고 공백이 없어야 합니다.",
+    "password_mismatch": "비밀번호가 일치하지 않습니다.",
+    "reset_failed": "비밀번호를 재설정할 수 없습니다. 새 링크를 요청하세요.",
+    "submit": "비밀번호 재설정",
+    "back_to_login": "로그인으로 돌아가기"
   },
   "RegisterPage": {
     "title": "GitHub Release Monitor 회원가입",

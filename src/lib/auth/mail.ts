@@ -1,6 +1,10 @@
 import nodemailer from "nodemailer";
+import { defaultLocale, getLocaleMetadata, type Locale } from "@/i18n/config";
 import { getAuthSmtpConfig } from "@/lib/auth/config";
+import { renderPasswordResetEmailHtml } from "@/lib/auth/password-reset-email-html";
+import { getPasswordResetEmailMessages } from "@/lib/auth/password-reset-email-messages";
 import { logger } from "@/lib/logger";
+import { getLocaleSetting } from "@/lib/storage/settings";
 
 const log = logger.withScope("Auth");
 const smtpConfig = getAuthSmtpConfig();
@@ -13,6 +17,7 @@ const smtpPassword = smtpConfig.password;
 const smtpTlsRejectUnauthorized = smtpConfig.tlsRejectUnauthorized;
 
 export const authEmailVerificationEnabled = smtpConfig.emailVerificationEnabled;
+export const authEmailDeliveryEnabled = smtpConfig.emailVerificationEnabled;
 
 let authEmailTransporter: nodemailer.Transporter | null = null;
 
@@ -37,6 +42,17 @@ function escapeHtml(value: string) {
 
 function escapeHtmlAttribute(value: string) {
   return escapeHtml(value).replaceAll("`", "&#96;");
+}
+
+async function getPasswordResetEmailLocale(): Promise<Locale> {
+  try {
+    return await getLocaleSetting();
+  } catch {
+    log.warn(
+      `Could not read the configured locale for the password reset email; using '${defaultLocale}'.`,
+    );
+    return defaultLocale;
+  }
 }
 
 function getAuthEmailTransporter() {
@@ -98,7 +114,6 @@ async function sendAuthEmail(options: {
   } catch (error) {
     log.error(
       `Failed to send auth email to '${recipientLabel}' with subject='${options.subject}'.`,
-      error,
     );
     throw error;
   }
@@ -172,6 +187,66 @@ export async function sendChangeEmailConfirmationToCurrentEmail(args: {
 
   await sendAuthEmail({
     to: currentEmail,
+    subject,
+    text,
+    html,
+  });
+}
+
+export async function sendPasswordResetEmail(args: {
+  email: string;
+  resetUrl: string;
+  expiresInSeconds: number;
+}) {
+  if (!isValidEmailTarget(args.email)) {
+    return;
+  }
+  const email = args.email.trim();
+  const safeResetUrl = escapeHtmlAttribute(args.resetUrl);
+  const locale = await getPasswordResetEmailLocale();
+  const direction = getLocaleMetadata(locale).direction;
+  const messages = await getPasswordResetEmailMessages(locale);
+  const durationValue =
+    args.expiresInSeconds % 60 === 0
+      ? args.expiresInSeconds / 60
+      : args.expiresInSeconds;
+  const durationUnit = args.expiresInSeconds % 60 === 0 ? "minute" : "second";
+  const expiryLabel = new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: durationUnit,
+    unitDisplay: "long",
+  }).format(durationValue);
+  const subject = messages.subject;
+  const intro = messages.intro;
+  const expiryNotice = messages.expiry_notice.replace(
+    "{duration}",
+    expiryLabel,
+  );
+  const ignoreNotice = messages.ignore_notice;
+  const text = [
+    messages.title,
+    "",
+    intro,
+    "",
+    `${messages.button}: ${args.resetUrl}`,
+    "",
+    expiryNotice,
+    ignoreNotice,
+  ].join("\n");
+  const html = renderPasswordResetEmailHtml({
+    actionUrlAttribute: safeResetUrl,
+    buttonTextHtml: escapeHtml(messages.button),
+    directionAttribute: escapeHtmlAttribute(direction),
+    expiryNoticeHtml: escapeHtml(expiryNotice),
+    ignoreNoticeHtml: escapeHtml(ignoreNotice),
+    introHtml: escapeHtml(intro),
+    localeAttribute: escapeHtmlAttribute(locale),
+    subjectHtml: escapeHtml(subject),
+    titleHtml: escapeHtml(messages.title),
+  });
+
+  await sendAuthEmail({
+    to: email,
     subject,
     text,
     html,

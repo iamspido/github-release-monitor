@@ -126,13 +126,18 @@ export async function proxy(request: NextRequest) {
   const routeKey = getRouteKeyForPath(currentLocale, request.nextUrl.pathname);
   const isLoginPage = routeKey === "/login";
   const isRegisterPage = routeKey === "/register";
+  const isPasswordRecoveryPage =
+    routeKey === "/forgot-password" || routeKey === "/reset-password";
   const isAuthenticated = await checkSessionAuthentication({
     authenticationMethod,
     headers: request.headers,
     pathname,
   });
 
-  if (authenticationMethod === "External" && (isLoginPage || isRegisterPage)) {
+  if (
+    authenticationMethod === "External" &&
+    (isLoginPage || isRegisterPage || isPasswordRecoveryPage)
+  ) {
     logAuth.info("External auth mode active, redirecting auth page to home.");
     return secureResponse(
       buildLocaleRedirectResponse(request, currentLocale, "/"),
@@ -144,6 +149,7 @@ export async function proxy(request: NextRequest) {
     routeKey,
     isLoginPage,
     isRegisterPage,
+    isPasswordRecoveryPage,
   });
 
   if (!isAuthenticated && authGate.requiresAuth) {
@@ -249,8 +255,10 @@ function evaluateAuthGate(args: {
   routeKey: RouteKey | null;
   isLoginPage: boolean;
   isRegisterPage: boolean;
+  isPasswordRecoveryPage: boolean;
 }): { requiresAuth: boolean; isPublicAccessAllowed: boolean } {
-  const isPublicAuthPage = args.isLoginPage || args.isRegisterPage;
+  const isPublicAuthPage =
+    args.isLoginPage || args.isRegisterPage || args.isPasswordRecoveryPage;
   const canReadPublicHome =
     args.routeKey === "/" &&
     canReadHomeUnauthenticated(args.authenticationMethod);

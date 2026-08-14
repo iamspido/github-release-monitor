@@ -693,6 +693,14 @@
     "error_config_incomplete": "Email configuration is incomplete. Please check your .env file.",
     "error_send_failed": "Failed to process and send email: {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "Reset your GitHub Release Monitor password",
+    "title": "Reset your password",
+    "intro": "A password reset was requested for your GitHub Release Monitor account.",
+    "button": "Reset password",
+    "expiry_notice": "This link expires in {duration} and can be used only once.",
+    "ignore_notice": "If you did not request this, you can safely ignore this email."
+  },
   "LoginPage": {
     "title": "Login to GitHub Release Monitor",
     "form_title": "Welcome Back",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "Initial setup is no longer available.",
     "setup_success_login_now": "Initial setup completed. Please log in with your new account.",
     "signup_success_login_now": "Registration successful. Please log in with your new account."
+  },
+  "ForgotPasswordPage": {
+    "title": "Forgot your password?",
+    "description": "Enter your username or email address and we will send you a password reset link.",
+    "cli_description": "Email delivery is not configured. An administrator can generate a reset link from the container console.",
+    "identifier_label": "Username or email",
+    "identifier_placeholder": "admin or admin@example.test",
+    "success": "If an account exists for this username or email address, a password reset link has been sent.",
+    "cli_notice": "Ask an administrator with access to the Docker host to run:",
+    "network_error": "The reset request could not be submitted. Please try again.",
+    "submit": "Send reset link",
+    "back_to_login": "Back to login",
+    "login_link": "Forgot password?"
+  },
+  "ResetPasswordPage": {
+    "title": "Reset password",
+    "description": "Choose a new password for your account.",
+    "success": "Your password has been reset. All existing sessions were signed out.",
+    "invalid_or_expired": "This reset link is invalid, expired, or has already been used.",
+    "password_label": "New password",
+    "confirm_label": "Confirm new password",
+    "show_password": "Show password",
+    "hide_password": "Hide password",
+    "password_requirements": "Minimum 12 characters with uppercase, lowercase, a number, and no whitespace.",
+    "password_mismatch": "The passwords do not match.",
+    "reset_failed": "The password could not be reset. Please request a new link.",
+    "submit": "Reset password",
+    "back_to_login": "Back to login"
   },
   "RegisterPage": {
     "title": "Register for GitHub Release Monitor",

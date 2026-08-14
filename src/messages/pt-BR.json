@@ -693,6 +693,14 @@
     "error_config_incomplete": "A configuração de e-mail está incompleta. Verifique o arquivo .env.",
     "error_send_failed": "Falha ao processar e enviar o e-mail: {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "Redefina sua senha do GitHub Release Monitor",
+    "title": "Redefina sua senha",
+    "intro": "Foi solicitada a redefinição da senha da sua conta do GitHub Release Monitor.",
+    "button": "Redefinir senha",
+    "expiry_notice": "Este link expira em {duration} e pode ser usado apenas uma vez.",
+    "ignore_notice": "Se você não fez esta solicitação, pode ignorar este e-mail com segurança."
+  },
   "LoginPage": {
     "title": "Entrar no GitHub Release Monitor",
     "form_title": "Bem-vindo de volta",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "A configuração inicial não está mais disponível.",
     "setup_success_login_now": "Configuração inicial concluída. Entre com sua nova conta.",
     "signup_success_login_now": "Cadastro concluído. Entre com sua nova conta."
+  },
+  "ForgotPasswordPage": {
+    "title": "Esqueceu a senha?",
+    "description": "Informe o nome de usuário ou e-mail e enviaremos um link para redefinir a senha.",
+    "cli_description": "O envio de e-mail não está configurado. Um administrador pode gerar um link no console do contêiner.",
+    "identifier_label": "Nome de usuário ou e-mail",
+    "identifier_placeholder": "admin ou admin@example.test",
+    "success": "Se existir uma conta com este nome de usuário ou e-mail, um link de redefinição foi enviado.",
+    "cli_notice": "Peça a um administrador com acesso ao host Docker para executar:",
+    "network_error": "Não foi possível enviar a solicitação. Tente novamente.",
+    "submit": "Enviar link",
+    "back_to_login": "Voltar ao login",
+    "login_link": "Esqueceu a senha?"
+  },
+  "ResetPasswordPage": {
+    "title": "Redefinir senha",
+    "description": "Escolha uma nova senha para sua conta.",
+    "success": "Sua senha foi redefinida. Todas as sessões existentes foram encerradas.",
+    "invalid_or_expired": "Este link é inválido, expirou ou já foi usado.",
+    "password_label": "Nova senha",
+    "confirm_label": "Confirmar nova senha",
+    "show_password": "Mostrar senha",
+    "hide_password": "Ocultar senha",
+    "password_requirements": "No mínimo 12 caracteres, com maiúscula, minúscula, número e sem espaços.",
+    "password_mismatch": "As senhas não coincidem.",
+    "reset_failed": "Não foi possível redefinir a senha. Solicite um novo link.",
+    "submit": "Redefinir senha",
+    "back_to_login": "Voltar ao login"
   },
   "RegisterPage": {
     "title": "Cadastrar-se no GitHub Release Monitor",

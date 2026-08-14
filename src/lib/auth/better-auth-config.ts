@@ -5,12 +5,20 @@ import { getAuthFeatureConfig, getAuthSecret } from "@/lib/auth/config";
 import { authDbPath, getAuthDb } from "@/lib/auth/db";
 import { runTrackedAuthEmailDelivery } from "@/lib/auth/email-delivery-status";
 import {
+  authEmailDeliveryEnabled,
   authEmailVerificationEnabled,
   sendChangeEmailConfirmationToCurrentEmail,
   sendNewEmailVerificationEmail,
+  sendPasswordResetEmail,
 } from "@/lib/auth/mail";
+import { getPasswordResetTokenTtlConfig } from "@/lib/auth/password-reset-config";
 import type { SocialLoginProvider } from "@/lib/auth/social-login-intent";
 import { logger } from "@/lib/logger";
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from "@/lib/password-policy";
+import { trackBackgroundTask } from "@/lib/runtime/background-tasks";
 import { readSecretEnvValue } from "@/lib/secret-env";
 
 const log = logger.withScope("Auth");
@@ -29,6 +37,14 @@ const googleClientId = process.env.AUTH_GOOGLE_CLIENT_ID?.trim();
 const googleClientSecret = readSecretEnvValue(
   process.env.AUTH_GOOGLE_CLIENT_SECRET,
 );
+const passwordResetTokenTtlConfig = getPasswordResetTokenTtlConfig();
+const passwordResetTokenTtlSeconds = passwordResetTokenTtlConfig.value;
+
+if (passwordResetTokenTtlConfig.usedFallback) {
+  log.warn(
+    `Invalid AUTH_PASSWORD_RESET_TOKEN_TTL_SECONDS; using ${passwordResetTokenTtlSeconds} seconds. Expected an integer between 60 and 86400.`,
+  );
+}
 
 function buildSocialProviders(disableImplicitSignUp: boolean) {
   return {
@@ -76,7 +92,7 @@ log.info(
     configuredSocialProviders.length > 0
       ? configuredSocialProviders.join(",")
       : "none"
-  }, secure_cookies=${https}, email_change_verification=${authEmailVerificationEnabled}.`,
+  }, secure_cookies=${https}, email_change_verification=${authEmailVerificationEnabled}, password_reset_email=${authEmailDeliveryEnabled}, password_reset_ttl_seconds=${passwordResetTokenTtlSeconds}.`,
 );
 
 if (!secret || secret.length < 32) {
@@ -147,6 +163,13 @@ function buildAuthBaseConfig() {
         sameSite: "lax" as const,
       },
     },
+    rateLimit: {
+      // The catch-all route applies the application's trusted-proxy-aware
+      // limiter before resolving account identifiers. Disable only Better
+      // Auth's duplicate rule for this endpoint so it cannot use a different
+      // X-Forwarded-For trust model.
+      customRules: { "/request-password-reset": false as const },
+    },
     account: {
       accountLinking: {
         enabled: true,
@@ -164,7 +187,7 @@ function buildAuthBaseConfig() {
 function buildAuthConfig() {
   return {
     ...buildAuthBaseConfig(),
-    emailAndPassword: { enabled: true, disableSignUp: !signupEnabled },
+    emailAndPassword: buildEmailAndPasswordConfig(!signupEnabled),
     ...(hasSocialProviders ? { socialProviders: authSocialProviders } : {}),
   };
 }
@@ -172,8 +195,38 @@ function buildAuthConfig() {
 function buildSetupAuthConfig() {
   return {
     ...buildAuthBaseConfig(),
-    emailAndPassword: { enabled: true, disableSignUp: false },
+    emailAndPassword: buildEmailAndPasswordConfig(false),
     ...(hasSocialProviders ? { socialProviders: setupSocialProviders } : {}),
+  };
+}
+
+function buildEmailAndPasswordConfig(disableSignUp: boolean) {
+  return {
+    enabled: true,
+    disableSignUp,
+    minPasswordLength: PASSWORD_MIN_LENGTH,
+    maxPasswordLength: PASSWORD_MAX_LENGTH,
+    resetPasswordTokenExpiresIn: passwordResetTokenTtlSeconds,
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async (payload: {
+      user: { email: string };
+      url: string;
+      token: string;
+    }) => {
+      if (!authEmailDeliveryEnabled) {
+        return;
+      }
+      trackBackgroundTask(
+        sendPasswordResetEmail({
+          email: payload.user.email,
+          resetUrl: payload.url,
+          expiresInSeconds: passwordResetTokenTtlSeconds,
+        }).catch(() => {
+          // Keep the public response account-neutral. The mail layer logs the
+          // delivery failure without including the reset URL or token.
+        }),
+      );
+    },
   };
 }
 
@@ -192,6 +245,10 @@ export function getSetupBetterAuthConfig() {
 
 export function isAuthEmailVerificationEnabled() {
   return authEmailVerificationEnabled;
+}
+
+export function isAuthEmailDeliveryEnabled() {
+  return authEmailDeliveryEnabled;
 }
 
 export function isSignupEnabled() {

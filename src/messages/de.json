@@ -693,6 +693,14 @@
     "error_config_incomplete": "Die E-Mail-Konfiguration ist unvollständig. Bitte überprüfen Sie Ihre .env-Datei.",
     "error_send_failed": "E-Mail konnte nicht verarbeitet und gesendet werden: {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "Passwort für GitHub Release Monitor zurücksetzen",
+    "title": "Passwort zurücksetzen",
+    "intro": "Für Ihr GitHub-Release-Monitor-Konto wurde das Zurücksetzen des Passworts angefordert.",
+    "button": "Passwort zurücksetzen",
+    "expiry_notice": "Dieser Link läuft in {duration} ab und kann nur einmal verwendet werden.",
+    "ignore_notice": "Wenn Sie dies nicht angefordert haben, können Sie diese E-Mail einfach ignorieren."
+  },
   "LoginPage": {
     "title": "Anmeldung zum GitHub Release Monitor",
     "form_title": "Willkommen zurück",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "Die Ersteinrichtung ist nicht mehr verfügbar.",
     "setup_success_login_now": "Ersteinrichtung abgeschlossen. Bitte melden Sie sich mit dem neuen Konto an.",
     "signup_success_login_now": "Registrierung erfolgreich. Bitte melden Sie sich mit dem neuen Konto an."
+  },
+  "ForgotPasswordPage": {
+    "title": "Passwort vergessen?",
+    "description": "Gib deinen Benutzernamen oder deine E-Mail-Adresse ein. Wir senden dir einen Link zum Zurücksetzen des Passworts.",
+    "cli_description": "Der E-Mail-Versand ist nicht konfiguriert. Ein Administrator kann über die Container-Konsole einen Reset-Link erzeugen.",
+    "identifier_label": "Benutzername oder E-Mail",
+    "identifier_placeholder": "admin oder admin@example.test",
+    "success": "Falls ein Konto mit diesem Benutzernamen oder dieser E-Mail-Adresse existiert, wurde ein Link zum Zurücksetzen gesendet.",
+    "cli_notice": "Bitte einen Administrator mit Zugriff auf den Docker-Host, folgenden Befehl auszuführen:",
+    "network_error": "Die Anfrage konnte nicht gesendet werden. Bitte versuche es erneut.",
+    "submit": "Reset-Link senden",
+    "back_to_login": "Zurück zur Anmeldung",
+    "login_link": "Passwort vergessen?"
+  },
+  "ResetPasswordPage": {
+    "title": "Passwort zurücksetzen",
+    "description": "Wähle ein neues Passwort für dein Konto.",
+    "success": "Dein Passwort wurde zurückgesetzt. Alle bestehenden Sitzungen wurden abgemeldet.",
+    "invalid_or_expired": "Dieser Reset-Link ist ungültig, abgelaufen oder wurde bereits verwendet.",
+    "password_label": "Neues Passwort",
+    "confirm_label": "Neues Passwort bestätigen",
+    "show_password": "Passwort anzeigen",
+    "hide_password": "Passwort ausblenden",
+    "password_requirements": "Mindestens 12 Zeichen mit Großbuchstaben, Kleinbuchstaben, einer Zahl und ohne Leerzeichen.",
+    "password_mismatch": "Die Passwörter stimmen nicht überein.",
+    "reset_failed": "Das Passwort konnte nicht zurückgesetzt werden. Bitte fordere einen neuen Link an.",
+    "submit": "Passwort zurücksetzen",
+    "back_to_login": "Zurück zur Anmeldung"
   },
   "RegisterPage": {
     "title": "Registrierung zum GitHub Release Monitor",

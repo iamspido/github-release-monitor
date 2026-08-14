@@ -693,6 +693,14 @@
     "error_config_incomplete": "E-posta yapılandırması eksik. Lütfen .env dosyanızı kontrol edin.",
     "error_send_failed": "E-posta işlenemedi ve gönderilemedi: {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "GitHub Release Monitor parolanızı sıfırlayın",
+    "title": "Parolanızı sıfırlayın",
+    "intro": "GitHub Release Monitor hesabınız için parola sıfırlama isteği yapıldı.",
+    "button": "Parolayı sıfırla",
+    "expiry_notice": "Bu bağlantının süresi {duration} içinde dolar ve yalnızca bir kez kullanılabilir.",
+    "ignore_notice": "Bu isteği siz yapmadıysanız bu e-postayı güvenle yok sayabilirsiniz."
+  },
   "LoginPage": {
     "title": "GitHub Release Monitor'a Giriş Yap",
     "form_title": "Tekrar Hoş Geldiniz",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "İlk kurulum artık kullanılamıyor.",
     "setup_success_login_now": "İlk kurulum tamamlandı. Lütfen yeni hesabınızla giriş yapın.",
     "signup_success_login_now": "Kayıt başarılı. Lütfen yeni hesabınızla giriş yapın."
+  },
+  "ForgotPasswordPage": {
+    "title": "Şifrenizi mi unuttunuz?",
+    "description": "Kullanıcı adınızı veya e-postanızı girin; size şifre sıfırlama bağlantısı gönderelim.",
+    "cli_description": "E-posta gönderimi yapılandırılmamış. Bir yönetici konteyner konsolundan sıfırlama bağlantısı oluşturabilir.",
+    "identifier_label": "Kullanıcı adı veya e-posta",
+    "identifier_placeholder": "admin veya admin@example.test",
+    "success": "Bu kullanıcı adına veya e-postaya ait bir hesap varsa şifre sıfırlama bağlantısı gönderildi.",
+    "cli_notice": "Docker sunucusuna erişimi olan bir yöneticiden şu komutu çalıştırmasını isteyin:",
+    "network_error": "İstek gönderilemedi. Lütfen tekrar deneyin.",
+    "submit": "Sıfırlama bağlantısı gönder",
+    "back_to_login": "Girişe dön",
+    "login_link": "Şifrenizi mi unuttunuz?"
+  },
+  "ResetPasswordPage": {
+    "title": "Şifreyi sıfırla",
+    "description": "Hesabınız için yeni bir şifre seçin.",
+    "success": "Şifreniz sıfırlandı. Mevcut tüm oturumlar kapatıldı.",
+    "invalid_or_expired": "Bu bağlantı geçersiz, süresi dolmuş veya daha önce kullanılmış.",
+    "password_label": "Yeni şifre",
+    "confirm_label": "Yeni şifreyi doğrula",
+    "show_password": "Şifreyi göster",
+    "hide_password": "Şifreyi gizle",
+    "password_requirements": "En az 12 karakter; büyük harf, küçük harf ve sayı içermeli, boşluk içermemelidir.",
+    "password_mismatch": "Şifreler eşleşmiyor.",
+    "reset_failed": "Şifre sıfırlanamadı. Yeni bir bağlantı isteyin.",
+    "submit": "Şifreyi sıfırla",
+    "back_to_login": "Girişe dön"
   },
   "RegisterPage": {
     "title": "GitHub Release Monitor'a Kayıt Ol",

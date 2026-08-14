@@ -11,6 +11,7 @@ RUN npm ci && npm cache clean --force
 COPY biome.json ./
 COPY tsconfig.json ./
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 
 RUN npm run lint
 
@@ -29,8 +30,8 @@ COPY src/ ./src/
 
 RUN npm run typecheck
 
-# Test Stage (runs unit tests with Vitest)
-FROM node:24-alpine AS tester
+# Shared unit test stage
+FROM node:24-alpine AS test-base
 
 WORKDIR /app
 
@@ -55,8 +56,15 @@ COPY public/ ./public/
 COPY src/ ./src/
 COPY tests/ ./tests/
 
-# Run tests during image build; build fails if tests fail
-RUN npm test
+# Test Stage (full output for CI and manual runs)
+FROM test-base AS tester
+
+RUN npm test -- --reporter=dot
+
+# Agent Test Stage (only report failed tests and their errors)
+FROM test-base AS tester-agent
+
+RUN npm test -- --reporter=minimal
 
 # Builder Stage (for E2E / standalone)
 FROM node:24-alpine AS builder
@@ -77,6 +85,7 @@ COPY components.json \
      ./
 COPY public/ ./public/
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 
 # Produce standalone build used by Playwright e2e stage
 # Force production env only for the build step so Next emits standalone output
@@ -121,7 +130,7 @@ RUN npm rebuild better-sqlite3
 RUN node ./node_modules/@playwright/test/cli.js test
 
 # Development Runtime Stage
-FROM node:24-alpine
+FROM node:24-alpine AS development
 
 WORKDIR /app
 
@@ -154,6 +163,10 @@ COPY components.json \
 # Copy source code and public assets
 COPY public/ ./public/
 COPY src/ ./src/
+COPY scripts/ ./scripts/
+
+# Bundle the administration CLI at the same path as the production image.
+RUN npm run build:cli && cp .next/cli/grm-cli.mjs ./grm-cli.mjs
 
 # Expose development port
 EXPOSE 3000

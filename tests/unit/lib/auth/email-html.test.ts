@@ -37,6 +37,13 @@ describe("auth/email HTML rendering", () => {
           token: string;
         }) => Promise<void>;
       };
+      emailAndPassword: {
+        sendResetPassword: (args: {
+          user: { email: string };
+          url: string;
+          token: string;
+        }) => Promise<void>;
+      };
       user: {
         changeEmail: {
           sendChangeEmailConfirmation: (args: {
@@ -111,11 +118,21 @@ describe("auth/email HTML rendering", () => {
       url: `https://example.test/change?next=<x>&email="a'b\``,
       token: "token",
     });
+    await authConfig.emailAndPassword.sendResetPassword({
+      user: { email: `reset<user>"'&@example.test` },
+      url: `https://example.test/reset?next=<x>&token="a'b\``,
+      token: "token",
+    });
+    const { waitForBackgroundTasks } = await import(
+      "@/lib/runtime/background-tasks"
+    );
+    await waitForBackgroundTasks();
 
-    expect(sendMailMock).toHaveBeenCalledTimes(2);
+    expect(sendMailMock).toHaveBeenCalledTimes(3);
     const verificationEmail = sendMailMock.mock.calls[0]?.[0];
     const changeEmail = sendMailMock.mock.calls[1]?.[0];
-    if (!verificationEmail || !changeEmail) {
+    const resetEmail = sendMailMock.mock.calls[2]?.[0];
+    if (!verificationEmail || !changeEmail || !resetEmail) {
       throw new Error("Expected auth emails to be sent");
     }
 
@@ -137,6 +154,10 @@ describe("auth/email HTML rendering", () => {
       'href="https://example.test/change?next=&lt;x&gt;&amp;email=&quot;a&#39;b&#96;"',
     );
     expect(changeEmail.html).not.toContain(`current<user>"'&@example.test`);
+    expect(resetEmail.html).toContain(
+      'href="https://example.test/reset?next=&lt;x&gt;&amp;token=&quot;a&#39;b&#96;"',
+    );
+    expect(resetEmail.html).not.toContain("token=\"a'b`");
   });
 
   it("opens the auth database lazily and logs an actionable message when it fails", async () => {

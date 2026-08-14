@@ -693,6 +693,14 @@
     "error_config_incomplete": "La configurazione email è incompleta. Controlla il file .env.",
     "error_send_failed": "Impossibile elaborare e inviare l'email: {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "Reimposta la password di GitHub Release Monitor",
+    "title": "Reimposta la password",
+    "intro": "È stata richiesta la reimpostazione della password per il tuo account GitHub Release Monitor.",
+    "button": "Reimposta password",
+    "expiry_notice": "Questo link scade tra {duration} e può essere utilizzato una sola volta.",
+    "ignore_notice": "Se non hai effettuato questa richiesta, puoi ignorare questa e-mail."
+  },
   "LoginPage": {
     "title": "Accedi a GitHub Release Monitor",
     "form_title": "Bentornato",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "La configurazione iniziale non è più disponibile.",
     "setup_success_login_now": "Configurazione iniziale completata. Accedi con il nuovo account.",
     "signup_success_login_now": "Registrazione riuscita. Accedi con il nuovo account."
+  },
+  "ForgotPasswordPage": {
+    "title": "Password dimenticata?",
+    "description": "Inserisci il nome utente o l’e-mail e riceverai un link per reimpostare la password.",
+    "cli_description": "L’invio e-mail non è configurato. Un amministratore può generare un link dalla console del container.",
+    "identifier_label": "Nome utente o e-mail",
+    "identifier_placeholder": "admin o admin@example.test",
+    "success": "Se esiste un account con questo nome utente o questa e-mail, è stato inviato un link di reimpostazione.",
+    "cli_notice": "Chiedi a un amministratore con accesso all’host Docker di eseguire:",
+    "network_error": "Impossibile inviare la richiesta. Riprova.",
+    "submit": "Invia link",
+    "back_to_login": "Torna all’accesso",
+    "login_link": "Password dimenticata?"
+  },
+  "ResetPasswordPage": {
+    "title": "Reimposta password",
+    "description": "Scegli una nuova password per il tuo account.",
+    "success": "La password è stata reimpostata. Tutte le sessioni esistenti sono state disconnesse.",
+    "invalid_or_expired": "Il link non è valido, è scaduto o è già stato utilizzato.",
+    "password_label": "Nuova password",
+    "confirm_label": "Conferma nuova password",
+    "show_password": "Mostra password",
+    "hide_password": "Nascondi password",
+    "password_requirements": "Almeno 12 caratteri con maiuscola, minuscola, numero e senza spazi.",
+    "password_mismatch": "Le password non corrispondono.",
+    "reset_failed": "Impossibile reimpostare la password. Richiedi un nuovo link.",
+    "submit": "Reimposta password",
+    "back_to_login": "Torna all’accesso"
   },
   "RegisterPage": {
     "title": "Registrati a GitHub Release Monitor",

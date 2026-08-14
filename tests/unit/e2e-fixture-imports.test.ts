@@ -20,6 +20,7 @@ const unauthenticatedSpecs = new Set([
   "mobile-menu-a11y.spec.ts",
   "not-found-ui.spec.ts",
   "not-found.spec.ts",
+  "password-recovery.spec.ts",
   "secure-redirect-login-loop.spec.ts",
   "security-headers-extra.spec.ts",
   "security-headers.spec.ts",

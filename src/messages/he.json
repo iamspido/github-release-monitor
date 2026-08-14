@@ -693,6 +693,14 @@
     "error_config_incomplete": "תצורת הדוא״ל אינה שלמה. בדקו את קובץ .env.",
     "error_send_failed": "עיבוד ושליחת הדוא״ל נכשלו: {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "איפוס הסיסמה של GitHub Release Monitor",
+    "title": "איפוס הסיסמה",
+    "intro": "התקבלה בקשה לאיפוס הסיסמה של חשבון GitHub Release Monitor שלך.",
+    "button": "איפוס סיסמה",
+    "expiry_notice": "תוקף הקישור יפוג בעוד {duration}, וניתן להשתמש בו פעם אחת בלבד.",
+    "ignore_notice": "אם לא ביקשת זאת, אפשר להתעלם מהודעה זו בבטחה."
+  },
   "LoginPage": {
     "title": "כניסה ל-GitHub Release Monitor",
     "form_title": "ברוכים השבים",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "ההגדרה הראשונית אינה זמינה עוד.",
     "setup_success_login_now": "ההגדרה הראשונית הושלמה. היכנסו באמצעות החשבון החדש.",
     "signup_success_login_now": "ההרשמה הצליחה. היכנסו באמצעות החשבון החדש."
+  },
+  "ForgotPasswordPage": {
+    "title": "שכחת את הסיסמה?",
+    "description": "יש להזין שם משתמש או כתובת דוא״ל ונשלח קישור לאיפוס הסיסמה.",
+    "cli_description": "שליחת דוא״ל אינה מוגדרת. מנהל יכול ליצור קישור ממסוף הקונטיינר.",
+    "identifier_label": "שם משתמש או דוא״ל",
+    "identifier_placeholder": "admin או admin@example.test",
+    "success": "אם קיים חשבון עם שם משתמש או כתובת דוא״ל אלה, נשלח קישור לאיפוס הסיסמה.",
+    "cli_notice": "יש לבקש ממנהל עם גישה למארח Docker להריץ:",
+    "network_error": "לא ניתן לשלוח את הבקשה. יש לנסות שוב.",
+    "submit": "שליחת קישור איפוס",
+    "back_to_login": "חזרה להתחברות",
+    "login_link": "שכחת את הסיסמה?"
+  },
+  "ResetPasswordPage": {
+    "title": "איפוס סיסמה",
+    "description": "יש לבחור סיסמה חדשה לחשבון.",
+    "success": "הסיסמה אופסה. כל ההפעלות הקיימות נותקו.",
+    "invalid_or_expired": "הקישור אינו תקף, פג תוקף או כבר שומש.",
+    "password_label": "סיסמה חדשה",
+    "confirm_label": "אישור הסיסמה החדשה",
+    "show_password": "הצגת סיסמה",
+    "hide_password": "הסתרת סיסמה",
+    "password_requirements": "לפחות 12 תווים, אות גדולה, אות קטנה, מספר וללא רווחים.",
+    "password_mismatch": "הסיסמאות אינן תואמות.",
+    "reset_failed": "לא ניתן לאפס את הסיסמה. יש לבקש קישור חדש.",
+    "submit": "איפוס סיסמה",
+    "back_to_login": "חזרה להתחברות"
   },
   "RegisterPage": {
     "title": "הרשמה ל-GitHub Release Monitor",

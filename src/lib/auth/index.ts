@@ -6,6 +6,7 @@ import {
 import type { SocialLoginProvider } from "@/lib/auth/social-login-intent";
 
 export {
+  isAuthEmailDeliveryEnabled,
   isAuthEmailVerificationEnabled,
   isSignupEnabled,
   isSocialProviderConfigured,

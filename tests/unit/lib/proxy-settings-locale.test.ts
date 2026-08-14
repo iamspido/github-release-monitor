@@ -672,7 +672,11 @@ describe("proxy", () => {
     expect(getSessionMock).not.toHaveBeenCalled();
   });
 
-  it("redirects auth pages to home in External mode", async () => {
+  it.each([
+    "/de/anmelden",
+    "/de/passwort-vergessen",
+    "/de/passwort-zuruecksetzen",
+  ])("redirects auth page %s to home in External mode", async (pathname) => {
     expect(proxyFn).toBeDefined();
     const { NextResponse } = await import("next/server");
     process.env.AUTHENTICATION_METHOD = "External";
@@ -682,7 +686,7 @@ describe("proxy", () => {
     handleI18nMock.mockReturnValue(baseResponse);
 
     const request = createRequest(
-      "https://example.test/de/anmelden",
+      `https://example.test${pathname}`,
       { host: "example.test" },
       { [SETTINGS_LOCALE_COOKIE]: "de" },
     );

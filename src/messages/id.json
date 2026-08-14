@@ -693,6 +693,14 @@
     "error_config_incomplete": "Konfigurasi email belum lengkap. Periksa berkas .env Anda.",
     "error_send_failed": "Gagal memproses dan mengirim email: {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "Atur ulang kata sandi GitHub Release Monitor Anda",
+    "title": "Atur ulang kata sandi Anda",
+    "intro": "Permintaan pengaturan ulang kata sandi telah dibuat untuk akun GitHub Release Monitor Anda.",
+    "button": "Atur ulang kata sandi",
+    "expiry_notice": "Tautan ini kedaluwarsa dalam {duration} dan hanya dapat digunakan sekali.",
+    "ignore_notice": "Jika Anda tidak meminta ini, Anda dapat mengabaikan email ini dengan aman."
+  },
   "LoginPage": {
     "title": "Masuk ke GitHub Release Monitor",
     "form_title": "Selamat Datang Kembali",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "Penyiapan awal tidak lagi tersedia.",
     "setup_success_login_now": "Penyiapan awal selesai. Masuk dengan akun baru Anda.",
     "signup_success_login_now": "Pendaftaran berhasil. Masuk dengan akun baru Anda."
+  },
+  "ForgotPasswordPage": {
+    "title": "Lupa kata sandi?",
+    "description": "Masukkan nama pengguna atau email Anda dan kami akan mengirim tautan pengaturan ulang kata sandi.",
+    "cli_description": "Pengiriman email belum dikonfigurasi. Administrator dapat membuat tautan dari konsol kontainer.",
+    "identifier_label": "Nama pengguna atau email",
+    "identifier_placeholder": "admin atau admin@example.test",
+    "success": "Jika akun dengan nama pengguna atau email ini ada, tautan pengaturan ulang telah dikirim.",
+    "cli_notice": "Minta administrator yang memiliki akses ke host Docker untuk menjalankan:",
+    "network_error": "Permintaan tidak dapat dikirim. Silakan coba lagi.",
+    "submit": "Kirim tautan",
+    "back_to_login": "Kembali ke login",
+    "login_link": "Lupa kata sandi?"
+  },
+  "ResetPasswordPage": {
+    "title": "Atur ulang kata sandi",
+    "description": "Pilih kata sandi baru untuk akun Anda.",
+    "success": "Kata sandi telah diatur ulang. Semua sesi yang ada telah dikeluarkan.",
+    "invalid_or_expired": "Tautan ini tidak valid, kedaluwarsa, atau sudah digunakan.",
+    "password_label": "Kata sandi baru",
+    "confirm_label": "Konfirmasi kata sandi baru",
+    "show_password": "Tampilkan kata sandi",
+    "hide_password": "Sembunyikan kata sandi",
+    "password_requirements": "Minimal 12 karakter dengan huruf besar, huruf kecil, angka, dan tanpa spasi.",
+    "password_mismatch": "Kata sandi tidak cocok.",
+    "reset_failed": "Kata sandi tidak dapat diatur ulang. Minta tautan baru.",
+    "submit": "Atur ulang kata sandi",
+    "back_to_login": "Kembali ke login"
   },
   "RegisterPage": {
     "title": "Daftar ke GitHub Release Monitor",

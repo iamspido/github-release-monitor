@@ -37,6 +37,7 @@ import { isolateLtrText } from "@/lib/bidi";
 import {
   isPasswordPolicyValid,
   keepPasswordInputWhitespaceFree,
+  PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
 } from "@/lib/password-policy";
 
@@ -385,6 +386,7 @@ export function AccountCredentialsSettingsCard() {
                 placeholder={t("account_password_new_placeholder")}
                 autoComplete="new-password"
                 minLength={PASSWORD_MIN_LENGTH}
+                maxLength={PASSWORD_MAX_LENGTH}
                 className={newPasswordInputClass}
               />
               <Button
@@ -428,6 +430,7 @@ export function AccountCredentialsSettingsCard() {
                 placeholder={t("account_password_confirm_placeholder")}
                 autoComplete="new-password"
                 minLength={PASSWORD_MIN_LENGTH}
+                maxLength={PASSWORD_MAX_LENGTH}
                 className={confirmPasswordInputClass}
               />
               <Button

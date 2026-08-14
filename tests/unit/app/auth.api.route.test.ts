@@ -5,6 +5,25 @@ const ensureInitialAuthUserProfileMock = vi.fn(() => null);
 const getAuthUserIdSnapshotMock = vi.fn(() => new Set(["existing-user"]));
 const applySocialRegistrationProfileMock = vi.fn(() => "applied");
 const isSignupEnabledMock = vi.fn(() => false);
+const isAuthEmailDeliveryEnabledMock = vi.fn(() => false);
+const consumePasswordResetRequestMock = vi.fn(
+  (_clientIp: string, _identifier: string, _now?: number) => ({
+    allowed: true,
+    retryAfterSeconds: 0,
+  }),
+);
+const readPasswordResetIdentifierFromRequestMock = vi.fn(
+  async (_request: Request) => "admin@example.test",
+);
+const rewritePasswordResetIdentifierRequestMock = vi.fn(
+  async (request: Request) => request,
+);
+const authLogMocks = vi.hoisted(() => ({
+  debug: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+}));
 const canDeletePasskeyForUserMock = vi.fn<
   (_userId: string, _passkeyId: string) => boolean
 >(() => false);
@@ -19,7 +38,9 @@ const getSessionMock = vi.fn(async () => ({
 const authInstance = { kind: "auth", api: { getSession: getSessionMock } };
 const setupAuthInstance = { kind: "setup-auth" };
 const authGetMock = vi.fn(async () => new Response(null, { status: 200 }));
-const authPostMock = vi.fn(async () => new Response(null, { status: 200 }));
+const authPostMock = vi.fn(
+  async (_request: Request) => new Response(null, { status: 200 }),
+);
 const setupGetMock = vi.fn(async () => new Response(null, { status: 200 }));
 const setupPostMock = vi.fn(async () => new Response(null, { status: 200 }));
 
@@ -50,8 +71,24 @@ vi.mock("@/lib/auth", () => ({
   getAuthUserIdSnapshot: getAuthUserIdSnapshotMock,
   applySocialRegistrationProfile: applySocialRegistrationProfileMock,
   isSignupEnabled: isSignupEnabledMock,
+  isAuthEmailDeliveryEnabled: isAuthEmailDeliveryEnabledMock,
   canDeletePasskeyForUser: canDeletePasskeyForUserMock,
   canUnlinkAccountForUser: canUnlinkAccountForUserMock,
+}));
+
+vi.mock("@/lib/auth/password-reset-rate-limit", () => ({
+  consumePasswordResetRequest: (
+    clientIp: string,
+    identifier: string,
+    now?: number,
+  ) => consumePasswordResetRequestMock(clientIp, identifier, now),
+}));
+
+vi.mock("@/lib/auth/password-reset-identifier", () => ({
+  readPasswordResetIdentifierFromRequest: (request: Request) =>
+    readPasswordResetIdentifierFromRequestMock(request),
+  rewritePasswordResetIdentifierRequest: (request: Request) =>
+    rewritePasswordResetIdentifierRequestMock(request),
 }));
 
 type SetupSocialContext = {
@@ -120,13 +157,7 @@ vi.mock("@/lib/auth/social-login-intent", () => ({
 
 vi.mock("@/lib/logger", () => ({
   logger: {
-    withScope: () => ({
-      error: vi.fn(),
-      warn: vi.fn(),
-      info: vi.fn(),
-      debug: vi.fn(),
-      withScope: vi.fn(),
-    }),
+    withScope: () => authLogMocks,
   },
 }));
 
@@ -147,6 +178,17 @@ describe("auth catch-all route setup social cookie handling", () => {
     getAuthUserIdSnapshotMock.mockReturnValue(new Set(["existing-user"]));
     applySocialRegistrationProfileMock.mockReturnValue("applied");
     isSignupEnabledMock.mockReturnValue(false);
+    isAuthEmailDeliveryEnabledMock.mockReturnValue(false);
+    consumePasswordResetRequestMock.mockReturnValue({
+      allowed: true,
+      retryAfterSeconds: 0,
+    });
+    rewritePasswordResetIdentifierRequestMock.mockImplementation(
+      async (request: Request) => request,
+    );
+    readPasswordResetIdentifierFromRequestMock.mockResolvedValue(
+      "admin@example.test",
+    );
     canDeletePasskeyForUserMock.mockReturnValue(false);
     canUnlinkAccountForUserMock.mockReturnValue(false);
     getSessionMock.mockResolvedValue({
@@ -169,6 +211,209 @@ describe("auth catch-all route setup social cookie handling", () => {
 
   afterEach(() => {
     process.env = { ...env };
+  });
+
+  it("does not create public reset tokens when SMTP is unavailable", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+    const response = await POST(
+      new Request("http://localhost/api/auth/request-password-reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "admin@example.test",
+          redirectTo: "http://localhost/en/reset-password",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: true });
+    expect(authPostMock).not.toHaveBeenCalled();
+    expect(rewritePasswordResetIdentifierRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("rate limits password reset requests even when SMTP is unavailable", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    consumePasswordResetRequestMock.mockReturnValueOnce({
+      allowed: false,
+      retryAfterSeconds: 42,
+    });
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+    const response = await POST(
+      new Request("http://localhost/api/auth/request-password-reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "admin@example.test" }),
+      }),
+    );
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("42");
+    await expect(response.json()).resolves.toEqual({
+      error: "too_many_requests",
+    });
+    expect(authPostMock).not.toHaveBeenCalled();
+  });
+
+  it("applies the trusted client IP rate limit before SMTP reset delivery", async () => {
+    process.env.AUTH_TRUST_PROXY_HEADERS = "true";
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    isAuthEmailDeliveryEnabledMock.mockReturnValue(true);
+    consumePasswordResetRequestMock.mockReturnValueOnce({
+      allowed: false,
+      retryAfterSeconds: 17,
+    });
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+    const response = await POST(
+      new Request("http://localhost/api/auth/request-password-reset", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.7",
+        },
+        body: JSON.stringify({ email: "admin@example.test" }),
+      }),
+    );
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("17");
+    expect(consumePasswordResetRequestMock).toHaveBeenCalledWith(
+      "203.0.113.7",
+      "admin@example.test",
+      undefined,
+    );
+    expect(rewritePasswordResetIdentifierRequestMock).not.toHaveBeenCalled();
+    expect(authPostMock).not.toHaveBeenCalled();
+  });
+
+  it("does not trust forwarded addresses for reset limits by default", async () => {
+    delete process.env.AUTH_TRUST_PROXY_HEADERS;
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    isAuthEmailDeliveryEnabledMock.mockReturnValue(true);
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+
+    await POST(
+      new Request("http://localhost/api/auth/request-password-reset", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "203.0.113.7",
+        },
+        body: JSON.stringify({ email: "admin@example.test" }),
+      }),
+    );
+
+    expect(consumePasswordResetRequestMock).toHaveBeenCalledWith(
+      "unknown",
+      "admin@example.test",
+      undefined,
+    );
+  });
+
+  it("resolves a password reset username before invoking Better Auth", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    isAuthEmailDeliveryEnabledMock.mockReturnValue(true);
+    rewritePasswordResetIdentifierRequestMock.mockImplementationOnce(
+      async (request: Request) => {
+        const payload = (await request.clone().json()) as Record<
+          string,
+          unknown
+        >;
+        return new Request(request, {
+          body: JSON.stringify({
+            ...payload,
+            email: "admin@example.test",
+          }),
+        });
+      },
+    );
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+    const response = await POST(
+      new Request("http://localhost/api/auth/request-password-reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "admin",
+          redirectTo: "/en/reset-password",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(consumePasswordResetRequestMock).toHaveBeenCalledOnce();
+    expect(rewritePasswordResetIdentifierRequestMock).toHaveBeenCalledOnce();
+    expect(authPostMock).toHaveBeenCalledOnce();
+    const forwardedRequest = authPostMock.mock.calls[0]?.[0] as Request;
+    await expect(forwardedRequest.clone().json()).resolves.toEqual({
+      email: "admin@example.test",
+      redirectTo: "/en/reset-password",
+    });
+  });
+
+  it("redacts reset callback tokens from success and error logs", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    const { GET } = await import("@/app/api/auth/[...all]/route");
+    const secretToken = "secret-reset-token";
+
+    await GET(
+      new Request(
+        `http://localhost/api/auth/reset-password/${secretToken}?callbackURL=%2Fen%2Freset-password`,
+      ),
+    );
+    authGetMock.mockRejectedValueOnce(
+      new Error(`Callback failed for ${secretToken}`),
+    );
+    await expect(
+      GET(
+        new Request(
+          `http://localhost/api/auth/reset-password/${secretToken}?callbackURL=%2Fen%2Freset-password`,
+        ),
+      ),
+    ).rejects.toThrow("Callback failed");
+
+    const logged = Object.values(authLogMocks)
+      .flatMap((mock) => mock.mock.calls.flat())
+      .map(String)
+      .join(" ");
+    expect(logged).toContain("reset-password/[redacted]");
+    expect(logged).not.toContain(secretToken);
+  });
+
+  it("does not log reset tokens retained by POST error objects", async () => {
+    readSetupSocialContextFromRequestMock.mockReturnValue(null);
+    hasAnyAuthUserMock.mockReturnValue("has_user");
+    const { POST } = await import("@/app/api/auth/[...all]/route");
+    const secretToken = "post-secret-reset-token";
+    authPostMock.mockRejectedValueOnce(
+      new Error(`Failed request body contained token ${secretToken}`),
+    );
+
+    await expect(
+      POST(
+        new Request("http://localhost/api/auth/reset-password", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            newPassword: "StrongPassword1",
+            token: secretToken,
+          }),
+        }),
+      ),
+    ).rejects.toThrow("Failed request body");
+
+    const logged = Object.values(authLogMocks)
+      .flatMap((mock) => mock.mock.calls.flat())
+      .map(String)
+      .join(" ");
+    expect(logged).toContain("/api/auth/reset-password");
+    expect(logged).not.toContain(secretToken);
   });
 
   it("rejects unlinking the last login method through the direct auth route", async () => {

@@ -42,6 +42,7 @@ interface LoginFormProps {
   passkeyEnabled: boolean;
   signupEnabled: boolean;
   registerPath: string;
+  forgotPasswordPath?: string;
   allowUnauthenticatedAccess?: boolean;
   publicHomePath?: string;
 }
@@ -73,6 +74,7 @@ export function LoginForm({
   passkeyEnabled,
   signupEnabled,
   registerPath,
+  forgotPasswordPath = "/en/forgot-password",
   allowUnauthenticatedAccess = false,
   publicHomePath = "/",
 }: LoginFormProps) {
@@ -95,6 +97,7 @@ export function LoginForm({
   const [twoFactorCode, setTwoFactorCode] = React.useState("");
   const [showLoginPassword, setShowLoginPassword] = React.useState(false);
   const t = useTranslations("LoginPage");
+  const tForgotPassword = useTranslations("ForgotPasswordPage");
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
   const oauthErrorCode = searchParams.get("error");
@@ -393,6 +396,14 @@ export function LoginForm({
                     hideLabel={t("hide_password")}
                     onToggle={() => setShowLoginPassword((prev) => !prev)}
                   />
+                </div>
+                <div className="text-end">
+                  <Link
+                    href={forgotPasswordPath}
+                    className="text-sm text-primary underline-offset-4 hover:underline"
+                  >
+                    {tForgotPassword("login_link")}
+                  </Link>
                 </div>
               </div>
             </>

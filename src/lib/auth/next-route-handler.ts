@@ -9,11 +9,19 @@ import {
   getAuthUserIdSnapshot,
   hasAnyAuthUser,
   hasValidAuthSessionForRequest,
+  isAuthEmailDeliveryEnabled,
   setupAuth,
 } from "@/lib/auth";
 import { scheduleLoginMethodRemoval } from "@/lib/auth/login-method-removal-queue";
 import {
+  readPasswordResetIdentifierFromRequest,
+  rewritePasswordResetIdentifierRequest,
+} from "@/lib/auth/password-reset-identifier";
+import { enforcePasswordResetRequestPolicy } from "@/lib/auth/password-reset-policy";
+import { consumePasswordResetRequest } from "@/lib/auth/password-reset-rate-limit";
+import {
   getClientIpFromRequest,
+  getExplicitlyTrustedClientIpFromRequest,
   isSupportedAuthSocialProvider,
 } from "@/lib/auth/request-context";
 import {
@@ -22,7 +30,9 @@ import {
   getOAuthErrorFromResponseLocation,
   getOAuthProviderFromAction,
   getPasskeyIdFromDeleteRequest,
+  getSafeAuthActionForLog,
   getSocialProviderFromSignInRequest,
+  isPasswordResetTokenBearingAction,
   isSocialAuthAction,
   isSocialSignInAction,
 } from "@/lib/auth/route-request";
@@ -109,7 +119,8 @@ function logResponse(
   status: number,
   durationMs: number,
 ) {
-  const message = `Auth API response: ${method} /api/auth/${action} status=${status} duration_ms=${durationMs}`;
+  const safeAction = getSafeAuthActionForLog(action);
+  const message = `Auth API response: ${method} /api/auth/${safeAction} status=${status} duration_ms=${durationMs}`;
   if (status >= 500) {
     log.error(message);
     return;
@@ -342,8 +353,9 @@ async function guardSetupSocialState(state: AuthRouteState) {
 }
 
 function logAuthRouteStart(method: AuthRouteMethod, state: AuthRouteState) {
+  const safeAction = getSafeAuthActionForLog(state.action);
   log.info(
-    `Auth API request: ${method} /api/auth/${state.action} ip='${state.clientIp}'`,
+    `Auth API request: ${method} /api/auth/${safeAction} ip='${state.clientIp}'`,
   );
   if (state.setupFlowAllowed) {
     log.info(
@@ -394,6 +406,52 @@ async function runGuardedAuthHandler(
 ) {
   if (method !== "POST") {
     return runAuthHandler(method, request, state.setupFlowAllowed);
+  }
+
+  if (state.action === "request-password-reset") {
+    const identifier = await readPasswordResetIdentifierFromRequest(request);
+    const rateLimit = consumePasswordResetRequest(
+      getExplicitlyTrustedClientIpFromRequest(request),
+      identifier,
+    );
+    if (!rateLimit.allowed) {
+      log.warn(
+        `Rate limited password reset request from ip='${state.clientIp}'.`,
+      );
+      return Response.json(
+        { error: "too_many_requests" },
+        {
+          status: 429,
+          headers: { "retry-after": String(rateLimit.retryAfterSeconds) },
+        },
+      );
+    }
+  }
+
+  if (
+    state.action === "request-password-reset" &&
+    !isAuthEmailDeliveryEnabled()
+  ) {
+    log.debug(
+      `Ignored password reset email request from ip='${state.clientIp}' because SMTP is not configured.`,
+    );
+    return Response.json({ status: true });
+  }
+
+  if (state.action === "request-password-reset") {
+    const resolvedRequest =
+      await rewritePasswordResetIdentifierRequest(request);
+    return runAuthHandler(method, resolvedRequest, state.setupFlowAllowed);
+  }
+
+  if (state.action === "reset-password") {
+    const policyResponse = await enforcePasswordResetRequestPolicy(request);
+    if (policyResponse) {
+      log.warn(
+        `Rejected password reset from ip='${state.clientIp}' because the new password does not meet the application password policy.`,
+      );
+      return policyResponse;
+    }
   }
 
   if (state.action === "unlink-account") {
@@ -597,10 +655,15 @@ export async function handleAuthRouteRequest(
     logResponse(method, state.action, finalResponse.status, Date.now() - start);
     return finalResponse;
   } catch (error) {
-    log.error(
-      `Unhandled error in Auth API route ${method} /api/auth/${state.action}.`,
-      error,
-    );
+    const safeAction = getSafeAuthActionForLog(state.action);
+    const message = `Unhandled error in Auth API route ${method} /api/auth/${safeAction}.`;
+    if (isPasswordResetTokenBearingAction(state.action)) {
+      // Error objects from token-bearing routes may retain the request URL or
+      // the reset-password request body.
+      log.error(message);
+    } else {
+      log.error(message, error);
+    }
     throw error;
   } finally {
     if (state.setupBootstrapLock?.status === "acquired") {

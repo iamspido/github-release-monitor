@@ -693,6 +693,14 @@
     "error_config_incomplete": "De e-mailconfiguratie is onvolledig. Controleer je .env-bestand.",
     "error_send_failed": "Verwerken en verzenden van e-mail mislukt: {details}"
   },
+  "PasswordResetEmail": {
+    "subject": "Stel uw GitHub Release Monitor-wachtwoord opnieuw in",
+    "title": "Stel uw wachtwoord opnieuw in",
+    "intro": "Er is een verzoek gedaan om het wachtwoord van uw GitHub Release Monitor-account opnieuw in te stellen.",
+    "button": "Wachtwoord opnieuw instellen",
+    "expiry_notice": "Deze link verloopt over {duration} en kan slechts één keer worden gebruikt.",
+    "ignore_notice": "Als u dit niet hebt aangevraagd, kunt u deze e-mail veilig negeren."
+  },
   "LoginPage": {
     "title": "Inloggen bij GitHub Release Monitor",
     "form_title": "Welkom terug",
@@ -760,6 +768,34 @@
     "error_setup_unavailable": "De eerste configuratie is niet meer beschikbaar.",
     "setup_success_login_now": "De eerste configuratie is voltooid. Log in met je nieuwe account.",
     "signup_success_login_now": "Registratie geslaagd. Log in met je nieuwe account."
+  },
+  "ForgotPasswordPage": {
+    "title": "Wachtwoord vergeten?",
+    "description": "Vul je gebruikersnaam of e-mailadres in; we sturen een link om je wachtwoord opnieuw in te stellen.",
+    "cli_description": "E-mailverzending is niet ingesteld. Een beheerder kan via de containerconsole een resetlink maken.",
+    "identifier_label": "Gebruikersnaam of e-mail",
+    "identifier_placeholder": "admin of admin@example.test",
+    "success": "Als er een account met deze gebruikersnaam of dit e-mailadres bestaat, is een resetlink verzonden.",
+    "cli_notice": "Vraag een beheerder met toegang tot de Docker-host om dit uit te voeren:",
+    "network_error": "Het verzoek kon niet worden verzonden. Probeer het opnieuw.",
+    "submit": "Resetlink verzenden",
+    "back_to_login": "Terug naar aanmelden",
+    "login_link": "Wachtwoord vergeten?"
+  },
+  "ResetPasswordPage": {
+    "title": "Wachtwoord opnieuw instellen",
+    "description": "Kies een nieuw wachtwoord voor je account.",
+    "success": "Je wachtwoord is opnieuw ingesteld. Alle bestaande sessies zijn afgemeld.",
+    "invalid_or_expired": "Deze link is ongeldig, verlopen of al gebruikt.",
+    "password_label": "Nieuw wachtwoord",
+    "confirm_label": "Nieuw wachtwoord bevestigen",
+    "show_password": "Wachtwoord tonen",
+    "hide_password": "Wachtwoord verbergen",
+    "password_requirements": "Minimaal 12 tekens met hoofdletter, kleine letter, cijfer en zonder spaties.",
+    "password_mismatch": "De wachtwoorden komen niet overeen.",
+    "reset_failed": "Het wachtwoord kon niet worden ingesteld. Vraag een nieuwe link aan.",
+    "submit": "Wachtwoord instellen",
+    "back_to_login": "Terug naar aanmelden"
   },
   "RegisterPage": {
     "title": "Registreren voor GitHub Release Monitor",

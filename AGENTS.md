@@ -12,9 +12,17 @@ Prefer Docker for lint/typecheck/tests. Avoid running `node`/`npm` directly on t
 
 - `docker build -f ./docker/Dockerfile --target lint --progress=plain .`
 - `docker build -f ./docker/Dockerfile --target typecheck --progress=plain .`
-- `docker build -f ./docker/Dockerfile --target tester --progress=plain .`
+- `docker build -f ./docker/Dockerfile --target tester-agent --progress=plain .`
 - `docker build -f ./docker/Dockerfile --target coverage -t grm-coverage --progress=plain .`
 - `docker build -f ./docker/Dockerfile --target runner -t github-release-monitor:dev --progress=plain .`
+
+### Unit Tests
+
+For agent-executed unit tests, use the Docker `tester-agent` target. Its Vitest `minimal` reporter only reports failed tests and their errors, including assertions, stack traces, and console output from failed tests. Output from successful tests and the success summary are suppressed.
+
+Do not use `tester-agent` for CI or documented manual test commands. Those continue to use the regular `tester` target with full output:
+
+- `docker build -f ./docker/Dockerfile --target tester --progress=plain .`
 
 ### E2E Tests
 
