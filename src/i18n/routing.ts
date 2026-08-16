@@ -6,6 +6,10 @@ import {
   locales,
 } from "@/i18n/config";
 
+// Note: `zh-CN` paths intentionally use ASCII (e.g. `/login` instead of
+// `/登录`). next-intl's canonical redirect mis-handles non-ASCII localized
+// paths (the decoded/encoded forms never match), causing an infinite 308
+// loop. The UI language stays Chinese; only the URL paths are ASCII.
 export const pathnames = {
   "/": {
     en: "/",
@@ -36,7 +40,7 @@ export const pathnames = {
     "pt-BR": "/configuracoes",
     id: "/pengaturan",
     hi: "/सेटिंग्स",
-    "zh-CN": "/设置",
+    "zh-CN": "/settings",
     ja: "/設定",
     ko: "/설정",
     tr: "/ayarlar",
@@ -57,7 +61,7 @@ export const pathnames = {
     "pt-BR": "/entrar",
     id: "/masuk",
     hi: "/लॉगिन",
-    "zh-CN": "/登录",
+    "zh-CN": "/login",
     ja: "/ログイン",
     ko: "/로그인",
     tr: "/giriş",
@@ -78,7 +82,7 @@ export const pathnames = {
     "pt-BR": "/cadastro",
     id: "/daftar",
     hi: "/पंजीकरण",
-    "zh-CN": "/注册",
+    "zh-CN": "/register",
     ja: "/登録",
     ko: "/회원가입",
     tr: "/kayıt",
@@ -99,7 +103,7 @@ export const pathnames = {
     "pt-BR": "/teste",
     id: "/uji",
     hi: "/परीक्षण",
-    "zh-CN": "/测试",
+    "zh-CN": "/test",
     ja: "/テスト",
     ko: "/테스트",
     tr: "/test",

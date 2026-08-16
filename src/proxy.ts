@@ -34,6 +34,26 @@ import { routing } from "./i18n/routing";
 type LocaleKey = Locale;
 type RouteKey = ProxyRouteKey;
 
+/**
+ * Compare two pathnames ignoring percent-encoding differences.
+ *
+ * Next.js keeps `request.nextUrl.pathname` percent-encoded
+ * (e.g. `/zh-CN/%E7%99%BB%E5%BD%95`), while `buildRedirectUrl` may produce a
+ * decoded path (e.g. `/zh-CN/登录`). A direct `!==` comparison is therefore
+ * always true for non-ASCII locales, which causes an infinite canonical
+ * redirect loop. Comparing after decoding both sides fixes it.
+ */
+function samePathname(a: string, b: string): boolean {
+  const decode = (p: string): string => {
+    try {
+      return decodeURIComponent(p);
+    } catch {
+      return p; // 非合法编码串，按原样比较
+    }
+  };
+  return decode(a) === decode(b);
+}
+
 export async function proxy(request: NextRequest) {
   const logAuth = logger.withScope("Auth");
   const logSecurity = logger.withScope("Security");
@@ -68,7 +88,7 @@ export async function proxy(request: NextRequest) {
       ? resolvedRest
       : "/";
     const redirectUrl = buildRedirectUrl(request, settingsLocale, targetRest);
-    if (redirectUrl.pathname !== pathname) {
+    if (!samePathname(redirectUrl.pathname, pathname)) {
       const redirectResponse = NextResponse.redirect(redirectUrl);
       attachLocaleCookies(redirectResponse, settingsLocale);
       return secureResponse(redirectResponse);
@@ -112,9 +132,13 @@ export async function proxy(request: NextRequest) {
         requestedLocale,
         canonicalRest,
       );
-      const redirectResponse = NextResponse.redirect(redirectUrl, 308);
-      attachLocaleCookies(redirectResponse, requestedLocale);
-      return secureResponse(redirectResponse);
+      // If the canonical target equals the current path (compared after
+      // decoding), skip the redirect to avoid a 308 loop on non-ASCII locales.
+      if (!samePathname(redirectUrl.pathname, pathname)) {
+        const redirectResponse = NextResponse.redirect(redirectUrl, 308);
+        attachLocaleCookies(redirectResponse, requestedLocale);
+        return secureResponse(redirectResponse);
+      }
     }
   }
 
@@ -280,14 +304,33 @@ function buildLocaleRedirectResponse(
   locale: LocaleKey,
   restPath: string,
 ): NextResponse {
+  // Use the public origin when available (Next middleware redirects require
+  // absolute URLs; see getPublicOrigin).
   const redirectResponse = NextResponse.redirect(
     new URL(
       restPath === "/" ? `/${locale}` : `/${locale}${restPath}`,
-      request.url,
+      getPublicOrigin(request),
     ),
   );
   attachLocaleCookies(redirectResponse, locale);
   return redirectResponse;
+}
+
+function getPublicOrigin(request: NextRequest): string {
+  // Use the explicitly configured external URL when available. Deriving the
+  // origin from `request.url` is unreliable behind a reverse proxy: the
+  // X-Forwarded-Proto header plus the self hostname can yield
+  // `https://localhost:8901`, which does not match the init URL's origin and
+  // makes Next.js proxy the redirect internally (EPROTO against an HTTP port).
+  const authUrl = process.env.BETTER_AUTH_URL;
+  if (authUrl) {
+    try {
+      return new URL(authUrl).origin;
+    } catch {
+      // fall through
+    }
+  }
+  return new URL(request.url).origin;
 }
 
 function buildLoginRedirectResponse(
@@ -296,7 +339,7 @@ function buildLoginRedirectResponse(
 ): NextResponse {
   const redirectUrl = new URL(
     `/${locale}${getLocalizedLoginPath(locale)}`,
-    request.url,
+    getPublicOrigin(request),
   );
   redirectUrl.searchParams.set("next", request.nextUrl.pathname);
   const redirectResponse = NextResponse.redirect(redirectUrl);
