@@ -359,3 +359,57 @@ describe("proxy/locale-routing", () => {
     },
   );
 });
+
+describe("buildRedirectUrl behind a reverse proxy (regression)", () => {
+  it.each([
+    // [baseUrl, expectedOrigin]
+    ["https://releases.monitor.dc-sy.cn", "https://releases.monitor.dc-sy.cn"],
+    [undefined, "https://localhost:8901"],
+  ])(
+    "uses the explicit public baseUrl %s when provided, else falls back to request.url",
+    (baseUrl, expectedOrigin) => {
+      // Simulate a request as seen by the app behind a reverse proxy:
+      // nginx forwards X-Forwarded-Proto: https, so request.url's origin is
+      // reconstructed as https://localhost:<port> (self hostname + forwarded
+      // protocol) instead of the public host.
+      const request = {
+        nextUrl: new URL(
+          "https://localhost:8901/zh-CN/login?next=%2Fzh-CN",
+        ),
+        url: "https://localhost:8901/zh-CN/login?next=%2Fzh-CN",
+      } as unknown as NextRequest;
+
+      const redirect = buildRedirectUrl(
+        request,
+        "zh-CN",
+        "/login",
+        baseUrl,
+      );
+
+      expect(redirect.origin).toBe(expectedOrigin);
+      expect(redirect.pathname).toBe("/zh-CN/login");
+      // Regression: without baseUrl the origin would be https://localhost:8901,
+      // which does not match the init URL's origin (http://127.0.0.1:8901) and
+      // makes Next.js proxy the redirect internally → EPROTO.
+    },
+  );
+
+  it("keeps request search and hash when a public baseUrl is used", () => {
+    const request = {
+      nextUrl: new URL("https://localhost:8901/zh-CN/settings?tab=x#hash"),
+      url: "https://localhost:8901/zh-CN/settings?stale=1#old",
+    } as unknown as NextRequest;
+
+    const redirect = buildRedirectUrl(
+      request,
+      "zh-CN",
+      "/settings",
+      "https://releases.monitor.dc-sy.cn",
+    );
+
+    expect(redirect.origin).toBe("https://releases.monitor.dc-sy.cn");
+    expect(redirect.pathname).toBe("/zh-CN/settings");
+    expect(redirect.search).toBe("?tab=x");
+    expect(redirect.hash).toBe("#hash");
+  });
+});

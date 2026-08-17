@@ -187,8 +187,15 @@ export function buildRedirectUrl(
   request: NextRequest,
   locale: Locale,
   localizedRest: string,
+  baseUrl?: string,
 ): URL {
-  const url = new URL(request.url);
+  // `baseUrl` allows callers to override the origin with a public URL when
+  // running behind a reverse proxy (see getPublicOrigin in proxy.ts).
+  // Deriving the origin from `request.url` is unreliable there: the
+  // X-Forwarded-Proto header plus the self hostname can yield
+  // `https://localhost:8901`, which does not match the init URL's origin and
+  // makes Next.js proxy the redirect internally (EPROTO against an HTTP port).
+  const url = new URL(baseUrl ?? request.url);
   url.pathname =
     localizedRest === "/" ? `/${locale}` : `/${locale}${localizedRest}`;
   url.search = request.nextUrl.search;

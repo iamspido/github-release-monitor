@@ -67,7 +67,7 @@ export async function proxy(request: NextRequest) {
     const targetRest = getRouteMatchForPath(settingsLocale, resolvedRest)
       ? resolvedRest
       : "/";
-    const redirectUrl = buildRedirectUrl(request, settingsLocale, targetRest);
+    const redirectUrl = buildRedirectUrl(request, settingsLocale, targetRest, getPublicOrigin(request));
     if (redirectUrl.pathname !== pathname) {
       const redirectResponse = NextResponse.redirect(redirectUrl);
       attachLocaleCookies(redirectResponse, settingsLocale);
@@ -76,7 +76,7 @@ export async function proxy(request: NextRequest) {
   } else if (requestedLocale !== settingsLocale) {
     const requestedRouteMatch = getRouteMatchForPath(requestedLocale, restPath);
     if (!requestedRouteMatch) {
-      const redirectUrl = buildRedirectUrl(request, settingsLocale, "/");
+      const redirectUrl = buildRedirectUrl(request, settingsLocale, "/", getPublicOrigin(request));
       const redirectResponse = NextResponse.redirect(redirectUrl);
       attachLocaleCookies(redirectResponse, settingsLocale);
       return secureResponse(redirectResponse);
@@ -86,14 +86,14 @@ export async function proxy(request: NextRequest) {
       settingsLocale,
       requestedLocale,
     );
-    const redirectUrl = buildRedirectUrl(request, settingsLocale, targetRest);
+    const redirectUrl = buildRedirectUrl(request, settingsLocale, targetRest, getPublicOrigin(request));
     const redirectResponse = NextResponse.redirect(redirectUrl);
     attachLocaleCookies(redirectResponse, settingsLocale);
     return secureResponse(redirectResponse);
   } else {
     const routeMatch = getRouteMatchForPath(requestedLocale, restPath);
     if (!routeMatch) {
-      const redirectUrl = buildRedirectUrl(request, requestedLocale, "/");
+      const redirectUrl = buildRedirectUrl(request, requestedLocale, "/", getPublicOrigin(request));
       const redirectResponse = NextResponse.redirect(redirectUrl);
       attachLocaleCookies(redirectResponse, requestedLocale);
       return secureResponse(redirectResponse);
@@ -111,6 +111,7 @@ export async function proxy(request: NextRequest) {
         request,
         requestedLocale,
         canonicalRest,
+        getPublicOrigin(request),
       );
       const redirectResponse = NextResponse.redirect(redirectUrl, 308);
       attachLocaleCookies(redirectResponse, requestedLocale);
@@ -291,11 +292,28 @@ function buildLocaleRedirectResponse(
   const redirectResponse = NextResponse.redirect(
     new URL(
       restPath === "/" ? `/${locale}` : `/${locale}${restPath}`,
-      request.url,
+      getPublicOrigin(request),
     ),
   );
   attachLocaleCookies(redirectResponse, locale);
   return redirectResponse;
+}
+
+function getPublicOrigin(request: NextRequest): string {
+  // Use the explicitly configured external URL when available. Deriving the
+  // origin from `request.url` is unreliable behind a reverse proxy: the
+  // X-Forwarded-Proto header plus the self hostname can yield
+  // `https://localhost:8901`, which does not match the init URL's origin and
+  // makes Next.js proxy the redirect internally (EPROTO against an HTTP port).
+  const authUrl = process.env.BETTER_AUTH_URL;
+  if (authUrl) {
+    try {
+      return new URL(authUrl).origin;
+    } catch {
+      // fall through
+    }
+  }
+  return new URL(request.url).origin;
 }
 
 function buildLoginRedirectResponse(
@@ -304,7 +322,7 @@ function buildLoginRedirectResponse(
 ): NextResponse {
   const redirectUrl = new URL(
     `/${locale}${getLocalizedLoginPath(locale)}`,
-    request.url,
+    getPublicOrigin(request),
   );
   redirectUrl.searchParams.set("next", request.nextUrl.pathname);
   const redirectResponse = NextResponse.redirect(redirectUrl);
