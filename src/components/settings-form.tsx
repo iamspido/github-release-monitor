@@ -310,6 +310,8 @@ export function SettingsForm({
       cacheDays: `${baseId}-cache-days`,
       releasesPerPage: `${baseId}-releases-per-page`,
       parallelRepoFetches: `${baseId}-parallel-fetches`,
+      emailIncludeReleaseNotes: `${baseId}-email-include-release-notes`,
+      appriseIncludeReleaseNotes: `${baseId}-apprise-include-release-notes`,
       appriseMaxChars: `${baseId}-apprise-chars`,
       appriseFormat: `${baseId}-apprise-format`,
       appriseTags: `${baseId}-apprise-tags`,
@@ -393,6 +395,10 @@ export function SettingsForm({
   const [excludeRegex, setExcludeRegex] = React.useState(
     currentSettings.excludeRegex ?? "",
   );
+  const [emailIncludeReleaseNotes, setEmailIncludeReleaseNotes] =
+    React.useState(currentSettings.emailIncludeReleaseNotes !== false);
+  const [appriseIncludeReleaseNotes, setAppriseIncludeReleaseNotes] =
+    React.useState(currentSettings.appriseIncludeReleaseNotes !== false);
   const [appriseMaxCharacters, setAppriseMaxCharacters] = React.useState(
     String(currentSettings.appriseMaxCharacters ?? 1800),
   );
@@ -522,6 +528,8 @@ export function SettingsForm({
       repositoryFormExpanded,
       includeRegex: includeRegex,
       excludeRegex: excludeRegex,
+      emailIncludeReleaseNotes,
+      appriseIncludeReleaseNotes,
       appriseMaxCharacters: Number.isNaN(parsedAppriseChars)
         ? 1800
         : parsedAppriseChars,
@@ -563,6 +571,8 @@ export function SettingsForm({
     repositoryFormExpanded,
     includeRegex,
     excludeRegex,
+    emailIncludeReleaseNotes,
+    appriseIncludeReleaseNotes,
     appriseMaxCharacters,
     appriseTags,
     appriseFormat,
@@ -2027,6 +2037,49 @@ export function SettingsForm({
                   {t("parallel_repo_fetches_warning_high")}
                 </p>
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("notification_content_settings_title")}</CardTitle>
+            <CardDescription>
+              {t("notification_content_settings_description")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id={ids.emailIncludeReleaseNotes}
+                checked={emailIncludeReleaseNotes}
+                onCheckedChange={(checked) =>
+                  setEmailIncludeReleaseNotes(Boolean(checked))
+                }
+                disabled={!isOnline}
+              />
+              <Label
+                htmlFor={ids.emailIncludeReleaseNotes}
+                className="font-medium cursor-pointer"
+              >
+                {t("email_include_release_notes_label")}
+              </Label>
+            </div>
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id={ids.appriseIncludeReleaseNotes}
+                checked={appriseIncludeReleaseNotes}
+                onCheckedChange={(checked) =>
+                  setAppriseIncludeReleaseNotes(Boolean(checked))
+                }
+                disabled={!isOnline}
+              />
+              <Label
+                htmlFor={ids.appriseIncludeReleaseNotes}
+                className="font-medium cursor-pointer"
+              >
+                {t("apprise_include_release_notes_label")}
+              </Label>
             </div>
           </CardContent>
         </Card>

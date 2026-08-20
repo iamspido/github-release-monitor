@@ -55,6 +55,8 @@ export async function sendNotification(
         release,
         locale,
         settings.timeFormat,
+        undefined,
+        settings.emailIncludeReleaseNotes !== false,
       ),
     });
   }

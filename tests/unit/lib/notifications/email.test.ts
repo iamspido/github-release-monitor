@@ -71,6 +71,31 @@ describe("notifications/email", () => {
     expect(html).toContain("html_no_notes");
   });
 
+  it("omits release notes from both email alternatives when disabled", async () => {
+    const releaseWithNotes = { ...release, body: "private release details" };
+    const text = await generatePlainTextReleaseBody(
+      releaseWithNotes,
+      repo,
+      "en",
+      "24h",
+      false,
+    );
+    const html = await generateHtmlReleaseBody(
+      releaseWithNotes,
+      repo,
+      "en",
+      "24h",
+      false,
+    );
+
+    expect(text).not.toContain("private release details");
+    expect(text).not.toContain("text_release_notes_label");
+    expect(text).toContain(release.html_url);
+    expect(html).not.toContain("private release details");
+    expect(html).not.toContain("html_notes_title");
+    expect(html).toContain(release.html_url);
+  });
+
   it("renders Arabic email direction, bidi isolation, and RTL spacing", async () => {
     const html = await generateHtmlReleaseBody(release, repo, "ar", "24h");
 

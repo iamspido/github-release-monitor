@@ -73,6 +73,8 @@ export function enqueuePendingNotification(
     locale,
     settings: {
       timeFormat: settings.timeFormat,
+      emailIncludeReleaseNotes: settings.emailIncludeReleaseNotes,
+      appriseIncludeReleaseNotes: settings.appriseIncludeReleaseNotes,
       appriseMaxCharacters: settings.appriseMaxCharacters,
       appriseTags: settings.appriseTags,
       appriseFormat: settings.appriseFormat,

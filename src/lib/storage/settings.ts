@@ -61,6 +61,8 @@ export function createDefaultSettings(
     repositoryFormExpanded: true,
     includeRegex: undefined,
     excludeRegex: undefined,
+    emailIncludeReleaseNotes: true,
+    appriseIncludeReleaseNotes: true,
     appriseMaxCharacters: 1800,
     appriseTags: undefined,
     appriseFormat: "text",
@@ -147,6 +149,8 @@ export function normalizeSettings(value: unknown): AppSettings {
     "showProviderPrefixInRepoId",
     "showProviderDomainInRepoId",
     "repositoryFormExpanded",
+    "emailIncludeReleaseNotes",
+    "appriseIncludeReleaseNotes",
   ] as const) {
     assertOptionalField(persisted, key, isBoolean, "a boolean");
   }

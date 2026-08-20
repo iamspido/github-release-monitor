@@ -89,6 +89,8 @@ describe("storage/settings failure scenarios", () => {
     expect(first.parallelRepoFetches).toBe(5);
     expect(second.parallelRepoFetches).toBe(1);
     expect(first).toHaveProperty("repositoryFormExpanded", true);
+    expect(first).toHaveProperty("emailIncludeReleaseNotes", true);
+    expect(first).toHaveProperty("appriseIncludeReleaseNotes", true);
     expect(first).toHaveProperty("appriseMaxCharacters", 1800);
     expect(first).toHaveProperty("releaseSelectionStrategy", "newest");
 
@@ -295,6 +297,8 @@ describe("storage/settings failure scenarios", () => {
     [{ releasesPerPage: 1001 }, "releasesPerPage"],
     [{ parallelRepoFetches: 51 }, "parallelRepoFetches"],
     [{ appriseMaxCharacters: -1 }, "appriseMaxCharacters"],
+    [{ emailIncludeReleaseNotes: "yes" }, "emailIncludeReleaseNotes"],
+    [{ appriseIncludeReleaseNotes: 1 }, "appriseIncludeReleaseNotes"],
   ])(
     "rejects semantically invalid persisted settings %j",
     async (value, key) => {

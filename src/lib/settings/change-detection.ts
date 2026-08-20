@@ -329,6 +329,18 @@ export function buildGlobalSettingsChangeLog(
   );
   pushValueChange(
     changes,
+    "emailIncludeReleaseNotes",
+    previous.emailIncludeReleaseNotes,
+    next.emailIncludeReleaseNotes,
+  );
+  pushValueChange(
+    changes,
+    "appriseIncludeReleaseNotes",
+    previous.appriseIncludeReleaseNotes,
+    next.appriseIncludeReleaseNotes,
+  );
+  pushValueChange(
+    changes,
     "appriseMaxCharacters",
     previous.appriseMaxCharacters,
     next.appriseMaxCharacters,

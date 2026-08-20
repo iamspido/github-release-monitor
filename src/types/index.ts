@@ -300,6 +300,8 @@ export type AppSettings = {
   repositoryFormExpanded?: boolean;
   includeRegex?: string;
   excludeRegex?: string;
+  emailIncludeReleaseNotes?: boolean;
+  appriseIncludeReleaseNotes?: boolean;
   appriseMaxCharacters?: number;
   appriseTags?: string;
   appriseFormat?: AppriseFormat;
@@ -307,7 +309,12 @@ export type AppSettings = {
 
 export type NotificationSettings = Pick<
   AppSettings,
-  "timeFormat" | "appriseMaxCharacters" | "appriseTags" | "appriseFormat"
+  | "timeFormat"
+  | "emailIncludeReleaseNotes"
+  | "appriseIncludeReleaseNotes"
+  | "appriseMaxCharacters"
+  | "appriseTags"
+  | "appriseFormat"
 >;
 
 export type SystemStatus = {

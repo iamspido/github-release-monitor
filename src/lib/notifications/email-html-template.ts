@@ -7,7 +7,7 @@ interface ReleaseEmailHtmlTemplateData {
   listVersionLabelHtml: string;
   localeAttribute: string;
   notesTitleHtml: string;
-  releaseBodyHtml: string;
+  releaseBodyHtml?: string;
   releaseDateHtml: string;
   releaseNameHtml: string;
   releaseTagNameHtml: string;
@@ -193,10 +193,14 @@ export function renderReleaseEmailHtml(
           <li><strong style="color: #fafafa;">${data.listNameLabelHtml}</strong> <bdi dir="auto">${data.releaseNameHtml}</bdi></li>
           <li><strong style="color: #fafafa;">${data.listDateLabelHtml}</strong> <bdi dir="auto">${data.releaseDateHtml}</bdi></li>
         </ul>
-        <h3>${data.notesTitleHtml}</h3>
+        ${
+          data.releaseBodyHtml === undefined
+            ? ""
+            : `<h3>${data.notesTitleHtml}</h3>
         <div class="release-notes-container" dir="auto">
           ${data.releaseBodyHtml}
-        </div>
+        </div>`
+        }
         <p style="margin-top: 24px;">
           <a href="${data.releaseUrlAttribute}" class="button">
             ${data.buttonTextHtml}

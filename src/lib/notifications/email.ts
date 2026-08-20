@@ -56,6 +56,7 @@ export async function generatePlainTextReleaseBody(
   repository: Repository,
   locale: Locale,
   timeFormat: TimeFormat,
+  includeReleaseNotes = true,
 ): Promise<string> {
   const t = await getTranslations({ locale, namespace: "Email" });
   const { htmlDate } = await getFormattedDate(
@@ -72,9 +73,14 @@ ${t("text_version_label")}: ${isolateLtrText(release.tag_name)}
 ${t("text_release_name_label")}: ${isolateAutoText(releaseName)}
 ${t("text_release_date_label")}: ${isolateAutoText(htmlDate)}
 
-${t("text_release_notes_label")}:
+${
+  includeReleaseNotes
+    ? `${t("text_release_notes_label")}:
 ${release.body ? isolateAutoText(release.body) : t("text_no_notes")}
 
+`
+    : ""
+}
 ${t("text_view_on_github_label")}: ${isolateLtrText(release.html_url)}
 `;
 }
@@ -84,6 +90,7 @@ export async function generateHtmlReleaseBody(
   repository: Repository,
   locale: Locale,
   timeFormat: TimeFormat,
+  includeReleaseNotes = true,
 ): Promise<string> {
   const t = await getTranslations({ locale, namespace: "Email" });
   const subject = t("subject", {
@@ -107,14 +114,16 @@ export async function generateHtmlReleaseBody(
   const safeReleaseUrl = escapeHtmlAttribute(safeExternalUrl(release.html_url));
   const safeHtmlDate = escapeHtml(htmlDate);
 
-  const releaseBodyHtml = release.body
-    ? String(
-        await remark()
-          .use(remarkGfm)
-          .use(remarkHtml, { sanitize: true })
-          .process(release.body),
-      )
-    : `<p style="font-style: italic;">${escapeHtml(t("html_no_notes"))}</p>`;
+  const releaseBodyHtml = includeReleaseNotes
+    ? release.body
+      ? String(
+          await remark()
+            .use(remarkGfm)
+            .use(remarkHtml, { sanitize: true })
+            .process(release.body),
+        )
+      : `<p style="font-style: italic;">${escapeHtml(t("html_no_notes"))}</p>`
+    : undefined;
 
   const repoLink = `<a href="${safeRepoUrl}" style="color: #8c9fe8; text-decoration: none;"><strong style="color: #fafafa;"><bdi dir="ltr" style="direction: ltr; unicode-bidi: isolate;">${safeRepoId}</bdi></strong></a>`;
   const introHtml = t("html_intro", {
@@ -156,6 +165,7 @@ export async function sendNewReleaseEmail(
   locale: Locale,
   timeFormat: TimeFormat,
   toAddress?: string,
+  includeReleaseNotes = true,
 ) {
   const t = await getTranslations({ locale, namespace: "Email" });
 
@@ -179,12 +189,14 @@ export async function sendNewReleaseEmail(
     repository,
     locale,
     timeFormat,
+    includeReleaseNotes,
   );
   const htmlBody = await generateHtmlReleaseBody(
     release,
     repository,
     locale,
     timeFormat,
+    includeReleaseNotes,
   );
 
   try {
@@ -221,6 +233,7 @@ export async function sendTestEmail(
   locale: Locale,
   timeFormat: TimeFormat,
   toAddress?: string,
+  includeReleaseNotes = true,
 ) {
   const recipient = getEmailRuntimeConfig(process.env, toAddress).recipient;
   logger.withScope("Email").info(`Sending test email to ${recipient}...`);
@@ -230,5 +243,6 @@ export async function sendTestEmail(
     locale,
     timeFormat,
     recipient,
+    includeReleaseNotes,
   );
 }

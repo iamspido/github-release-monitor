@@ -222,6 +222,50 @@ describe("notifications/index", () => {
     expect(payload.body.length).toBeLessThanOrEqual(10);
   });
 
+  it.each(["text", "markdown", "html"] as const)(
+    "omits release notes from %s Apprise messages when disabled",
+    async (appriseFormat) => {
+      process.env.APPRISE_URL = "http://apprise.test/notify";
+      vi.mocked(global.fetch).mockResolvedValue(
+        mockFetchResponse({ status: 200, text: "" }),
+      );
+
+      const releaseWithNotes = {
+        ...release,
+        body: "private release details",
+      };
+      await sendNotification(repo, releaseWithNotes, "en", {
+        ...baseSettings,
+        appriseFormat,
+        appriseIncludeReleaseNotes: false,
+      });
+
+      const call = vi.mocked(global.fetch).mock.calls[0];
+      const payload = JSON.parse(fetchCallBodyText(call));
+      expect(payload.body).not.toContain("private release details");
+      expect(payload.body).toContain(release.html_url);
+    },
+  );
+
+  it("forwards the email release-notes setting independently", async () => {
+    await sendNotification(
+      repo,
+      release,
+      "en",
+      { ...baseSettings, emailIncludeReleaseNotes: false },
+      ["email"],
+    );
+
+    expect(sendNewReleaseEmailMock).toHaveBeenCalledWith(
+      repo,
+      release,
+      "en",
+      "24h",
+      undefined,
+      false,
+    );
+  });
+
   it("apprise tags: repo overrides global; global applied when repo absent", async () => {
     process.env.APPRISE_URL = "http://apprise.test/notify";
     vi.mocked(global.fetch).mockResolvedValue(

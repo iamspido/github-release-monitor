@@ -186,6 +186,44 @@ describe("SettingsForm offline autosave paused", () => {
     }
   });
 
+  it.each([
+    ["email", "email_include_release_notes_label", "emailIncludeReleaseNotes"],
+    [
+      "Apprise",
+      "apprise_include_release_notes_label",
+      "appriseIncludeReleaseNotes",
+    ],
+  ] as const)(
+    "saves the %s release-note choice independently",
+    async (_channel, labelText, settingKey) => {
+      vi.useFakeTimers();
+      const { div, cleanup } = renderForm(true);
+      try {
+        const { updateSettingsPatchAction } = await import(
+          "@/app/settings/actions"
+        );
+        const updateMock = vi.mocked(updateSettingsPatchAction);
+        updateMock.mockClear();
+
+        const label = Array.from(div.querySelectorAll("label")).find(
+          (candidate) => candidate.textContent === labelText,
+        );
+        const checkbox = label?.htmlFor
+          ? document.getElementById(label.htmlFor)
+          : null;
+        await act(async () => {
+          (checkbox as HTMLButtonElement | null)?.click();
+          await Promise.resolve();
+        });
+
+        expect(updateMock).toHaveBeenCalledWith({ [settingKey]: false });
+      } finally {
+        cleanup();
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("saves a text field on blur before the fallback delay", async () => {
     vi.useFakeTimers();
     const { div, cleanup } = renderForm(true);

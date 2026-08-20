@@ -203,6 +203,7 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
       locale,
       settings.timeFormat,
       recipient,
+      settings.emailIncludeReleaseNotes !== false,
     );
     return { success: true };
   } catch (error: unknown) {

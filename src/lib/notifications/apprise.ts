@@ -60,7 +60,10 @@ ${introText}
 * **${t("text_release_date_label")}**: ${escapeMarkdownText(htmlDate)}
 `;
 
-  let body = `${header.trim()}\n\n### ${t("text_release_notes_label")}\n---\n${release.body || t("text_no_notes")}`;
+  let body = header.trim();
+  if (settings.appriseIncludeReleaseNotes !== false) {
+    body += `\n\n### ${t("text_release_notes_label")}\n---\n${release.body || t("text_no_notes")}`;
+  }
 
   if (maxChars > 0) {
     const footer = `${footerSeparator}${truncatedText}\n${viewOnGithubText}`;
@@ -98,6 +101,7 @@ async function generateAppriseBody(
         repository,
         locale,
         settings.timeFormat,
+        settings.appriseIncludeReleaseNotes !== false,
       );
     case "markdown":
       return generateMarkdownReleaseBody(
@@ -117,6 +121,7 @@ async function generateAppriseBody(
         repository,
         locale,
         settings.timeFormat,
+        settings.appriseIncludeReleaseNotes !== false,
       );
       const fullBody = `${title}\n\n${plainTextBody.trim()}`;
 

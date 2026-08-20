@@ -15,6 +15,7 @@ vi.mock("@/lib/notifications", async (orig) => {
 import {
   ABANDONED_NOTIFICATION_RETENTION_MS,
   deliverPendingNotifications,
+  enqueuePendingNotification,
   MAX_ABANDONED_NOTIFICATIONS_PER_REPOSITORY,
   MAX_NOTIFICATION_DELIVERIES_PER_RUN,
   MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
@@ -59,6 +60,37 @@ function createRepositories(count: number): Repository[] {
 describe("notifications/pending-deliveries", () => {
   beforeEach(() => {
     sendNotificationMock.mockReset();
+  });
+
+  it("snapshots both release-notes settings for later delivery", () => {
+    const repository: Repository = {
+      id: "owner/repo",
+      url: "https://github.com/owner/repo",
+    };
+
+    expect(
+      enqueuePendingNotification(
+        repository,
+        createPendingNotification("repo").release,
+        "en",
+        {
+          timeFormat: "24h",
+          locale: "en",
+          refreshInterval: 10,
+          cacheInterval: 5,
+          releasesPerPage: 30,
+          parallelRepoFetches: 1,
+          releaseChannels: ["stable"],
+          emailIncludeReleaseNotes: false,
+          appriseIncludeReleaseNotes: false,
+        },
+        ["email", "apprise"],
+      ),
+    ).toBe(true);
+    expect(repository.pendingNotifications?.[0].settings).toMatchObject({
+      emailIncludeReleaseNotes: false,
+      appriseIncludeReleaseNotes: false,
+    });
   });
 
   it("limits each delivery run to a bounded batch", async () => {
