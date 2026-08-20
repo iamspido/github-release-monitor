@@ -11,6 +11,9 @@ const { state, sendNotificationMock } = vi.hoisted(() => ({
         lastSeenReleaseTag: "v1",
       },
     ] as Repository[],
+    releaseId: 2,
+    releaseTag: "v2",
+    fetchErrorType: undefined as "not_modified" | undefined,
   },
   sendNotificationMock: vi.fn(),
 }));
@@ -41,16 +44,20 @@ vi.mock("@/lib/releases", () => ({
       repoId: "github:owner/repo",
       repoUrl: "https://github.com/owner/repo",
       release: {
-        id: 2,
-        html_url: "https://github.com/owner/repo/releases/tag/v2",
-        tag_name: "v2",
-        name: "v2",
+        id: state.releaseId,
+        html_url: `https://github.com/owner/repo/releases/tag/${state.releaseTag}`,
+        tag_name: state.releaseTag,
+        name:
+          state.releaseId === 0 ? `Tag: ${state.releaseTag}` : state.releaseTag,
         body: null,
         created_at: "2026-07-14T00:00:00.000Z",
         published_at: "2026-07-14T00:00:00.000Z",
         prerelease: false,
         draft: false,
       },
+      ...(state.fetchErrorType
+        ? { error: { type: state.fetchErrorType } }
+        : {}),
     },
   ],
 }));
@@ -76,7 +83,77 @@ describe("release checker scheduling", () => {
         lastSeenReleaseTag: "v1",
       },
     ];
+    state.releaseId = 2;
+    state.releaseTag = "v2";
+    state.fetchErrorType = undefined;
     sendNotificationMock.mockReset();
+  });
+
+  it("uses the first tag fallback as the notification baseline", async () => {
+    state.repositories = [
+      {
+        id: "github:owner/repo",
+        url: "https://github.com/owner/repo",
+      },
+    ];
+    state.releaseId = 0;
+
+    await expect(
+      checkForNewReleases({ skipCache: true }),
+    ).resolves.toMatchObject({ notificationsSent: 0 });
+
+    expect(sendNotificationMock).not.toHaveBeenCalled();
+    expect(state.repositories[0]).toMatchObject({
+      lastSeenReleaseTag: "v2",
+      isNew: false,
+      latestRelease: expect.objectContaining({
+        tag_name: "v2",
+        source: "tag",
+      }),
+    });
+  });
+
+  it("detects and notifies for a new tag fallback", async () => {
+    state.releaseId = 0;
+    sendNotificationMock.mockResolvedValue(undefined);
+
+    await expect(
+      checkForNewReleases({ skipCache: true }),
+    ).resolves.toMatchObject({ notificationsSent: 1 });
+
+    expect(sendNotificationMock).toHaveBeenCalledOnce();
+    expect(state.repositories[0]).toMatchObject({
+      lastSeenReleaseTag: "v2",
+      isNew: true,
+    });
+  });
+
+  it("does not treat a reconstructed not-modified result as new", async () => {
+    state.repositories = [
+      {
+        id: "github:owner/repo",
+        url: "https://github.com/owner/repo",
+        lastSeenReleaseTag: "v1",
+        latestRelease: {
+          html_url: "https://github.com/owner/repo/releases/tag/v2",
+          tag_name: "v2",
+          name: "v2",
+          body: null,
+          created_at: "2026-07-14T00:00:00.000Z",
+          published_at: "2026-07-14T00:00:00.000Z",
+          source: "release",
+        },
+      },
+    ];
+    state.releaseId = 0;
+    state.fetchErrorType = "not_modified";
+
+    await expect(
+      checkForNewReleases({ skipCache: true }),
+    ).resolves.toMatchObject({ notificationsSent: 0 });
+
+    expect(sendNotificationMock).not.toHaveBeenCalled();
+    expect(state.repositories[0].lastSeenReleaseTag).toBe("v1");
   });
 
   it("releases the shared state scheduler before notification I/O", async () => {

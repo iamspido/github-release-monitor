@@ -6,12 +6,12 @@ import {
 import type { EnrichedRelease, Repository } from "@/types";
 
 type ApplyReleaseFetchResultOptions = {
-  initializeLastSeenFromRealRelease?: boolean;
+  initializeLastSeenFromFetchedRelease?: boolean;
 };
 
 export function applyReleaseFetchResultToRepository(
   repository: Repository,
-  enrichedRelease: Pick<EnrichedRelease, "release" | "newEtag">,
+  enrichedRelease: Pick<EnrichedRelease, "release" | "error" | "newEtag">,
   options: ApplyReleaseFetchResultOptions = {},
 ): boolean {
   let changed = applyEtagUpdate(repository, enrichedRelease.newEtag);
@@ -20,11 +20,11 @@ export function applyReleaseFetchResultToRepository(
     return changed;
   }
 
-  const isVirtual = enrichedRelease.release.id === 0;
+  const isReconstructed = enrichedRelease.error?.type === "not_modified";
   const newCachedRelease = toCachedRelease(enrichedRelease.release);
 
   if (
-    !isVirtual ||
+    !isReconstructed ||
     canReplaceCachedReleaseWithVirtual(repository.latestRelease)
   ) {
     if (
@@ -42,9 +42,9 @@ export function applyReleaseFetchResultToRepository(
   }
 
   if (
-    options.initializeLastSeenFromRealRelease &&
+    options.initializeLastSeenFromFetchedRelease &&
     !repository.lastSeenReleaseTag &&
-    !isVirtual
+    !isReconstructed
   ) {
     repository.lastSeenReleaseTag = enrichedRelease.release.tag_name;
     changed = true;

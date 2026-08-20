@@ -363,7 +363,7 @@ export async function refreshSingleRepositoryAction(repoId: string) {
     }
 
     applyReleaseFetchResultToRepository(allRepos[repoIndex], enrichedRelease, {
-      initializeLastSeenFromRealRelease: true,
+      initializeLastSeenFromFetchedRelease: true,
     });
 
     await saveRepositories(allRepos);
@@ -416,7 +416,7 @@ export async function refreshMultipleRepositoriesAction(
                 createReleaseFetchFingerprint(repo, currentSettings)
             ) {
               applyReleaseFetchResultToRepository(repo, enriched, {
-                initializeLastSeenFromRealRelease: true,
+                initializeLastSeenFromFetchedRelease: true,
               });
             } else if (enriched && fetchFingerprint) {
               log.info(

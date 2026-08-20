@@ -2,6 +2,8 @@
 
 import type { AppSettings, Repository } from "@/types";
 
+const checkForNewReleasesMock = vi.hoisted(() => vi.fn());
+
 vi.mock("next/cache", () => ({
   revalidatePath: () => {},
   updateTag: () => {},
@@ -15,6 +17,10 @@ vi.mock("next-intl/server", () => ({
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({ set: vi.fn() }),
+}));
+
+vi.mock("@/lib/releases/checker", () => ({
+  checkForNewReleases: checkForNewReleasesMock,
 }));
 
 const memRepos: { list: Repository[] } = { list: [] };
@@ -52,6 +58,9 @@ vi.mock("@/lib/storage/settings", () => ({
 describe("settings actions", () => {
   beforeEach(() => {
     vi.resetModules();
+    checkForNewReleasesMock
+      .mockReset()
+      .mockResolvedValue({ notificationsSent: 0 });
     memRepos.list = [];
     settingsStore.current = {
       timeFormat: "24h",
@@ -73,18 +82,6 @@ describe("settings actions", () => {
       { id: "o/a", url: "https://github.com/o/a", etag: "E1", isNew: true },
       { id: "o/b", url: "https://github.com/o/b", etag: "E2", isNew: true },
     ];
-
-    // Spy checkForNewReleases
-    vi.doMock("@/app/actions", async () => {
-      const actual =
-        await vi.importActual<typeof import("@/app/actions")>("@/app/actions");
-      return {
-        ...actual,
-        checkForNewReleases: vi
-          .fn()
-          .mockResolvedValue({ notificationsSent: 0 }),
-      };
-    });
 
     const { updateSettingsAction } = await import("@/app/settings/actions");
     await updateSettingsAction({

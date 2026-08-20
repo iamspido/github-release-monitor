@@ -71,10 +71,10 @@ async function applyReleaseCheckResults({
     }
 
     if (enrichedRelease.release) {
-      const isVirtual = enrichedRelease.release.id === 0; // tag-fallback or reconstructed data
+      const isReconstructed = enrichedRelease.error?.type === "not_modified";
       const newTag = enrichedRelease.release.tag_name;
       const isNewRelease =
-        !isVirtual &&
+        !isReconstructed &&
         repo.lastSeenReleaseTag &&
         repo.lastSeenReleaseTag !== newTag;
 
@@ -95,7 +95,7 @@ async function applyReleaseCheckResults({
           settings,
           notificationChannels,
         );
-      } else if (!repo.lastSeenReleaseTag && !isVirtual) {
+      } else if (!repo.lastSeenReleaseTag && !isReconstructed) {
         log.info(
           `First fetch for ${repo.id}, setting initial release tag to ${newTag}. No notification will be sent.`,
         );
