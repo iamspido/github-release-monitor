@@ -14,4 +14,14 @@ test("global release channels require at least one selected", async ({
     page.getByText("At least one release type must be selected.").first(),
   ).toBeVisible();
   await assertNoAutosave(page);
+
+  await expect(
+    page.getByRole("checkbox", { name: "Pre-release", exact: true }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByRole("textbox", {
+      name: "Custom pre-release markers",
+      exact: true,
+    }),
+  ).toBeEnabled();
 });

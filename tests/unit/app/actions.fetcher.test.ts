@@ -614,6 +614,41 @@ describe("actions fetcher scenarios", () => {
     expect(vi.mocked(global.fetch)).toHaveBeenCalledOnce();
   });
 
+  it("trusts GitHub's provider-latest designation over tag markers", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "o/r",
+      url: "https://github.com/o/r",
+      releaseSelectionStrategy: "provider_latest",
+    };
+    const providerLatest = {
+      id: 1,
+      html_url: "https://github.com/o/r/releases/tag/v1.5.0-beta.1",
+      tag_name: "v1.5.0-beta.1",
+      name: "v1.5.0-beta.1",
+      body: "provider-designated latest",
+      created_at: "2024-01-01T00:00:00Z",
+      published_at: "2024-01-01T00:00:00Z",
+      prerelease: false,
+      draft: false,
+    };
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: providerLatest }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("v1.5.0-beta.1");
+    expect(enriched[0].error).toBeUndefined();
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledOnce();
+  });
+
   it("preserves provider-latest endpoint errors", async () => {
     const actions = await import("@/app/actions");
     const repo: Repository = {

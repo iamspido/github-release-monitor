@@ -193,7 +193,7 @@ describe("filters: include/exclude/channels/subchannels", () => {
     expect(enriched[0].release?.tag_name).toBe("v1.0.0-1");
   });
 
-  it("empty preReleaseSubChannels does not break prerelease tags", async () => {
+  it("an empty preReleaseSubChannels list disables built-in tag detection", async () => {
     const repo: Repository = {
       id: "o/r",
       url: "https://github.com/o/r",
@@ -230,7 +230,7 @@ describe("filters: include/exclude/channels/subchannels", () => {
       "en",
       { skipCache: true },
     );
-    expect(enriched[0].release?.tag_name).toBe("v1.0.0-rc1");
+    expect(enriched[0].error?.type).toBe("no_matching_releases");
   });
 
   it("draft releases included only when channel allows", async () => {

@@ -61,4 +61,8 @@ describe("hasCustomRepoSettings", () => {
       }),
     ).toBe(true);
   });
+
+  it("recognizes an explicitly empty pre-release marker override", () => {
+    expect(hasCustomRepoSettings({ preReleaseSubChannels: [] })).toBe(true);
+  });
 });

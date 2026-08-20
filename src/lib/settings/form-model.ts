@@ -1,3 +1,8 @@
+import {
+  getInvalidCustomPreReleaseMarkers,
+  parseCustomPreReleaseMarkers,
+  splitCustomPreReleaseMarkerInput,
+} from "@/lib/releases/pre-release-markers";
 import { areArraysEqualIgnoringOrder } from "@/lib/settings/change-detection";
 import { isValidFiveFieldCron } from "@/lib/settings/schedule-fields";
 import type { Repository } from "@/types";
@@ -5,6 +10,14 @@ import type { Repository } from "@/types";
 export type RegexValidationError = "invalid" | null;
 export type RangeValidationError = "too_low" | "too_high" | null;
 export type CronValidationError = "invalid" | null;
+
+export { parseCustomPreReleaseMarkers };
+
+export function validateCustomPreReleaseMarkersInput(value: string): string[] {
+  return getInvalidCustomPreReleaseMarkers(
+    splitCustomPreReleaseMarkerInput(value),
+  );
+}
 
 export function validateRegexInput(value: string): RegexValidationError {
   if (!value.trim()) return null;
@@ -112,6 +125,7 @@ export type RefreshSensitiveRepoSettings = Pick<
   Repository,
   | "releaseChannels"
   | "preReleaseSubChannels"
+  | "customPreReleaseMarkers"
   | "releaseSelectionStrategy"
   | "versionTagPattern"
   | "releasesPerPage"
@@ -134,6 +148,10 @@ export function hasRefreshSensitiveRepoSettingChanges(
     previous.preReleaseSubChannels,
     next.preReleaseSubChannels,
   );
+  const customPreReleaseMarkersChanged = !areArraysEqualIgnoringOrder(
+    previous.customPreReleaseMarkers,
+    next.customPreReleaseMarkers,
+  );
   const releasesPerPageChanged =
     previous.releasesPerPage !== next.releasesPerPage;
   const releaseSelectionStrategyChanged =
@@ -146,6 +164,7 @@ export function hasRefreshSensitiveRepoSettingChanges(
     filtersChanged ||
     channelsChanged ||
     preReleaseSubChannelsChanged ||
+    customPreReleaseMarkersChanged ||
     releaseSelectionStrategyChanged ||
     versionTagPatternChanged ||
     releasesPerPageChanged

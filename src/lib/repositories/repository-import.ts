@@ -1,3 +1,9 @@
+import {
+  getInvalidCustomPreReleaseMarkers,
+  legacyPreReleaseMarkers,
+  migrateLegacyPreReleaseConfiguration,
+  normalizeCustomPreReleaseMarkers,
+} from "@/lib/releases/pre-release-markers";
 import { validateVersionTagPattern } from "@/lib/releases/version-tag-pattern";
 import { normalizeRepositoryDisplayName } from "@/lib/repositories/display-name";
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
@@ -5,7 +11,6 @@ import { normalizeRepositoryTags } from "@/lib/repositories/tags";
 import type {
   AppriseFormat,
   CachedRelease,
-  PreReleaseChannelType,
   ReleaseChannel,
   ReleaseSelectionStrategy,
   Repository,
@@ -20,7 +25,10 @@ const releaseChannels = new Set<ReleaseChannel>([
   "prerelease",
   "draft",
 ]);
-const preReleaseChannels = new Set<PreReleaseChannelType>(allPreReleaseTypes);
+const preReleaseChannels = new Set<string>([
+  ...allPreReleaseTypes,
+  ...legacyPreReleaseMarkers,
+]);
 const appriseFormats = new Set<AppriseFormat>(["text", "markdown", "html"]);
 const releaseSelectionStrategies = new Set<ReleaseSelectionStrategy>(
   supportedReleaseSelectionStrategies,
@@ -153,8 +161,32 @@ export function parseImportedRepository(value: unknown): Repository | null {
     value.preReleaseSubChannels,
     preReleaseChannels,
   );
-  if (importedPreReleaseChannels) {
-    repository.preReleaseSubChannels = importedPreReleaseChannels;
+  const hasValidCustomPreReleaseMarkers =
+    Array.isArray(value.customPreReleaseMarkers) &&
+    value.customPreReleaseMarkers.every(
+      (marker): marker is string => typeof marker === "string",
+    ) &&
+    getInvalidCustomPreReleaseMarkers(value.customPreReleaseMarkers).length ===
+      0;
+  const importedCustomPreReleaseMarkers = hasValidCustomPreReleaseMarkers
+    ? normalizeCustomPreReleaseMarkers(
+        value.customPreReleaseMarkers as string[],
+      )
+    : undefined;
+  const migratedPreReleaseConfiguration = migrateLegacyPreReleaseConfiguration(
+    importedPreReleaseChannels,
+    importedCustomPreReleaseMarkers,
+  );
+  if (importedPreReleaseChannels !== undefined) {
+    repository.preReleaseSubChannels =
+      migratedPreReleaseConfiguration.preReleaseSubChannels;
+  }
+  if (
+    hasValidCustomPreReleaseMarkers ||
+    migratedPreReleaseConfiguration.customPreReleaseMarkers !== undefined
+  ) {
+    repository.customPreReleaseMarkers =
+      migratedPreReleaseConfiguration.customPreReleaseMarkers;
   }
   if (
     releaseSelectionStrategies.has(

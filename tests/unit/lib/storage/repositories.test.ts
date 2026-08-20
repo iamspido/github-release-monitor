@@ -109,6 +109,76 @@ describe("storage/repositories", () => {
     );
   });
 
+  it("migrates explicitly selected legacy short channels to custom markers", async () => {
+    const dataDir = path.join(tmpDir, "data");
+    await fs.mkdir(dataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(dataDir, "repositories.json"),
+      JSON.stringify([
+        {
+          id: "github:owner/repo",
+          url: "https://github.com/owner/repo",
+          preReleaseSubChannels: ["a", "beta", "b", "m"],
+          customPreReleaseMarkers: [" Testing ", "testing", "EDGE"],
+        },
+      ]),
+      "utf8",
+    );
+    const { getRepositories } = await import("@/lib/storage/repositories");
+
+    await expect(getRepositories()).resolves.toEqual([
+      expect.objectContaining({
+        preReleaseSubChannels: ["beta"],
+        customPreReleaseMarkers: ["testing", "edge", "a", "b", "m"],
+      }),
+    ]);
+  });
+
+  it("preserves a legacy short-channel-only repository configuration", async () => {
+    const dataDir = path.join(tmpDir, "data");
+    await fs.mkdir(dataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(dataDir, "repositories.json"),
+      JSON.stringify([
+        {
+          id: "github:owner/repo",
+          url: "https://github.com/owner/repo",
+          preReleaseSubChannels: ["b"],
+        },
+      ]),
+      "utf8",
+    );
+    const { getRepositories } = await import("@/lib/storage/repositories");
+
+    await expect(getRepositories()).resolves.toEqual([
+      expect.objectContaining({
+        preReleaseSubChannels: [],
+        customPreReleaseMarkers: ["b"],
+      }),
+    ]);
+  });
+
+  it("rejects invalid persisted custom pre-release markers", async () => {
+    const dataDir = path.join(tmpDir, "data");
+    await fs.mkdir(dataDir, { recursive: true });
+    await fs.writeFile(
+      path.join(dataDir, "repositories.json"),
+      JSON.stringify([
+        {
+          id: "github:owner/repo",
+          url: "https://github.com/owner/repo",
+          customPreReleaseMarkers: ["."],
+        },
+      ]),
+      "utf8",
+    );
+    const { getRepositories } = await import("@/lib/storage/repositories");
+
+    await expect(getRepositories()).rejects.toThrow(
+      "customPreReleaseMarkers contains invalid markers",
+    );
+  });
+
   it("rejects invalid persisted repository tags", async () => {
     const dataDir = path.join(tmpDir, "data");
     await fs.mkdir(dataDir, { recursive: true });

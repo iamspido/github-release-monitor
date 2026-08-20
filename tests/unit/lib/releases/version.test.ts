@@ -58,11 +58,61 @@ describe("releases/version", () => {
     });
   });
 
-  it("parses compact prereleases using the configured channel identifiers", () => {
-    expect(parseComparableVersion("runtime1.27b10")).toEqual({
+  it("parses compact prereleases using custom markers", () => {
+    expect(parseComparableVersion("runtime1.27b10")).toBeNull();
+    expect(parseComparableVersion("runtime1.27b10", ["b"])).toEqual({
       core: [BigInt(1), BigInt(27)],
       prerelease: ["b", BigInt(10)],
       family: "runtime",
+      revision: BigInt(-1),
+    });
+  });
+
+  it("does not let invalid markers reinterpret normal versions", () => {
+    expect(parseComparableVersion("v1.2.3", ["."])).toEqual(
+      parseComparableVersion("v1.2.3"),
+    );
+  });
+
+  it("normalizes Unicode custom markers consistently for compact versions", () => {
+    expect(parseComparableVersion("v1.2İTEST10", ["İtest"])).toEqual({
+      core: [BigInt(1), BigInt(2)],
+      prerelease: ["i\u0307test", BigInt(10)],
+      family: "",
+      revision: BigInt(-1),
+    });
+  });
+
+  it("splits numeric revisions from hyphenated custom markers", () => {
+    expect(parseComparableVersion("v1.2.3-testing10", ["testing"])).toEqual({
+      core: [BigInt(1), BigInt(2), BigInt(3)],
+      prerelease: ["testing", BigInt(10)],
+      family: "",
+      revision: BigInt(-1),
+    });
+    expect(
+      parseComparableVersion("runtime1.2-testing-10", ["testing"]),
+    ).toEqual({
+      core: [BigInt(1), BigInt(2)],
+      prerelease: ["testing", BigInt(10)],
+      family: "runtime",
+      revision: BigInt(-1),
+    });
+    expect(
+      parseComparableVersion("v1.2.3-linux-testing10", ["testing"]),
+    ).toEqual({
+      core: [BigInt(1), BigInt(2), BigInt(3)],
+      prerelease: ["linux-", "testing", BigInt(10)],
+      family: "",
+      revision: BigInt(-1),
+    });
+  });
+
+  it("parses Unicode custom markers in hyphenated versions", () => {
+    expect(parseComparableVersion("v1.2.3-测试10", ["测试"])).toEqual({
+      core: [BigInt(1), BigInt(2), BigInt(3)],
+      prerelease: ["测试", BigInt(10)],
+      family: "",
       revision: BigInt(-1),
     });
   });

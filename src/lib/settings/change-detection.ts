@@ -8,6 +8,7 @@ export type ReleaseCacheInvalidationChanges = {
   filtersChanged?: boolean;
   releaseChannelsChanged?: boolean;
   preReleaseSubChannelsChanged?: boolean;
+  customPreReleaseMarkersChanged?: boolean;
   releasesPerPageChanged?: boolean;
   releaseSelectionStrategyChanged?: boolean;
   versionTagPatternChanged?: boolean;
@@ -17,7 +18,10 @@ function normalizeComparableArray<T>(
   value: T[] | null | undefined,
   options: ArrayCompareOptions = {},
 ): T[] | undefined {
-  if (!value || value.length === 0) {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (value.length === 0) {
     return options.emptyAsUndefined ? undefined : [];
   }
 
@@ -114,6 +118,9 @@ export function getReleaseCacheInvalidationReasons(
   if (changes.preReleaseSubChannelsChanged) {
     reasons.push("preReleaseSubChannelsChanged");
   }
+  if (changes.customPreReleaseMarkersChanged) {
+    reasons.push("customPreReleaseMarkersChanged");
+  }
   if (changes.releasesPerPageChanged) {
     reasons.push("releasesPerPageChanged");
   }
@@ -156,6 +163,10 @@ export function getGlobalReleaseCacheInvalidationChanges(
     preReleaseSubChannelsChanged: !areArraysEqualIgnoringOrder(
       previous.preReleaseSubChannels,
       next.preReleaseSubChannels,
+    ),
+    customPreReleaseMarkersChanged: !areArraysEqualIgnoringOrder(
+      previous.customPreReleaseMarkers,
+      next.customPreReleaseMarkers,
     ),
     releasesPerPageChanged: previous.releasesPerPage !== next.releasesPerPage,
     releaseSelectionStrategyChanged:
@@ -219,6 +230,12 @@ export function buildGlobalSettingsChangeLog(
     "preReleaseSubChannels",
     previous.preReleaseSubChannels,
     next.preReleaseSubChannels,
+  );
+  pushArrayChange(
+    changes,
+    "customPreReleaseMarkers",
+    previous.customPreReleaseMarkers,
+    next.customPreReleaseMarkers,
   );
   pushValueChange(
     changes,
@@ -339,6 +356,7 @@ export type RepositorySettingsUpdate = Pick<
   | "tags"
   | "releaseChannels"
   | "preReleaseSubChannels"
+  | "customPreReleaseMarkers"
   | "releaseSelectionStrategy"
   | "versionTagPattern"
   | "releasesPerPage"
@@ -374,7 +392,10 @@ export function getRepositoryReleaseCacheInvalidationChanges(
     preReleaseSubChannelsChanged: !areArraysEqualIgnoringOrder(
       previous.preReleaseSubChannels,
       next.preReleaseSubChannels,
-      { emptyAsUndefined: true },
+    ),
+    customPreReleaseMarkersChanged: !areArraysEqualIgnoringOrder(
+      previous.customPreReleaseMarkers,
+      next.customPreReleaseMarkers,
     ),
     releasesPerPageChanged:
       (previous.releasesPerPage ?? undefined) !==
@@ -425,10 +446,15 @@ export function buildRepositorySettingsChangeLog(
   );
   pushArrayChange(
     changes,
+    "customPreReleaseMarkers",
+    previous.customPreReleaseMarkers,
+    next.customPreReleaseMarkers,
+  );
+  pushArrayChange(
+    changes,
     "preReleaseSubChannels",
     previous.preReleaseSubChannels,
     next.preReleaseSubChannels,
-    { emptyAsUndefined: true },
   );
   pushValueChange(
     changes,

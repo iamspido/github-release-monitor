@@ -169,6 +169,25 @@ describe("settings actions", () => {
     expect(settingsStore.current).toEqual(previousSettings);
   });
 
+  it("returns invalid custom pre-release marker values", async () => {
+    const { updateSettingsAction } = await import("@/app/settings/actions");
+    const previousSettings = structuredClone(settingsStore.current);
+
+    const result = await updateSettingsAction({
+      ...settingsStore.current,
+      customPreReleaseMarkers: [".", "Edge3"],
+    });
+
+    expect(result).toEqual({
+      success: false,
+      message: {
+        title: "toast_error_title",
+        description: "custom_prerelease_markers_error_invalid ., Edge3",
+      },
+    });
+    expect(settingsStore.current).toEqual(previousSettings);
+  });
+
   it("does not mutate repositories when settings validation fails", async () => {
     memRepos.list = [
       {

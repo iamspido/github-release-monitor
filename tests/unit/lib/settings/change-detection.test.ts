@@ -28,4 +28,17 @@ describe("repository settings change detection", () => {
 
     expect(changes).toContain('tags: ["infra","media"] -> ["media","infra"]');
   });
+
+  it("records an explicitly empty pre-release marker override", () => {
+    const changes = buildRepositorySettingsChangeLog(
+      {
+        id: "owner/repository",
+        url: "https://github.com/owner/repository",
+      },
+      { preReleaseSubChannels: [] },
+      {},
+    );
+
+    expect(changes).toContain("preReleaseSubChannels: undefined -> []");
+  });
 });

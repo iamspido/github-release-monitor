@@ -3,7 +3,9 @@ import {
   getSettingsReconciliationPatch,
   hasRefreshSensitiveRepoSettingChanges,
   hasSettingsSnapshotDrift,
+  parseCustomPreReleaseMarkers,
   type RefreshSensitiveRepoSettings,
+  validateCustomPreReleaseMarkersInput,
   validateRegexInput,
 } from "@/lib/settings/form-model";
 
@@ -12,6 +14,35 @@ describe("settings/form-model", () => {
     expect(validateRegexInput("")).toBeNull();
     expect(validateRegexInput(" v\\d+ ")).toBeNull();
     expect(validateRegexInput("[broken")).toBe("invalid");
+  });
+
+  it("normalizes comma-separated custom pre-release markers", () => {
+    expect(
+      parseCustomPreReleaseMarkers(" Experimental, testing,EXPERIMENTAL,  "),
+    ).toEqual(["experimental", "testing"]);
+    expect(parseCustomPreReleaseMarkers("تجريبي، اختبار，حافة")).toEqual([
+      "تجريبي",
+      "اختبار",
+      "حافة",
+    ]);
+  });
+
+  it("validates identifier-like custom pre-release markers", () => {
+    expect(
+      validateCustomPreReleaseMarkersInput(
+        "experimental, test-edge, тестовый, 测试",
+      ),
+    ).toEqual([]);
+    expect(
+      validateCustomPreReleaseMarkersInput("., _dev, 2beta, Edge3, test-2"),
+    ).toEqual([".", "_dev", "2beta", "Edge3", "test-2"]);
+  });
+
+  it("keeps Unicode marker validation stable after normalization", () => {
+    expect(validateCustomPreReleaseMarkersInput("İtest")).toEqual([]);
+    const normalized = parseCustomPreReleaseMarkers("İtest");
+    expect(normalized).toEqual(["i\u0307test"]);
+    expect(validateCustomPreReleaseMarkersInput(normalized[0])).toEqual([]);
   });
 
   it("compares persisted settings snapshots", () => {
@@ -51,6 +82,7 @@ describe("settings/form-model", () => {
     const base: RefreshSensitiveRepoSettings = {
       releaseChannels: ["stable", "prerelease"],
       preReleaseSubChannels: ["beta"],
+      customPreReleaseMarkers: ["testing"],
       releasesPerPage: 20,
       includeRegex: "v",
       excludeRegex: "nightly",
@@ -66,6 +98,12 @@ describe("settings/form-model", () => {
       hasRefreshSensitiveRepoSettingChanges(base, {
         ...base,
         includeRegex: "stable",
+      }),
+    ).toBe(true);
+    expect(
+      hasRefreshSensitiveRepoSettingChanges(base, {
+        ...base,
+        customPreReleaseMarkers: [],
       }),
     ).toBe(true);
     expect(

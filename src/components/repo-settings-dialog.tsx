@@ -86,8 +86,10 @@ import {
   hasRefreshSensitiveRepoSettingChanges,
   hasSettingsSnapshotDrift,
   isCacheIntervalInvalid,
+  parseCustomPreReleaseMarkers,
   type RangeValidationError,
   validateCronInput,
+  validateCustomPreReleaseMarkersInput,
   validateFilledInterval,
   validateOptionalIntegerInput,
   validateRegexInput,
@@ -222,6 +224,7 @@ type RepositorySettingsSnapshot = Pick<
   | "tags"
   | "releaseChannels"
   | "preReleaseSubChannels"
+  | "customPreReleaseMarkers"
   | "releaseSelectionStrategy"
   | "versionTagPattern"
   | "releasesPerPage"
@@ -245,6 +248,7 @@ const DEFERRED_REPOSITORY_SETTING_KEYS = new Set<
   "includeRegex",
   "excludeRegex",
   "versionTagPattern",
+  "customPreReleaseMarkers",
   "appriseTags",
 ]);
 
@@ -263,6 +267,7 @@ interface RepoSettingsDialogProps {
     | "isPinned"
     | "releaseChannels"
     | "preReleaseSubChannels"
+    | "customPreReleaseMarkers"
     | "releaseSelectionStrategy"
     | "versionTagPattern"
     | "releasesPerPage"
@@ -330,6 +335,8 @@ export function RepoSettingsDialog({
   const appriseFormatId = React.useId();
   const appriseTagsId = React.useId();
   const prereleaseSubChannelBaseId = React.useId();
+  const customPreReleaseMarkersId = React.useId();
+  const useGlobalCustomPreReleaseMarkersId = React.useId();
 
   const [channels, setChannels] = React.useState<ReleaseChannel[]>(
     currentRepoSettings?.releaseChannels ?? [],
@@ -373,6 +380,15 @@ export function RepoSettingsDialog({
   const [preReleaseSubChannels, setPreReleaseSubChannels] = React.useState<
     PreReleaseChannelType[] | undefined
   >(currentRepoSettings?.preReleaseSubChannels);
+  const [customPreReleaseMarkers, setCustomPreReleaseMarkers] = React.useState(
+    (currentRepoSettings?.customPreReleaseMarkers ?? []).join(", "),
+  );
+  const [
+    useGlobalCustomPreReleaseMarkers,
+    setUseGlobalCustomPreReleaseMarkers,
+  ] = React.useState(
+    currentRepoSettings?.customPreReleaseMarkers === undefined,
+  );
   const [releaseSelectionStrategy, setReleaseSelectionStrategy] =
     React.useState<ReleaseSelectionStrategy | undefined>(
       currentRepoSettings?.releaseSelectionStrategy,
@@ -579,6 +595,7 @@ export function RepoSettingsDialog({
         tags: currentRepositoryTags,
         releaseChannels: currentRepoSettings?.releaseChannels ?? [],
         preReleaseSubChannels: currentRepoSettings?.preReleaseSubChannels,
+        customPreReleaseMarkers: currentRepoSettings?.customPreReleaseMarkers,
         releaseSelectionStrategy: currentRepoSettings?.releaseSelectionStrategy,
         versionTagPattern: currentRepoSettings?.versionTagPattern,
         releasesPerPage: currentRepoSettings?.releasesPerPage ?? null,
@@ -605,6 +622,12 @@ export function RepoSettingsDialog({
       finishRepositoryTagDrag();
       setRepositoryTagOrderAnnouncement("");
       setPreReleaseSubChannels(initialSettings.preReleaseSubChannels);
+      setCustomPreReleaseMarkers(
+        (initialSettings.customPreReleaseMarkers ?? []).join(", "),
+      );
+      setUseGlobalCustomPreReleaseMarkers(
+        initialSettings.customPreReleaseMarkers === undefined,
+      );
       setReleaseSelectionStrategy(initialSettings.releaseSelectionStrategy);
       setVersionTagPattern(initialSettings.versionTagPattern ?? "");
       setReleasesPerPage(initialSettings.releasesPerPage ?? "");
@@ -688,6 +711,7 @@ export function RepoSettingsDialog({
     useAutomaticDisplayName &&
     useGlobalChannels &&
     useGlobalSubChannels &&
+    useGlobalCustomPreReleaseMarkers &&
     useGlobalReleaseSelection &&
     useDefaultVersionTagPattern &&
     useGlobalReleasesPerPage &&
@@ -738,6 +762,9 @@ export function RepoSettingsDialog({
       tags: repositoryTags,
       releaseChannels: channels,
       preReleaseSubChannels,
+      customPreReleaseMarkers: useGlobalCustomPreReleaseMarkers
+        ? undefined
+        : parseCustomPreReleaseMarkers(customPreReleaseMarkers),
       releaseSelectionStrategy,
       versionTagPattern: versionTagPattern.trim() || undefined,
       releasesPerPage: finalReleasesPerPage,
@@ -755,6 +782,8 @@ export function RepoSettingsDialog({
     repositoryTags,
     channels,
     preReleaseSubChannels,
+    customPreReleaseMarkers,
+    useGlobalCustomPreReleaseMarkers,
     releaseSelectionStrategy,
     versionTagPattern,
     releasesPerPage,
@@ -790,6 +819,7 @@ export function RepoSettingsDialog({
     includeRegexError,
     excludeRegexError,
     versionTagPatternError,
+    invalidCustomPreReleaseMarkers,
   } = React.useMemo(() => {
     const intervalFieldsFilled =
       intervalDays !== "" && intervalHours !== "" && intervalMinutes !== "";
@@ -831,6 +861,9 @@ export function RepoSettingsDialog({
       includeRegexError: validateRegexInput(includeRegex),
       excludeRegexError: validateRegexInput(excludeRegex),
       versionTagPatternError: validateVersionTagPattern(versionTagPattern),
+      invalidCustomPreReleaseMarkers: useGlobalCustomPreReleaseMarkers
+        ? []
+        : validateCustomPreReleaseMarkersInput(customPreReleaseMarkers),
     };
   }, [
     releasesPerPage,
@@ -850,6 +883,8 @@ export function RepoSettingsDialog({
     includeRegex,
     excludeRegex,
     versionTagPattern,
+    customPreReleaseMarkers,
+    useGlobalCustomPreReleaseMarkers,
   ]);
 
   const hasEmptyIntervalFields =
@@ -872,7 +907,8 @@ export function RepoSettingsDialog({
       cronError ||
       includeRegexError ||
       excludeRegexError ||
-      versionTagPatternError,
+      versionTagPatternError ||
+      invalidCustomPreReleaseMarkers.length > 0,
   );
   const hasValidationErrors = Boolean(
     hasNonTagValidationErrors || repositoryTagError,
@@ -1366,9 +1402,11 @@ export function RepoSettingsDialog({
                       ? includeRegexId
                       : excludeRegexError
                         ? excludeRegexId
-                        : versionTagPatternError
-                          ? versionTagPatternId
-                          : null;
+                        : invalidCustomPreReleaseMarkers.length > 0
+                          ? customPreReleaseMarkersId
+                          : versionTagPatternError
+                            ? versionTagPatternId
+                            : null;
     if (!targetId) return;
     window.requestAnimationFrame(() =>
       document.getElementById(targetId)?.focus(),
@@ -1494,6 +1532,8 @@ export function RepoSettingsDialog({
     setIsPinned(false);
     setChannels([]);
     setPreReleaseSubChannels(undefined);
+    setCustomPreReleaseMarkers("");
+    setUseGlobalCustomPreReleaseMarkers(true);
     setReleaseSelectionStrategy(undefined);
     setVersionTagPattern("");
     setReleasesPerPage("");
@@ -1509,6 +1549,8 @@ export function RepoSettingsDialog({
     requestImmediateSave();
     setChannels([]);
     setPreReleaseSubChannels(undefined);
+    setCustomPreReleaseMarkers("");
+    setUseGlobalCustomPreReleaseMarkers(true);
     setIncludeRegex("");
     setExcludeRegex("");
   };
@@ -2074,6 +2116,67 @@ export function RepoSettingsDialog({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div className="space-y-2 ms-6 ps-3 border-s-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id={useGlobalCustomPreReleaseMarkersId}
+                    checked={useGlobalCustomPreReleaseMarkers}
+                    onCheckedChange={(checked) => {
+                      const useGlobal = checked === true;
+                      setUseGlobalCustomPreReleaseMarkers(useGlobal);
+                      if (!useGlobal && !customPreReleaseMarkers) {
+                        setCustomPreReleaseMarkers(
+                          (globalSettings.customPreReleaseMarkers ?? []).join(
+                            ", ",
+                          ),
+                        );
+                      }
+                    }}
+                    disabled={!isOnline}
+                  />
+                  <Label
+                    htmlFor={useGlobalCustomPreReleaseMarkersId}
+                    className="font-normal cursor-pointer text-sm"
+                  >
+                    {tGlobal("custom_prerelease_markers_use_global")}
+                  </Label>
+                </div>
+                <Label htmlFor={customPreReleaseMarkersId}>
+                  {tGlobal("custom_prerelease_markers_label")}
+                </Label>
+                <Input
+                  id={customPreReleaseMarkersId}
+                  dir="auto"
+                  value={
+                    useGlobalCustomPreReleaseMarkers
+                      ? (globalSettings.customPreReleaseMarkers ?? []).join(
+                          ", ",
+                        )
+                      : customPreReleaseMarkers
+                  }
+                  onChange={(event) =>
+                    setCustomPreReleaseMarkers(event.target.value)
+                  }
+                  placeholder={tGlobal("custom_prerelease_markers_placeholder")}
+                  disabled={useGlobalCustomPreReleaseMarkers || !isOnline}
+                  aria-invalid={invalidCustomPreReleaseMarkers.length > 0}
+                  className={cn(
+                    invalidCustomPreReleaseMarkers.length > 0 &&
+                      "border-destructive focus-visible:ring-destructive",
+                  )}
+                />
+                {invalidCustomPreReleaseMarkers.length > 0 ? (
+                  <p className="text-sm text-destructive">
+                    {tGlobal("custom_prerelease_markers_error_invalid")}{" "}
+                    {invalidCustomPreReleaseMarkers.join(", ")}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {tGlobal("custom_prerelease_markers_description")}
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center gap-2">

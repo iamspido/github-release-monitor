@@ -39,7 +39,9 @@ test.describe("Repo dialog offline read-only + autosave pause", () => {
 
     // Representative controls disabled
     await expect(dialog.getByLabel("Stable")).toBeDisabled();
-    await expect(dialog.getByLabel("Pre-release")).toBeDisabled();
+    await expect(
+      dialog.getByRole("checkbox", { name: "Pre-release", exact: true }),
+    ).toBeDisabled();
     await expect(
       dialog
         .getByLabel("Include Pattern")

@@ -121,11 +121,103 @@ describe("storage/settings failure scenarios", () => {
     expect(settings.repositoryFormExpanded).toBe(true);
   });
 
+  it("migrates explicitly selected legacy short channels to custom markers", async () => {
+    fsMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        preReleaseSubChannels: ["a", "alpha", "b", "m", "milestone"],
+        customPreReleaseMarkers: [" Testing ", "testing", "EDGE"],
+      }),
+    );
+    const { getSettings } = await import("@/lib/storage/settings");
+
+    const settings = await getSettings();
+
+    expect(settings.preReleaseSubChannels).toEqual(["alpha", "milestone"]);
+    expect(settings.customPreReleaseMarkers).toEqual([
+      "testing",
+      "edge",
+      "a",
+      "b",
+      "m",
+    ]);
+  });
+
+  it("preserves a legacy short-channel-only configuration", async () => {
+    fsMock.readFile.mockResolvedValue(
+      JSON.stringify({ preReleaseSubChannels: ["b"] }),
+    );
+    const { getSettings } = await import("@/lib/storage/settings");
+
+    const settings = await getSettings();
+
+    expect(settings.preReleaseSubChannels).toEqual([]);
+    expect(settings.customPreReleaseMarkers).toEqual(["b"]);
+  });
+
+  it("does not opt old defaults back into removed short markers", async () => {
+    fsMock.readFile.mockResolvedValue(
+      JSON.stringify({
+        preReleaseSubChannels: [
+          "a",
+          "alpha",
+          "b",
+          "beta",
+          "canary",
+          "cr",
+          "dev",
+          "eap",
+          "m",
+          "milestone",
+          "next",
+          "nightly",
+          "pre",
+          "preview",
+          "pr",
+          "rc",
+          "snapshot",
+          "sp",
+          "tp",
+        ],
+      }),
+    );
+    const { getSettings } = await import("@/lib/storage/settings");
+
+    const settings = await getSettings();
+
+    expect(settings.preReleaseSubChannels).not.toContain("a");
+    expect(settings.preReleaseSubChannels).not.toContain("b");
+    expect(settings.preReleaseSubChannels).not.toContain("m");
+    expect(settings.customPreReleaseMarkers).toEqual([]);
+  });
+
+  it("rejects invalid persisted custom pre-release markers", async () => {
+    fsMock.readFile.mockResolvedValue(
+      JSON.stringify({ customPreReleaseMarkers: ["."] }),
+    );
+    const { getSettings } = await import("@/lib/storage/settings");
+
+    await expect(getSettings()).rejects.toThrow(
+      "customPreReleaseMarkers contains invalid markers",
+    );
+  });
+
+  it("normalizes persisted Unicode markers without invalidating them", async () => {
+    fsMock.readFile.mockResolvedValue(
+      JSON.stringify({ customPreReleaseMarkers: ["İtest"] }),
+    );
+    const { getSettings } = await import("@/lib/storage/settings");
+
+    await expect(getSettings()).resolves.toMatchObject({
+      customPreReleaseMarkers: ["i\u0307test"],
+    });
+  });
+
   it("returns cloned settings so callers cannot mutate the cache", async () => {
     fsMock.readFile.mockResolvedValue(
       JSON.stringify({
         releaseChannels: ["stable"],
         preReleaseSubChannels: ["rc"],
+        customPreReleaseMarkers: ["testing"],
       }),
     );
     const { getSettings } = await import("@/lib/storage/settings");
@@ -133,11 +225,13 @@ describe("storage/settings failure scenarios", () => {
     const first = await getSettings();
     first.releaseChannels.push("draft");
     first.preReleaseSubChannels?.push("beta");
+    first.customPreReleaseMarkers?.push("edge");
 
     const second = await getSettings();
 
     expect(second.releaseChannels).toEqual(["stable"]);
     expect(second.preReleaseSubChannels).toEqual(["rc"]);
+    expect(second.customPreReleaseMarkers).toEqual(["testing"]);
   });
 
   it("uses the cached settings within 500ms and refreshes after mtime changes", async () => {

@@ -135,11 +135,13 @@ function isProductionSuffix(
   release: GithubRelease,
   version: ParsedVersion,
   versionValue: string,
+  customPreReleaseMarkers: readonly string[],
 ): boolean {
   return (
     version.prerelease.length > 0 &&
     !release.prerelease &&
-    !isPreReleaseByTagName(versionValue, allPreReleaseTypes)
+    !isPreReleaseByTagName(versionValue, allPreReleaseTypes) &&
+    !isPreReleaseByTagName(versionValue, customPreReleaseMarkers)
   );
 }
 
@@ -210,12 +212,13 @@ function selectActiveVersionFamily(
 function parseConfiguredVersion(
   release: GithubRelease,
   pattern: RegExp,
+  customPreReleaseMarkers: readonly string[] = [],
 ): VersionedRelease | null {
   const match = pattern.exec(release.tag_name);
   const versionValue = match?.groups?.version;
   if (!versionValue) return null;
 
-  const version = parseComparableVersion(versionValue);
+  const version = parseComparableVersion(versionValue, customPreReleaseMarkers);
   if (!version) return null;
 
   const revisionValue = match.groups?.revision;
@@ -228,7 +231,12 @@ function parseConfiguredVersion(
     // artifact, so an absent revision sorts immediately before r0.
     revision:
       revisionValue === undefined ? version.revision : BigInt(revisionValue),
-    isProductionSuffix: isProductionSuffix(release, version, versionValue),
+    isProductionSuffix: isProductionSuffix(
+      release,
+      version,
+      versionValue,
+      customPreReleaseMarkers,
+    ),
   };
 }
 
@@ -243,23 +251,33 @@ function getConfiguredVersionPattern(
 export function hasComparableVersionTag(
   releases: GithubRelease[],
   versionTagPattern: string | undefined,
+  customPreReleaseMarkers: readonly string[] = [],
 ): boolean {
   const hasConfiguredPattern = Boolean(versionTagPattern?.trim());
   const pattern = getConfiguredVersionPattern(versionTagPattern);
   if (hasConfiguredPattern && !pattern) return false;
   return pattern
-    ? releases.some((release) => parseConfiguredVersion(release, pattern))
-    : releases.some((release) => parseComparableVersion(release.tag_name));
+    ? releases.some((release) =>
+        parseConfiguredVersion(release, pattern, customPreReleaseMarkers),
+      )
+    : releases.some((release) =>
+        parseComparableVersion(release.tag_name, customPreReleaseMarkers),
+      );
 }
 
 export function getReleaseSelectionErrorType(args: {
   releases: GithubRelease[];
   strategy: ReleaseSelectionStrategy;
   versionTagPattern: string | undefined;
+  customPreReleaseMarkers?: readonly string[];
 }): FetchError["type"] {
   return args.strategy === "highest_version" &&
     args.versionTagPattern?.trim() &&
-    !hasComparableVersionTag(args.releases, args.versionTagPattern)
+    !hasComparableVersionTag(
+      args.releases,
+      args.versionTagPattern,
+      args.customPreReleaseMarkers,
+    )
     ? "no_matching_version_tags"
     : "no_matching_releases";
 }
@@ -267,16 +285,24 @@ export function getReleaseSelectionErrorType(args: {
 function selectHighestVersion(
   releases: GithubRelease[],
   versionTagPattern: string | undefined,
+  customPreReleaseMarkers: readonly string[],
 ): GithubRelease | null {
   const hasConfiguredPattern = Boolean(versionTagPattern?.trim());
   const configuredPattern = getConfiguredVersionPattern(versionTagPattern);
   if (hasConfiguredPattern && !configuredPattern) return null;
   const versioned = releases.flatMap((release) => {
     if (hasConfiguredPattern && configuredPattern) {
-      const candidate = parseConfiguredVersion(release, configuredPattern);
+      const candidate = parseConfiguredVersion(
+        release,
+        configuredPattern,
+        customPreReleaseMarkers,
+      );
       return candidate ? [candidate] : [];
     }
-    const version = parseComparableVersion(release.tag_name);
+    const version = parseComparableVersion(
+      release.tag_name,
+      customPreReleaseMarkers,
+    );
     return version
       ? [
           {
@@ -287,6 +313,7 @@ function selectHighestVersion(
               release,
               version,
               release.tag_name,
+              customPreReleaseMarkers,
             ),
           },
         ]
@@ -330,6 +357,7 @@ export function selectMatchingRelease(args: {
   repoIdForLog: string;
   strategy: ReleaseSelectionStrategy;
   providerLatestRelease?: GithubRelease | null;
+  providerLatestIsStable?: boolean;
 }): GithubRelease | null {
   const matchesRelease = createEffectiveReleaseMatcher(
     {
@@ -337,6 +365,10 @@ export function selectMatchingRelease(args: {
       effectiveReleaseSelectionStrategy: args.strategy,
     },
     args.repoIdForLog,
+    {
+      forceStableChannel:
+        args.strategy === "provider_latest" && args.providerLatestIsStable,
+    },
   );
 
   if (args.strategy === "provider_latest") {
@@ -350,6 +382,10 @@ export function selectMatchingRelease(args: {
   if (filteredReleases.length === 0) return null;
 
   return args.strategy === "highest_version"
-    ? selectHighestVersion(filteredReleases, args.filters.versionTagPattern)
+    ? selectHighestVersion(
+        filteredReleases,
+        args.filters.versionTagPattern,
+        args.filters.effectiveCustomPreReleaseMarkers,
+      )
     : selectNewestRelease(filteredReleases);
 }

@@ -68,8 +68,10 @@ import {
   getSettingsReconciliationPatch,
   hasSettingsSnapshotDrift,
   isCacheIntervalInvalid,
+  parseCustomPreReleaseMarkers,
   type RangeValidationError,
   validateCronInput,
+  validateCustomPreReleaseMarkersInput,
   validateFilledInterval,
   validateOptionalIntegerInput,
   validateRegexInput,
@@ -121,6 +123,7 @@ const DEFERRED_GLOBAL_SETTING_KEYS = new Set<keyof AppSettings>([
   "backgroundCheckCron",
   "includeRegex",
   "excludeRegex",
+  "customPreReleaseMarkers",
   "securityHighlightCustomColor",
   "customSecurityPatterns",
   "appriseMaxCharacters",
@@ -289,6 +292,7 @@ export function SettingsForm({
       stable: `${baseId}-stable`,
       prerelease: `${baseId}-prerelease`,
       draft: `${baseId}-draft`,
+      customPreReleaseMarkers: `${baseId}-custom-prerelease-markers`,
       includeRegex: `${baseId}-include-regex`,
       excludeRegex: `${baseId}-exclude-regex`,
       intervalMinutes: `${baseId}-interval-minutes`,
@@ -368,6 +372,9 @@ export function SettingsForm({
   const [preReleaseSubChannels, setPreReleaseSubChannels] = React.useState<
     PreReleaseChannelType[]
   >(currentSettings.preReleaseSubChannels || allPreReleaseTypes);
+  const [customPreReleaseMarkers, setCustomPreReleaseMarkers] = React.useState(
+    (currentSettings.customPreReleaseMarkers ?? []).join(", "),
+  );
   const [showAcknowledge, setShowAcknowledge] = React.useState<boolean>(
     currentSettings.showAcknowledge ?? true,
   );
@@ -496,6 +503,9 @@ export function SettingsForm({
         1,
       releaseChannels: channels,
       preReleaseSubChannels,
+      customPreReleaseMarkers: parseCustomPreReleaseMarkers(
+        customPreReleaseMarkers,
+      ),
       releaseSelectionStrategy,
       releaseSortOrder,
       providerSortOrder,
@@ -536,6 +546,7 @@ export function SettingsForm({
     locale,
     channels,
     preReleaseSubChannels,
+    customPreReleaseMarkers,
     releaseSelectionStrategy,
     releaseSortOrder,
     providerSortOrder,
@@ -568,6 +579,7 @@ export function SettingsForm({
     cronError,
     securityHighlightCustomColorError,
     customSecurityPatternsError,
+    invalidCustomPreReleaseMarkers,
   } = React.useMemo(() => {
     const refreshFieldsFilled = days !== "" && hours !== "" && minutes !== "";
     const cacheFieldsFilled =
@@ -612,6 +624,9 @@ export function SettingsForm({
       cronError: nextCronError,
       securityHighlightCustomColorError: nextSecurityColorError,
       customSecurityPatternsError: nextSecurityPatternsError,
+      invalidCustomPreReleaseMarkers: validateCustomPreReleaseMarkersInput(
+        customPreReleaseMarkers,
+      ),
       isCacheInvalid: isCacheIntervalInvalid({
         enabled: automationMode === "interval" && refreshFieldsFilled,
         fieldsFilled: cacheFieldsFilled,
@@ -635,6 +650,7 @@ export function SettingsForm({
     securityHighlightColorPreset,
     securityHighlightCustomColor,
     customSecurityPatterns,
+    customPreReleaseMarkers,
     automationMode,
     newSettings.backgroundCheckCron,
   ]);
@@ -669,6 +685,7 @@ export function SettingsForm({
       excludeRegexError ||
       securityHighlightCustomColorError ||
       customSecurityPatternsError ||
+      invalidCustomPreReleaseMarkers.length > 0 ||
       cronError,
   );
 
@@ -1504,6 +1521,37 @@ export function SettingsForm({
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-2 ms-6 ps-3 border-s-2">
+              <Label htmlFor={ids.customPreReleaseMarkers}>
+                {t("custom_prerelease_markers_label")}
+              </Label>
+              <Input
+                id={ids.customPreReleaseMarkers}
+                dir="auto"
+                value={customPreReleaseMarkers}
+                onChange={(event) =>
+                  setCustomPreReleaseMarkers(event.target.value)
+                }
+                placeholder={t("custom_prerelease_markers_placeholder")}
+                disabled={!isOnline}
+                aria-invalid={invalidCustomPreReleaseMarkers.length > 0}
+                className={cn(
+                  invalidCustomPreReleaseMarkers.length > 0 &&
+                    "border-destructive focus-visible:ring-destructive",
+                )}
+              />
+              {invalidCustomPreReleaseMarkers.length > 0 ? (
+                <p className="text-sm text-destructive">
+                  {t("custom_prerelease_markers_error_invalid")}{" "}
+                  {invalidCustomPreReleaseMarkers.join(", ")}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {t("custom_prerelease_markers_description")}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-2">

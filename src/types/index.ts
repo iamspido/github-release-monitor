@@ -19,9 +19,12 @@ export type Repository = {
   // User-defined labels used to organize and filter monitored repositories.
   tags?: string[];
   // New: Per-repository settings override
-  // Empty arrays/undefined mean "use global setting"
+  // For pre-release sub-channels and custom markers, undefined inherits the
+  // global setting while an empty array explicitly disables the corresponding
+  // tag-name heuristics.
   releaseChannels?: ReleaseChannel[];
   preReleaseSubChannels?: PreReleaseChannelType[];
+  customPreReleaseMarkers?: string[];
   releaseSelectionStrategy?: ReleaseSelectionStrategy;
   versionTagPattern?: string;
   releasesPerPage?: number | null;
@@ -106,6 +109,7 @@ export type EnrichedRelease = {
     isPinned?: boolean;
     releaseChannels?: ReleaseChannel[];
     preReleaseSubChannels?: PreReleaseChannelType[];
+    customPreReleaseMarkers?: string[];
     releaseSelectionStrategy?: ReleaseSelectionStrategy;
     versionTagPattern?: string;
     releasesPerPage?: number | null;
@@ -197,15 +201,12 @@ export type AppriseStatus = {
 export type TimeFormat = "12h" | "24h";
 export type ReleaseChannel = "stable" | "prerelease" | "draft";
 export type PreReleaseChannelType =
-  | "a"
   | "alpha"
-  | "b"
   | "beta"
   | "canary"
   | "cr"
   | "dev"
   | "eap"
-  | "m"
   | "milestone"
   | "next"
   | "nightly"
@@ -217,15 +218,12 @@ export type PreReleaseChannelType =
   | "sp"
   | "tp";
 export const allPreReleaseTypes: PreReleaseChannelType[] = [
-  "a",
   "alpha",
-  "b",
   "beta",
   "canary",
   "cr",
   "dev",
   "eap",
-  "m",
   "milestone",
   "next",
   "nightly",
@@ -285,6 +283,7 @@ export type AppSettings = {
   parallelRepoFetches: number;
   releaseChannels: ReleaseChannel[];
   preReleaseSubChannels?: PreReleaseChannelType[];
+  customPreReleaseMarkers?: string[];
   releaseSelectionStrategy?: ReleaseSelectionStrategy;
   releaseSortOrder?: ReleaseSortOrder;
   providerSortOrder?: ReleaseProviderSortKey[];

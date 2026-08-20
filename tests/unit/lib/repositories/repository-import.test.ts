@@ -131,6 +131,7 @@ describe("repository import metadata", () => {
       tags: [" Production ", "backend"],
       releaseChannels: ["stable", "prerelease"],
       preReleaseSubChannels: ["beta", "rc"],
+      customPreReleaseMarkers: [" Testing ", "testing", "EDGE"],
       releaseSelectionStrategy: "highest_version",
       versionTagPattern: "^v(?<version>\\d+\\.\\d+\\.\\d+)$",
       releasesPerPage: 25,
@@ -168,6 +169,7 @@ describe("repository import metadata", () => {
       tags: ["production", "backend"],
       releaseChannels: ["stable", "prerelease"],
       preReleaseSubChannels: ["beta", "rc"],
+      customPreReleaseMarkers: ["testing", "edge"],
       releaseSelectionStrategy: "highest_version",
       versionTagPattern: "^v(?<version>\\d+\\.\\d+\\.\\d+)$",
       releasesPerPage: 25,
@@ -180,6 +182,27 @@ describe("repository import metadata", () => {
       appriseTags: "release",
       appriseFormat: "markdown",
     });
+  });
+
+  it("migrates supported and legacy short pre-release channels independently", () => {
+    expect(
+      parseImportedRepository({
+        url: "https://github.com/owner/repo",
+        preReleaseSubChannels: ["rc", "b"],
+      }),
+    ).toMatchObject({
+      preReleaseSubChannels: ["rc"],
+      customPreReleaseMarkers: ["b"],
+    });
+  });
+
+  it("ignores invalid custom pre-release marker metadata", () => {
+    expect(
+      parseImportedRepository({
+        url: "https://github.com/owner/repo",
+        customPreReleaseMarkers: ["."],
+      }),
+    ).not.toHaveProperty("customPreReleaseMarkers");
   });
 
   it("fills legacy cached release defaults", () => {

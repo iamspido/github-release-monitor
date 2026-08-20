@@ -46,8 +46,8 @@ export function hasCustomRepoSettings(
     repoSettings.displayName ||
       (repoSettings.releaseChannels &&
         repoSettings.releaseChannels.length > 0) ||
-      (repoSettings.preReleaseSubChannels &&
-        repoSettings.preReleaseSubChannels.length > 0) ||
+      repoSettings.preReleaseSubChannels !== undefined ||
+      repoSettings.customPreReleaseMarkers !== undefined ||
       repoSettings.releaseSelectionStrategy !== undefined ||
       repoSettings.versionTagPattern !== undefined ||
       (repoSettings.releasesPerPage !== null &&

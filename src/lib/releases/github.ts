@@ -617,6 +617,7 @@ export async function fetchLatestReleaseFromGitHub(
         repoIdForLog: `${owner}/${repo}`,
         strategy: effectiveReleaseSelectionStrategy,
         providerLatestRelease,
+        providerLatestIsStable: true,
       });
 
     if (!latestRelease) {

@@ -96,6 +96,7 @@ export function selectLatestMatchingRelease(args: {
   repoIdForLog: string;
   strategy?: ReleaseSelectionStrategy;
   providerLatestRelease?: GithubRelease | null;
+  providerLatestIsStable?: boolean;
 }) {
   return selectMatchingRelease({
     ...args,
@@ -112,5 +113,6 @@ export function resolveReleaseSelectionErrorType(args: {
     releases: args.releases,
     strategy: args.strategy,
     versionTagPattern: args.filters.versionTagPattern,
+    customPreReleaseMarkers: args.filters.effectiveCustomPreReleaseMarkers,
   });
 }

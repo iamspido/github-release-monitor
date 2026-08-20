@@ -1,3 +1,7 @@
+import {
+  getValidCustomPreReleaseMarkers,
+  normalizePreReleaseMarkerText,
+} from "@/lib/releases/pre-release-markers";
 import { allPreReleaseTypes } from "@/types";
 
 export type ParsedVersion = {
@@ -8,31 +12,55 @@ export type ParsedVersion = {
 };
 
 const VERSION_PATTERN =
-  /^[vV]?(\d+(?:\.\d+){0,3})(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+  /^[vV]?(\d+(?:\.\d+){0,3})(?:-([\p{L}\p{M}0-9-]+(?:\.[\p{L}\p{M}0-9-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
 const PREFIXED_MAJOR_VERSION_PATTERN =
-  /^(.+?[._/-]v)(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/i;
+  /^(.+?[._/-]v)(\d+)(?:-([\p{L}\p{M}0-9-]+(?:\.[\p{L}\p{M}0-9-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/iu;
 const PREFIXED_VERSION_PATTERN =
-  /^(.+?)(\d+(?:\.\d+){1,3})(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+  /^(.+?)(\d+(?:\.\d+){1,3})(?:-([\p{L}\p{M}0-9-]+(?:\.[\p{L}\p{M}0-9-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-const compactPrereleaseIdentifiers = [...allPreReleaseTypes].sort(
-  (left, right) => right.length - left.length,
-);
-const COMPACT_PRERELEASE_PATTERN = new RegExp(
-  `^[vV]?(\\d+(?:\\.\\d+){1,3})(${compactPrereleaseIdentifiers
-    .map(escapeRegExp)
-    .join("|")})(\\d+)$`,
-  "i",
-);
-const PREFIXED_COMPACT_PRERELEASE_PATTERN = new RegExp(
-  `^(.+?)(\\d+(?:\\.\\d+){1,3})(${compactPrereleaseIdentifiers
-    .map(escapeRegExp)
-    .join("|")})(\\d+)$`,
-  "i",
-);
+const compactPatternCache = new Map<
+  string,
+  { plain: RegExp; prefixed: RegExp }
+>();
+const maxCachedCompactPatterns = 100;
+
+function getCompactPrereleasePatterns(customMarkers: readonly string[]) {
+  const markers = getComparablePreReleaseMarkers(customMarkers);
+  const key = markers.join("\0");
+  const cached = compactPatternCache.get(key);
+  if (cached) return cached;
+
+  const alternatives = markers.map(escapeRegExp).join("|");
+  const patterns = {
+    plain: new RegExp(
+      `^[vV]?(\\d+(?:\\.\\d+){1,3})(${alternatives})(\\d+)$`,
+      "iu",
+    ),
+    prefixed: new RegExp(
+      `^(.+?)(\\d+(?:\\.\\d+){1,3})(${alternatives})(\\d+)$`,
+      "iu",
+    ),
+  };
+  if (compactPatternCache.size >= maxCachedCompactPatterns) {
+    const oldestKey = compactPatternCache.keys().next().value;
+    if (oldestKey !== undefined) compactPatternCache.delete(oldestKey);
+  }
+  compactPatternCache.set(key, patterns);
+  return patterns;
+}
+
+function getComparablePreReleaseMarkers(customMarkers: readonly string[]) {
+  return [
+    ...new Set([
+      ...allPreReleaseTypes,
+      ...getValidCustomPreReleaseMarkers(customMarkers),
+    ]),
+  ].sort((left, right) => right.length - left.length);
+}
 
 function parseCore(value: string): bigint[] {
   return value.split(".").map((component) => BigInt(component));
@@ -41,9 +69,18 @@ function parseCore(value: string): bigint[] {
 function parsePrerelease(
   value: string | undefined,
   family: string,
+  markers: readonly string[],
 ): Pick<ParsedVersion, "prerelease" | "revision"> {
   if (!value) {
     return { prerelease: [], revision: BigInt(-1) };
+  }
+
+  const directMarkerPrerelease = parseMarkerIdentifier(value, markers);
+  if (directMarkerPrerelease) {
+    return {
+      prerelease: directMarkerPrerelease,
+      revision: BigInt(-1),
+    };
   }
 
   const revisionMatch = /^(?:(.+)-)?r(\d+)$/i.exec(value);
@@ -52,8 +89,8 @@ function parsePrerelease(
       prerelease: revisionMatch[1]
         ? revisionMatch[1]
             .split(".")
-            .map((identifier) =>
-              /^\d+$/.test(identifier) ? BigInt(identifier) : identifier,
+            .flatMap((identifier) =>
+              parsePreReleaseIdentifier(identifier, markers),
             )
         : [],
       revision: BigInt(revisionMatch[2]),
@@ -63,11 +100,49 @@ function parsePrerelease(
   return {
     prerelease: value
       .split(".")
-      .map((identifier) =>
-        /^\d+$/.test(identifier) ? BigInt(identifier) : identifier,
-      ),
+      .flatMap((identifier) => parsePreReleaseIdentifier(identifier, markers)),
     revision: BigInt(-1),
   };
+}
+
+function parsePreReleaseIdentifier(
+  identifier: string,
+  markers: readonly string[],
+): Array<bigint | string> {
+  if (/^\d+$/.test(identifier)) return [BigInt(identifier)];
+
+  return parseMarkerIdentifier(identifier, markers) ?? [identifier];
+}
+
+function parseMarkerIdentifier(
+  identifier: string,
+  markers: readonly string[],
+): Array<bigint | string> | null {
+  const normalizedIdentifier = normalizePreReleaseMarkerText(identifier);
+  for (const marker of markers) {
+    let markerIndex = normalizedIdentifier.indexOf(marker);
+    while (markerIndex >= 0) {
+      const prefix = normalizedIdentifier.slice(0, markerIndex);
+      const hasBoundaryBefore =
+        markerIndex === 0 || !/[\p{L}\p{M}]$/u.test(prefix);
+      if (hasBoundaryBefore) {
+        const remainder = normalizedIdentifier.slice(
+          markerIndex + marker.length,
+        );
+        const revisionMatch = /^-?(\d+)$/.exec(remainder);
+        if (remainder === "" || revisionMatch) {
+          return [
+            ...(prefix ? [prefix] : []),
+            marker,
+            ...(revisionMatch ? [BigInt(revisionMatch[1])] : []),
+          ];
+        }
+      }
+      markerIndex = normalizedIdentifier.indexOf(marker, markerIndex + 1);
+    }
+  }
+
+  return null;
 }
 
 function isSafePrefix(prefix: string): boolean {
@@ -113,10 +188,15 @@ function normalizeVersionFamily(prefix: string): string {
     .replace(/[^a-z0-9]+$/g, "");
 }
 
-export function parseComparableVersion(tagName: string): ParsedVersion | null {
+export function parseComparableVersion(
+  tagName: string,
+  customPreReleaseMarkers: readonly string[] = [],
+): ParsedVersion | null {
   const trimmedTagName = tagName.trim();
-  const compactPrereleaseMatch =
-    COMPACT_PRERELEASE_PATTERN.exec(trimmedTagName);
+  const markers = getComparablePreReleaseMarkers(customPreReleaseMarkers);
+  const compactPatterns = getCompactPrereleasePatterns(customPreReleaseMarkers);
+  const normalizedTagName = normalizePreReleaseMarkerText(trimmedTagName);
+  const compactPrereleaseMatch = compactPatterns.plain.exec(normalizedTagName);
   if (compactPrereleaseMatch) {
     return {
       core: parseCore(compactPrereleaseMatch[1]),
@@ -134,7 +214,7 @@ export function parseComparableVersion(tagName: string): ParsedVersion | null {
     const family = "";
     return {
       core: parseCore(versionMatch[1]),
-      ...parsePrerelease(versionMatch[2], family),
+      ...parsePrerelease(versionMatch[2], family, markers),
       family,
     };
   }
@@ -146,13 +226,12 @@ export function parseComparableVersion(tagName: string): ParsedVersion | null {
     if (!family) return null;
     return {
       core: parseCore(prefixedMajorMatch[2]),
-      ...parsePrerelease(prefixedMajorMatch[3], family),
+      ...parsePrerelease(prefixedMajorMatch[3], family, markers),
       family,
     };
   }
 
-  const prefixedCompactMatch =
-    PREFIXED_COMPACT_PRERELEASE_PATTERN.exec(trimmedTagName);
+  const prefixedCompactMatch = compactPatterns.prefixed.exec(normalizedTagName);
   if (prefixedCompactMatch && isSafePrefix(prefixedCompactMatch[1])) {
     const family = normalizeVersionFamily(prefixedCompactMatch[1]);
     if (!family || isDatedActivityVersion(family, prefixedCompactMatch[2])) {
@@ -178,7 +257,7 @@ export function parseComparableVersion(tagName: string): ParsedVersion | null {
 
   return {
     core: parseCore(prefixedMatch[2]),
-    ...parsePrerelease(prefixedMatch[3], family),
+    ...parsePrerelease(prefixedMatch[3], family, markers),
     family,
   };
 }

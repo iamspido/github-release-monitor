@@ -1,3 +1,7 @@
+import {
+  getValidCustomPreReleaseMarkers,
+  normalizePreReleaseMarkerText,
+} from "@/lib/releases/pre-release-markers";
 import { log } from "@/lib/server-action-helpers";
 import type {
   AppSettings,
@@ -14,6 +18,7 @@ const preReleaseMatcherCache = new Map<
   ReturnType<typeof createPreReleaseMatcher>
 >();
 const maxCachedPreReleaseMatchers = 100;
+const builtInPreReleaseMarkerSet = new Set<string>(allPreReleaseTypes);
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -21,19 +26,19 @@ function escapeRegExp(value: string): string {
 
 export function isPreReleaseByTagName(
   tagName: string,
-  preReleaseSubChannels?: PreReleaseChannelType[],
+  preReleaseMarkers?: readonly string[],
 ): boolean {
   if (typeof tagName !== "string" || !tagName) return false;
 
   // If no sub-channels are provided or the array is empty, it can't match anything.
-  if (!preReleaseSubChannels || preReleaseSubChannels.length === 0) {
+  if (!preReleaseMarkers || preReleaseMarkers.length === 0) {
     return false;
   }
 
-  const cacheKey = preReleaseSubChannels.join("\0");
+  const cacheKey = preReleaseMarkers.join("\0");
   let matcher = preReleaseMatcherCache.get(cacheKey);
   if (!matcher) {
-    matcher = createPreReleaseMatcher(preReleaseSubChannels);
+    matcher = createPreReleaseMatcher(preReleaseMarkers);
     if (preReleaseMatcherCache.size >= maxCachedPreReleaseMatchers) {
       const oldestKey = preReleaseMatcherCache.keys().next().value;
       if (oldestKey !== undefined) preReleaseMatcherCache.delete(oldestKey);
@@ -114,6 +119,7 @@ export function resolveEffectiveRepoFilters(
     Repository,
     | "releaseChannels"
     | "preReleaseSubChannels"
+    | "customPreReleaseMarkers"
     | "releaseSelectionStrategy"
     | "versionTagPattern"
     | "releasesPerPage"
@@ -125,6 +131,7 @@ export function resolveEffectiveRepoFilters(
 ): {
   effectiveReleaseChannels: AppSettings["releaseChannels"];
   effectivePreReleaseSubChannels: PreReleaseChannelType[];
+  effectiveCustomPreReleaseMarkers: string[];
   effectiveReleaseSelectionStrategy: ReleaseSelectionStrategy;
   versionTagPattern: string | undefined;
   totalReleasesToFetch: number;
@@ -136,16 +143,16 @@ export function resolveEffectiveRepoFilters(
       ? repoSettings.releaseChannels
       : globalSettings.releaseChannels;
 
-  const preReleaseSubChannelCandidate =
-    repoSettings.preReleaseSubChannels &&
-    repoSettings.preReleaseSubChannels.length > 0
-      ? repoSettings.preReleaseSubChannels
-      : globalSettings.preReleaseSubChannels;
-
   const effectivePreReleaseSubChannels =
-    preReleaseSubChannelCandidate && preReleaseSubChannelCandidate.length > 0
-      ? preReleaseSubChannelCandidate
-      : allPreReleaseTypes;
+    repoSettings.preReleaseSubChannels ??
+    globalSettings.preReleaseSubChannels ??
+    allPreReleaseTypes;
+
+  const effectiveCustomPreReleaseMarkers = getValidCustomPreReleaseMarkers(
+    repoSettings.customPreReleaseMarkers === undefined
+      ? globalSettings.customPreReleaseMarkers
+      : repoSettings.customPreReleaseMarkers,
+  ).filter((marker) => !builtInPreReleaseMarkerSet.has(marker));
 
   const totalReleasesToFetch =
     typeof repoSettings.releasesPerPage === "number" &&
@@ -172,6 +179,7 @@ export function resolveEffectiveRepoFilters(
   return {
     effectiveReleaseChannels,
     effectivePreReleaseSubChannels,
+    effectiveCustomPreReleaseMarkers,
     effectiveReleaseSelectionStrategy,
     versionTagPattern,
     totalReleasesToFetch,
@@ -200,23 +208,29 @@ function compileOptionalRegex(pattern: string | undefined): {
 }
 
 function createPreReleaseMatcher(
-  preReleaseSubChannels: PreReleaseChannelType[],
+  preReleaseSubChannels: readonly string[],
 ): (tagName: string) => boolean {
   if (preReleaseSubChannels.length === 0) return () => false;
 
-  // The lookahead prevents partial word matches such as `beta` in `betamax`.
+  const alternatives = preReleaseSubChannels.map((marker) => {
+    const normalizedMarker = normalizePreReleaseMarkerText(marker);
+    return `${escapeRegExp(normalizedMarker)}(?=[^\\p{L}\\p{M}]|$)`;
+  });
+
+  // Letters and combining marks cannot border a marker. Digits may precede a
+  // marker in compact versions and may follow it as the release revision (for
+  // example rc1).
   const regex = new RegExp(
-    `(?:^|[^a-zA-Z])(${preReleaseSubChannels
-      .map(escapeRegExp)
-      .join("|")})(?=[^a-zA-Z]|$)`,
-    "i",
+    `(?:^|[^\\p{L}\\p{M}])(?:${alternatives.join("|")})`,
+    "u",
   );
-  return (tagName) => regex.test(tagName);
+  return (tagName) => regex.test(normalizePreReleaseMarkerText(tagName));
 }
 
 export function createEffectiveReleaseMatcher(
   filters: EffectiveRepoFilters,
   repoIdForLog: string,
+  options: { forceStableChannel?: boolean } = {},
 ): ReleaseMatcher {
   const exclude = compileOptionalRegex(filters.effectiveExcludeRegex);
   const include = compileOptionalRegex(filters.effectiveIncludeRegex);
@@ -224,6 +238,9 @@ export function createEffectiveReleaseMatcher(
     createPreReleaseMatcher(allPreReleaseTypes);
   const matchesSelectedPreReleaseChannel = createPreReleaseMatcher(
     filters.effectivePreReleaseSubChannels,
+  );
+  const matchesCustomPreReleaseMarker = createPreReleaseMatcher(
+    filters.effectiveCustomPreReleaseMarkers,
   );
   let versionTagPattern: RegExp | undefined;
   if (
@@ -266,6 +283,10 @@ export function createEffectiveReleaseMatcher(
       return filters.effectiveReleaseChannels.includes("draft");
     }
 
+    if (options.forceStableChannel) {
+      return filters.effectiveReleaseChannels.includes("stable");
+    }
+
     const extractedVersion = versionTagPattern?.exec(release.tag_name)?.groups
       ?.version;
     const versionForChannelClassification = (
@@ -274,9 +295,13 @@ export function createEffectiveReleaseMatcher(
     const isTagMarkedPreRelease = matchesAnyPreReleaseChannel(
       versionForChannelClassification,
     );
+    const isCustomMarkedPreRelease = matchesCustomPreReleaseMarker(
+      versionForChannelClassification,
+    );
     // Unrecognized version suffixes may describe package revisions or target
     // platforms (for example -ls446 or -spt-4.0), not release channels.
-    const isConsideredPreRelease = release.prerelease || isTagMarkedPreRelease;
+    const isConsideredPreRelease =
+      release.prerelease || isTagMarkedPreRelease || isCustomMarkedPreRelease;
 
     if (isConsideredPreRelease) {
       if (!filters.effectiveReleaseChannels.includes("prerelease")) {
@@ -285,6 +310,8 @@ export function createEffectiveReleaseMatcher(
 
       // If the tag explicitly includes a pre-release marker (e.g. -beta/-rc),
       // apply the configured sub-channel filter. Otherwise, fall back to the API flag.
+      if (isCustomMarkedPreRelease) return true;
+
       if (isTagMarkedPreRelease) {
         return matchesSelectedPreReleaseChannel(
           versionForChannelClassification,

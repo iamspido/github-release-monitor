@@ -19,7 +19,9 @@ test("repo dialog reset filters clears channels/regex and errors", async ({
   const dialog = page.getByRole("dialog");
 
   // Toggle prerelease to expand subtypes (just to create a non-global state)
-  await page.getByLabel("Pre-release").click();
+  await dialog
+    .getByRole("checkbox", { name: "Pre-release", exact: true })
+    .click();
 
   // Enter invalid regex to trigger error - use label to find the correct input
   const includeInput = dialog

@@ -15,11 +15,24 @@ test("pre-release subtypes toggle while keeping parent active", async ({
   await expect(settingsButton).toBeVisible({ timeout: 10_000 });
   await settingsButton.click();
 
-  // Enable Pre-release
-  const pre = page.getByLabel("Pre-release");
-  if (!(await pre.isChecked())) {
-    await pre.check();
+  const pre = page.getByLabel("Pre-release", { exact: true });
+  if (await pre.isChecked()) {
+    await pre.uncheck();
   }
+  const useGlobalMarkers = page.getByLabel(
+    "Use global custom pre-release markers",
+  );
+  const customMarkers = page.getByRole("textbox", {
+    name: "Custom pre-release markers",
+    exact: true,
+  });
+
+  // Marker classification must remain configurable for stable-only filtering.
+  await expect(useGlobalMarkers).toBeVisible();
+  await expect(customMarkers).toBeVisible();
+
+  // Enable Pre-release
+  await pre.check();
   // Subtypes should be visible
   await expect(
     page.getByText("Select the specific pre-release types to monitor."),
@@ -37,4 +50,18 @@ test("pre-release subtypes toggle while keeping parent active", async ({
 
   // Parent pre-release checkbox should remain active
   await expect(pre).toBeChecked();
+
+  await useGlobalMarkers.uncheck();
+  await customMarkers.fill("test2");
+  await expect(page.getByText(/Invalid marker.*test2/)).toBeVisible();
+
+  await pre.uncheck();
+  await expect(customMarkers).toBeVisible();
+  await expect(customMarkers).toBeEnabled();
+  await expect(customMarkers).toHaveAttribute("dir", "auto");
+
+  await customMarkers.clear();
+  await expect(customMarkers).toBeVisible();
+  await expect(useGlobalMarkers).toBeVisible();
+  await expect(useGlobalMarkers).toBeEnabled();
 });

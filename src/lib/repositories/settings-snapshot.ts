@@ -8,6 +8,7 @@ export function toRepositorySettingsSnapshot(
     isPinned: repository.isPinned,
     releaseChannels: repository.releaseChannels,
     preReleaseSubChannels: repository.preReleaseSubChannels,
+    customPreReleaseMarkers: repository.customPreReleaseMarkers,
     releaseSelectionStrategy: repository.releaseSelectionStrategy,
     versionTagPattern: repository.versionTagPattern,
     releasesPerPage: repository.releasesPerPage,

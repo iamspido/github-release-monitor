@@ -58,7 +58,9 @@ async function applySettingsUpdate(
         success: false,
         message: {
           title: t("toast_error_title"),
-          description: t(preparedUpdate.errorKey),
+          description: preparedUpdate.errorValues
+            ? `${t(preparedUpdate.errorKey)} ${preparedUpdate.errorValues.join(", ")}`
+            : t(preparedUpdate.errorKey),
         },
       };
     }
@@ -79,6 +81,7 @@ async function applySettingsUpdate(
       !releaseCacheInvalidation.filtersChanged &&
       !releaseCacheInvalidation.releaseChannelsChanged &&
       !releaseCacheInvalidation.preReleaseSubChannelsChanged &&
+      !releaseCacheInvalidation.customPreReleaseMarkersChanged &&
       !releaseCacheInvalidation.releasesPerPageChanged;
 
     // All validation is complete before any persistent side effects begin.

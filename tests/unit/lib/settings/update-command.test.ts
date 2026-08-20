@@ -48,5 +48,13 @@ describe("settings update command", () => {
       errorKey: "cron_error_invalid",
       locale: "en",
     });
+    expect(
+      prepareSettingsUpdate({ customPreReleaseMarkers: ["."] }, current, true),
+    ).toEqual({
+      ok: false,
+      errorKey: "custom_prerelease_markers_error_invalid",
+      locale: "en",
+      errorValues: ["."],
+    });
   });
 });

@@ -2,13 +2,17 @@
 
 import type { AppSettings, Repository } from "@/types";
 
+const intlMocks = vi.hoisted(() => ({
+  getTranslations: vi.fn(async () => (key: string) => key),
+}));
+
 vi.mock("next/cache", () => ({
   revalidatePath: () => {},
   updateTag: () => {},
 }));
 
 vi.mock("next-intl/server", () => ({
-  getTranslations: async () => (key: string) => key,
+  getTranslations: intlMocks.getTranslations,
   getLocale: async () => "en",
 }));
 
@@ -36,6 +40,7 @@ vi.mock("@/lib/storage/settings", () => ({
 describe("updateRepositorySettingsAction", () => {
   beforeEach(() => {
     vi.resetModules();
+    intlMocks.getTranslations.mockClear();
     mem.repos = [];
   });
 
@@ -173,6 +178,25 @@ describe("updateRepositorySettingsAction", () => {
       error: "version_tag_pattern_error_missing_version_group",
     });
     expect(mem.repos[0].versionTagPattern).toBeUndefined();
+  });
+
+  it("rejects invalid custom pre-release markers", async () => {
+    mem.repos = [{ id: "o/r", url: "https://github.com/o/r" }];
+
+    const { updateRepositorySettingsAction } = await import("@/app/actions");
+    const result = await updateRepositorySettingsAction("o/r", {
+      customPreReleaseMarkers: ["."],
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "custom_prerelease_markers_error_invalid .",
+    });
+    expect(intlMocks.getTranslations).toHaveBeenCalledWith({
+      locale: "en",
+      namespace: "SettingsForm",
+    });
+    expect(mem.repos[0].customPreReleaseMarkers).toBeUndefined();
   });
 
   it("normalizes the display name without clearing the ETag", async () => {

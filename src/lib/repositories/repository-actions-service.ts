@@ -4,6 +4,10 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { getLatestReleasesForRepos } from "@/lib/releases";
 import { resolveEffectiveRepoFilters } from "@/lib/releases/filters";
 import {
+  getInvalidCustomPreReleaseMarkers,
+  normalizeCustomPreReleaseMarkers,
+} from "@/lib/releases/pre-release-markers";
+import {
   normalizeReleaseSelectionStrategy,
   resolveEffectiveReleaseSelectionStrategy,
 } from "@/lib/releases/selection";
@@ -50,6 +54,9 @@ function createReleaseFetchFingerprint(
     locale: settings.locale,
     releaseChannels: [...filters.effectiveReleaseChannels].sort(),
     preReleaseSubChannels: [...filters.effectivePreReleaseSubChannels].sort(),
+    customPreReleaseMarkers: [
+      ...filters.effectiveCustomPreReleaseMarkers,
+    ].sort(),
     releaseSelectionStrategy: filters.effectiveReleaseSelectionStrategy,
     versionTagPattern: filters.versionTagPattern,
     releasesPerPage: filters.totalReleasesToFetch,
@@ -535,6 +542,7 @@ export async function updateRepositorySettingsAction(
     | "isPinned"
     | "releaseChannels"
     | "preReleaseSubChannels"
+    | "customPreReleaseMarkers"
     | "releaseSelectionStrategy"
     | "versionTagPattern"
     | "releasesPerPage"
@@ -634,6 +642,23 @@ export async function updateRepositorySettingsAction(
 
       const newInclude = (settings.includeRegex ?? "").trim() || undefined;
       const newExclude = (settings.excludeRegex ?? "").trim() || undefined;
+      const invalidCustomPreReleaseMarkers = getInvalidCustomPreReleaseMarkers(
+        settings.customPreReleaseMarkers,
+      );
+      if (invalidCustomPreReleaseMarkers.length > 0) {
+        const tSettings = await getTranslations({
+          locale,
+          namespace: "SettingsForm",
+        });
+        return {
+          success: false,
+          error: `${tSettings("custom_prerelease_markers_error_invalid")} ${invalidCustomPreReleaseMarkers.join(", ")}`,
+        };
+      }
+      const newCustomPreReleaseMarkers =
+        settings.customPreReleaseMarkers === undefined
+          ? undefined
+          : normalizeCustomPreReleaseMarkers(settings.customPreReleaseMarkers);
       if (
         (newInclude && validateRegexInput(newInclude)) ||
         (newExclude && validateRegexInput(newExclude))
@@ -664,6 +689,7 @@ export async function updateRepositorySettingsAction(
           ...settings,
           releaseSelectionStrategy: newReleaseSelectionStrategy,
           versionTagPattern: newVersionTagPattern,
+          customPreReleaseMarkers: newCustomPreReleaseMarkers,
         });
       const backgroundCheckCronChanged =
         (existing.backgroundCheckCron ?? undefined) !== newBackgroundCheckCron;
@@ -674,6 +700,7 @@ export async function updateRepositorySettingsAction(
           ...settings,
           releaseSelectionStrategy: newReleaseSelectionStrategy,
           versionTagPattern: newVersionTagPattern,
+          customPreReleaseMarkers: newCustomPreReleaseMarkers,
           displayName: normalizedDisplayName.displayName,
           isPinned: newIsPinned,
           tags: newTags,
@@ -695,6 +722,7 @@ export async function updateRepositorySettingsAction(
         isPinned: newIsPinned,
         releaseChannels: settings.releaseChannels,
         preReleaseSubChannels: settings.preReleaseSubChannels,
+        customPreReleaseMarkers: newCustomPreReleaseMarkers,
         releaseSelectionStrategy: newReleaseSelectionStrategy,
         versionTagPattern: newVersionTagPattern,
         releasesPerPage: settings.releasesPerPage,

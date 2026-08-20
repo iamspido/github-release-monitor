@@ -5,6 +5,12 @@ import {
   normalizeProviderSortOrder,
   normalizeReleaseSortOrder,
 } from "@/lib/release-sort";
+import {
+  getInvalidCustomPreReleaseMarkers,
+  legacyPreReleaseMarkers,
+  migrateLegacyPreReleaseConfiguration,
+  normalizeCustomPreReleaseMarkers,
+} from "@/lib/releases/pre-release-markers";
 import { normalizeReleaseSelectionStrategy } from "@/lib/releases/selection";
 import {
   defaultSecurityHighlightColorPreset,
@@ -38,6 +44,7 @@ export function createDefaultSettings(
     parallelRepoFetches: env.GITHUB_ACCESS_TOKEN?.trim() ? 5 : 1,
     releaseChannels: ["stable"],
     preReleaseSubChannels: [...allPreReleaseTypes],
+    customPreReleaseMarkers: [],
     releaseSelectionStrategy: "newest",
     releaseSortOrder: "latest_first",
     providerSortOrder: [...defaultProviderSortOrder],
@@ -75,6 +82,9 @@ function cloneSettings(settings: AppSettings): AppSettings {
     preReleaseSubChannels: settings.preReleaseSubChannels
       ? [...(settings.preReleaseSubChannels ?? [])]
       : undefined,
+    customPreReleaseMarkers: normalizeCustomPreReleaseMarkers(
+      settings.customPreReleaseMarkers,
+    ),
     releaseSortOrder: normalizeReleaseSortOrder(settings.releaseSortOrder),
     releaseSelectionStrategy: normalizeReleaseSelectionStrategy(
       settings.releaseSelectionStrategy,
@@ -92,7 +102,10 @@ const isIntegerInRange = (min: number, max: number) => (value: unknown) =>
 export function normalizeSettings(value: unknown): AppSettings {
   const persisted = assertJsonObject(value, "Settings data");
   const isReleaseChannel = isOneOf(["stable", "prerelease", "draft"]);
-  const isPreReleaseChannel = isOneOf(allPreReleaseTypes);
+  const isPreReleaseChannel = isOneOf([
+    ...allPreReleaseTypes,
+    ...legacyPreReleaseMarkers,
+  ]);
   const isAppriseFormat = isOneOf(["text", "markdown", "html"]);
 
   assertOptionalField(
@@ -170,6 +183,20 @@ export function normalizeSettings(value: unknown): AppSettings {
   );
   assertOptionalField(
     persisted,
+    "customPreReleaseMarkers",
+    isArrayOf(isString),
+    "an array of custom prerelease markers",
+  );
+  const invalidCustomPreReleaseMarkers = getInvalidCustomPreReleaseMarkers(
+    persisted.customPreReleaseMarkers as string[] | undefined,
+  );
+  if (invalidCustomPreReleaseMarkers.length > 0) {
+    throw new Error(
+      `Settings data.customPreReleaseMarkers contains invalid markers: ${invalidCustomPreReleaseMarkers.join(", ")}.`,
+    );
+  }
+  assertOptionalField(
+    persisted,
     "providerSortOrder",
     isArrayOf(isString),
     "an array of provider names",
@@ -192,10 +219,26 @@ export function normalizeSettings(value: unknown): AppSettings {
       ([, fieldValue]) => fieldValue !== undefined,
     ),
   );
+  const migratedPreReleaseConfiguration = migrateLegacyPreReleaseConfiguration(
+    persisted.preReleaseSubChannels as string[] | undefined,
+    persisted.customPreReleaseMarkers as string[] | undefined,
+  );
+  if (persisted.preReleaseSubChannels !== undefined) {
+    definedPersisted.preReleaseSubChannels =
+      migratedPreReleaseConfiguration.preReleaseSubChannels;
+  }
+  if (migratedPreReleaseConfiguration.customPreReleaseMarkers !== undefined) {
+    definedPersisted.customPreReleaseMarkers =
+      migratedPreReleaseConfiguration.customPreReleaseMarkers;
+  }
+
   const merged = {
     ...defaultSettings,
     ...(definedPersisted as Partial<AppSettings>),
   };
+  merged.customPreReleaseMarkers = normalizeCustomPreReleaseMarkers(
+    merged.customPreReleaseMarkers,
+  );
   merged.locale = parseLocale(merged.locale) ?? defaultLocale;
   merged.releaseSortOrder = normalizeReleaseSortOrder(merged.releaseSortOrder);
   merged.releaseSelectionStrategy = normalizeReleaseSelectionStrategy(

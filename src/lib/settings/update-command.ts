@@ -2,6 +2,10 @@ import {
   normalizeProviderSortOrder,
   normalizeReleaseSortOrder,
 } from "@/lib/release-sort";
+import {
+  getInvalidCustomPreReleaseMarkers,
+  normalizeCustomPreReleaseMarkers,
+} from "@/lib/releases/pre-release-markers";
 import { normalizeReleaseSelectionStrategy } from "@/lib/releases/selection";
 import { normalizeBackgroundCheckCron } from "@/lib/runtime/repository-schedule";
 import {
@@ -20,6 +24,7 @@ import type { AppSettings } from "@/types";
 
 export type SettingsValidationErrorKey =
   | "cron_error_invalid"
+  | "custom_prerelease_markers_error_invalid"
   | "regex_error_invalid"
   | "security_patterns_error_invalid";
 
@@ -44,12 +49,23 @@ export function prepareSettingsUpdate(
       ok: false;
       errorKey: SettingsValidationErrorKey;
       locale: AppSettings["locale"];
+      errorValues?: string[];
     } {
-  const newSettings = normalizeSettings(
-    mergeWithCurrent
-      ? { ...currentSettings, ...incomingSettings }
-      : incomingSettings,
+  const settingsCandidate = mergeWithCurrent
+    ? { ...currentSettings, ...incomingSettings }
+    : incomingSettings;
+  const invalidCustomPreReleaseMarkers = getInvalidCustomPreReleaseMarkers(
+    settingsCandidate.customPreReleaseMarkers,
   );
+  if (invalidCustomPreReleaseMarkers.length > 0) {
+    return {
+      ok: false,
+      errorKey: "custom_prerelease_markers_error_invalid",
+      locale: currentSettings.locale,
+      errorValues: invalidCustomPreReleaseMarkers,
+    };
+  }
+  const newSettings = normalizeSettings(settingsCandidate);
   const releaseCacheInvalidation = getGlobalReleaseCacheInvalidationChanges(
     currentSettings,
     newSettings,
@@ -115,6 +131,9 @@ export function prepareSettingsUpdate(
       1000,
     ),
     parallelRepoFetches: Math.min(Math.max(normalizedParallelFetches, 1), 50),
+    customPreReleaseMarkers: normalizeCustomPreReleaseMarkers(
+      newSettings.customPreReleaseMarkers,
+    ),
     includeRegex: newSettings.includeRegex?.trim() || undefined,
     excludeRegex: newSettings.excludeRegex?.trim() || undefined,
     appriseTags: newSettings.appriseTags?.trim() || undefined,

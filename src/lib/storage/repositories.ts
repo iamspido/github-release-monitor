@@ -1,6 +1,11 @@
 import path from "node:path";
 import { normalizeLocale } from "@/i18n/config";
 import { logger } from "@/lib/logger";
+import {
+  getInvalidCustomPreReleaseMarkers,
+  legacyPreReleaseMarkers,
+  migrateLegacyPreReleaseConfiguration,
+} from "@/lib/releases/pre-release-markers";
 import { normalizeRepositoryDisplayName } from "@/lib/repositories/display-name";
 import { normalizeRepositoryTags } from "@/lib/repositories/tags";
 import { JsonFileStore } from "@/lib/storage/json-file-store";
@@ -32,7 +37,10 @@ const isPrefixedRepoId = (repoId: string) =>
 let migrationInFlight: Promise<void> | null = null;
 
 const isReleaseChannel = isOneOf(["stable", "prerelease", "draft"]);
-const isPreReleaseChannel = isOneOf(allPreReleaseTypes);
+const isPreReleaseChannel = isOneOf([
+  ...allPreReleaseTypes,
+  ...legacyPreReleaseMarkers,
+]);
 const isAppriseFormat = isOneOf(["text", "markdown", "html"]);
 const isReleaseSource = isOneOf(["release", "tag"]);
 const isReleaseSelectionStrategy = isOneOf(releaseSelectionStrategies);
@@ -203,6 +211,28 @@ function parseRepository(value: unknown, index: number): Repository {
   );
   assertOptionalField(
     repository,
+    "customPreReleaseMarkers",
+    isArrayOf(isString),
+    "an array of custom prerelease markers",
+  );
+  const invalidCustomPreReleaseMarkers = getInvalidCustomPreReleaseMarkers(
+    repository.customPreReleaseMarkers as string[] | undefined,
+  );
+  if (invalidCustomPreReleaseMarkers.length > 0) {
+    throw new Error(
+      `${path}.customPreReleaseMarkers contains invalid markers: ${invalidCustomPreReleaseMarkers.join(", ")}.`,
+    );
+  }
+  const migratedPreReleaseConfiguration = migrateLegacyPreReleaseConfiguration(
+    repository.preReleaseSubChannels as string[] | undefined,
+    repository.customPreReleaseMarkers as string[] | undefined,
+  );
+  repository.preReleaseSubChannels =
+    migratedPreReleaseConfiguration.preReleaseSubChannels;
+  repository.customPreReleaseMarkers =
+    migratedPreReleaseConfiguration.customPreReleaseMarkers;
+  assertOptionalField(
+    repository,
     "releaseSelectionStrategy",
     isReleaseSelectionStrategy,
     "a supported release selection strategy",
@@ -312,6 +342,10 @@ function mergeRepositoriesPreferFirst(
     preReleaseSubChannels: preferDefined(
       base.preReleaseSubChannels,
       incoming.preReleaseSubChannels,
+    ),
+    customPreReleaseMarkers: preferDefined(
+      base.customPreReleaseMarkers,
+      incoming.customPreReleaseMarkers,
     ),
     releaseSelectionStrategy: preferDefined(
       base.releaseSelectionStrategy,
