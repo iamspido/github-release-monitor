@@ -168,6 +168,12 @@ describe("actions fetcher scenarios", () => {
         ],
       }),
     );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: [] }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -178,6 +184,159 @@ describe("actions fetcher scenarios", () => {
 
     expect(enriched[0].release?.tag_name).toBe("docker/4.15.0-r0");
     expect(enriched[0].error).toBeUndefined();
+  });
+
+  it("keeps a production-suffixed formal release ahead of its base tag", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "owner/repo",
+      url: "https://github.com/owner/repo",
+      releaseSelectionStrategy: "highest_version",
+    };
+    const selectedSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        headers: { etag: 'W/"formal-releases"' },
+        json: [
+          {
+            id: 1,
+            html_url: "https://github.com/owner/repo/releases/tag/v1.0.0-fix",
+            tag_name: "v1.0.0-fix",
+            name: "v1.0.0",
+            body: "fixed invalid GUID",
+            created_at: "2026-01-01T00:00:00Z",
+            published_at: "2026-01-01T00:00:00Z",
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        text: `
+          <a href="/owner/repo/releases/tag/v1.0.0">v1.0.0</a>
+          <relative-time datetime="2025-12-01T00:00:00Z">Dec 1</relative-time>
+          <a href="/owner/repo/commit/${selectedSha}">aaaaaaa</a>
+        `,
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          { name: "v1.0.0-fix", commit: { sha: "bbbb" } },
+          { name: "v1.0.0", commit: { sha: selectedSha } },
+        ],
+      }),
+    );
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release?.tag_name).toBe("v1.0.0-fix");
+    expect(enriched[0].release?.id).toBe(1);
+    expect(enriched[0].newEtag).toBeNull();
+    expect(enriched[0].error).toBeUndefined();
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(3);
+  });
+
+  it("selects and enriches a higher standalone tag over a formal release", async () => {
+    const actions = await import("@/app/actions");
+    const repo: Repository = {
+      id: "owner/repo",
+      url: "https://github.com/owner/repo",
+      releaseSelectionStrategy: "highest_version",
+    };
+    const selectedSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          {
+            id: 1,
+            html_url: "https://github.com/owner/repo/releases/tag/v1.0.0-fix",
+            tag_name: "v1.0.0-fix",
+            name: "v1.0.0-fix",
+            body: "production fix",
+            created_at: "2026-01-02T00:00:00Z",
+            published_at: "2026-01-02T00:00:00Z",
+            prerelease: false,
+            draft: false,
+          },
+        ],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        text: `
+          <a href="/owner/repo/releases/tag/v1.1.0">v1.1.0</a>
+          <relative-time datetime="2026-01-01T00:00:00Z">Jan 1</relative-time>
+          <a href="/owner/repo/commit/${selectedSha}">aaaaaaa</a>
+        `,
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: [
+          { name: "v1.1.0", commit: { sha: selectedSha } },
+          { name: "v1.0.0-fix", commit: { sha: "bbbb" } },
+        ],
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: { object: { type: "commit", sha: selectedSha, url: "unused" } },
+      }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({
+        status: 200,
+        json: {
+          commit: {
+            message: "Standalone v1.1.0",
+            committer: { date: "2026-01-01T00:00:00Z" },
+          },
+        },
+      }),
+    );
+
+    const enriched = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(enriched[0].release).toEqual(
+      expect.objectContaining({
+        id: 0,
+        tag_name: "v1.1.0",
+        created_at: "2026-01-01T00:00:00Z",
+        published_at: "2026-01-01T00:00:00Z",
+        published_at_unknown: false,
+      }),
+    );
+    expect(enriched[0].release?.body).toContain("Standalone v1.1.0");
+    expect(enriched[0].newEtag).toBeNull();
+    expect(enriched[0].error).toBeUndefined();
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(5);
+    expect(vi.mocked(global.fetch).mock.calls[3][0]).toContain(
+      "/git/ref/tags/v1.1.0",
+    );
+    expect(vi.mocked(global.fetch).mock.calls[4][0]).toContain(
+      `/commits/${selectedSha}`,
+    );
   });
 
   it("reports when no release matches a configured version tag pattern", async () => {
@@ -205,6 +364,12 @@ describe("actions fetcher scenarios", () => {
           },
         ],
       }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: [] }),
     );
 
     const enriched = await actions.getLatestReleasesForRepos(
@@ -269,6 +434,12 @@ describe("actions fetcher scenarios", () => {
         ],
       }),
     );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 404 }),
+    );
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      mockFetchResponse({ status: 200, json: [] }),
+    );
 
     const enriched = await actions.getLatestReleasesForRepos(
       [repo],
@@ -278,7 +449,7 @@ describe("actions fetcher scenarios", () => {
     );
 
     expect(enriched[0].release?.tag_name).toBe("v999.0.0");
-    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(4);
     expect(
       headerRecord(fetchCallHeaders(vi.mocked(global.fetch).mock.calls[0]))[
         "If-None-Match"

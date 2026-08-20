@@ -1,5 +1,8 @@
 import type { EffectiveRepoFilters } from "@/lib/releases/filters";
-import { createEffectiveReleaseMatcher } from "@/lib/releases/filters";
+import {
+  createEffectiveReleaseMatcher,
+  isPreReleaseByTagName,
+} from "@/lib/releases/filters";
 import {
   type ParsedVersion,
   parseComparableVersion,
@@ -11,7 +14,7 @@ import type {
   ReleaseSelectionStrategy,
   Repository,
 } from "@/types";
-import { releaseSelectionStrategies } from "@/types";
+import { allPreReleaseTypes, releaseSelectionStrategies } from "@/types";
 
 export function normalizeReleaseSelectionStrategy(
   value: unknown,
@@ -60,7 +63,7 @@ function comparePrerelease(
   return 0;
 }
 
-function compareVersions(a: ParsedVersion, b: ParsedVersion): number {
+function compareVersionCore(a: ParsedVersion, b: ParsedVersion): number {
   const length = Math.max(a.core.length, b.core.length);
   for (let index = 0; index < length; index += 1) {
     const aComponent = a.core[index] ?? BigInt(0);
@@ -68,7 +71,25 @@ function compareVersions(a: ParsedVersion, b: ParsedVersion): number {
     if (aComponent === bComponent) continue;
     return aComponent > bComponent ? 1 : -1;
   }
-  return comparePrerelease(a.prerelease, b.prerelease);
+  return 0;
+}
+
+function splitNaturalIdentifier(
+  identifier: bigint | string,
+): Array<bigint | string> {
+  if (typeof identifier === "bigint") return [identifier];
+  return (identifier.match(/\d+|\D+/g) ?? [identifier]).map((part) =>
+    /^\d+$/.test(part) ? BigInt(part) : part,
+  );
+}
+
+function compareProductionSuffix(
+  a: ParsedVersion["prerelease"],
+  b: ParsedVersion["prerelease"],
+): number {
+  const aParts = a.flatMap(splitNaturalIdentifier);
+  const bParts = b.flatMap(splitNaturalIdentifier);
+  return comparePrerelease(aParts, bParts);
 }
 
 function getReleaseTime(release: GithubRelease): number {
@@ -107,7 +128,37 @@ type VersionedRelease = {
   release: GithubRelease;
   version: ParsedVersion;
   revision: bigint;
+  isProductionSuffix: boolean;
 };
+
+function isProductionSuffix(
+  release: GithubRelease,
+  version: ParsedVersion,
+  versionValue: string,
+): boolean {
+  return (
+    version.prerelease.length > 0 &&
+    !release.prerelease &&
+    !isPreReleaseByTagName(versionValue, allPreReleaseTypes)
+  );
+}
+
+function compareVersionedReleases(
+  a: VersionedRelease,
+  b: VersionedRelease,
+): number {
+  const coreComparison = compareVersionCore(a.version, b.version);
+  if (coreComparison !== 0) return coreComparison;
+
+  if (a.isProductionSuffix || b.isProductionSuffix) {
+    if (a.isProductionSuffix !== b.isProductionSuffix) {
+      return a.isProductionSuffix ? 1 : -1;
+    }
+    return compareProductionSuffix(a.version.prerelease, b.version.prerelease);
+  }
+
+  return comparePrerelease(a.version.prerelease, b.version.prerelease);
+}
 
 function selectActiveVersionFamily(
   releases: VersionedRelease[],
@@ -177,6 +228,7 @@ function parseConfiguredVersion(
     // artifact, so an absent revision sorts immediately before r0.
     revision:
       revisionValue === undefined ? version.revision : BigInt(revisionValue),
+    isProductionSuffix: isProductionSuffix(release, version, versionValue),
   };
 }
 
@@ -225,7 +277,20 @@ function selectHighestVersion(
       return candidate ? [candidate] : [];
     }
     const version = parseComparableVersion(release.tag_name);
-    return version ? [{ release, version, revision: version.revision }] : [];
+    return version
+      ? [
+          {
+            release,
+            version,
+            revision: version.revision,
+            isProductionSuffix: isProductionSuffix(
+              release,
+              version,
+              release.tag_name,
+            ),
+          },
+        ]
+      : [];
   });
 
   if (versioned.length === 0) {
@@ -242,7 +307,7 @@ function selectHighestVersion(
   if (!comparableVersioned) return null;
 
   return comparableVersioned.reduce((selected, candidate) => {
-    const comparison = compareVersions(candidate.version, selected.version);
+    const comparison = compareVersionedReleases(candidate, selected);
     if (comparison > 0) return candidate;
     if (comparison === 0 && candidate.revision > selected.revision) {
       return candidate;

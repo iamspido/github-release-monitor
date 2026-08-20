@@ -1,4 +1,3 @@
-import { parseComparableVersion } from "@/lib/releases/version";
 import { log } from "@/lib/server-action-helpers";
 import type {
   AppSettings,
@@ -275,19 +274,9 @@ export function createEffectiveReleaseMatcher(
     const isTagMarkedPreRelease = matchesAnyPreReleaseChannel(
       versionForChannelClassification,
     );
-    const parsedVersion = parseComparableVersion(
-      versionForChannelClassification,
-    );
-    // Preserve the established behavior for abbreviated versions while
-    // classifying fully qualified semantic prereleases consistently across all
-    // release-selection strategies.
-    const isSemanticPreRelease = Boolean(
-      parsedVersion &&
-        parsedVersion.core.length >= 3 &&
-        parsedVersion.prerelease.length,
-    );
-    const isConsideredPreRelease =
-      release.prerelease || isTagMarkedPreRelease || isSemanticPreRelease;
+    // Unrecognized version suffixes may describe package revisions or target
+    // platforms (for example -ls446 or -spt-4.0), not release channels.
+    const isConsideredPreRelease = release.prerelease || isTagMarkedPreRelease;
 
     if (isConsideredPreRelease) {
       if (!filters.effectiveReleaseChannels.includes("prerelease")) {
