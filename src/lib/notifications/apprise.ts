@@ -5,6 +5,7 @@ import {
   fetchWithTimeout,
 } from "@/lib/http/fetch-with-timeout";
 import { logger } from "@/lib/logger";
+import { getReleaseMonitorUrl } from "@/lib/notifications/config";
 import {
   escapeMarkdownLinkDestination,
   escapeMarkdownText,
@@ -12,6 +13,7 @@ import {
 import {
   generateHtmlReleaseBody,
   generatePlainTextReleaseBody,
+  generatePlainTextReleaseLinkLines,
   getFormattedDate,
 } from "@/lib/notifications/email";
 import type {
@@ -21,6 +23,43 @@ import type {
   NotificationSettings,
   Repository,
 } from "@/types";
+
+function appendPriorityLinks(
+  body: string,
+  priorityLinks: readonly string[],
+  maxChars: number,
+  footerSeparator: string,
+  truncatedText?: string,
+): string {
+  const allLinks = priorityLinks.join("\n");
+  const fullBody = `${body}${footerSeparator}${allLinks}`;
+  if (maxChars <= 0 || fullBody.length <= maxChars) return fullBody;
+
+  let fittedLinks = "";
+  for (const link of priorityLinks) {
+    const candidate = fittedLinks ? `${fittedLinks}\n${link}` : link;
+    if (candidate.length > maxChars) continue;
+    fittedLinks = candidate;
+  }
+
+  if (!fittedLinks) return body.substring(0, maxChars);
+
+  const footerCandidates = [
+    truncatedText
+      ? `${footerSeparator}${truncatedText}\n${fittedLinks}`
+      : undefined,
+    `${footerSeparator}${fittedLinks}`,
+    `\n${fittedLinks}`,
+    fittedLinks,
+  ];
+  const footer = footerCandidates.find(
+    (candidate): candidate is string =>
+      candidate !== undefined && candidate.length <= maxChars,
+  );
+
+  if (!footer) return body.substring(0, maxChars);
+  return `${body.substring(0, maxChars - footer.length)}${footer}`;
+}
 
 async function generateMarkdownReleaseBody(
   release: GithubRelease,
@@ -40,6 +79,13 @@ async function generateMarkdownReleaseBody(
   const viewOnGithubText = tApprise("view_on_github_link", {
     link: escapeMarkdownLinkDestination(release.html_url),
   });
+  const monitorUrl = getReleaseMonitorUrl(locale);
+  const viewMonitorText = monitorUrl
+    ? `[${escapeMarkdownText(t("view_monitor_label"))}](${escapeMarkdownLinkDestination(monitorUrl)})`
+    : undefined;
+  const priorityLinks = [viewOnGithubText, viewMonitorText].filter(
+    (link): link is string => link !== undefined,
+  );
   const truncatedText = tApprise("truncated_message");
   const footerSeparator = "\n\n---\n\n";
 
@@ -65,23 +111,13 @@ ${introText}
     body += `\n\n### ${t("text_release_notes_label")}\n---\n${release.body || t("text_no_notes")}`;
   }
 
-  if (maxChars > 0) {
-    const footer = `${footerSeparator}${truncatedText}\n${viewOnGithubText}`;
-    const availableLength = maxChars - footer.length;
-
-    if (body.length > availableLength) {
-      if (availableLength > 0) {
-        body = body.substring(0, availableLength) + footer;
-      } else {
-        body = viewOnGithubText;
-      }
-    } else {
-      body = `${body}${footerSeparator}${viewOnGithubText}`;
-    }
-  } else {
-    body = `${body}${footerSeparator}${viewOnGithubText}`;
-  }
-  return body;
+  return appendPriorityLinks(
+    body,
+    priorityLinks,
+    maxChars,
+    footerSeparator,
+    truncatedText,
+  );
 }
 
 async function generateAppriseBody(
@@ -122,13 +158,14 @@ async function generateAppriseBody(
         locale,
         settings.timeFormat,
         settings.appriseIncludeReleaseNotes !== false,
+        false,
       );
-      const fullBody = `${title}\n\n${plainTextBody.trim()}`;
-
-      if (maxChars > 0 && fullBody.length > maxChars) {
-        return fullBody.substring(0, maxChars);
-      }
-      return fullBody;
+      const priorityLinks = await generatePlainTextReleaseLinkLines(
+        release,
+        locale,
+      );
+      const contentBody = `${title}\n\n${plainTextBody.trim()}`;
+      return appendPriorityLinks(contentBody, priorityLinks, maxChars, "\n\n");
     }
   }
 }

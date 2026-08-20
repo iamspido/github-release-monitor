@@ -691,6 +691,7 @@
     "text_release_notes_label": "הערות גרסה",
     "text_no_notes": "לא סופקו הערות גרסה.",
     "text_view_on_github_label": "הצגת הגרסה",
+    "view_monitor_label": "פתיחת GitHub Release Monitor",
     "html_title": "🚀 גרסה חדשה עבור {repoId}: {tagName}",
     "html_intro": "פורסמה גרסה חדשה של {repoId}.",
     "html_list_version_label": "גרסה:",

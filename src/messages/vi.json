@@ -691,6 +691,7 @@
     "text_release_notes_label": "Ghi chú phát hành",
     "text_no_notes": "Không có ghi chú phát hành.",
     "text_view_on_github_label": "Xem bản phát hành",
+    "view_monitor_label": "Mở GitHub Release Monitor",
     "html_title": "🚀 Bản phát hành mới cho {repoId}: {tagName}",
     "html_intro": "Một phiên bản mới của {repoId} đã được phát hành.",
     "html_list_version_label": "Phiên bản:",

@@ -691,6 +691,7 @@
     "text_release_notes_label": "Releaseopmerkingen",
     "text_no_notes": "Geen releaseopmerkingen opgegeven.",
     "text_view_on_github_label": "Release bekijken",
+    "view_monitor_label": "GitHub Release Monitor openen",
     "html_title": "🚀 Nieuwe release voor {repoId}: {tagName}",
     "html_intro": "Er is een nieuwe versie van {repoId} uitgebracht.",
     "html_list_version_label": "Versie:",

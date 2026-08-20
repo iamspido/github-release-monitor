@@ -1,3 +1,4 @@
+import type { Locale } from "@/i18n/config";
 import {
   parseSmtpPort,
   parseSmtpTlsRejectUnauthorized,
@@ -7,6 +8,25 @@ type NotificationEnv = Partial<NodeJS.ProcessEnv>;
 
 function hasValue(value: string | undefined): boolean {
   return Boolean(value?.trim());
+}
+
+export function getReleaseMonitorUrl(
+  locale: Locale,
+  env: NotificationEnv = process.env,
+): string | undefined {
+  const configuredUrl =
+    env.BETTER_AUTH_URL?.trim() || env.BETTER_AUTH_BASE_URL?.trim();
+  if (!configuredUrl) return undefined;
+
+  try {
+    const url = new URL(configuredUrl);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return undefined;
+    }
+    return new URL(`/${encodeURIComponent(locale)}`, url.origin).href;
+  } catch {
+    return undefined;
+  }
 }
 
 export function getNotificationRuntimeConfig(

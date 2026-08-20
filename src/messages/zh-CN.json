@@ -691,6 +691,7 @@
     "text_release_notes_label": "发布说明",
     "text_no_notes": "未提供发布说明。",
     "text_view_on_github_label": "查看发布页面",
+    "view_monitor_label": "打开 GitHub Release Monitor",
     "html_title": "🚀 {repoId} 的新版本：{tagName}",
     "html_intro": "{repoId} 发布了新版本。",
     "html_list_version_label": "版本：",

@@ -96,6 +96,18 @@ describe("notifications/email", () => {
     expect(html).toContain(release.html_url);
   });
 
+  it("adds the localized release monitor link to both email alternatives", async () => {
+    process.env.BETTER_AUTH_URL = "https://monitor.example/base?old=1#old";
+
+    const text = await generatePlainTextReleaseBody(release, repo, "de", "24h");
+    const html = await generateHtmlReleaseBody(release, repo, "de", "24h");
+
+    expect(text).toContain("view_monitor_label");
+    expect(text).toContain("https://monitor.example/de");
+    expect(html).toContain("view_monitor_label");
+    expect(html).toContain('href="https://monitor.example/de"');
+  });
+
   it("renders Arabic email direction, bidi isolation, and RTL spacing", async () => {
     const html = await generateHtmlReleaseBody(release, repo, "ar", "24h");
 

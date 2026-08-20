@@ -691,6 +691,7 @@
     "text_release_notes_label": "ملاحظات الإصدار",
     "text_no_notes": "لم يتم توفير ملاحظات الإصدار.",
     "text_view_on_github_label": "عرض الإصدار",
+    "view_monitor_label": "فتح GitHub Release Monitor",
     "html_title": "🚀 الإصدار الجديد لـ {repoId}: {tagName}",
     "html_intro": "صدر إصدار جديد من {repoId}.",
     "html_list_version_label": "إصدار:",

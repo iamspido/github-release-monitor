@@ -6,6 +6,8 @@ interface ReleaseEmailHtmlTemplateData {
   listNameLabelHtml: string;
   listVersionLabelHtml: string;
   localeAttribute: string;
+  monitorButtonTextHtml?: string;
+  monitorUrlAttribute?: string;
   notesTitleHtml: string;
   releaseBodyHtml?: string;
   releaseDateHtml: string;
@@ -205,6 +207,13 @@ export function renderReleaseEmailHtml(
           <a href="${data.releaseUrlAttribute}" class="button">
             ${data.buttonTextHtml}
           </a>
+          ${
+            data.monitorButtonTextHtml && data.monitorUrlAttribute
+              ? `<a href="${data.monitorUrlAttribute}" class="button" style="margin-inline-start: 8px;">
+            ${data.monitorButtonTextHtml}
+          </a>`
+              : ""
+          }
         </p>
       </div>
     </body>

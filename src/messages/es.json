@@ -687,6 +687,7 @@
     "text_release_notes_label": "Notas de la versión",
     "text_no_notes": "No se proporcionaron notas de la versión.",
     "text_view_on_github_label": "Ver versión",
+    "view_monitor_label": "Abrir GitHub Release Monitor",
     "html_title": "🚀 Nueva versión de {repoId}: {tagName}",
     "html_intro": "Se ha publicado una nueva versión de {repoId}.",
     "html_list_version_label": "Versión:",

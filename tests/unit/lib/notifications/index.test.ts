@@ -207,25 +207,34 @@ describe("notifications/index", () => {
 
   it("appriseMaxCharacters truncates text payload", async () => {
     process.env.APPRISE_URL = "http://apprise.test/notify";
+    process.env.BETTER_AUTH_URL = "http://localhost:3000";
     vi.mocked(global.fetch).mockResolvedValue(
       mockFetchResponse({ status: 200, text: "" }),
     );
 
     const settings: AppSettings = {
       ...baseSettings,
-      appriseMaxCharacters: 10,
+      appriseMaxCharacters: 500,
       appriseFormat: "text",
     };
-    await sendNotification(repo, release, "en", settings);
+    await sendNotification(
+      repo,
+      { ...release, body: "x".repeat(2_000) },
+      "en",
+      settings,
+    );
     const call = vi.mocked(global.fetch).mock.calls[0];
     const payload = JSON.parse(fetchCallBodyText(call));
-    expect(payload.body.length).toBeLessThanOrEqual(10);
+    expect(payload.body.length).toBeLessThanOrEqual(500);
+    expect(payload.body).toContain(release.html_url);
+    expect(payload.body).toContain("http://localhost:3000/en");
   });
 
   it.each(["text", "markdown", "html"] as const)(
     "omits release notes from %s Apprise messages when disabled",
     async (appriseFormat) => {
       process.env.APPRISE_URL = "http://apprise.test/notify";
+      process.env.BETTER_AUTH_URL = "https://monitor.example/base";
       vi.mocked(global.fetch).mockResolvedValue(
         mockFetchResponse({ status: 200, text: "" }),
       );
@@ -244,6 +253,78 @@ describe("notifications/index", () => {
       const payload = JSON.parse(fetchCallBodyText(call));
       expect(payload.body).not.toContain("private release details");
       expect(payload.body).toContain(release.html_url);
+      expect(payload.body).toContain("https://monitor.example/en");
+    },
+  );
+
+  it.each(["text", "markdown"] as const)(
+    "never exceeds a very small %s Apprise message limit",
+    async (appriseFormat) => {
+      process.env.APPRISE_URL = "http://apprise.test/notify";
+      process.env.BETTER_AUTH_URL = "https://monitor.example";
+      vi.mocked(global.fetch).mockResolvedValue(
+        mockFetchResponse({ status: 200, text: "" }),
+      );
+
+      await sendNotification(repo, release, "en", {
+        ...baseSettings,
+        appriseFormat,
+        appriseMaxCharacters: 1,
+      });
+
+      const call = vi.mocked(global.fetch).mock.calls[0];
+      const payload = JSON.parse(fetchCallBodyText(call));
+      expect(payload.body.length).toBeLessThanOrEqual(1);
+    },
+  );
+
+  it.each(["text", "markdown"] as const)(
+    "prioritizes the release link when only one link fits in a %s Apprise message",
+    async (appriseFormat) => {
+      process.env.APPRISE_URL = "http://apprise.test/notify";
+      process.env.BETTER_AUTH_URL = "https://monitor.example";
+      vi.mocked(global.fetch).mockResolvedValue(
+        mockFetchResponse({ status: 200, text: "" }),
+      );
+
+      await sendNotification(repo, release, "en", {
+        ...baseSettings,
+        appriseFormat,
+        appriseMaxCharacters: 90,
+      });
+
+      const call = vi.mocked(global.fetch).mock.calls[0];
+      const payload = JSON.parse(fetchCallBodyText(call));
+      expect(payload.body.length).toBeLessThanOrEqual(90);
+      expect(payload.body).toContain(release.html_url);
+      expect(payload.body).not.toContain("https://monitor.example/en");
+    },
+  );
+
+  it.each(["text", "markdown"] as const)(
+    "uses the monitor link when the release link does not fit in a %s Apprise message",
+    async (appriseFormat) => {
+      process.env.APPRISE_URL = "http://apprise.test/notify";
+      process.env.BETTER_AUTH_URL = "https://monitor.example";
+      vi.mocked(global.fetch).mockResolvedValue(
+        mockFetchResponse({ status: 200, text: "" }),
+      );
+      const oversizedRelease = {
+        ...release,
+        html_url: `https://github.com/${"x".repeat(200)}`,
+      };
+
+      await sendNotification(repo, oversizedRelease, "en", {
+        ...baseSettings,
+        appriseFormat,
+        appriseMaxCharacters: 90,
+      });
+
+      const call = vi.mocked(global.fetch).mock.calls[0];
+      const payload = JSON.parse(fetchCallBodyText(call));
+      expect(payload.body.length).toBeLessThanOrEqual(90);
+      expect(payload.body).not.toContain(oversizedRelease.html_url);
+      expect(payload.body).toContain("https://monitor.example/en");
     },
   );
 

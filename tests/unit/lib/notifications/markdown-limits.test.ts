@@ -18,6 +18,7 @@ describe("notifications/markdown limits", () => {
 
   beforeEach(() => {
     installFetchMock();
+    process.env.BETTER_AUTH_URL = "http://localhost:3000";
   });
   afterEach(() => {
     process.env = { ...envBackup };
@@ -40,7 +41,7 @@ describe("notifications/markdown limits", () => {
     draft: false,
   };
 
-  it("when availableLength <= 0, body becomes view_on_github_link", async () => {
+  it("when no priority link fits, body still respects the limit", async () => {
     process.env.APPRISE_URL = "http://apprise.test";
     vi.mocked(global.fetch).mockResolvedValue(
       mockFetchResponse({ status: 200, text: "" }),
@@ -56,16 +57,16 @@ describe("notifications/markdown limits", () => {
       releaseChannels: ["stable"],
       timeFormat: "24h",
       appriseMaxCharacters: 1,
-    }; // forces availableLength <= 0
+    }; // forces every complete priority link to exceed the limit
     const repoOverrides: Repository = { ...repo, appriseFormat: "markdown" };
     await sendNotification(repoOverrides, release, "en", settings);
 
     const call = vi.mocked(global.fetch).mock.calls[0];
     const payload = JSON.parse(fetchCallBodyText(call));
-    expect(payload.body).toBe("view_on_github_link");
+    expect(payload.body.length).toBeLessThanOrEqual(1);
   });
 
-  it("when body shorter than limit, appends footer and link", async () => {
+  it("when body is shorter than the limit, appends the footer links", async () => {
     process.env.APPRISE_URL = "http://apprise.test";
     vi.mocked(global.fetch).mockResolvedValue(
       mockFetchResponse({ status: 200, text: "" }),
@@ -88,6 +89,8 @@ describe("notifications/markdown limits", () => {
     const call = vi.mocked(global.fetch).mock.calls[0];
     const payload = JSON.parse(fetchCallBodyText(call));
     expect(payload.body).toContain("view_on_github_link");
+    expect(payload.body).toContain("view\\_monitor\\_label");
+    expect(payload.body).toContain("http://localhost:3000/en");
     expect(payload.body).toContain("---"); // footer separator present
   });
 });

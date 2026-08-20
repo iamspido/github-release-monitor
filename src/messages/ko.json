@@ -691,6 +691,7 @@
     "text_release_notes_label": "릴리스 노트",
     "text_no_notes": "릴리스 노트가 없습니다.",
     "text_view_on_github_label": "릴리스 보기",
+    "view_monitor_label": "GitHub Release Monitor 열기",
     "html_title": "🚀 {repoId}의 새 릴리스: {tagName}",
     "html_intro": "{repoId}의 새 버전이 릴리스되었습니다.",
     "html_list_version_label": "버전:",

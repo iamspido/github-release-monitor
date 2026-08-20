@@ -691,6 +691,7 @@
     "text_release_notes_label": "Примечания к выпуску",
     "text_no_notes": "Примечания к выпуску отсутствуют.",
     "text_view_on_github_label": "Открыть выпуск",
+    "view_monitor_label": "Открыть GitHub Release Monitor",
     "html_title": "🚀 Новый выпуск для {repoId}: {tagName}",
     "html_intro": "Выпущена новая версия {repoId}.",
     "html_list_version_label": "Версия:",

@@ -6,7 +6,10 @@ import { getLocaleMetadata, type Locale } from "@/i18n/config";
 import { isolateAutoText, isolateLtrText } from "@/lib/bidi";
 import { formatAbsoluteDateTime } from "@/lib/date-time";
 import { logger } from "@/lib/logger";
-import { getEmailRuntimeConfig } from "@/lib/notifications/config";
+import {
+  getEmailRuntimeConfig,
+  getReleaseMonitorUrl,
+} from "@/lib/notifications/config";
 import {
   escapeHtml,
   escapeHtmlAttribute,
@@ -57,6 +60,7 @@ export async function generatePlainTextReleaseBody(
   locale: Locale,
   timeFormat: TimeFormat,
   includeReleaseNotes = true,
+  includeLinks = true,
 ): Promise<string> {
   const t = await getTranslations({ locale, namespace: "Email" });
   const { htmlDate } = await getFormattedDate(
@@ -65,6 +69,9 @@ export async function generatePlainTextReleaseBody(
     timeFormat,
   );
   const releaseName = release.name || "N/A";
+  const links = includeLinks
+    ? await generatePlainTextReleaseLinks(release, locale)
+    : "";
 
   return `
 ${t("text_new_version_of", { repoId: isolateLtrText(repository.id) })}
@@ -80,9 +87,29 @@ ${release.body ? isolateAutoText(release.body) : t("text_no_notes")}
 
 `
     : ""
-}
-${t("text_view_on_github_label")}: ${isolateLtrText(release.html_url)}
+}${links ? `\n${links}` : ""}
 `;
+}
+
+export async function generatePlainTextReleaseLinks(
+  release: GithubRelease,
+  locale: Locale,
+): Promise<string> {
+  return (await generatePlainTextReleaseLinkLines(release, locale)).join("\n");
+}
+
+export async function generatePlainTextReleaseLinkLines(
+  release: GithubRelease,
+  locale: Locale,
+): Promise<string[]> {
+  const t = await getTranslations({ locale, namespace: "Email" });
+  const monitorUrl = getReleaseMonitorUrl(locale);
+  return [
+    `${t("text_view_on_github_label")}: ${isolateLtrText(release.html_url)}`,
+    monitorUrl
+      ? `${t("view_monitor_label")}: ${isolateLtrText(monitorUrl)}`
+      : undefined,
+  ].filter((line): line is string => line !== undefined);
 }
 
 export async function generateHtmlReleaseBody(
@@ -112,6 +139,10 @@ export async function generateHtmlReleaseBody(
   const safeReleaseTagName = escapeHtml(release.tag_name);
   const safeReleaseName = escapeHtml(release.name || "N/A");
   const safeReleaseUrl = escapeHtmlAttribute(safeExternalUrl(release.html_url));
+  const monitorUrl = getReleaseMonitorUrl(locale);
+  const safeMonitorUrl = monitorUrl
+    ? escapeHtmlAttribute(safeExternalUrl(monitorUrl))
+    : undefined;
   const safeHtmlDate = escapeHtml(htmlDate);
 
   const releaseBodyHtml = includeReleaseNotes
@@ -148,6 +179,10 @@ export async function generateHtmlReleaseBody(
     listNameLabelHtml: escapeHtml(t("html_list_name_label")),
     listVersionLabelHtml: escapeHtml(t("html_list_version_label")),
     localeAttribute: safeLocale,
+    monitorButtonTextHtml: safeMonitorUrl
+      ? escapeHtml(t("view_monitor_label"))
+      : undefined,
+    monitorUrlAttribute: safeMonitorUrl,
     notesTitleHtml: escapeHtml(t("html_notes_title")),
     releaseBodyHtml,
     releaseDateHtml: safeHtmlDate,

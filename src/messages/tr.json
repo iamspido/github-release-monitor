@@ -691,6 +691,7 @@
     "text_release_notes_label": "Sürüm Notları",
     "text_no_notes": "Sürüm notu sağlanmadı.",
     "text_view_on_github_label": "Sürümü görüntüle",
+    "view_monitor_label": "GitHub Release Monitor uygulamasını aç",
     "html_title": "🚀 {repoId} için Yeni Sürüm: {tagName}",
     "html_intro": "{repoId} için yeni bir sürüm yayımlandı.",
     "html_list_version_label": "Sürüm:",

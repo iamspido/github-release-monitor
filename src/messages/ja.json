@@ -691,6 +691,7 @@
     "text_release_notes_label": "リリースノート",
     "text_no_notes": "リリースノートはありません。",
     "text_view_on_github_label": "リリースを表示",
+    "view_monitor_label": "GitHub Release Monitorを開く",
     "html_title": "🚀 {repoId} の新しいリリース：{tagName}",
     "html_intro": "{repoId} の新しいバージョンがリリースされました。",
     "html_list_version_label": "バージョン：",

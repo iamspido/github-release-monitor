@@ -691,6 +691,7 @@
     "text_release_notes_label": "Catatan Rilis",
     "text_no_notes": "Tidak ada catatan rilis.",
     "text_view_on_github_label": "Lihat rilis",
+    "view_monitor_label": "Buka GitHub Release Monitor",
     "html_title": "🚀 Rilis Baru untuk {repoId}: {tagName}",
     "html_intro": "Versi baru {repoId} telah dirilis.",
     "html_list_version_label": "Versi:",

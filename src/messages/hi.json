@@ -691,6 +691,7 @@
     "text_release_notes_label": "रिलीज़ नोट",
     "text_no_notes": "कोई रिलीज़ नोट नहीं दिए गए।",
     "text_view_on_github_label": "रिलीज़ देखें",
+    "view_monitor_label": "GitHub Release Monitor खोलें",
     "html_title": "🚀 {repoId} के लिए नई रिलीज़: {tagName}",
     "html_intro": "{repoId} का नया संस्करण रिलीज़ हुआ है।",
     "html_list_version_label": "संस्करण:",
