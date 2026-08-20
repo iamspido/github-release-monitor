@@ -1,0 +1,26 @@
+name: Update Star History Chart
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Generate star history charts
+        uses: xpzouying/star-history@8b1f26dc5e9a17caa75da9351b688509ef312811 # v1
+        with:
+          token: ${{ github.token }}
+          branch: star-history
+          commit-message: |
+            chore: update star history chart
+
+            Regenerate the self-hosted light and dark star history charts.

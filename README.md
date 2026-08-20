@@ -832,10 +832,7 @@ Here is a complete list of all environment variables used by the application.
 
 ## Star History
 
-<a href="https://www.star-history.com/#iamspido/github-release-monitor&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=iamspido/github-release-monitor&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=iamspido/github-release-monitor&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=iamspido/github-release-monitor&type=Date" />
- </picture>
-</a>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/iamspido/github-release-monitor/star-history/assets/star-history-dark.svg" />
+  <img alt="Star History Chart" src="https://raw.githubusercontent.com/iamspido/github-release-monitor/star-history/assets/star-history.svg" />
+</picture>
