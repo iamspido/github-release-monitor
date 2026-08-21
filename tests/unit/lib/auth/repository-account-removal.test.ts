@@ -46,7 +46,7 @@ describe("auth account removal safeguards", () => {
     });
     const { canUnlinkAccountForUser } = await import("@/lib/auth/repository");
 
-    expect(canUnlinkAccountForUser("user-1", "github", "github-2")).toBe(true);
+    expect(canUnlinkAccountForUser("user-1", "row-2")).toBe(true);
   });
 
   it("allows removing a credential account when another account remains", async () => {
@@ -67,7 +67,7 @@ describe("auth account removal safeguards", () => {
     });
     const { canUnlinkAccountForUser } = await import("@/lib/auth/repository");
 
-    expect(canUnlinkAccountForUser("user-1", "credential")).toBe(true);
+    expect(canUnlinkAccountForUser("user-1", "credential-row")).toBe(true);
   });
 
   it("rejects removing the final account when no passkey remains", async () => {
@@ -86,7 +86,7 @@ describe("auth account removal safeguards", () => {
     });
     const { canUnlinkAccountForUser } = await import("@/lib/auth/repository");
 
-    expect(canUnlinkAccountForUser("user-1", "github")).toBe(false);
+    expect(canUnlinkAccountForUser("user-1", "row-1")).toBe(false);
   });
 
   it("rejects relying on a passkey when passkey authentication is disabled", async () => {
@@ -106,7 +106,7 @@ describe("auth account removal safeguards", () => {
     });
     const { canUnlinkAccountForUser } = await import("@/lib/auth/repository");
 
-    expect(canUnlinkAccountForUser("user-1", "github")).toBe(false);
+    expect(canUnlinkAccountForUser("user-1", "row-1")).toBe(false);
   });
 
   it("allows removing the final account when an enabled passkey remains", async () => {
@@ -125,7 +125,7 @@ describe("auth account removal safeguards", () => {
     });
     const { canUnlinkAccountForUser } = await import("@/lib/auth/repository");
 
-    expect(canUnlinkAccountForUser("user-1", "github")).toBe(true);
+    expect(canUnlinkAccountForUser("user-1", "row-1")).toBe(true);
   });
 
   it("rejects relying on a social account whose provider is disabled", async () => {
@@ -151,7 +151,7 @@ describe("auth account removal safeguards", () => {
     });
     const { canUnlinkAccountForUser } = await import("@/lib/auth/repository");
 
-    expect(canUnlinkAccountForUser("user-1", "credential")).toBe(false);
+    expect(canUnlinkAccountForUser("user-1", "credential-row")).toBe(false);
   });
 
   it("rejects deleting the final passkey when only a disabled provider remains", async () => {

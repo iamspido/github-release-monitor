@@ -2,6 +2,11 @@ const mocks = vi.hoisted(() => ({
   betterAuth: vi.fn(),
   getMigrations: vi.fn(),
   runMigrations: vi.fn(),
+  migrateAuthAccountIdentities: vi.fn(),
+}));
+
+vi.mock("@/lib/auth/account-identity-migration", () => ({
+  migrateAuthAccountIdentities: mocks.migrateAuthAccountIdentities,
 }));
 
 vi.mock("better-auth", () => ({
@@ -33,6 +38,7 @@ describe("auth/bootstrap", () => {
     vi.resetModules();
     vi.clearAllMocks();
     mocks.runMigrations.mockResolvedValue(undefined);
+    mocks.migrateAuthAccountIdentities.mockReturnValue(false);
     mocks.getMigrations.mockResolvedValue({
       toBeAdded: [],
       toBeCreated: [],

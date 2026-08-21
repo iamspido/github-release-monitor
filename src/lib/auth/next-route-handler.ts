@@ -474,9 +474,7 @@ async function runGuardedAuthHandler(
     }
 
     return scheduleLoginMethodRemoval(userId, async () => {
-      if (
-        !canUnlinkAccountForUser(userId, account.providerId, account.accountId)
-      ) {
+      if (!canUnlinkAccountForUser(userId, account.accountId)) {
         log.warn(
           `Rejected direct account unlink from ip='${state.clientIp}' because it would remove the last login method or the account is invalid.`,
         );

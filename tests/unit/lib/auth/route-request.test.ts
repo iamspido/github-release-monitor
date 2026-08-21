@@ -67,7 +67,7 @@ describe("auth route request parsing", () => {
     const unlinkRequest = new Request("http://localhost/api/auth/unlink", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ providerId: "github", accountId: "account-1" }),
+      body: JSON.stringify({ accountId: " account-1 " }),
     });
     const passkeyRequest = new Request("http://localhost/api/auth/passkey", {
       method: "POST",
@@ -76,7 +76,6 @@ describe("auth route request parsing", () => {
     });
 
     expect(await getAccountSelectionFromUnlinkRequest(unlinkRequest)).toEqual({
-      providerId: "github",
       accountId: "account-1",
     });
     expect(await getPasskeyIdFromDeleteRequest(passkeyRequest)).toBe("key-1");

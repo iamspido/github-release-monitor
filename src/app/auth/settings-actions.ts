@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import {
   auth,
-  canUnlinkSocialProviderForUser,
+  canUnlinkAccountForUser,
   ensureAuthDatabaseReady,
+  getSocialProviderAccountIdForUser,
   hasCredentialPasswordAccount,
   isAuthEmailVerificationEnabled,
 } from "@/lib/auth";
@@ -318,7 +319,8 @@ export async function unlinkSocialAccountAction(
   }
 
   return scheduleLoginMethodRemoval(userId, async () => {
-    if (!canUnlinkSocialProviderForUser(userId, provider)) {
+    const accountId = getSocialProviderAccountIdForUser(userId, provider);
+    if (!accountId || !canUnlinkAccountForUser(userId, accountId)) {
       logger
         .withScope("Auth")
         .warn(
@@ -330,7 +332,7 @@ export async function unlinkSocialAccountAction(
     try {
       const response = await auth.api.unlinkAccount({
         headers: headerStore,
-        body: { providerId: provider },
+        body: { accountId },
         asResponse: true,
       });
       if (!response.ok) {

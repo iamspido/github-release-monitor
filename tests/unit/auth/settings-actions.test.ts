@@ -3,9 +3,12 @@ const ensureAuthDatabaseReadyMock = vi.fn(async () => undefined);
 const hasCredentialPasswordAccountMock = vi.fn(() => false);
 const getLinkedSocialProvidersForUserMock = vi.fn(() => ["github"]);
 const hasPasskeyForUserMock = vi.fn(() => false);
-const canUnlinkSocialProviderForUserMock = vi.fn<
-  (_userId: string, _provider: "github" | "google") => boolean
+const canUnlinkAccountForUserMock = vi.fn<
+  (_userId: string, _accountId: string) => boolean
 >(() => false);
+const getSocialProviderAccountIdForUserMock = vi.fn(
+  (_userId: string, provider: "github" | "google") => `${provider}-account`,
+);
 const isAuthEmailVerificationEnabledMock = vi.fn(() => false);
 const beginAuthEmailDeliveryTrackingMock = vi.fn(() => "delivery-1");
 const consumeAuthEmailDeliveryStatusMock = vi.fn<
@@ -29,7 +32,7 @@ type ChangeEmailInput = {
 const changeEmailMock = vi.fn<
   (input: ChangeEmailInput) => Promise<{ ok: boolean; status: number }>
 >(async () => ({ ok: true, status: 200 }));
-type UnlinkAccountInput = { body: { providerId: string } };
+type UnlinkAccountInput = { body: { accountId: string } };
 const unlinkAccountMock = vi.fn<
   (input: UnlinkAccountInput) => Promise<{ ok: boolean; status: number }>
 >(async () => ({ ok: true, status: 200 }));
@@ -52,9 +55,10 @@ vi.mock("@/lib/auth/email-delivery-status", () => ({
 }));
 
 vi.mock("@/lib/auth", () => ({
-  canUnlinkSocialProviderForUser: canUnlinkSocialProviderForUserMock,
+  canUnlinkAccountForUser: canUnlinkAccountForUserMock,
   ensureAuthDatabaseReady: ensureAuthDatabaseReadyMock,
   getLinkedSocialProvidersForUser: getLinkedSocialProvidersForUserMock,
+  getSocialProviderAccountIdForUser: getSocialProviderAccountIdForUserMock,
   hasCredentialPasswordAccount: hasCredentialPasswordAccountMock,
   hasPasskeyForUser: hasPasskeyForUserMock,
   isAuthEmailVerificationEnabled: isAuthEmailVerificationEnabledMock,
@@ -89,7 +93,10 @@ describe("auth settings actions", () => {
     hasCredentialPasswordAccountMock.mockReturnValue(false);
     getLinkedSocialProvidersForUserMock.mockReturnValue(["github"]);
     hasPasskeyForUserMock.mockReturnValue(false);
-    canUnlinkSocialProviderForUserMock.mockReturnValue(false);
+    canUnlinkAccountForUserMock.mockReturnValue(false);
+    getSocialProviderAccountIdForUserMock.mockImplementation(
+      (_userId, provider) => `${provider}-account`,
+    );
     isAuthEmailVerificationEnabledMock.mockReturnValue(false);
     beginAuthEmailDeliveryTrackingMock.mockReturnValue("delivery-1");
     consumeAuthEmailDeliveryStatusMock.mockReturnValue("pending");
@@ -390,7 +397,7 @@ describe("auth settings actions", () => {
   });
 
   it("unlinks a social account when another login method remains", async () => {
-    canUnlinkSocialProviderForUserMock.mockReturnValue(true);
+    canUnlinkAccountForUserMock.mockReturnValue(true);
     const { unlinkSocialAccountAction } = await import(
       "@/app/auth/settings-actions"
     );
@@ -400,14 +407,14 @@ describe("auth settings actions", () => {
     expect(result).toEqual({ ok: true });
     expect(unlinkAccountMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: { providerId: "github" },
+        body: { accountId: "github-account" },
         asResponse: true,
       }),
     );
   });
 
   it("logs a rejected unlink and explains when the session is not fresh", async () => {
-    canUnlinkSocialProviderForUserMock.mockReturnValue(true);
+    canUnlinkAccountForUserMock.mockReturnValue(true);
     unlinkAccountMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -441,16 +448,18 @@ describe("auth settings actions", () => {
     getLinkedSocialProvidersForUserMock.mockImplementation(() => [
       ...linkedProviders,
     ]);
-    canUnlinkSocialProviderForUserMock.mockImplementation(
-      (_userId, provider) =>
-        linkedProviders.includes(provider) && linkedProviders.length > 1,
+    canUnlinkAccountForUserMock.mockImplementation(
+      (_userId, accountId) =>
+        linkedProviders.some(
+          (provider) => `${provider}-account` === accountId,
+        ) && linkedProviders.length > 1,
     );
     unlinkAccountMock.mockImplementationOnce(
       ({ body }: UnlinkAccountInput) =>
         new Promise((resolve) => {
           finishFirstUnlink = () => {
             linkedProviders = linkedProviders.filter(
-              (provider) => provider !== body.providerId,
+              (provider) => `${provider}-account` !== body.accountId,
             );
             resolve({ ok: true, status: 200 });
           };
@@ -479,7 +488,7 @@ describe("auth settings actions", () => {
   });
 
   it("allows unlinking the final social account when a passkey remains", async () => {
-    canUnlinkSocialProviderForUserMock.mockReturnValue(true);
+    canUnlinkAccountForUserMock.mockReturnValue(true);
     const { unlinkSocialAccountAction } = await import(
       "@/app/auth/settings-actions"
     );

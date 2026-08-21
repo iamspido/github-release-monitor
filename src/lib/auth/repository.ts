@@ -12,6 +12,7 @@ export {
   canUnlinkAccountForUser,
   canUnlinkSocialProviderForUser,
   getLinkedSocialProvidersForUser,
+  getSocialProviderAccountIdForUser,
   hasCredentialPasswordAccount,
   hasPasskeyForUser,
   hasVerifiedTotpForUser,

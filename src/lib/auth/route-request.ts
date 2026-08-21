@@ -56,27 +56,17 @@ export async function getSocialProviderFromSignInRequest(request: Request) {
   return null;
 }
 
-export type UnlinkAccountSelection = {
-  providerId: string;
-  accountId?: string;
-};
-
 export async function getAccountSelectionFromUnlinkRequest(
   request: Request,
-): Promise<UnlinkAccountSelection | null> {
+): Promise<{ accountId: string } | null> {
   try {
     const data = (await request.clone().json()) as {
-      providerId?: unknown;
       accountId?: unknown;
     };
-    if (typeof data.providerId !== "string" || !data.providerId) return null;
-    if (data.accountId !== undefined && typeof data.accountId !== "string") {
+    if (typeof data.accountId !== "string" || !data.accountId.trim()) {
       return null;
     }
-    return {
-      providerId: data.providerId,
-      ...(data.accountId !== undefined ? { accountId: data.accountId } : {}),
-    };
+    return { accountId: data.accountId.trim() };
   } catch {
     return null;
   }

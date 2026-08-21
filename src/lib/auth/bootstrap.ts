@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
+import { migrateAuthAccountIdentities } from "@/lib/auth/account-identity-migration";
 import {
   getBetterAuthConfig,
   getSetupBetterAuthConfig,
@@ -68,6 +69,9 @@ export async function ensureAuthDatabaseReady() {
 
   authDatabaseReadyPromise = (async () => {
     log.info("Checking Better Auth database migrations.");
+    if (migrateAuthAccountIdentities()) {
+      log.info("Migrated Better Auth account identities for version 1.7.");
+    }
     const migrations = await getMigrations(getBetterAuthConfig());
     if (migrations.toBeCreated.length > 0 || migrations.toBeAdded.length > 0) {
       log.info(

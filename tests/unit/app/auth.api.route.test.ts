@@ -28,7 +28,7 @@ const canDeletePasskeyForUserMock = vi.fn<
   (_userId: string, _passkeyId: string) => boolean
 >(() => false);
 const canUnlinkAccountForUserMock = vi.fn<
-  (_userId: string, _providerId: string, _accountId?: string) => boolean
+  (_userId: string, _accountId: string) => boolean
 >(() => false);
 const getSessionMock = vi.fn(async () => ({
   user: { id: "user-1" },
@@ -425,7 +425,7 @@ describe("auth catch-all route setup social cookie handling", () => {
       new Request("http://localhost/api/auth/unlink-account", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ providerId: "github" }),
+        body: JSON.stringify({ accountId: "github-account" }),
       }),
     );
 
@@ -443,20 +443,19 @@ describe("auth catch-all route setup social cookie handling", () => {
       new Request("http://localhost/api/auth/unlink-account", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ providerId: "github" }),
+        body: JSON.stringify({ accountId: "github-account" }),
       }),
     );
 
     expect(response.status).toBe(200);
     expect(canUnlinkAccountForUserMock).toHaveBeenCalledWith(
       "user-1",
-      "github",
-      undefined,
+      "github-account",
     );
     expect(authPostMock).toHaveBeenCalledOnce();
   });
 
-  it("preserves provider and account selection for direct unlink requests", async () => {
+  it("preserves the local account selection for direct unlink requests", async () => {
     readSetupSocialContextFromRequestMock.mockReturnValue(null);
     hasAnyAuthUserMock.mockReturnValue("has_user");
     hasValidAuthSessionForRequestMock.mockReturnValue(true);
@@ -466,17 +465,13 @@ describe("auth catch-all route setup social cookie handling", () => {
       new Request("http://localhost/api/auth/unlink-account", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          providerId: "credential",
-          accountId: "account-1",
-        }),
+        body: JSON.stringify({ accountId: "account-1" }),
       }),
     );
 
     expect(response.status).toBe(200);
     expect(canUnlinkAccountForUserMock).toHaveBeenCalledWith(
       "user-1",
-      "credential",
       "account-1",
     );
     expect(authPostMock).toHaveBeenCalledOnce();

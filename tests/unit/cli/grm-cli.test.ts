@@ -97,6 +97,10 @@ vi.mock("better-auth/plugins", () => ({
   username: () => ({ id: "username" }),
 }));
 
+vi.mock("@/lib/auth/account-identity-migration", () => ({
+  migrateAuthAccountIdentities: vi.fn(),
+}));
+
 vi.mock("better-auth", () => ({
   betterAuth: (config: {
     emailAndPassword: {

@@ -7,6 +7,7 @@ import { getMigrations } from "better-auth/db/migration";
 import { username } from "better-auth/plugins";
 import { normalizeLocale } from "@/i18n/config";
 import { getCanonicalRoutePath } from "@/i18n/routing";
+import { migrateAuthAccountIdentities } from "@/lib/auth/account-identity-migration";
 import { getAuthSecret } from "@/lib/auth/config";
 import { getAuthDb } from "@/lib/auth/db";
 import { getPasswordResetTokenTtlConfig } from "@/lib/auth/password-reset-config";
@@ -214,6 +215,7 @@ async function createCliAuth() {
       },
     },
   };
+  migrateAuthAccountIdentities();
   const migrations = await getMigrations(config);
   await migrations.runMigrations();
   return {

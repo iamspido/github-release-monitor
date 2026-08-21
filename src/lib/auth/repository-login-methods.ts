@@ -120,20 +120,15 @@ function isUsableAuthAccount(
   );
 }
 
-export function canUnlinkAccountForUser(
-  userId: string,
-  providerId: string,
-  accountId?: string,
-) {
+export function canUnlinkAccountForUser(userId: string, accountId: string) {
   const normalizedUserId = userId.trim();
-  if (!normalizedUserId || !providerId) return false;
+  const normalizedAccountId = accountId.trim();
+  if (!normalizedUserId || !normalizedAccountId) return false;
 
   const accounts = getAuthAccountsForUser(normalizedUserId);
   if (!accounts) return false;
   const targetAccount = accounts.find(
-    (account) =>
-      account.providerId === providerId &&
-      (accountId === undefined || account.accountId === accountId),
+    (account) => account.id === normalizedAccountId,
   );
   if (!targetAccount) return false;
 
@@ -153,7 +148,23 @@ export function canUnlinkSocialProviderForUser(
   userId: string,
   provider: SocialLoginProvider,
 ) {
-  return canUnlinkAccountForUser(userId, provider);
+  const accountId = getSocialProviderAccountIdForUser(userId, provider);
+  return accountId ? canUnlinkAccountForUser(userId, accountId) : false;
+}
+
+export function getSocialProviderAccountIdForUser(
+  userId: string,
+  provider: SocialLoginProvider,
+) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) return null;
+  const accounts = getAuthAccountsForUser(normalizedUserId);
+  const account = accounts?.find(
+    (candidate) => candidate.providerId === provider,
+  );
+  return typeof account?.id === "string" && account.id.trim()
+    ? account.id.trim()
+    : null;
 }
 
 export function canDeletePasskeyForUser(userId: string, passkeyId: string) {

@@ -22,6 +22,7 @@ export {
   findRegistrationConflict,
   getAuthUserIdSnapshot,
   getLinkedSocialProvidersForUser,
+  getSocialProviderAccountIdForUser,
   hasAnyAuthUser,
   hasCredentialPasswordAccount,
   hasPasskeyForUser,
