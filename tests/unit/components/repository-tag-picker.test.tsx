@@ -87,4 +87,39 @@ describe("RepositoryTagPicker", () => {
 
     expect(onTagSelect).not.toHaveBeenCalled();
   });
+
+  it("does not reclaim focus after a tag is selected", () => {
+    let pendingFocus: FrameRequestCallback | undefined;
+    const requestAnimationFrame = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        pendingFocus = callback;
+        return 1;
+      });
+    const input = renderPicker();
+    const nextInput = document.createElement("textarea");
+    document.body.appendChild(nextInput);
+
+    act(() => {
+      input.focus();
+      setInputValue(input, "med");
+    });
+    act(() => {
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+    nextInput.focus();
+    act(() => pendingFocus?.(performance.now()));
+
+    expect(document.activeElement).toBe(nextInput);
+
+    nextInput.remove();
+    requestAnimationFrame.mockRestore();
+  });
 });

@@ -131,7 +131,16 @@ export function RepositoryTagPicker({
   };
 
   const focusInput = () => {
-    window.requestAnimationFrame(() => inputRef.current?.focus());
+    window.requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (
+        input &&
+        (document.activeElement === input ||
+          document.activeElement === document.body)
+      ) {
+        input.focus();
+      }
+    });
   };
 
   const selectTag = (tag: string) => {
