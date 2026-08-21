@@ -242,7 +242,7 @@ async function requestStargazerPage(
     if (!retryable || attempt === MAX_RETRIES) {
       if (response.status === 403) {
         throw new Error(
-          "GitHub REST API denied stargazer access (HTTP 403); the token owner must be a repository admin or collaborator",
+          "GitHub REST API denied stargazer access (HTTP 403); user tokens require repository admin/collaborator access and installation tokens require contents: write",
         );
       }
       throw new Error(
