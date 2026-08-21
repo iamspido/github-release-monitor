@@ -45,6 +45,7 @@ COPY tsconfig.json ./
 COPY src/ ./src/
 COPY tests/ ./tests/
 COPY scripts/ ./scripts/
+COPY .github/actions/star-history/ ./.github/actions/star-history/
 
 RUN npm run lint
 
@@ -92,16 +93,20 @@ COPY components.json \
 COPY public/ ./public/
 COPY src/ ./src/
 COPY tests/ ./tests/
+COPY .github/actions/star-history/ ./.github/actions/star-history/
 
 # Test Stage (full output for CI and manual runs)
 FROM test-base AS tester
 
 RUN npm test -- --reporter=dot
+RUN node --test .github/actions/star-history/index.test.js
 
 # Agent Test Stage (only report failed tests and their errors)
 FROM test-base AS tester-agent
 
 RUN npm test -- --reporter=minimal
+RUN node --test .github/actions/star-history/index.test.js >/tmp/star-history-tests.log \
+ || (cat /tmp/star-history-tests.log; exit 1)
 
 # E2E Stage (Playwright)
 FROM mcr.microsoft.com/playwright:v1.62.1-resolute AS e2e

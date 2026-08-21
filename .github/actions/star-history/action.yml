@@ -1,0 +1,20 @@
+name: Local Star History
+description: Generate dependency-free light and dark star history SVGs for this repository.
+
+inputs:
+  token:
+    description: Repository-scoped GitHub token used to read the stargazer timeline.
+    required: true
+  repository:
+    description: Repository to chart in owner/name format.
+    required: true
+
+outputs:
+  light:
+    description: Absolute path to the generated light SVG.
+  dark:
+    description: Absolute path to the generated dark SVG.
+
+runs:
+  using: node24
+  main: index.js

@@ -6,21 +6,105 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: star-history
+  cancel-in-progress: true
 
 jobs:
-  update:
+  generate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Generate star history charts
+        uses: ./.github/actions/star-history
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+
+      - name: Upload generated charts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: star-history-charts
+          path: ${{ runner.temp }}/star-history-generated
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - name: Generate star history charts
-        uses: xpzouying/star-history@8b1f26dc5e9a17caa75da9351b688509ef312811 # v1
+      - name: Download generated charts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          token: ${{ github.token }}
-          branch: star-history
-          commit-message: |
-            chore: update star history chart
+          name: star-history-charts
+          path: ${{ runner.temp }}/star-history-publish
 
-            Regenerate the self-hosted light and dark star history charts.
+      - name: Validate generated charts
+        env:
+          PUBLISH_DIR: ${{ runner.temp }}/star-history-publish
+        run: |
+          set -euo pipefail
+
+          light="$PUBLISH_DIR/assets/star-history.svg"
+          dark="$PUBLISH_DIR/assets/star-history-dark.svg"
+
+          test -f "$light" && test ! -L "$light"
+          test -f "$dark" && test ! -L "$dark"
+          test "$(find "$PUBLISH_DIR" -type f | wc -l | tr -d ' ')" -eq 2
+          test -z "$(find "$PUBLISH_DIR" -type l -print -quit)"
+
+          for chart in "$light" "$dark"; do
+            test "$(wc -c < "$chart")" -le 1048576
+            grep -q '^<svg ' "$chart"
+            grep -q '</svg>$' "$chart"
+            if grep -Eiq '<!DOCTYPE|<!ENTITY|<(script|style|image|foreignObject|a|use|animate|set|iframe|object|embed|audio|video|link|meta)|[[:space:]]on[a-z]+[[:space:]]*=|(href|src)[[:space:]]*=|url[[:space:]]*\(|@import' "$chart"; then
+              echo "Unsafe SVG content in $chart" >&2
+              exit 1
+            fi
+          done
+
+      - name: Publish charts to data branch
+        env:
+          PUBLISH_DIR: ${{ runner.temp }}/star-history-publish
+        run: |
+          set -euo pipefail
+
+          light="$PUBLISH_DIR/assets/star-history.svg"
+          dark="$PUBLISH_DIR/assets/star-history-dark.svg"
+          remote_ref="refs/remotes/origin/star-history"
+
+          if git fetch --no-tags origin refs/heads/star-history:"$remote_ref"; then
+            existing_files="$(git ls-tree -r --name-only "$remote_ref")"
+            if [ "$existing_files" = $'assets/star-history-dark.svg\nassets/star-history.svg' ] \
+              && git show "$remote_ref:assets/star-history.svg" | cmp -s - "$light" \
+              && git show "$remote_ref:assets/star-history-dark.svg" | cmp -s - "$dark"; then
+              echo "Star history charts are unchanged."
+              exit 0
+            fi
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan __star_history_publish
+          git reset -q
+          mkdir -p assets
+          cp -- "$light" assets/star-history.svg
+          cp -- "$dark" assets/star-history-dark.svg
+          git add -f assets/star-history.svg assets/star-history-dark.svg
+          git commit \
+            -m "chore: update star history chart" \
+            -m "Regenerate the self-hosted light and dark star history charts."
+          git push --force origin HEAD:refs/heads/star-history
