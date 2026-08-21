@@ -145,3 +145,14 @@ test("renders deterministic SVG output", () => {
     renderSvg("owner/repo", timestamps, LIGHT_THEME),
   );
 });
+
+test("renders ordinary repository names without truncation", () => {
+  const svg = renderSvg(
+    "iamspido/github-release-monitor",
+    ["2024-01-01T00:00:00Z", "2024-02-01T00:00:00Z"],
+    LIGHT_THEME,
+  );
+
+  assert.match(svg, />iamspido\/github-release-monitor<\/text>/);
+  assert.doesNotMatch(svg, /iamspido\/gith…elease-monitor/);
+});

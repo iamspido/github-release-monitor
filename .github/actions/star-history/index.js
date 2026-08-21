@@ -114,10 +114,10 @@ function formatAxisDate(date) {
 }
 
 function truncateRepository(repository) {
-  if (repository.length <= 28) {
+  if (repository.length <= 42) {
     return repository;
   }
-  return `${repository.slice(0, 13)}…${repository.slice(-14)}`;
+  return `${repository.slice(0, 20)}…${repository.slice(-21)}`;
 }
 
 function renderSvg(repository, timestamps, theme) {
