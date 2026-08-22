@@ -1,5 +1,6 @@
 {
   "name": "github-release-monitor",
+  "type": "module",
   "version": "2.4.0",
   "description": "An application to monitor GitHub repository releases.",
   "private": true,
@@ -57,7 +58,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.9",
+    "@biomejs/biome": "^2.5.10",
     "@formatjs/icu-messageformat-parser": "^3.5.17",
     "@playwright/test": "^1.62.1",
     "@swc/helpers": "^0.5.23",
@@ -68,7 +69,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
-    "@vitejs/plugin-react-swc": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.0",
     "@vitest/coverage-v8": "^4.1.11",
     "esbuild": "^0.28.2",
     "jsdom": "^30.0.1",

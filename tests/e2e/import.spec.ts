@@ -6,7 +6,7 @@ test("import small JSON shows success and triggers refresh", async ({
 }) => {
   await page.goto("/en");
   const fileInput = page.locator('input[type="file"][accept*=".json"]');
-  const jsonPath = path.resolve(__dirname, "fixtures", "repos.json");
+  const jsonPath = path.resolve(import.meta.dirname, "fixtures", "repos.json");
   await fileInput.setInputFiles(jsonPath);
   // Confirm import in dialog
   // Click Import in the confirmation dialog (Radix uses role=alertdialog)

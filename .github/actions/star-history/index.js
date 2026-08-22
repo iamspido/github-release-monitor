@@ -1,5 +1,6 @@
-const { appendFileSync, mkdirSync, writeFileSync } = require("node:fs");
-const path = require("node:path");
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const GITHUB_API_URL = "https://api.github.com";
 const PAGE_SIZE = 100;
@@ -351,20 +352,23 @@ async function main() {
   );
 }
 
-if (require.main === module) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   main().catch((error) => {
     process.stderr.write(`::error::${escapeWorkflowCommand(error.message)}\n`);
     process.exitCode = 1;
   });
 }
 
-module.exports = {
+export {
   DARK_THEME,
-  LIGHT_THEME,
   escapeXml,
   fetchStarTimes,
   formatCount,
   generateCharts,
+  LIGHT_THEME,
   niceStep,
   renderSvg,
   validateRepository,

@@ -1,20 +1,20 @@
-const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
-const { mkdtemp, rm } = require("node:fs/promises");
-const os = require("node:os");
-const path = require("node:path");
-const { afterEach, test } = require("node:test");
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, test } from "node:test";
 
-const {
+import {
   DARK_THEME,
-  LIGHT_THEME,
   escapeXml,
   fetchStarTimes,
   generateCharts,
+  LIGHT_THEME,
   niceStep,
   renderSvg,
   validateRepository,
-} = require("./index.js");
+} from "./index.js";
 
 const temporaryDirectories = [];
 

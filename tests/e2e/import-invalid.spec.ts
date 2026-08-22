@@ -5,7 +5,7 @@ test("import invalid-format JSON shows error toast", async ({ page }) => {
   await page.goto("/en");
   const fileInput = page.locator('input[type="file"][accept*=".json"]');
   const invalidPath = path.resolve(
-    __dirname,
+    import.meta.dirname,
     "fixtures",
     "invalid-format.json",
   );
