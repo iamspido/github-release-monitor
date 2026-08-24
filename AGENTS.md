@@ -49,14 +49,20 @@ The agent must author translations directly and locally. Do not use external
 translation services, translation APIs, or third-party translation tools, and
 do not upload or send repository message catalogs to them.
 
-## Project Structure for Codex Navigation
+## Project Structure
 
 - `/src`: Next.js application source
   - `/app`: App Router routes, server actions, and route handlers
     - `/[locale]`: Localized routes (home, settings, test, login, register)
     - `/api`: Route handlers for authentication, login, setup, and locale settings
     - `/auth` and `/settings`: Server Actions for authentication and application settings
-  - `/components`: React components (UI, dialogs, forms, client helpers)
+    - `actions.ts`: Public Server Action facade for application-domain operations
+  - `/cli`: Command-line interface entry point and CLI-specific helpers
+  - `/components`: React UI, dialogs, forms, domain sections, client controllers, and draft hooks
+    - `/auth`: Authentication and account-setup components
+    - `/diagnostics`: Diagnostic status and protected secret-reveal UI/model helpers
+    - `/icons`: Shared application and provider icons
+    - `/ui`: Reusable UI primitives
   - `/hooks`: Client hooks (network status, toast helpers, etc.)
   - `/i18n`: i18n routing + request configuration
   - `/lib`: Server-side domain modules and shared helpers
@@ -67,10 +73,10 @@ do not upload or send repository message catalogs to them.
     - `/notifications`: Apprise/email notification sending and release email rendering
     - `/proxy`: Locale routing, locale settings, and security-header helpers used by `src/proxy.ts`
     - `/releases`: Release provider fetchers, filtering, caching, and release checking
-    - `/repositories`: Repository parsing, provider resolution, mutations, and repository action services
+    - `/repositories`: Repository parsing, provider resolution, release-cache updates, mutations, and focused repository action services
     - `/runtime`: Background workers, scheduled tasks, repository schedules, update checks, and task scheduler
     - `/settings`: Settings form models, change detection, schedule fields, and update commands
-    - `/storage`: JSON-backed repository/settings/status/job persistence
+    - `/storage`: JSON-backed repository/settings/status/job persistence, runtime validation, and repository parsing
     - Root utilities remain for small shared helpers such as logging, release sorting, security release detection, and server action errors
   - `/messages`: One translation dictionary per registered locale
   - `/types`: Shared TypeScript types used across server/client
@@ -79,7 +85,8 @@ do not upload or send repository message catalogs to them.
   - `/unit`: Vitest unit tests
     - `/app`: Tests for public app routes, route handlers, settings actions, and the `src/app/actions.ts` Server Action facade
     - `/auth`: Tests for auth actions and settings-action auth behavior
-    - `/components`: React component unit tests
+    - `/cli`: Command-line interface unit tests
+    - `/components`: React component unit tests and shared component test harnesses
     - `/helpers`: Shared unit-test helpers
     - `/hooks`: Client hook unit tests
     - `/i18n`: Routing, request config, and message completeness tests
@@ -90,4 +97,6 @@ do not upload or send repository message catalogs to them.
 - `/docker`: Docker build definitions (multi-stage targets used above)
 - `/example`: Example docker-compose / deployment configs
 - `/public`: Static assets served by Next.js
+- `/scripts`: Project maintenance and release-support scripts
+- `/.github`: CI workflows, repository automation, and custom GitHub Actions
 - `/data`: Runtime state (created at runtime; e.g. `data/repositories.json`, settings/system status)
