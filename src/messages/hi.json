@@ -939,7 +939,7 @@
     "title": "🚀 {repoId} के लिए नई रिलीज़: {tagName}",
     "digest_title": "{count, plural, one {# नई रिलीज़ उपलब्ध} other {# नई रिलीज़ उपलब्ध}}",
     "digest_intro": "{count, plural, one {इस जाँच में # नई रिलीज़ मिली।} other {इस जाँच में # नई रिलीज़ मिलीं।}}",
-    "digest_omitted": "{count, plural, one {संदेश सीमा के कारण # अतिरिक्त रिलीज़ छोड़ी गई।} other {संदेश सीमा के कारण # अतिरिक्त रिलीज़ छोड़ी गईं।}}",
+    "digest_omitted": "{count, plural, one {वर्ण सीमा के कारण # अतिरिक्त रिलीज़ छोड़ी गई।} other {वर्ण सीमा के कारण # अतिरिक्त रिलीज़ छोड़ी गईं।}}",
     "no_release_notes": "_कोई रिलीज़ नोट नहीं दिए गए।_",
     "view_on_github_link": "[रिलीज़ देखें]({link})",
     "truncated_message": "_(संदेश छोटा किया गया)_",

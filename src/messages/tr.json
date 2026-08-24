@@ -939,7 +939,7 @@
     "title": "🚀 {repoId} için Yeni Sürüm: {tagName}",
     "digest_title": "{count, plural, one {# yeni sürüm mevcut} other {# yeni sürüm mevcut}}",
     "digest_intro": "{count, plural, one {Bu kontrol sırasında # yeni sürüm algılandı.} other {Bu kontrol sırasında # yeni sürüm algılandı.}}",
-    "digest_omitted": "{count, plural, one {Mesaj sınırı nedeniyle # ek sürüm atlandı.} other {Mesaj sınırı nedeniyle # ek sürüm atlandı.}}",
+    "digest_omitted": "{count, plural, one {Karakter sınırı nedeniyle # ek sürüm atlandı.} other {Karakter sınırı nedeniyle # ek sürüm atlandı.}}",
     "no_release_notes": "_Sürüm notu sağlanmadı._",
     "view_on_github_link": "[Sürümü görüntüle]({link})",
     "truncated_message": "_(İleti kısaltıldı)_",

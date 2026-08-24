@@ -448,6 +448,45 @@ describe("notifications/index", () => {
     expect(payload.body).toContain("https://monitor.example/en");
   });
 
+  it("omits the monitor link instead of truncating it in a digest", async () => {
+    process.env.APPRISE_URL = "http://apprise.test/notify";
+    process.env.BETTER_AUTH_URL = "https://monitor.example";
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
+    const items = Array.from({ length: 2 }, (_, index) => ({
+      repository: {
+        id: `owner/repository-${index}`,
+        url: `https://github.com/owner/repository-${index}`,
+      },
+      release: {
+        ...release,
+        tag_name: `v${index}`,
+        html_url: `https://github.com/owner/repository-${index}/releases/v${index}`,
+        body: "x".repeat(300),
+      },
+    }));
+
+    await sendAppriseDigest(
+      items,
+      "en",
+      {
+        ...baseSettings,
+        appriseFormat: "text",
+        appriseMaxCharacters: 60,
+      },
+      { format: "text" },
+    );
+
+    const payload = JSON.parse(
+      fetchCallBodyText(vi.mocked(global.fetch).mock.calls[0]),
+    );
+    expect(payload.body.length).toBeLessThanOrEqual(60);
+    expect(payload.body).toContain("digest_omitted");
+    expect(payload.body).not.toContain("https://monitor.example");
+    expect(payload.body).not.toContain("https://mon");
+  });
+
   it("normalizes Markdown release notes without leaking blocks into later entries", async () => {
     const unsafeControl = "\u202e";
     const normalized = normalizeMarkdownReleaseNotes(

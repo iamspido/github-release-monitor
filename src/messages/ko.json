@@ -939,7 +939,7 @@
     "title": "🚀 {repoId}의 새 릴리스: {tagName}",
     "digest_title": "{count, plural, other {새 릴리스 #개 사용 가능}}",
     "digest_intro": "{count, plural, other {이번 검사에서 새 릴리스 #개가 감지되었습니다.}}",
-    "digest_omitted": "{count, plural, other {메시지 제한으로 인해 추가 릴리스 #개가 생략되었습니다.}}",
+    "digest_omitted": "{count, plural, other {글자 수 제한으로 인해 추가 릴리스 #개가 생략되었습니다.}}",
     "no_release_notes": "_릴리스 노트가 없습니다._",
     "view_on_github_link": "[릴리스 보기]({link})",
     "truncated_message": "_(메시지가 잘렸습니다)_",

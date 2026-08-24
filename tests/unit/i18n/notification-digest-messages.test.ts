@@ -42,16 +42,16 @@ describe("notification digest messages", () => {
     });
 
     expect(translateEnglish("digest_omitted", { count: 1 })).toBe(
-      "1 additional release was omitted because of the message limit.",
+      "1 additional release was omitted because of the character limit.",
     );
     expect(translateEnglish("digest_omitted", { count: 3 })).toBe(
-      "3 additional releases were omitted because of the message limit.",
+      "3 additional releases were omitted because of the character limit.",
     );
     expect(translateGerman("digest_omitted", { count: 1 })).toBe(
-      "1 weiteres Release wurde wegen des Nachrichtenlimits ausgelassen.",
+      "1 weiteres Release wurde wegen des Zeichenlimits ausgelassen.",
     );
     expect(translateGerman("digest_omitted", { count: 3 })).toBe(
-      "3 weitere Releases wurden wegen des Nachrichtenlimits ausgelassen.",
+      "3 weitere Releases wurden wegen des Zeichenlimits ausgelassen.",
     );
   });
 });

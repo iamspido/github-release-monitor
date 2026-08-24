@@ -8,7 +8,7 @@ A powerful, self-hostable application to automatically monitor GitHub, GitLab, C
 - **Flexible Notifications**:
   - **Email**: Configure SMTP settings to receive detailed email notifications.
   - **Apprise**: Integrate with [Apprise](https://github.com/caronc/apprise) to send notifications to over 70 services like Discord, Telegram, Slack, and more.
-  - **Per-check Digests**: Choose per channel whether each detected release is sent separately or all compatible releases from one check are grouped into a single notification. Queue throughput and delivery concurrency are configurable in Settings.
+  - **Per-check Digests**: Choose per channel whether each detected release is sent separately or two or more compatible releases from one check are grouped into a single notification. Singleton groups keep the existing per-release layout. Queue throughput and delivery concurrency are configurable in Settings.
 - **Flexible Release Filtering**:
     - **Global Settings**: Define application-wide rules for which release types (stable, pre-release, draft) to monitor.
     - **Per-Repository Overrides**: Customize filtering rules for individual repositories.

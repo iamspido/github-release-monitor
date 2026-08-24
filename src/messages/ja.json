@@ -939,7 +939,7 @@
     "title": "🚀 {repoId} の新しいリリース：{tagName}",
     "digest_title": "{count, plural, other {# 件の新しいリリースがあります}}",
     "digest_intro": "{count, plural, other {このチェックで # 件の新しいリリースが検出されました。}}",
-    "digest_omitted": "{count, plural, other {メッセージ上限のため、さらに # 件のリリースを省略しました。}}",
+    "digest_omitted": "{count, plural, other {文字数制限のため、さらに # 件のリリースを省略しました。}}",
     "no_release_notes": "_リリースノートはありません。_",
     "view_on_github_link": "[リリースを表示]({link})",
     "truncated_message": "_（メッセージは省略されました）_",

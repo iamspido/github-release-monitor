@@ -939,7 +939,7 @@
     "title": "🚀 Bản phát hành mới cho {repoId}: {tagName}",
     "digest_title": "{count, plural, other {Có # bản phát hành mới}}",
     "digest_intro": "{count, plural, other {Đã phát hiện # bản phát hành mới trong lần kiểm tra này.}}",
-    "digest_omitted": "{count, plural, other {Đã bỏ qua # bản phát hành bổ sung do giới hạn tin nhắn.}}",
+    "digest_omitted": "{count, plural, other {Đã bỏ qua # bản phát hành bổ sung do giới hạn ký tự.}}",
     "no_release_notes": "_Không có ghi chú phát hành._",
     "view_on_github_link": "[Xem bản phát hành]({link})",
     "truncated_message": "_(Tin nhắn đã được rút gọn)_",

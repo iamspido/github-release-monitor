@@ -939,7 +939,7 @@
     "title": "🚀 Rilis Baru untuk {repoId}: {tagName}",
     "digest_title": "{count, plural, one {# rilis baru tersedia} other {# rilis baru tersedia}}",
     "digest_intro": "{count, plural, one {# rilis baru terdeteksi selama pemeriksaan ini.} other {# rilis baru terdeteksi selama pemeriksaan ini.}}",
-    "digest_omitted": "{count, plural, one {# rilis tambahan dihilangkan karena batas pesan.} other {# rilis tambahan dihilangkan karena batas pesan.}}",
+    "digest_omitted": "{count, plural, one {# rilis tambahan dihilangkan karena batas karakter.} other {# rilis tambahan dihilangkan karena batas karakter.}}",
     "no_release_notes": "_Tidak ada catatan rilis._",
     "view_on_github_link": "[Lihat rilis]({link})",
     "truncated_message": "_(Pesan dipotong)_",

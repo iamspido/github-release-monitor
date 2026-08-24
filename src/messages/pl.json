@@ -939,7 +939,7 @@
     "title": "🚀 Nowe wydanie repozytorium {repoId}: {tagName}",
     "digest_title": "{count, plural, one {# nowe wydanie dostępne} few {# nowe wydania dostępne} many {# nowych wydań dostępnych} other {# nowego wydania dostępnego}}",
     "digest_intro": "{count, plural, one {Podczas tego sprawdzenia wykryto jedno nowe wydanie.} few {Podczas tego sprawdzenia wykryto # nowe wydania.} many {Podczas tego sprawdzenia wykryto # nowych wydań.} other {Podczas tego sprawdzenia wykryto # nowego wydania.}}",
-    "digest_omitted": "{count, plural, one {Pominięto # dodatkowe wydanie z powodu limitu wiadomości.} few {Pominięto # dodatkowe wydania z powodu limitu wiadomości.} many {Pominięto # dodatkowych wydań z powodu limitu wiadomości.} other {Pominięto # dodatkowego wydania z powodu limitu wiadomości.}}",
+    "digest_omitted": "{count, plural, one {Pominięto # dodatkowe wydanie z powodu limitu znaków.} few {Pominięto # dodatkowe wydania z powodu limitu znaków.} many {Pominięto # dodatkowych wydań z powodu limitu znaków.} other {Pominięto # dodatkowego wydania z powodu limitu znaków.}}",
     "no_release_notes": "_Nie podano informacji o wydaniu._",
     "view_on_github_link": "[Wyświetl wydanie]({link})",
     "truncated_message": "_(Wiadomość skrócona)_",

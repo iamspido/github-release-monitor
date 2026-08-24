@@ -294,8 +294,9 @@ async function sendDeliveryWorkUnit(unit: DeliveryWorkUnit): Promise<void> {
     repository: notification.repository,
     release: notification.release,
   }));
+  const useDigest = unit.mode === "batch" && items.length > 1;
   if (unit.channel === "email") {
-    if (unit.mode === "batch") {
+    if (useDigest) {
       await sendReleaseDigestEmail(
         items,
         first.locale,
@@ -313,7 +314,7 @@ async function sendDeliveryWorkUnit(unit: DeliveryWorkUnit): Promise<void> {
     }
     return;
   }
-  if (unit.mode === "batch") {
+  if (useDigest) {
     await sendAppriseDigest(
       items,
       first.locale,

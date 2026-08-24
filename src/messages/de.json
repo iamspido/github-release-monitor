@@ -939,7 +939,7 @@
     "title": "🚀 Neue Version für {repoId}: {tagName}",
     "digest_title": "{count, plural, one {# neues Release verfügbar} other {# neue Releases verfügbar}}",
     "digest_intro": "{count, plural, one {Bei diesem Prüflauf wurde ein neues Release erkannt.} other {Bei diesem Prüflauf wurden # neue Releases erkannt.}}",
-    "digest_omitted": "{count, plural, one {# weiteres Release wurde wegen des Nachrichtenlimits ausgelassen.} other {# weitere Releases wurden wegen des Nachrichtenlimits ausgelassen.}}",
+    "digest_omitted": "{count, plural, one {# weiteres Release wurde wegen des Zeichenlimits ausgelassen.} other {# weitere Releases wurden wegen des Zeichenlimits ausgelassen.}}",
     "no_release_notes": "_Keine Versionshinweise vorhanden._",
     "view_on_github_link": "[Release ansehen]({link})",
     "truncated_message": "_(Nachricht gekürzt)_",

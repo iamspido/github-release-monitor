@@ -939,7 +939,7 @@
     "title": "🚀 {repoId} 的新版本：{tagName}",
     "digest_title": "{count, plural, other {有 # 个新版本可用}}",
     "digest_intro": "{count, plural, other {本次检查检测到 # 个新版本。}}",
-    "digest_omitted": "{count, plural, other {由于消息长度限制，省略了另外 # 个版本。}}",
+    "digest_omitted": "{count, plural, other {由于字符限制，省略了另外 # 个版本。}}",
     "no_release_notes": "_未提供发布说明。_",
     "view_on_github_link": "[查看发布页面]({link})",
     "truncated_message": "_（消息已截断）_",

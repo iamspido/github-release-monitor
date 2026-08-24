@@ -134,6 +134,31 @@ describe("notifications/pending-deliveries", () => {
     ).toBe(false);
   });
 
+  it("uses the existing per-release delivery for singleton batch work units", async () => {
+    sendNotificationMock.mockResolvedValue(undefined);
+    const notification = createPendingNotification("repo");
+    notification.channels = ["email", "apprise"];
+    notification.batchId = "check-1";
+    notification.settings.emailNotificationMode = "batch";
+    notification.settings.appriseNotificationMode = "batch";
+    const repository: Repository = {
+      id: "owner/repo",
+      url: "https://github.com/owner/repo",
+      pendingNotifications: [notification],
+    };
+
+    const result = await deliverPendingNotifications([repository]);
+
+    expect(sendEmailDigestMock).not.toHaveBeenCalled();
+    expect(sendAppriseDigestMock).not.toHaveBeenCalled();
+    expect(sendNotificationMock).toHaveBeenCalledTimes(2);
+    expect(
+      sendNotificationMock.mock.calls.map((call) => call[4]).sort(),
+    ).toEqual([["apprise"], ["email"]]);
+    expect(result.notificationsSent).toBe(2);
+    expect(result.repositories[0].pendingNotifications).toBeUndefined();
+  });
+
   it("processes an unlimited run with the configured rolling concurrency", async () => {
     let active = 0;
     let maximumActive = 0;
@@ -192,8 +217,8 @@ describe("notifications/pending-deliveries", () => {
     expect(sendNotificationMock.mock.calls[0][4]).toEqual(["apprise"]);
   });
 
-  it("separates Apprise batches with different effective tags", async () => {
-    sendAppriseDigestMock.mockResolvedValue(undefined);
+  it("delivers singleton Apprise groups with different tags separately", async () => {
+    sendNotificationMock.mockResolvedValue(undefined);
     const repositories = createRepositories(2);
     repositories.forEach((repository, index) => {
       const notification = repository.pendingNotifications?.[0];
@@ -206,12 +231,17 @@ describe("notifications/pending-deliveries", () => {
 
     const result = await deliverPendingNotifications(repositories);
 
-    expect(sendAppriseDigestMock).toHaveBeenCalledTimes(2);
+    expect(sendAppriseDigestMock).not.toHaveBeenCalled();
+    expect(sendNotificationMock).toHaveBeenCalledTimes(2);
+    expect(sendNotificationMock.mock.calls.map((call) => call[4])).toEqual([
+      ["apprise"],
+      ["apprise"],
+    ]);
     expect(result.notificationsSent).toBe(2);
   });
 
-  it("separates Apprise batches with different effective formats", async () => {
-    sendAppriseDigestMock.mockResolvedValue(undefined);
+  it("delivers singleton Apprise groups with different formats separately", async () => {
+    sendNotificationMock.mockResolvedValue(undefined);
     const repositories = createRepositories(2);
     repositories.forEach((repository, index) => {
       const notification = repository.pendingNotifications?.[0];
@@ -225,9 +255,12 @@ describe("notifications/pending-deliveries", () => {
 
     const result = await deliverPendingNotifications(repositories);
 
-    expect(sendAppriseDigestMock).toHaveBeenCalledTimes(2);
+    expect(sendAppriseDigestMock).not.toHaveBeenCalled();
+    expect(sendNotificationMock).toHaveBeenCalledTimes(2);
     expect(
-      sendAppriseDigestMock.mock.calls.map((call) => call[3].format).sort(),
+      sendNotificationMock.mock.calls
+        .map((call) => call[0].appriseFormat)
+        .sort(),
     ).toEqual(["markdown", "text"]);
     expect(result.notificationsSent).toBe(2);
   });

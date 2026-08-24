@@ -79,16 +79,16 @@ function fitCompleteDigestEntries(
   maxChars: number,
   omittedText: (count: number) => string,
 ): string {
-  const join = (selected: string[], omitted: number) =>
+  const join = (selected: string[], omitted: number, includedFooter?: string) =>
     [
       header,
       ...selected,
       omitted > 0 ? omittedText(omitted) : undefined,
-      footer,
+      includedFooter,
     ]
       .filter((value): value is string => Boolean(value))
       .join("\n\n");
-  if (maxChars <= 0) return join(entries, 0);
+  if (maxChars <= 0) return join(entries, 0, footer);
 
   const selected: string[] = [];
   for (const entry of entries) {
@@ -98,8 +98,20 @@ function fitCompleteDigestEntries(
     }
     selected.push(entry);
   }
-  const fitted = join(selected, entries.length - selected.length);
-  return fitted.length <= maxChars ? fitted : fitted.substring(0, maxChars);
+  const omitted = entries.length - selected.length;
+  const fittedWithoutFooter = join(selected, omitted);
+  if (footer) {
+    const fittedWithFooter = join(selected, omitted, footer);
+    if (fittedWithFooter.length <= maxChars) return fittedWithFooter;
+  }
+  if (fittedWithoutFooter.length <= maxChars) return fittedWithoutFooter;
+
+  const omissionNotice = omitted > 0 ? omittedText(omitted) : undefined;
+  if (omissionNotice?.length && omissionNotice.length <= maxChars) {
+    return omissionNotice;
+  }
+  if (header.length <= maxChars) return header;
+  return (omissionNotice ?? header).substring(0, maxChars);
 }
 
 type MutableMarkdownNode = {
