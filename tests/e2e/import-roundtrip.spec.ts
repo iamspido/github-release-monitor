@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import { expect, test } from "./fixtures/withTestRepo";
-import { ensureTestRepo, login, waitForRepoLink } from "./utils";
+import {
+  ensureTestRepo,
+  login,
+  waitForRepoLink,
+  waitForRepositoryUpdate,
+} from "./utils";
 
 test("export then import shows 0 new and updates existing without duplicates", async ({
   page,
@@ -30,10 +35,7 @@ test("export then import shows 0 new and updates existing without duplicates", a
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Import" }).click();
 
-  // Wait for refresh done toast (Update Complete)
-  await expect(
-    page.getByText("Update Complete", { exact: true }),
-  ).toBeVisible();
+  await waitForRepositoryUpdate(page);
 
   // Ensure only one test/test card exists
   await expect(page.getByText("test/test")).toHaveCount(1);

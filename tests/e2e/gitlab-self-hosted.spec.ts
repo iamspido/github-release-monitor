@@ -1,5 +1,9 @@
 import { expect, test } from "./fixtures/ensureLoggedIn";
-import { ensureRepositoryFormExpanded, login } from "./utils";
+import {
+  ensureRepositoryFormExpanded,
+  login,
+  waitForRepositoryUpdate,
+} from "./utils";
 
 test.describe("GitLab self-hosted repository add flow", () => {
   test("adds a repository from allowed additional gitlab host", async ({
@@ -23,9 +27,7 @@ test.describe("GitLab self-hosted repository add flow", () => {
     await expect(
       page.getByText("Repositories Processed", { exact: true }),
     ).toBeVisible();
-    await expect(
-      page.getByText("Update Complete", { exact: true }),
-    ).toBeVisible();
+    await waitForRepositoryUpdate(page);
 
     await page.goto("/en");
     await expect(page.locator(`a[href="${repoUrl}"]`).first()).toBeVisible({

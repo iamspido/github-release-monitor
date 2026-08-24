@@ -1,5 +1,6 @@
 import path from "node:path";
 import { expect, test } from "./fixtures/ensureLoggedIn";
+import { waitForRepositoryUpdate } from "./utils";
 
 test("import small JSON shows success and triggers refresh", async ({
   page,
@@ -17,10 +18,8 @@ test("import small JSON shows success and triggers refresh", async ({
   await expect(
     page.getByText("Import Successful", { exact: true }),
   ).toBeVisible();
-  // Wait for background refresh completion toast
-  await expect(
-    page.getByText("Update Complete", { exact: true }),
-  ).toBeVisible();
+  // Wait for the background refresh result rather than the toast's default timeout.
+  await waitForRepositoryUpdate(page);
   // Force a fresh render to pick up revalidated data
   await page.goto("/en");
   // Land on home and ensure the section renders
