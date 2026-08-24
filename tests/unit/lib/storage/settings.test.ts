@@ -90,7 +90,11 @@ describe("storage/settings failure scenarios", () => {
     expect(second.parallelRepoFetches).toBe(1);
     expect(first).toHaveProperty("repositoryFormExpanded", true);
     expect(first).toHaveProperty("emailIncludeReleaseNotes", true);
+    expect(first).toHaveProperty("emailNotificationMode", "per_release");
     expect(first).toHaveProperty("appriseIncludeReleaseNotes", true);
+    expect(first).toHaveProperty("appriseNotificationMode", "per_release");
+    expect(first).toHaveProperty("notificationMaxMessagesPerRun", 20);
+    expect(first).toHaveProperty("notificationDeliveryConcurrency", 4);
     expect(first).toHaveProperty("appriseMaxCharacters", 1800);
     expect(first).toHaveProperty("releaseSelectionStrategy", "newest");
 
@@ -297,6 +301,18 @@ describe("storage/settings failure scenarios", () => {
     [{ releasesPerPage: 1001 }, "releasesPerPage"],
     [{ parallelRepoFetches: 51 }, "parallelRepoFetches"],
     [{ appriseMaxCharacters: -1 }, "appriseMaxCharacters"],
+    [{ notificationMaxMessagesPerRun: -1 }, "notificationMaxMessagesPerRun"],
+    [
+      { notificationMaxMessagesPerRun: 10_001 },
+      "notificationMaxMessagesPerRun",
+    ],
+    [{ notificationDeliveryConcurrency: 0 }, "notificationDeliveryConcurrency"],
+    [
+      { notificationDeliveryConcurrency: 51 },
+      "notificationDeliveryConcurrency",
+    ],
+    [{ emailNotificationMode: "single" }, "emailNotificationMode"],
+    [{ appriseNotificationMode: "digest" }, "appriseNotificationMode"],
     [{ emailIncludeReleaseNotes: "yes" }, "emailIncludeReleaseNotes"],
     [{ appriseIncludeReleaseNotes: 1 }, "appriseIncludeReleaseNotes"],
   ])(

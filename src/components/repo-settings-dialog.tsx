@@ -123,7 +123,6 @@ import type {
 import { allPreReleaseTypes } from "@/types";
 import { Input } from "./ui/input";
 
-type ReleasesPerPageError = RangeValidationError;
 type IntervalValidationError = RangeValidationError;
 type AutomationMode = "global" | "interval" | "cron";
 
@@ -846,7 +845,7 @@ export function RepoSettingsDialog({
         releasesPerPage,
         1,
         1000,
-      ) as ReleasesPerPageError,
+      ),
       intervalError: nextIntervalError,
       isCacheInvalid: isCacheIntervalInvalid({
         enabled: effectiveAutomationUsesInterval && useCustomCache,
@@ -2624,6 +2623,7 @@ export function RepoSettingsDialog({
                   onChange={(e) => setReleasesPerPage(e.target.value)}
                   min={1}
                   max={1000}
+                  step={1}
                   placeholder={t("releases_per_page_placeholder", {
                     count: globalSettings.releasesPerPage,
                   })}
@@ -2658,7 +2658,11 @@ export function RepoSettingsDialog({
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              {releasesPerPageError === "too_low" ? (
+              {releasesPerPageError === "invalid" ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {tGlobal("integer_error_invalid")}
+                </p>
+              ) : releasesPerPageError === "too_low" ? (
                 <p className="mt-2 text-sm text-destructive">
                   {tGlobal("releases_per_page_error_min")}
                 </p>

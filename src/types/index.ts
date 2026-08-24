@@ -40,9 +40,11 @@ export type Repository = {
 };
 
 export type NotificationChannel = "email" | "apprise";
+export type NotificationMode = "per_release" | "batch";
 
 export type PendingReleaseNotification = {
   id: string;
+  batchId?: string;
   repository: {
     id: string;
     url: string;
@@ -53,6 +55,16 @@ export type PendingReleaseNotification = {
   locale: Locale;
   settings: NotificationSettings;
   channels: NotificationChannel[];
+  channelStates?: Partial<
+    Record<
+      NotificationChannel,
+      {
+        attempts: number;
+        nextAttemptAt?: string;
+        abandonedAt?: string;
+      }
+    >
+  >;
   createdAt: string;
   attempts: number;
   nextAttemptAt?: string;
@@ -301,7 +313,11 @@ export type AppSettings = {
   includeRegex?: string;
   excludeRegex?: string;
   emailIncludeReleaseNotes?: boolean;
+  emailNotificationMode?: NotificationMode;
   appriseIncludeReleaseNotes?: boolean;
+  appriseNotificationMode?: NotificationMode;
+  notificationMaxMessagesPerRun?: number;
+  notificationDeliveryConcurrency?: number;
   appriseMaxCharacters?: number;
   appriseTags?: string;
   appriseFormat?: AppriseFormat;
@@ -311,7 +327,11 @@ export type NotificationSettings = Pick<
   AppSettings,
   | "timeFormat"
   | "emailIncludeReleaseNotes"
+  | "emailNotificationMode"
   | "appriseIncludeReleaseNotes"
+  | "appriseNotificationMode"
+  | "notificationMaxMessagesPerRun"
+  | "notificationDeliveryConcurrency"
   | "appriseMaxCharacters"
   | "appriseTags"
   | "appriseFormat"

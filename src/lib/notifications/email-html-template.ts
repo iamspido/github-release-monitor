@@ -220,3 +220,58 @@ export function renderReleaseEmailHtml(
     </html>
   `;
 }
+
+interface ReleaseDigestEmailHtmlTemplateData {
+  directionAttribute: string;
+  entriesHtml: string;
+  introHtml: string;
+  localeAttribute: string;
+  monitorButtonTextHtml?: string;
+  monitorUrlAttribute?: string;
+  subjectHtml: string;
+}
+
+export function renderReleaseDigestEmailHtml(
+  data: ReleaseDigestEmailHtmlTemplateData,
+): string {
+  return `
+    <!DOCTYPE html>
+    <html lang="${data.localeAttribute}" dir="${data.directionAttribute}">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="color-scheme" content="dark">
+      <meta name="supported-color-schemes" content="dark">
+      <title>${data.subjectHtml}</title>
+      <style>
+        :root { color-scheme: dark; }
+        body { margin: 0; padding: 0; background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif; line-height: 1.6; }
+        html[dir="rtl"] body { text-align: right; }
+        .container { background: #101928; padding: 20px; max-width: 680px; margin: 20px auto; border: 1px solid #30363d; border-radius: 8px; }
+        .release { border-top: 1px solid #30363d; margin-top: 24px; padding-top: 8px; }
+        .notes { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 1px 16px; unicode-bidi: plaintext; }
+        h1, h2, h3, h4, h5, h6 { color: #fafafa; margin-top: 24px; margin-bottom: 16px; }
+        a { color: #8c9fe8; text-decoration: none; }
+        ul, ol { padding-inline-start: 2em; }
+        pre { display: block; background: #161b22; padding: 16px; overflow-x: auto; direction: ltr; text-align: left; }
+        code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; direction: ltr; unicode-bidi: isolate; }
+        blockquote { border-inline-start: 4px solid #30363d; padding-inline-start: 16px; color: #8b949e; }
+        .button { display: inline-block; background: #24292f; color: #fff; padding: 10px 20px; border-radius: 5px; font-weight: 500; }
+        .technical-value { direction: ltr; unicode-bidi: isolate; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h2><bdi dir="auto">${data.subjectHtml}</bdi></h2>
+        <p>${data.introHtml}</p>
+        ${data.entriesHtml}
+        ${
+          data.monitorButtonTextHtml && data.monitorUrlAttribute
+            ? `<p style="margin-top: 24px;"><a href="${data.monitorUrlAttribute}" class="button">${data.monitorButtonTextHtml}</a></p>`
+            : ""
+        }
+      </div>
+    </body>
+    </html>
+  `;
+}

@@ -335,9 +335,33 @@ export function buildGlobalSettingsChangeLog(
   );
   pushValueChange(
     changes,
+    "emailNotificationMode",
+    previous.emailNotificationMode,
+    next.emailNotificationMode,
+  );
+  pushValueChange(
+    changes,
     "appriseIncludeReleaseNotes",
     previous.appriseIncludeReleaseNotes,
     next.appriseIncludeReleaseNotes,
+  );
+  pushValueChange(
+    changes,
+    "appriseNotificationMode",
+    previous.appriseNotificationMode,
+    next.appriseNotificationMode,
+  );
+  pushValueChange(
+    changes,
+    "notificationMaxMessagesPerRun",
+    previous.notificationMaxMessagesPerRun,
+    next.notificationMaxMessagesPerRun,
+  );
+  pushValueChange(
+    changes,
+    "notificationDeliveryConcurrency",
+    previous.notificationDeliveryConcurrency,
+    next.notificationDeliveryConcurrency,
   );
   pushValueChange(
     changes,

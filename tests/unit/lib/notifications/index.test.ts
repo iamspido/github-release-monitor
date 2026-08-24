@@ -34,6 +34,10 @@ import {
   sendNotification,
   sendTestAppriseNotification,
 } from "@/lib/notifications";
+import {
+  normalizeMarkdownReleaseNotes,
+  sendAppriseDigest,
+} from "@/lib/notifications/apprise";
 import type { AppSettings, GithubRelease, Repository } from "@/types";
 import {
   fetchCallBodyText,
@@ -404,4 +408,180 @@ describe("notifications/index", () => {
     const url = call[0] as string;
     expect(url).toBe("http://apprise.test/notify");
   });
+
+  it("truncates an Apprise digest at complete release boundaries", async () => {
+    process.env.APPRISE_URL = "http://apprise.test/notify";
+    process.env.BETTER_AUTH_URL = "https://monitor.example";
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
+    const items = Array.from({ length: 8 }, (_, index) => ({
+      repository: {
+        id: `owner/repository-${index}`,
+        url: `https://github.com/owner/repository-${index}`,
+      },
+      release: {
+        ...release,
+        tag_name: `v${index}`,
+        html_url: `https://github.com/owner/repository-${index}/releases/v${index}`,
+        body: "x".repeat(300),
+      },
+    }));
+
+    await sendAppriseDigest(
+      items,
+      "en",
+      {
+        ...baseSettings,
+        appriseFormat: "markdown",
+        appriseMaxCharacters: 500,
+      },
+      { format: "markdown" },
+    );
+
+    const payload = JSON.parse(
+      fetchCallBodyText(vi.mocked(global.fetch).mock.calls[0]),
+    );
+    expect(payload.body.length).toBeLessThanOrEqual(500);
+    expect(payload.body).toContain("digest_omitted");
+    expect(payload.body).not.toMatch(/x{100}/);
+    expect(payload.body).toContain("https://monitor.example/en");
+  });
+
+  it("normalizes Markdown release notes without leaking blocks into later entries", async () => {
+    const unsafeControl = "\u202e";
+    const normalized = normalizeMarkdownReleaseNotes(
+      `${unsafeControl}<script>alert(1)</script>\n\n[unsafe](javascript:alert(1))\n\n\`\`\`js\nconst value = 1;`,
+    );
+
+    expect(normalized).not.toContain(unsafeControl);
+    expect(normalized).not.toContain("javascript:");
+    expect(normalized).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(normalized).toMatch(/```js\nconst value = 1;\n```$/);
+
+    process.env.APPRISE_URL = "http://apprise.test/notify";
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
+    await sendAppriseDigest(
+      [
+        {
+          repository: repo,
+          release: { ...release, body: "```text\nunclosed" },
+        },
+        {
+          repository: { ...repo, id: "owner/second" },
+          release: { ...release, tag_name: "v2" },
+        },
+      ],
+      "en",
+      { ...baseSettings, appriseFormat: "markdown" },
+      { format: "markdown" },
+    );
+
+    const payload = JSON.parse(
+      fetchCallBodyText(vi.mocked(global.fetch).mock.calls[0]),
+    );
+    const openingFence = payload.body.indexOf("```text");
+    const closingFence = payload.body.indexOf("```", openingFence + 3);
+    const secondEntry = payload.body.indexOf("owner/second");
+    expect(openingFence).toBeGreaterThanOrEqual(0);
+    expect(closingFence).toBeGreaterThan(openingFence);
+    expect(secondEntry).toBeGreaterThan(closingFence);
+  });
+
+  it("isolates colliding Markdown reference definitions between digest entries", async () => {
+    process.env.APPRISE_URL = "http://apprise.test/notify";
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
+
+    await sendAppriseDigest(
+      [
+        {
+          repository: repo,
+          release: {
+            ...release,
+            body: "[First docs][shared]\n\n[shared]: https://first.example",
+          },
+        },
+        {
+          repository: { ...repo, id: "owner/second" },
+          release: {
+            ...release,
+            tag_name: "v2",
+            body: "[Second docs][shared]\n\n[shared]: https://second.example",
+          },
+        },
+      ],
+      "en",
+      { ...baseSettings, appriseFormat: "markdown" },
+      { format: "markdown" },
+    );
+
+    const payload = JSON.parse(
+      fetchCallBodyText(vi.mocked(global.fetch).mock.calls[0]),
+    );
+    expect(payload.body).toContain("[First docs](https://first.example/)");
+    expect(payload.body).toContain("[Second docs](https://second.example/)");
+    expect(payload.body).not.toContain("[shared]:");
+  });
+
+  it("uses the no-notes fallback when Markdown normalization removes all content", async () => {
+    process.env.APPRISE_URL = "http://apprise.test/notify";
+    vi.mocked(global.fetch).mockResolvedValue(
+      mockFetchResponse({ status: 200, text: "" }),
+    );
+
+    await sendAppriseDigest(
+      [{ repository: repo, release: { ...release, body: "\u202e" } }],
+      "en",
+      { ...baseSettings, appriseFormat: "markdown" },
+      { format: "markdown" },
+    );
+
+    const payload = JSON.parse(
+      fetchCallBodyText(vi.mocked(global.fetch).mock.calls[0]),
+    );
+    expect(payload.body).toContain(
+      "**text\\_release\\_notes\\_label**\n\ntext\\_no\\_notes",
+    );
+    expect(payload.body).not.toContain("\u202e");
+  });
+
+  it.each(["text", "markdown"] as const)(
+    "isolates technical values and strips injected bidi controls in %s digests",
+    async (format) => {
+      process.env.APPRISE_URL = "http://apprise.test/notify";
+      vi.mocked(global.fetch).mockResolvedValue(
+        mockFetchResponse({ status: 200, text: "" }),
+      );
+      const unsafeControl = "\u202e";
+      const repository = {
+        id: `owner/${unsafeControl}repository`,
+        url: "https://github.com/owner/repository",
+      };
+      const digestRelease = {
+        ...release,
+        tag_name: `v${unsafeControl}2`,
+        name: `Release ${unsafeControl}name`,
+        body: `Release notes ${unsafeControl}body`,
+      };
+
+      await sendAppriseDigest(
+        [{ repository, release: digestRelease }],
+        "ar",
+        { ...baseSettings, appriseFormat: format },
+        { format },
+      );
+
+      const payload = JSON.parse(
+        fetchCallBodyText(vi.mocked(global.fetch).mock.calls[0]),
+      );
+      expect(payload.body).not.toContain(unsafeControl);
+      expect(payload.body).toContain("\u2066owner/repository\u2069");
+      expect(payload.body).toContain("\u2066v2\u2069");
+      expect(payload.body).toContain("\u2068Release name\u2069");
+    },
+  );
 });

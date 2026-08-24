@@ -15,10 +15,18 @@ import {
   escapeHtmlAttribute,
   safeExternalUrl,
 } from "@/lib/notifications/content-safety";
-import { renderReleaseEmailHtml } from "@/lib/notifications/email-html-template";
+import {
+  renderReleaseDigestEmailHtml,
+  renderReleaseEmailHtml,
+} from "@/lib/notifications/email-html-template";
 import { sendEmailMessage } from "@/lib/notifications/email-transport";
 import { getServerTimeZone } from "@/lib/server-time-zone";
 import type { GithubRelease, Repository, TimeFormat } from "@/types";
+
+export type ReleaseNotificationItem = {
+  repository: Repository;
+  release: GithubRelease;
+};
 
 export async function getFormattedDate(
   date: Date,
@@ -258,6 +266,147 @@ export async function sendNewReleaseEmail(
       .error(`Failed to send email for ${repository.id}:`, error);
     const message =
       error instanceof Error ? error.message : String(error ?? "unknown");
+    throw new Error(t("error_send_failed", { details: message }));
+  }
+}
+
+export async function generatePlainTextReleaseDigestBody(
+  items: ReleaseNotificationItem[],
+  locale: Locale,
+  timeFormat: TimeFormat,
+  includeReleaseNotes = true,
+): Promise<string> {
+  const t = await getTranslations({ locale, namespace: "Email" });
+  const sections = await Promise.all(
+    items.map(async ({ repository, release }) => {
+      const { textDate } = await getFormattedDate(
+        new Date(release.created_at),
+        locale,
+        timeFormat,
+      );
+      return [
+        `${isolateLtrText(repository.id)} — ${isolateLtrText(release.tag_name)}`,
+        `${t("text_release_name_label")}: ${isolateAutoText(release.name || "N/A")}`,
+        `${t("text_release_date_label")}: ${isolateAutoText(textDate)}`,
+        ...(includeReleaseNotes
+          ? [
+              `${t("text_release_notes_label")}:`,
+              release.body ? isolateAutoText(release.body) : t("text_no_notes"),
+            ]
+          : []),
+        `${t("text_view_on_github_label")}: ${isolateLtrText(release.html_url)}`,
+      ].join("\n");
+    }),
+  );
+  const monitorUrl = getReleaseMonitorUrl(locale);
+  return [
+    t("digest_intro", { count: items.length }),
+    ...sections,
+    monitorUrl
+      ? `${t("view_monitor_label")}: ${isolateLtrText(monitorUrl)}`
+      : undefined,
+  ]
+    .filter((part): part is string => part !== undefined)
+    .join("\n\n");
+}
+
+export async function generateHtmlReleaseDigestBody(
+  items: ReleaseNotificationItem[],
+  locale: Locale,
+  timeFormat: TimeFormat,
+  includeReleaseNotes = true,
+): Promise<string> {
+  const t = await getTranslations({ locale, namespace: "Email" });
+  const subject = t("digest_subject", { count: items.length });
+  const entriesHtml = (
+    await Promise.all(
+      items.map(async ({ repository, release }) => {
+        const { htmlDate } = await getFormattedDate(
+          new Date(release.created_at),
+          locale,
+          timeFormat,
+        );
+        const notesHtml = includeReleaseNotes
+          ? release.body
+            ? String(
+                await remark()
+                  .use(remarkGfm)
+                  .use(remarkHtml, { sanitize: true })
+                  .process(release.body),
+              )
+            : `<p><em>${escapeHtml(t("html_no_notes"))}</em></p>`
+          : undefined;
+        return `<section class="release">
+          <h3><a href="${escapeHtmlAttribute(safeExternalUrl(repository.url))}"><bdi dir="ltr" class="technical-value">${escapeHtml(repository.id)}</bdi></a> — <bdi dir="ltr" class="technical-value">${escapeHtml(release.tag_name)}</bdi></h3>
+          <ul>
+            <li><strong>${escapeHtml(t("html_list_name_label"))}</strong> <bdi dir="auto">${escapeHtml(release.name || "N/A")}</bdi></li>
+            <li><strong>${escapeHtml(t("html_list_date_label"))}</strong> <bdi dir="auto">${escapeHtml(htmlDate)}</bdi></li>
+          </ul>
+          ${notesHtml === undefined ? "" : `<h4>${escapeHtml(t("html_notes_title"))}</h4><div class="notes" dir="auto">${notesHtml}</div>`}
+          <p><a href="${escapeHtmlAttribute(safeExternalUrl(release.html_url))}" class="button">${escapeHtml(t("html_button_text"))}</a></p>
+        </section>`;
+      }),
+    )
+  ).join("\n");
+  const monitorUrl = getReleaseMonitorUrl(locale);
+  return renderReleaseDigestEmailHtml({
+    directionAttribute: escapeHtmlAttribute(
+      getLocaleMetadata(locale).direction,
+    ),
+    entriesHtml,
+    introHtml: escapeHtml(t("digest_intro", { count: items.length })),
+    localeAttribute: escapeHtmlAttribute(locale),
+    monitorButtonTextHtml: monitorUrl
+      ? escapeHtml(t("view_monitor_label"))
+      : undefined,
+    monitorUrlAttribute: monitorUrl
+      ? escapeHtmlAttribute(safeExternalUrl(monitorUrl))
+      : undefined,
+    subjectHtml: escapeHtml(subject),
+  });
+}
+
+export async function sendReleaseDigestEmail(
+  items: ReleaseNotificationItem[],
+  locale: Locale,
+  timeFormat: TimeFormat,
+  includeReleaseNotes = true,
+) {
+  if (items.length === 0) return;
+  const t = await getTranslations({ locale, namespace: "Email" });
+  const emailConfig = getEmailRuntimeConfig(process.env);
+  if (!emailConfig.isComplete) throw new Error(t("error_config_incomplete"));
+  const subject = t("digest_subject", { count: items.length });
+  try {
+    await sendEmailMessage(
+      {
+        host: emailConfig.host,
+        port: emailConfig.port,
+        username: emailConfig.username,
+        password: emailConfig.password,
+        tlsRejectUnauthorized: emailConfig.tlsRejectUnauthorized,
+      },
+      {
+        fromName: emailConfig.fromName || t("from_name_fallback"),
+        fromAddress: emailConfig.fromAddress,
+        to: emailConfig.recipient,
+        subject,
+        text: await generatePlainTextReleaseDigestBody(
+          items,
+          locale,
+          timeFormat,
+          includeReleaseNotes,
+        ),
+        html: await generateHtmlReleaseDigestBody(
+          items,
+          locale,
+          timeFormat,
+          includeReleaseNotes,
+        ),
+      },
+    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
     throw new Error(t("error_send_failed", { details: message }));
   }
 }

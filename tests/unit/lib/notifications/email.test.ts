@@ -27,7 +27,9 @@ vi.mock("nodemailer", () => ({
 
 import {
   generateHtmlReleaseBody,
+  generateHtmlReleaseDigestBody,
   generatePlainTextReleaseBody,
+  generatePlainTextReleaseDigestBody,
   getFormattedDate,
   sendNewReleaseEmail,
 } from "@/lib/notifications/email";
@@ -94,6 +96,41 @@ describe("notifications/email", () => {
     expect(html).not.toContain("private release details");
     expect(html).not.toContain("html_notes_title");
     expect(html).toContain(release.html_url);
+  });
+
+  it("renders multiple releases in safe text and HTML digests", async () => {
+    const maliciousRepository: Repository = {
+      id: "owner/<script>alert(1)</script>",
+      url: "javascript:alert(1)",
+    };
+    const items = [
+      { repository: repo, release },
+      {
+        repository: maliciousRepository,
+        release: {
+          ...release,
+          tag_name: "v2<script>",
+          html_url: "javascript:alert(2)",
+          body: "private digest notes",
+        },
+      },
+    ];
+
+    const text = await generatePlainTextReleaseDigestBody(
+      items,
+      "en",
+      "24h",
+      false,
+    );
+    const html = await generateHtmlReleaseDigestBody(items, "ar", "24h", true);
+
+    expect(text).toContain(repo.id);
+    expect(text).toContain(maliciousRepository.id);
+    expect(text).not.toContain("private digest notes");
+    expect(html).toContain('<html lang="ar" dir="rtl">');
+    expect(html).toContain("owner/&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).not.toContain("javascript:");
+    expect(html).toContain("private digest notes");
   });
 
   it("adds the localized release monitor link to both email alternatives", async () => {

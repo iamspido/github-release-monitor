@@ -1,4 +1,8 @@
-import { buildRepositorySettingsChangeLog } from "@/lib/settings/change-detection";
+import {
+  buildGlobalSettingsChangeLog,
+  buildRepositorySettingsChangeLog,
+} from "@/lib/settings/change-detection";
+import { createDefaultSettings } from "@/lib/storage/settings";
 
 describe("repository settings change detection", () => {
   it("records display-name changes", () => {
@@ -40,5 +44,27 @@ describe("repository settings change detection", () => {
     );
 
     expect(changes).toContain("preReleaseSubChannels: undefined -> []");
+  });
+});
+
+describe("global notification delivery change detection", () => {
+  it("records notification modes and delivery limits", () => {
+    const previous = createDefaultSettings();
+    const changes = buildGlobalSettingsChangeLog(previous, {
+      ...previous,
+      emailNotificationMode: "batch",
+      appriseNotificationMode: "batch",
+      notificationMaxMessagesPerRun: 0,
+      notificationDeliveryConcurrency: 12,
+    });
+
+    expect(changes).toEqual(
+      expect.arrayContaining([
+        'emailNotificationMode: "per_release" -> "batch"',
+        'appriseNotificationMode: "per_release" -> "batch"',
+        "notificationMaxMessagesPerRun: 20 -> 0",
+        "notificationDeliveryConcurrency: 4 -> 12",
+      ]),
+    );
   });
 });

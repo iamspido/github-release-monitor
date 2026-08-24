@@ -39,13 +39,13 @@ vi.mock("@/lib/storage/settings", () => ({
 }));
 
 vi.mock("@/lib/releases", () => ({
-  getLatestReleasesForRepos: async () => [
-    {
-      repoId: "github:owner/repo",
-      repoUrl: "https://github.com/owner/repo",
+  getLatestReleasesForRepos: async (repositories: Repository[]) =>
+    repositories.map((repository) => ({
+      repoId: repository.id,
+      repoUrl: repository.url,
       release: {
         id: state.releaseId,
-        html_url: `https://github.com/owner/repo/releases/tag/${state.releaseTag}`,
+        html_url: `${repository.url}/releases/tag/${state.releaseTag}`,
         tag_name: state.releaseTag,
         name:
           state.releaseId === 0 ? `Tag: ${state.releaseTag}` : state.releaseTag,
@@ -58,8 +58,7 @@ vi.mock("@/lib/releases", () => ({
       ...(state.fetchErrorType
         ? { error: { type: state.fetchErrorType } }
         : {}),
-    },
-  ],
+    })),
 }));
 
 vi.mock("@/lib/notifications", async (orig) => {
@@ -154,6 +153,68 @@ describe("release checker scheduling", () => {
 
     expect(sendNotificationMock).not.toHaveBeenCalled();
     expect(state.repositories[0].lastSeenReleaseTag).toBe("v1");
+  });
+
+  it("assigns one batch id to all releases detected in the same check", async () => {
+    state.repositories = [
+      {
+        id: "github:owner/repo-a",
+        url: "https://github.com/owner/repo-a",
+        lastSeenReleaseTag: "v1",
+      },
+      {
+        id: "github:owner/repo-b",
+        url: "https://github.com/owner/repo-b",
+        lastSeenReleaseTag: "v1",
+      },
+    ];
+    const finishDeliveries: Array<() => void> = [];
+    sendNotificationMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishDeliveries.push(resolve);
+        }),
+    );
+
+    const check = checkForNewReleases({ skipCache: true });
+    await vi.waitFor(() =>
+      expect(sendNotificationMock).toHaveBeenCalledTimes(2),
+    );
+
+    const batchIds = state.repositories.map(
+      (repository) => repository.pendingNotifications?.[0]?.batchId,
+    );
+    expect(batchIds[0]).toBeTruthy();
+    expect(batchIds[1]).toBe(batchIds[0]);
+
+    finishDeliveries.forEach((finish) => {
+      finish();
+    });
+    await expect(check).resolves.toMatchObject({ notificationsSent: 2 });
+  });
+
+  it("assigns different batch ids to releases detected in separate checks", async () => {
+    sendNotificationMock.mockRejectedValue(new Error("Apprise unavailable"));
+
+    await expect(
+      checkForNewReleases({ skipCache: true }),
+    ).resolves.toMatchObject({ notificationsSent: 0 });
+    const firstBatchId = state.repositories[0].pendingNotifications?.find(
+      (notification) => notification.release.tag_name === "v2",
+    )?.batchId;
+
+    state.releaseId = 3;
+    state.releaseTag = "v3";
+    await expect(
+      checkForNewReleases({ skipCache: true }),
+    ).resolves.toMatchObject({ notificationsSent: 0 });
+    const secondBatchId = state.repositories[0].pendingNotifications?.find(
+      (notification) => notification.release.tag_name === "v3",
+    )?.batchId;
+
+    expect(firstBatchId).toBeTruthy();
+    expect(secondBatchId).toBeTruthy();
+    expect(secondBatchId).not.toBe(firstBatchId);
   });
 
   it("releases the shared state scheduler before notification I/O", async () => {

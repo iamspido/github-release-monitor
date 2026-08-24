@@ -1,7 +1,135 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { Repository } from "@/types";
+import type { PendingReleaseNotification, Repository } from "@/types";
+
+function createPendingNotification(): PendingReleaseNotification {
+  const createdAt = "2026-07-14T00:00:00.000Z";
+  return {
+    id: "github%3Aowner%2Frepo:v2",
+    batchId: "check-1",
+    repository: {
+      id: "github:owner/repo",
+      url: "https://github.com/owner/repo",
+      appriseTags: "operations",
+      appriseFormat: "markdown",
+    },
+    release: {
+      id: 2,
+      html_url: "https://github.com/owner/repo/releases/tag/v2",
+      tag_name: "v2",
+      name: "v2",
+      body: "notes",
+      created_at: createdAt,
+      published_at: createdAt,
+      prerelease: false,
+      draft: false,
+    },
+    locale: "en",
+    settings: {
+      timeFormat: "24h",
+      emailNotificationMode: "batch",
+      appriseNotificationMode: "batch",
+      emailIncludeReleaseNotes: true,
+      appriseIncludeReleaseNotes: false,
+      appriseMaxCharacters: 1800,
+      appriseTags: "operations",
+      appriseFormat: "markdown",
+    },
+    channels: ["email", "apprise"],
+    channelStates: {
+      email: { attempts: 0 },
+      apprise: {
+        attempts: 1,
+        nextAttemptAt: "2026-07-14T00:01:00.000Z",
+      },
+    },
+    createdAt,
+    attempts: 1,
+    nextAttemptAt: "2026-07-14T00:01:00.000Z",
+  };
+}
+
+function createLegacyPendingNotification(): PendingReleaseNotification {
+  const notification = createPendingNotification();
+  delete notification.batchId;
+  delete notification.channelStates;
+  delete notification.settings.emailNotificationMode;
+  delete notification.settings.appriseNotificationMode;
+  notification.channels = ["email"];
+  return notification;
+}
+
+type InvalidPendingNotificationCase = {
+  name: string;
+  mutate: (notification: Record<string, unknown>) => void;
+  expectedError: string;
+};
+
+const invalidPendingNotificationCases: InvalidPendingNotificationCase[] = [
+  {
+    name: "non-string batch ids",
+    mutate: (notification) => {
+      notification.batchId = 123;
+    },
+    expectedError: "batchId must be a string",
+  },
+  {
+    name: "non-object channel states",
+    mutate: (notification) => {
+      notification.channelStates = "invalid";
+    },
+    expectedError: "channelStates must be an object",
+  },
+  {
+    name: "invalid channel attempt counts",
+    mutate: (notification) => {
+      notification.channelStates = { email: { attempts: "one" } };
+    },
+    expectedError:
+      "channelStates.email.attempts must be a non-negative integer",
+  },
+  {
+    name: "fractional legacy attempt counts",
+    mutate: (notification) => {
+      notification.attempts = 1.5;
+    },
+    expectedError: "attempts must be a non-negative integer",
+  },
+  {
+    name: "fractional channel attempt counts",
+    mutate: (notification) => {
+      notification.channelStates = { email: { attempts: 1.5 } };
+    },
+    expectedError:
+      "channelStates.email.attempts must be a non-negative integer",
+  },
+  {
+    name: "invalid channel retry timestamps",
+    mutate: (notification) => {
+      notification.channelStates = {
+        email: { attempts: 1, nextAttemptAt: 123 },
+      };
+    },
+    expectedError: "nextAttemptAt must be a string",
+  },
+  {
+    name: "invalid email notification modes",
+    mutate: (notification) => {
+      const settings = notification.settings as Record<string, unknown>;
+      settings.emailNotificationMode = "simple";
+    },
+    expectedError: "emailNotificationMode must be per_release or batch",
+  },
+  {
+    name: "invalid Apprise notification modes",
+    mutate: (notification) => {
+      const settings = notification.settings as Record<string, unknown>;
+      settings.appriseNotificationMode = "digest";
+    },
+    expectedError: "appriseNotificationMode must be per_release or batch",
+  },
+];
 
 describe("storage/repositories", () => {
   let tmpDir: string;
@@ -246,36 +374,10 @@ describe("storage/repositories", () => {
     const { getRepositories, saveRepositories } = await import(
       "@/lib/storage/repositories"
     );
-    const createdAt = "2026-07-14T00:00:00.000Z";
     const repository: Repository = {
       id: "github:owner/repo",
       url: "https://github.com/owner/repo",
-      pendingNotifications: [
-        {
-          id: "github%3Aowner%2Frepo:v2",
-          repository: {
-            id: "github:owner/repo",
-            url: "https://github.com/owner/repo",
-          },
-          release: {
-            id: 2,
-            html_url: "https://github.com/owner/repo/releases/tag/v2",
-            tag_name: "v2",
-            name: "v2",
-            body: "notes",
-            created_at: createdAt,
-            published_at: createdAt,
-            prerelease: false,
-            draft: false,
-          },
-          locale: "en",
-          settings: { timeFormat: "24h" },
-          channels: ["email"],
-          createdAt,
-          attempts: 1,
-          nextAttemptAt: "2026-07-14T00:01:00.000Z",
-        },
-      ],
+      pendingNotifications: [createPendingNotification()],
     };
 
     await saveRepositories([repository]);
@@ -290,6 +392,47 @@ describe("storage/repositories", () => {
       "channels must contain notification channels",
     );
   });
+
+  it("round-trips pending notifications in the legacy queue format", async () => {
+    const { getRepositories, saveRepositories } = await import(
+      "@/lib/storage/repositories"
+    );
+    const repository: Repository = {
+      id: "github:owner/repo",
+      url: "https://github.com/owner/repo",
+      pendingNotifications: [createLegacyPendingNotification()],
+    };
+
+    await saveRepositories([repository]);
+
+    await expect(getRepositories()).resolves.toEqual([repository]);
+  });
+
+  it.each(invalidPendingNotificationCases)(
+    "rejects $name",
+    async ({ mutate, expectedError }) => {
+      const dataDir = path.join(tmpDir, "data");
+      await fs.mkdir(dataDir, { recursive: true });
+      const notification = structuredClone(
+        createPendingNotification(),
+      ) as unknown as Record<string, unknown>;
+      mutate(notification);
+      await fs.writeFile(
+        path.join(dataDir, "repositories.json"),
+        JSON.stringify([
+          {
+            id: "github:owner/repo",
+            url: "https://github.com/owner/repo",
+            pendingNotifications: [notification],
+          },
+        ]),
+        "utf8",
+      );
+      const { getRepositories } = await import("@/lib/storage/repositories");
+
+      await expect(getRepositories()).rejects.toThrow(expectedError);
+    },
+  );
 
   it("preserves null repository overrides while merging duplicate migrated ids", async () => {
     const { getRepositories } = await import("@/lib/storage/repositories");

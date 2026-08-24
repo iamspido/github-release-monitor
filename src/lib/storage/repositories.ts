@@ -114,17 +114,46 @@ function parsePendingNotification(
     }
   }
   notification.locale = normalizeLocale(notification.locale);
-  if (!isFiniteNumber(notification.attempts) || notification.attempts < 0) {
-    throw new Error(`${path}.attempts must be a non-negative number.`);
+  if (
+    !isFiniteNumber(notification.attempts) ||
+    !Number.isInteger(notification.attempts) ||
+    notification.attempts < 0
+  ) {
+    throw new Error(`${path}.attempts must be a non-negative integer.`);
   }
   assertOptionalField(notification, "nextAttemptAt", isString, "a string");
   assertOptionalField(notification, "abandonedAt", isString, "a string");
+  assertOptionalField(notification, "batchId", isString, "a string");
   if (
     !Array.isArray(notification.channels) ||
     notification.channels.length === 0 ||
     !notification.channels.every(isNotificationChannel)
   ) {
     throw new Error(`${path}.channels must contain notification channels.`);
+  }
+  if (notification.channelStates !== undefined) {
+    const channelStates = assertJsonObject(
+      notification.channelStates,
+      `${path}.channelStates`,
+    );
+    for (const channel of ["email", "apprise"] as const) {
+      if (channelStates[channel] === undefined) continue;
+      const state = assertJsonObject(
+        channelStates[channel],
+        `${path}.channelStates.${channel}`,
+      );
+      if (
+        !isFiniteNumber(state.attempts) ||
+        !Number.isInteger(state.attempts) ||
+        state.attempts < 0
+      ) {
+        throw new Error(
+          `${path}.channelStates.${channel}.attempts must be a non-negative integer.`,
+        );
+      }
+      assertOptionalField(state, "nextAttemptAt", isString, "a string");
+      assertOptionalField(state, "abandonedAt", isString, "a string");
+    }
   }
 
   const repository = assertJsonObject(
@@ -162,6 +191,17 @@ function parsePendingNotification(
     isAppriseFormat,
     "text, markdown, or html",
   );
+  for (const key of [
+    "emailNotificationMode",
+    "appriseNotificationMode",
+  ] as const) {
+    assertOptionalField(
+      settings,
+      key,
+      isOneOf(["per_release", "batch"]),
+      "per_release or batch",
+    );
+  }
   return notification as PendingReleaseNotification;
 }
 

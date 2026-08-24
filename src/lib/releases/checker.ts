@@ -28,6 +28,7 @@ async function applyReleaseCheckResults({
   backgroundCheckStartedAtIso,
   markDueChecks,
   notificationChannels,
+  notificationBatchId,
 }: {
   originalRepos: Repository[];
   enrichedReleases: EnrichedRelease[];
@@ -36,6 +37,7 @@ async function applyReleaseCheckResults({
   backgroundCheckStartedAtIso: string;
   markDueChecks: boolean;
   notificationChannels: ReturnType<typeof getConfiguredNotificationChannels>;
+  notificationBatchId: string;
 }) {
   const updatedRepos = originalRepos.map((repository) => ({
     ...repository,
@@ -43,6 +45,13 @@ async function applyReleaseCheckResults({
       (notification) => ({
         ...notification,
         channels: [...notification.channels],
+        channelStates: notification.channelStates
+          ? Object.fromEntries(
+              Object.entries(notification.channelStates).map(
+                ([channel, state]) => [channel, { ...state }],
+              ),
+            )
+          : undefined,
       }),
     ),
   }));
@@ -94,6 +103,7 @@ async function applyReleaseCheckResults({
           effectiveLocale,
           settings,
           notificationChannels,
+          notificationBatchId,
         );
       } else if (!repo.lastSeenReleaseTag && !isReconstructed) {
         log.info(
@@ -159,6 +169,7 @@ async function _checkForNewReleasesUnscheduled(options?: {
   );
 
   const notificationChannels = getConfiguredNotificationChannels();
+  const notificationBatchId = crypto.randomUUID();
   const { updatedRepos, changed } = await applyReleaseCheckResults({
     originalRepos,
     enrichedReleases,
@@ -167,6 +178,7 @@ async function _checkForNewReleasesUnscheduled(options?: {
     backgroundCheckStartedAtIso,
     markDueChecks: options?.onlyDue === true,
     notificationChannels,
+    notificationBatchId,
   });
 
   if (changed) {
@@ -186,11 +198,15 @@ function processPendingNotifications(): Promise<number> {
     // Network delivery deliberately happens outside the shared state scheduler.
     // Only the short merge/write phase is serialized with other state changes.
     const now = new Date();
-    const snapshot = await getRepositories();
+    const [snapshot, settings] = await Promise.all([
+      getRepositories(),
+      getSettings(),
+    ]);
     const prunedSnapshot = pruneAbandonedNotifications(snapshot, now);
     const delivery = await attemptPendingNotifications(
       prunedSnapshot.repositories,
       now,
+      settings,
     );
     if (prunedSnapshot.changed || delivery.outcomes.length > 0) {
       await scheduleTask("persistNotificationDeliveryResults", async () => {

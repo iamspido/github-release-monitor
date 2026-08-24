@@ -141,6 +141,14 @@ export function prepareSettingsUpdate(
       0,
       Math.round(newSettings.appriseMaxCharacters ?? 1800),
     ),
+    notificationMaxMessagesPerRun: Math.min(
+      Math.max(0, Math.round(newSettings.notificationMaxMessagesPerRun ?? 20)),
+      10_000,
+    ),
+    notificationDeliveryConcurrency: Math.min(
+      Math.max(1, Math.round(newSettings.notificationDeliveryConcurrency ?? 4)),
+      50,
+    ),
     releaseSortOrder: normalizeReleaseSortOrder(newSettings.releaseSortOrder),
     releaseSelectionStrategy: normalizeReleaseSelectionStrategy(
       newSettings.releaseSelectionStrategy,

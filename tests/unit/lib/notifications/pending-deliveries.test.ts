@@ -1,8 +1,11 @@
 // vitest globals are enabled via vitest.config.ts
 
-const { sendNotificationMock } = vi.hoisted(() => ({
-  sendNotificationMock: vi.fn(),
-}));
+const { sendNotificationMock, sendEmailDigestMock, sendAppriseDigestMock } =
+  vi.hoisted(() => ({
+    sendNotificationMock: vi.fn(),
+    sendEmailDigestMock: vi.fn(),
+    sendAppriseDigestMock: vi.fn(),
+  }));
 
 vi.mock("@/lib/notifications", async (orig) => {
   const actual = await orig<typeof import("@/lib/notifications")>();
@@ -10,6 +13,16 @@ vi.mock("@/lib/notifications", async (orig) => {
     ...actual,
     sendNotification: sendNotificationMock,
   };
+});
+
+vi.mock("@/lib/notifications/email", async (orig) => {
+  const actual = await orig<typeof import("@/lib/notifications/email")>();
+  return { ...actual, sendReleaseDigestEmail: sendEmailDigestMock };
+});
+
+vi.mock("@/lib/notifications/apprise", async (orig) => {
+  const actual = await orig<typeof import("@/lib/notifications/apprise")>();
+  return { ...actual, sendAppriseDigest: sendAppriseDigestMock };
 });
 
 import {
@@ -60,9 +73,11 @@ function createRepositories(count: number): Repository[] {
 describe("notifications/pending-deliveries", () => {
   beforeEach(() => {
     sendNotificationMock.mockReset();
+    sendEmailDigestMock.mockReset();
+    sendAppriseDigestMock.mockReset();
   });
 
-  it("snapshots both release-notes settings for later delivery", () => {
+  it("snapshots both notification modes and release-notes settings", () => {
     const repository: Repository = {
       id: "owner/repo",
       url: "https://github.com/owner/repo",
@@ -82,15 +97,224 @@ describe("notifications/pending-deliveries", () => {
           parallelRepoFetches: 1,
           releaseChannels: ["stable"],
           emailIncludeReleaseNotes: false,
+          emailNotificationMode: "batch",
           appriseIncludeReleaseNotes: false,
+          appriseNotificationMode: "batch",
         },
         ["email", "apprise"],
       ),
     ).toBe(true);
     expect(repository.pendingNotifications?.[0].settings).toMatchObject({
       emailIncludeReleaseNotes: false,
+      emailNotificationMode: "batch",
       appriseIncludeReleaseNotes: false,
+      appriseNotificationMode: "batch",
     });
+  });
+
+  it("sends all releases from one email batch as one message", async () => {
+    sendEmailDigestMock.mockResolvedValue(undefined);
+    const repositories = createRepositories(100);
+    for (const repository of repositories) {
+      const notification = repository.pendingNotifications?.[0];
+      if (!notification) throw new Error("Expected pending notification");
+      notification.batchId = "check-1";
+      notification.settings.emailNotificationMode = "batch";
+    }
+
+    const result = await deliverPendingNotifications(repositories);
+
+    expect(sendEmailDigestMock).toHaveBeenCalledOnce();
+    expect(sendEmailDigestMock.mock.calls[0][0]).toHaveLength(100);
+    expect(result.notificationsSent).toBe(1);
+    expect(
+      result.repositories.some(
+        (repository) => repository.pendingNotifications?.length,
+      ),
+    ).toBe(false);
+  });
+
+  it("processes an unlimited run with the configured rolling concurrency", async () => {
+    let active = 0;
+    let maximumActive = 0;
+    sendNotificationMock.mockImplementation(async () => {
+      active++;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 3));
+      active--;
+    });
+
+    const result = await deliverPendingNotifications(
+      createRepositories(25),
+      new Date(),
+      {
+        notificationMaxMessagesPerRun: 0,
+        notificationDeliveryConcurrency: 3,
+      },
+    );
+
+    expect(result.notificationsSent).toBe(25);
+    expect(maximumActive).toBe(3);
+  });
+
+  it("keeps only a failed channel and does not resend a successful channel", async () => {
+    const notification = createPendingNotification("repo");
+    notification.channels = ["email", "apprise"];
+    const repository: Repository = {
+      id: "owner/repo",
+      url: "https://github.com/owner/repo",
+      pendingNotifications: [notification],
+    };
+    sendNotificationMock.mockImplementation(
+      async (_repository, _release, _locale, _settings, channels: string[]) => {
+        if (channels.includes("apprise")) throw new Error("Apprise down");
+      },
+    );
+
+    const first = await deliverPendingNotifications(
+      [repository],
+      new Date("2026-07-14T12:00:00.000Z"),
+    );
+    expect(first.notificationsSent).toBe(1);
+    expect(first.repositories[0].pendingNotifications?.[0].channels).toEqual([
+      "apprise",
+    ]);
+
+    sendNotificationMock.mockClear();
+    sendNotificationMock.mockResolvedValue(undefined);
+    const retryAt = new Date("2026-07-14T12:02:00.000Z");
+    const second = await deliverPendingNotifications(
+      first.repositories,
+      retryAt,
+    );
+    expect(second.notificationsSent).toBe(1);
+    expect(sendNotificationMock).toHaveBeenCalledOnce();
+    expect(sendNotificationMock.mock.calls[0][4]).toEqual(["apprise"]);
+  });
+
+  it("separates Apprise batches with different effective tags", async () => {
+    sendAppriseDigestMock.mockResolvedValue(undefined);
+    const repositories = createRepositories(2);
+    repositories.forEach((repository, index) => {
+      const notification = repository.pendingNotifications?.[0];
+      if (!notification) throw new Error("Expected pending notification");
+      notification.channels = ["apprise"];
+      notification.batchId = "check-1";
+      notification.settings.appriseNotificationMode = "batch";
+      notification.repository.appriseTags = `target-${index}`;
+    });
+
+    const result = await deliverPendingNotifications(repositories);
+
+    expect(sendAppriseDigestMock).toHaveBeenCalledTimes(2);
+    expect(result.notificationsSent).toBe(2);
+  });
+
+  it("separates Apprise batches with different effective formats", async () => {
+    sendAppriseDigestMock.mockResolvedValue(undefined);
+    const repositories = createRepositories(2);
+    repositories.forEach((repository, index) => {
+      const notification = repository.pendingNotifications?.[0];
+      if (!notification) throw new Error("Expected pending notification");
+      notification.channels = ["apprise"];
+      notification.batchId = "check-1";
+      notification.settings.appriseNotificationMode = "batch";
+      notification.repository.appriseTags = "shared-target";
+      notification.repository.appriseFormat = index === 0 ? "text" : "markdown";
+    });
+
+    const result = await deliverPendingNotifications(repositories);
+
+    expect(sendAppriseDigestMock).toHaveBeenCalledTimes(2);
+    expect(
+      sendAppriseDigestMock.mock.calls.map((call) => call[3].format).sort(),
+    ).toEqual(["markdown", "text"]);
+    expect(result.notificationsSent).toBe(2);
+  });
+
+  it("combines compatible Apprise entries into one batch", async () => {
+    sendAppriseDigestMock.mockResolvedValue(undefined);
+    const repositories = createRepositories(2);
+    repositories.forEach((repository) => {
+      const notification = repository.pendingNotifications?.[0];
+      if (!notification) throw new Error("Expected pending notification");
+      notification.channels = ["apprise"];
+      notification.batchId = "check-1";
+      notification.settings.appriseNotificationMode = "batch";
+      notification.repository.appriseTags = "shared-target";
+      notification.repository.appriseFormat = "markdown";
+    });
+
+    const result = await deliverPendingNotifications(repositories);
+
+    expect(sendAppriseDigestMock).toHaveBeenCalledOnce();
+    expect(sendAppriseDigestMock.mock.calls[0][0]).toHaveLength(2);
+    expect(result.notificationsSent).toBe(1);
+  });
+
+  it("counts an email batch and a compatible Apprise batch as two messages", async () => {
+    sendEmailDigestMock.mockResolvedValue(undefined);
+    sendAppriseDigestMock.mockResolvedValue(undefined);
+    const repositories = createRepositories(2);
+    repositories.forEach((repository) => {
+      const notification = repository.pendingNotifications?.[0];
+      if (!notification) throw new Error("Expected pending notification");
+      notification.channels = ["email", "apprise"];
+      notification.batchId = "check-1";
+      notification.settings.emailNotificationMode = "batch";
+      notification.settings.appriseNotificationMode = "batch";
+    });
+
+    const result = await deliverPendingNotifications(repositories);
+
+    expect(sendEmailDigestMock).toHaveBeenCalledOnce();
+    expect(sendAppriseDigestMock).toHaveBeenCalledOnce();
+    expect(result.notificationsSent).toBe(2);
+    expect(result.repositories[0].pendingNotifications).toBeUndefined();
+    expect(result.repositories[1].pendingNotifications).toBeUndefined();
+  });
+
+  it("retries only a failed batch channel", async () => {
+    sendEmailDigestMock.mockResolvedValue(undefined);
+    sendAppriseDigestMock.mockRejectedValueOnce(new Error("Apprise down"));
+    const repositories = createRepositories(2);
+    repositories.forEach((repository) => {
+      const notification = repository.pendingNotifications?.[0];
+      if (!notification) throw new Error("Expected pending notification");
+      notification.channels = ["email", "apprise"];
+      notification.batchId = "check-1";
+      notification.settings.emailNotificationMode = "batch";
+      notification.settings.appriseNotificationMode = "batch";
+    });
+
+    const first = await deliverPendingNotifications(
+      repositories,
+      new Date("2026-07-14T12:00:00.000Z"),
+    );
+
+    expect(first.notificationsSent).toBe(1);
+    expect(sendEmailDigestMock).toHaveBeenCalledOnce();
+    expect(sendAppriseDigestMock).toHaveBeenCalledOnce();
+    expect(
+      first.repositories.map(
+        (repository) => repository.pendingNotifications?.[0].channels,
+      ),
+    ).toEqual([["apprise"], ["apprise"]]);
+
+    sendAppriseDigestMock.mockResolvedValueOnce(undefined);
+    const second = await deliverPendingNotifications(
+      first.repositories,
+      new Date("2026-07-14T12:02:00.000Z"),
+    );
+
+    expect(second.notificationsSent).toBe(1);
+    expect(sendEmailDigestMock).toHaveBeenCalledOnce();
+    expect(sendAppriseDigestMock).toHaveBeenCalledTimes(2);
+    expect(
+      second.repositories.some(
+        (repository) => repository.pendingNotifications?.length,
+      ),
+    ).toBe(false);
   });
 
   it("limits each delivery run to a bounded batch", async () => {

@@ -9,6 +9,8 @@ describe("settings update command", () => {
         showAcknowledge: false,
         includeRegex: "  ^v  ",
         parallelRepoFetches: 50,
+        notificationMaxMessagesPerRun: 0,
+        notificationDeliveryConcurrency: 50,
       },
       current,
       true,
@@ -21,6 +23,8 @@ describe("settings update command", () => {
         showAcknowledge: false,
         includeRegex: "^v",
         parallelRepoFetches: 50,
+        notificationMaxMessagesPerRun: 0,
+        notificationDeliveryConcurrency: 50,
       }),
     );
     expect(result.value.shouldResetNewFlags).toBe(true);

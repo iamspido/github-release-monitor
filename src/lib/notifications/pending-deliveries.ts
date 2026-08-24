@@ -1,13 +1,16 @@
 import { logger } from "@/lib/logger";
+import { sendNotification } from "@/lib/notifications";
 import {
-  NotificationDeliveryError,
-  sendNotification,
-} from "@/lib/notifications";
+  getEffectiveAppriseProfile,
+  sendAppriseDigest,
+} from "@/lib/notifications/apprise";
+import { sendReleaseDigestEmail } from "@/lib/notifications/email";
 import type {
   AppSettings,
   GithubRelease,
   Locale,
   NotificationChannel,
+  NotificationMode,
   PendingReleaseNotification,
   Repository,
 } from "@/types";
@@ -20,17 +23,53 @@ export const NOTIFICATION_DELIVERY_CONCURRENCY = 4;
 export const ABANDONED_NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60_000;
 export const MAX_ABANDONED_NOTIFICATIONS_PER_REPOSITORY = 50;
 
+type ChannelState = {
+  attempts: number;
+  nextAttemptAt?: string;
+  abandonedAt?: string;
+};
+
 type NotificationDeliveryOutcome = {
   repositoryId: string;
   notificationId: string;
-  attemptedChannels: NotificationChannel[];
+  channel: NotificationChannel;
   previousAttempts: number;
   status: "sent" | "failed";
-  failedChannels?: NotificationChannel[];
   attempts?: number;
   nextAttemptAt?: string;
   abandonedAt?: string;
 };
+
+type DeliveryMember = {
+  repositoryId: string;
+  notification: PendingReleaseNotification;
+  previousAttempts: number;
+};
+
+type DeliveryWorkUnit = {
+  key: string;
+  channel: NotificationChannel;
+  mode: NotificationMode;
+  members: DeliveryMember[];
+};
+
+type DeliveryLimits = Pick<
+  AppSettings,
+  "notificationMaxMessagesPerRun" | "notificationDeliveryConcurrency"
+>;
+
+function getChannelState(
+  notification: PendingReleaseNotification,
+  channel: NotificationChannel,
+): ChannelState {
+  return (
+    notification.channelStates?.[channel] ?? {
+      attempts: notification.attempts,
+      nextAttemptAt: notification.nextAttemptAt,
+      abandonedAt: notification.abandonedAt,
+    }
+  );
+}
 
 export function enqueuePendingNotification(
   repository: Repository,
@@ -38,6 +77,7 @@ export function enqueuePendingNotification(
   locale: Locale,
   settings: AppSettings,
   channels: NotificationChannel[],
+  batchId?: string,
 ): boolean {
   if (channels.length === 0) {
     logger
@@ -55,14 +95,24 @@ export function enqueuePendingNotification(
     (notification) => notification.id === id,
   );
   if (existing) {
+    const addedChannels = channels.filter(
+      (channel) => !existing.channels.includes(channel),
+    );
     existing.channels = Array.from(
       new Set([...existing.channels, ...channels]),
     );
+    existing.channelStates = {
+      ...existing.channelStates,
+      ...Object.fromEntries(
+        addedChannels.map((channel) => [channel, { attempts: 0 }]),
+      ),
+    };
     return false;
   }
 
   const notification: PendingReleaseNotification = {
     id,
+    batchId,
     repository: {
       id: repository.id,
       url: repository.url,
@@ -74,12 +124,18 @@ export function enqueuePendingNotification(
     settings: {
       timeFormat: settings.timeFormat,
       emailIncludeReleaseNotes: settings.emailIncludeReleaseNotes,
+      emailNotificationMode: settings.emailNotificationMode ?? "per_release",
       appriseIncludeReleaseNotes: settings.appriseIncludeReleaseNotes,
+      appriseNotificationMode:
+        settings.appriseNotificationMode ?? "per_release",
       appriseMaxCharacters: settings.appriseMaxCharacters,
       appriseTags: settings.appriseTags,
       appriseFormat: settings.appriseFormat,
     },
     channels: [...channels],
+    channelStates: Object.fromEntries(
+      channels.map((channel) => [channel, { attempts: 0 }]),
+    ),
     createdAt: new Date().toISOString(),
     attempts: 0,
   };
@@ -90,20 +146,32 @@ export function enqueuePendingNotification(
   return true;
 }
 
-function isDueForDelivery(
+function isChannelDue(
   notification: PendingReleaseNotification,
+  channel: NotificationChannel,
   nowMs: number,
 ): boolean {
+  const state = getChannelState(notification, channel);
   if (
-    notification.abandonedAt ||
-    notification.attempts >= MAX_NOTIFICATION_DELIVERY_ATTEMPTS
+    state.abandonedAt ||
+    state.attempts >= MAX_NOTIFICATION_DELIVERY_ATTEMPTS
   ) {
     return false;
   }
-  const nextAttemptMs = notification.nextAttemptAt
-    ? Date.parse(notification.nextAttemptAt)
+  const nextAttemptMs = state.nextAttemptAt
+    ? Date.parse(state.nextAttemptAt)
     : Number.NEGATIVE_INFINITY;
   return !Number.isFinite(nextAttemptMs) || nextAttemptMs <= nowMs;
+}
+
+function getFullyAbandonedAt(
+  notification: PendingReleaseNotification,
+): string | undefined {
+  const abandonedTimes = notification.channels.map(
+    (channel) => getChannelState(notification, channel).abandonedAt,
+  );
+  if (abandonedTimes.some((value) => !value)) return undefined;
+  return abandonedTimes.sort().at(-1);
 }
 
 export function pruneAbandonedNotifications(
@@ -112,16 +180,18 @@ export function pruneAbandonedNotifications(
 ): { repositories: Repository[]; changed: boolean } {
   const nowMs = now.getTime();
   let changed = false;
-
   const updatedRepositories = repositories.map((repository) => {
     const pendingNotifications = repository.pendingNotifications;
     if (!pendingNotifications?.length) return repository;
-
     const retainedAbandoned = new Set(
       pendingNotifications
-        .filter((notification) => {
-          if (!notification.abandonedAt) return false;
-          const abandonedAtMs = Date.parse(notification.abandonedAt);
+        .map((notification) => ({
+          notification,
+          abandonedAt: getFullyAbandonedAt(notification),
+        }))
+        .filter(({ abandonedAt }) => {
+          if (!abandonedAt) return false;
+          const abandonedAtMs = Date.parse(abandonedAt);
           return (
             Number.isFinite(abandonedAtMs) &&
             abandonedAtMs <= nowMs &&
@@ -132,193 +202,309 @@ export function pruneAbandonedNotifications(
           (a, b) =>
             Date.parse(b.abandonedAt ?? "") - Date.parse(a.abandonedAt ?? ""),
         )
-        .slice(0, MAX_ABANDONED_NOTIFICATIONS_PER_REPOSITORY),
+        .slice(0, MAX_ABANDONED_NOTIFICATIONS_PER_REPOSITORY)
+        .map(({ notification }) => notification),
     );
-
     const retained = pendingNotifications.filter(
       (notification) =>
-        !notification.abandonedAt || retainedAbandoned.has(notification),
+        !getFullyAbandonedAt(notification) ||
+        retainedAbandoned.has(notification),
     );
     if (retained.length === pendingNotifications.length) return repository;
-
     changed = true;
     return {
       ...repository,
       pendingNotifications: retained.length > 0 ? retained : undefined,
     };
   });
-
   return { repositories: updatedRepositories, changed };
+}
+
+function getDeliveryMode(
+  notification: PendingReleaseNotification,
+  channel: NotificationChannel,
+): NotificationMode {
+  return channel === "email"
+    ? (notification.settings.emailNotificationMode ?? "per_release")
+    : (notification.settings.appriseNotificationMode ?? "per_release");
+}
+
+function getBatchCompatibilityKey(
+  notification: PendingReleaseNotification,
+  channel: NotificationChannel,
+): string {
+  const common = {
+    batchId: notification.batchId,
+    locale: notification.locale,
+    timeFormat: notification.settings.timeFormat,
+  };
+  if (channel === "email") {
+    return JSON.stringify({
+      ...common,
+      includeNotes: notification.settings.emailIncludeReleaseNotes !== false,
+    });
+  }
+  const profile = getEffectiveAppriseProfile(
+    notification.repository,
+    notification.settings,
+  );
+  return JSON.stringify({
+    ...common,
+    includeNotes: notification.settings.appriseIncludeReleaseNotes !== false,
+    maxCharacters: notification.settings.appriseMaxCharacters ?? 0,
+    ...profile,
+  });
+}
+
+function buildDeliveryWorkUnits(
+  repositories: Repository[],
+  nowMs: number,
+): DeliveryWorkUnit[] {
+  const units = new Map<string, DeliveryWorkUnit>();
+  for (const repository of repositories) {
+    for (const notification of repository.pendingNotifications ?? []) {
+      for (const channel of notification.channels) {
+        if (!isChannelDue(notification, channel, nowMs)) continue;
+        const requestedMode = getDeliveryMode(notification, channel);
+        const mode =
+          requestedMode === "batch" && notification.batchId
+            ? "batch"
+            : "per_release";
+        const key =
+          mode === "batch"
+            ? `${channel}:batch:${getBatchCompatibilityKey(notification, channel)}`
+            : `${channel}:per_release:${repository.id}:${notification.id}`;
+        const unit = units.get(key) ?? { key, channel, mode, members: [] };
+        unit.members.push({
+          repositoryId: repository.id,
+          notification,
+          previousAttempts: getChannelState(notification, channel).attempts,
+        });
+        units.set(key, unit);
+      }
+    }
+  }
+  return [...units.values()];
+}
+
+async function sendDeliveryWorkUnit(unit: DeliveryWorkUnit): Promise<void> {
+  const first = unit.members[0]?.notification;
+  if (!first) return;
+  const items = unit.members.map(({ notification }) => ({
+    repository: notification.repository,
+    release: notification.release,
+  }));
+  if (unit.channel === "email") {
+    if (unit.mode === "batch") {
+      await sendReleaseDigestEmail(
+        items,
+        first.locale,
+        first.settings.timeFormat,
+        first.settings.emailIncludeReleaseNotes !== false,
+      );
+    } else {
+      await sendNotification(
+        first.repository,
+        first.release,
+        first.locale,
+        first.settings,
+        ["email"],
+      );
+    }
+    return;
+  }
+  if (unit.mode === "batch") {
+    await sendAppriseDigest(
+      items,
+      first.locale,
+      first.settings,
+      getEffectiveAppriseProfile(first.repository, first.settings),
+    );
+  } else {
+    await sendNotification(
+      first.repository,
+      first.release,
+      first.locale,
+      first.settings,
+      ["apprise"],
+    );
+  }
 }
 
 export async function attemptPendingNotifications(
   repositories: Repository[],
   now = new Date(),
+  limits: DeliveryLimits = {},
 ): Promise<{
   outcomes: NotificationDeliveryOutcome[];
   notificationsSent: number;
 }> {
-  const nowMs = now.getTime();
-  const candidates = repositories
-    .flatMap((repository) =>
-      (repository.pendingNotifications ?? []).map((notification) => ({
-        repositoryId: repository.id,
-        notification,
-      })),
-    )
-    .filter(({ notification }) => isDueForDelivery(notification, nowMs))
-    .slice(0, MAX_NOTIFICATION_DELIVERIES_PER_RUN);
-  const outcomes = new Array<NotificationDeliveryOutcome>(candidates.length);
-  let nextCandidateIndex = 0;
+  const maxMessages = Math.min(
+    Math.max(
+      0,
+      Math.round(
+        limits.notificationMaxMessagesPerRun ??
+          MAX_NOTIFICATION_DELIVERIES_PER_RUN,
+      ),
+    ),
+    10_000,
+  );
+  const concurrency = Math.min(
+    Math.max(
+      1,
+      Math.round(
+        limits.notificationDeliveryConcurrency ??
+          NOTIFICATION_DELIVERY_CONCURRENCY,
+      ),
+    ),
+    50,
+  );
+  const allUnits = buildDeliveryWorkUnits(repositories, now.getTime());
+  const units = maxMessages === 0 ? allUnits : allUnits.slice(0, maxMessages);
+  const outcomes: NotificationDeliveryOutcome[] = [];
+  let notificationsSent = 0;
+  let nextUnitIndex = 0;
 
   async function worker() {
-    while (nextCandidateIndex < candidates.length) {
-      const candidateIndex = nextCandidateIndex++;
-      const { repositoryId, notification } = candidates[candidateIndex];
-      const attemptedChannels = [...notification.channels];
+    while (nextUnitIndex < units.length) {
+      const unit = units[nextUnitIndex++];
+      let failure: unknown;
       try {
-        await sendNotification(
-          notification.repository,
-          notification.release,
-          notification.locale,
-          notification.settings,
-          attemptedChannels,
-        );
-        outcomes[candidateIndex] = {
-          repositoryId,
-          notificationId: notification.id,
-          attemptedChannels,
-          previousAttempts: notification.attempts,
-          status: "sent",
-        };
+        await sendDeliveryWorkUnit(unit);
+        notificationsSent++;
       } catch (error: unknown) {
-        const failedChannels =
-          error instanceof NotificationDeliveryError
-            ? error.failedChannels
-            : attemptedChannels;
-        const attempts = notification.attempts + 1;
+        failure = error;
+      }
+      for (const member of unit.members) {
+        if (failure === undefined) {
+          outcomes.push({
+            repositoryId: member.repositoryId,
+            notificationId: member.notification.id,
+            channel: unit.channel,
+            previousAttempts: member.previousAttempts,
+            status: "sent",
+          });
+          continue;
+        }
+        const attempts = member.previousAttempts + 1;
         const abandoned = attempts >= MAX_NOTIFICATION_DELIVERY_ATTEMPTS;
         const retryDelay = Math.min(
           INITIAL_RETRY_DELAY_MS * 2 ** Math.min(attempts - 1, 16),
           MAX_RETRY_DELAY_MS,
         );
-        outcomes[candidateIndex] = {
-          repositoryId,
-          notificationId: notification.id,
-          attemptedChannels,
-          previousAttempts: notification.attempts,
+        outcomes.push({
+          repositoryId: member.repositoryId,
+          notificationId: member.notification.id,
+          channel: unit.channel,
+          previousAttempts: member.previousAttempts,
           status: "failed",
-          failedChannels: [...failedChannels],
           attempts,
           nextAttemptAt: abandoned
             ? undefined
-            : new Date(nowMs + retryDelay).toISOString(),
+            : new Date(now.getTime() + retryDelay).toISOString(),
           abandonedAt: abandoned ? now.toISOString() : undefined,
-        };
+        });
+      }
+      if (failure !== undefined) {
         const message =
-          error instanceof Error ? error.message : String(error ?? "unknown");
+          failure instanceof Error
+            ? failure.message
+            : String(failure ?? "unknown");
         logger
           .withScope("Notifications")
           .error(
-            abandoned
-              ? `Notification delivery for ${repositoryId} ${notification.release.tag_name} failed permanently after ${attempts} attempts. Error: ${message}`
-              : `Notification delivery for ${repositoryId} ${notification.release.tag_name} failed; retry ${attempts} is scheduled. Error: ${message}`,
-            error instanceof Error ? error : undefined,
+            `Notification delivery group '${unit.key}' failed: ${message}`,
+            failure instanceof Error ? failure : undefined,
           );
       }
     }
   }
 
   await Promise.all(
-    Array.from(
-      {
-        length: Math.min(NOTIFICATION_DELIVERY_CONCURRENCY, candidates.length),
-      },
-      () => worker(),
-    ),
+    Array.from({ length: Math.min(concurrency, units.length) }, () => worker()),
   );
-
-  return {
-    outcomes,
-    notificationsSent: outcomes.filter((outcome) => outcome.status === "sent")
-      .length,
-  };
+  return { outcomes, notificationsSent };
 }
 
 export function applyPendingNotificationDeliveryOutcomes(
   repositories: Repository[],
   outcomes: NotificationDeliveryOutcome[],
 ): { repositories: Repository[]; changed: boolean } {
-  if (outcomes.length === 0) {
-    return { repositories, changed: false };
-  }
-
-  const outcomesByRepository = new Map<string, NotificationDeliveryOutcome[]>();
-  for (const outcome of outcomes) {
-    const existing = outcomesByRepository.get(outcome.repositoryId) ?? [];
-    existing.push(outcome);
-    outcomesByRepository.set(outcome.repositoryId, existing);
-  }
-
+  if (outcomes.length === 0) return { repositories, changed: false };
+  const outcomeMap = new Map(
+    outcomes.map((outcome) => [
+      `${outcome.repositoryId}\u0000${outcome.notificationId}\u0000${outcome.channel}`,
+      outcome,
+    ]),
+  );
   let changed = false;
   const updatedRepositories = repositories.map((repository) => {
-    const repositoryOutcomes = outcomesByRepository.get(repository.id);
-    if (!repositoryOutcomes || !repository.pendingNotifications?.length) {
-      return repository;
-    }
-    const outcomesById = new Map(
-      repositoryOutcomes.map((outcome) => [outcome.notificationId, outcome]),
-    );
+    if (!repository.pendingNotifications?.length) return repository;
+    let repositoryChanged = false;
     const remaining: PendingReleaseNotification[] = [];
-
     for (const notification of repository.pendingNotifications) {
-      const outcome = outcomesById.get(notification.id);
-      // Do not apply a stale result if another delivery attempt already changed
-      // this entry while the network request was in flight.
-      if (!outcome || notification.attempts !== outcome.previousAttempts) {
-        remaining.push(notification);
-        continue;
-      }
-
-      const unattemptedChannels = notification.channels.filter(
-        (channel) => !outcome.attemptedChannels.includes(channel),
-      );
-      if (outcome.status === "sent") {
-        changed = true;
-        if (unattemptedChannels.length > 0) {
-          remaining.push({
-            ...notification,
-            channels: unattemptedChannels,
-            nextAttemptAt: undefined,
-          });
+      const states: Partial<Record<NotificationChannel, ChannelState>> = {};
+      const channels: NotificationChannel[] = [];
+      for (const channel of notification.channels) {
+        const currentState = getChannelState(notification, channel);
+        const outcome = outcomeMap.get(
+          `${repository.id}\u0000${notification.id}\u0000${channel}`,
+        );
+        if (!outcome || outcome.previousAttempts !== currentState.attempts) {
+          channels.push(channel);
+          states[channel] = currentState;
+          continue;
         }
-        continue;
+        changed = true;
+        repositoryChanged = true;
+        if (outcome.status === "failed") {
+          channels.push(channel);
+          states[channel] = {
+            attempts: outcome.attempts ?? currentState.attempts + 1,
+            nextAttemptAt: outcome.nextAttemptAt,
+            abandonedAt: outcome.abandonedAt,
+          };
+        }
       }
-
-      changed = true;
+      if (channels.length === 0) continue;
+      const stateValues = channels.flatMap((channel) => {
+        const state = states[channel];
+        return state ? [state] : [];
+      });
+      const activeNextAttempts = stateValues
+        .filter((state) => !state.abandonedAt)
+        .map((state) => state.nextAttemptAt)
+        .filter((value): value is string => Boolean(value))
+        .sort();
+      const abandonedTimes = stateValues
+        .map((state) => state.abandonedAt)
+        .filter((value): value is string => Boolean(value))
+        .sort();
       remaining.push({
         ...notification,
-        channels: Array.from(
-          new Set([...unattemptedChannels, ...(outcome.failedChannels ?? [])]),
-        ),
-        attempts: outcome.attempts ?? notification.attempts + 1,
-        nextAttemptAt: outcome.nextAttemptAt,
-        abandonedAt: outcome.abandonedAt,
+        channels,
+        channelStates: states,
+        attempts: Math.max(...stateValues.map((state) => state.attempts)),
+        nextAttemptAt: activeNextAttempts[0],
+        abandonedAt:
+          abandonedTimes.length === stateValues.length
+            ? abandonedTimes.at(-1)
+            : undefined,
       });
     }
-
+    if (!repositoryChanged) return repository;
     return {
       ...repository,
       pendingNotifications: remaining.length > 0 ? remaining : undefined,
     };
   });
-
   return { repositories: updatedRepositories, changed };
 }
 
 export async function deliverPendingNotifications(
   repositories: Repository[],
   now = new Date(),
+  limits: DeliveryLimits = {},
 ): Promise<{
   repositories: Repository[];
   changed: boolean;
@@ -328,6 +514,7 @@ export async function deliverPendingNotifications(
   const delivery = await attemptPendingNotifications(
     initiallyPruned.repositories,
     now,
+    limits,
   );
   const applied = applyPendingNotificationDeliveryOutcomes(
     initiallyPruned.repositories,

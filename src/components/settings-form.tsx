@@ -67,6 +67,7 @@ import {
   areSettingsSnapshotsEqual,
   getSettingsReconciliationPatch,
   hasSettingsSnapshotDrift,
+  type IntegerValidationError,
   isCacheIntervalInvalid,
   parseCustomPreReleaseMarkers,
   type RangeValidationError,
@@ -100,6 +101,7 @@ import type {
   AppriseFormat,
   AppSettings,
   Locale,
+  NotificationMode,
   PreReleaseChannelType,
   ReleaseChannel,
   ReleaseProviderSortKey,
@@ -113,7 +115,7 @@ import { allPreReleaseTypes, defaultProviderSortOrder } from "@/types";
 type GlobalAutomationMode = "interval" | "cron";
 
 type IntervalValidationError = RangeValidationError;
-type ReleasesPerPageError = RangeValidationError;
+type ReleasesPerPageError = IntegerValidationError;
 
 const DEFERRED_GLOBAL_SETTING_KEYS = new Set<keyof AppSettings>([
   "refreshInterval",
@@ -128,8 +130,10 @@ const DEFERRED_GLOBAL_SETTING_KEYS = new Set<keyof AppSettings>([
   "customSecurityPatterns",
   "appriseMaxCharacters",
   "appriseTags",
+  "notificationMaxMessagesPerRun",
+  "notificationDeliveryConcurrency",
 ]);
-type ParallelRepoFetchError = RangeValidationError;
+type ParallelRepoFetchError = IntegerValidationError;
 type HexColorError = "invalid" | null;
 type SecurityPatternsError = "invalid" | null;
 
@@ -311,7 +315,11 @@ export function SettingsForm({
       releasesPerPage: `${baseId}-releases-per-page`,
       parallelRepoFetches: `${baseId}-parallel-fetches`,
       emailIncludeReleaseNotes: `${baseId}-email-include-release-notes`,
+      emailNotificationMode: `${baseId}-email-notification-mode`,
       appriseIncludeReleaseNotes: `${baseId}-apprise-include-release-notes`,
+      appriseNotificationMode: `${baseId}-apprise-notification-mode`,
+      notificationMaxMessagesPerRun: `${baseId}-notification-max-messages-per-run`,
+      notificationDeliveryConcurrency: `${baseId}-notification-delivery-concurrency`,
       appriseMaxChars: `${baseId}-apprise-chars`,
       appriseFormat: `${baseId}-apprise-format`,
       appriseTags: `${baseId}-apprise-tags`,
@@ -397,8 +405,22 @@ export function SettingsForm({
   );
   const [emailIncludeReleaseNotes, setEmailIncludeReleaseNotes] =
     React.useState(currentSettings.emailIncludeReleaseNotes !== false);
+  const [emailNotificationMode, setEmailNotificationMode] =
+    React.useState<NotificationMode>(
+      currentSettings.emailNotificationMode ?? "per_release",
+    );
   const [appriseIncludeReleaseNotes, setAppriseIncludeReleaseNotes] =
     React.useState(currentSettings.appriseIncludeReleaseNotes !== false);
+  const [appriseNotificationMode, setAppriseNotificationMode] =
+    React.useState<NotificationMode>(
+      currentSettings.appriseNotificationMode ?? "per_release",
+    );
+  const [notificationMaxMessagesPerRun, setNotificationMaxMessagesPerRun] =
+    React.useState(String(currentSettings.notificationMaxMessagesPerRun ?? 20));
+  const [notificationDeliveryConcurrency, setNotificationDeliveryConcurrency] =
+    React.useState(
+      String(currentSettings.notificationDeliveryConcurrency ?? 4),
+    );
   const [appriseMaxCharacters, setAppriseMaxCharacters] = React.useState(
     String(currentSettings.appriseMaxCharacters ?? 1800),
   );
@@ -491,6 +513,8 @@ export function SettingsForm({
       dCache * MINUTES_IN_DAY + hCache * MINUTES_IN_HOUR + mCache;
 
     const parsedAppriseChars = parseInt(appriseMaxCharacters, 10);
+    const parsedMaxMessages = Number(notificationMaxMessagesPerRun);
+    const parsedDeliveryConcurrency = Number(notificationDeliveryConcurrency);
     const backgroundCheckCron =
       automationMode === "cron"
         ? buildCronExpression(cronPreset, cronTime, cronWeekday, cronExpression)
@@ -529,7 +553,17 @@ export function SettingsForm({
       includeRegex: includeRegex,
       excludeRegex: excludeRegex,
       emailIncludeReleaseNotes,
+      emailNotificationMode,
       appriseIncludeReleaseNotes,
+      appriseNotificationMode,
+      notificationMaxMessagesPerRun: Number.isInteger(parsedMaxMessages)
+        ? parsedMaxMessages
+        : 20,
+      notificationDeliveryConcurrency: Number.isInteger(
+        parsedDeliveryConcurrency,
+      )
+        ? parsedDeliveryConcurrency
+        : 4,
       appriseMaxCharacters: Number.isNaN(parsedAppriseChars)
         ? 1800
         : parsedAppriseChars,
@@ -572,7 +606,11 @@ export function SettingsForm({
     includeRegex,
     excludeRegex,
     emailIncludeReleaseNotes,
+    emailNotificationMode,
     appriseIncludeReleaseNotes,
+    appriseNotificationMode,
+    notificationMaxMessagesPerRun,
+    notificationDeliveryConcurrency,
     appriseMaxCharacters,
     appriseTags,
     appriseFormat,
@@ -583,6 +621,8 @@ export function SettingsForm({
     intervalError,
     releasesPerPageError,
     parallelRepoFetchesError,
+    notificationMaxMessagesError,
+    notificationDeliveryConcurrencyError,
     isCacheInvalid,
     includeRegexError,
     excludeRegexError,
@@ -596,6 +636,9 @@ export function SettingsForm({
       cacheDays !== "" && cacheHours !== "" && cacheMinutes !== "";
     const releasesPerPageFilled = releasesPerPage !== "";
     const parallelRepoFetchesFilled = parallelRepoFetches !== "";
+    const notificationMaxMessagesFilled = notificationMaxMessagesPerRun !== "";
+    const notificationDeliveryConcurrencyFilled =
+      notificationDeliveryConcurrency !== "";
     const nextIntervalError: IntervalValidationError =
       automationMode === "interval"
         ? validateFilledInterval(
@@ -629,6 +672,13 @@ export function SettingsForm({
       intervalError: nextIntervalError,
       releasesPerPageError: nextReleasesPerPageError,
       parallelRepoFetchesError: nextParallelRepoFetchesError,
+      notificationMaxMessagesError: notificationMaxMessagesFilled
+        ? validateOptionalIntegerInput(notificationMaxMessagesPerRun, 0, 10_000)
+        : null,
+      notificationDeliveryConcurrencyError:
+        notificationDeliveryConcurrencyFilled
+          ? validateOptionalIntegerInput(notificationDeliveryConcurrency, 1, 50)
+          : null,
       includeRegexError: validateRegexInput(includeRegex),
       excludeRegexError: validateRegexInput(excludeRegex),
       cronError: nextCronError,
@@ -653,6 +703,8 @@ export function SettingsForm({
     cacheMinutes,
     releasesPerPage,
     parallelRepoFetches,
+    notificationMaxMessagesPerRun,
+    notificationDeliveryConcurrency,
     newSettings.refreshInterval,
     newSettings.cacheInterval,
     includeRegex,
@@ -684,6 +736,8 @@ export function SettingsForm({
       releasesPerPage,
       parallelRepoFetches,
       appriseMaxCharacters,
+      notificationMaxMessagesPerRun,
+      notificationDeliveryConcurrency,
     ].some((value) => value === "");
   const hasValidationErrors = Boolean(
     hasEmptyFields ||
@@ -691,6 +745,8 @@ export function SettingsForm({
       isCacheInvalid ||
       releasesPerPageError ||
       parallelRepoFetchesError ||
+      notificationMaxMessagesError ||
+      notificationDeliveryConcurrencyError ||
       includeRegexError ||
       excludeRegexError ||
       securityHighlightCustomColorError ||
@@ -1971,6 +2027,7 @@ export function SettingsForm({
                 onChange={(e) => setReleasesPerPage(e.target.value)}
                 min={1}
                 max={1000}
+                step={1}
                 disabled={!isOnline}
                 className={cn(
                   "mt-2 w-full sm:w-48",
@@ -1978,7 +2035,11 @@ export function SettingsForm({
                     "border-destructive focus-visible:ring-destructive",
                 )}
               />
-              {releasesPerPageError === "too_low" ? (
+              {releasesPerPageError === "invalid" ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {t("integer_error_invalid")}
+                </p>
+              ) : releasesPerPageError === "too_low" ? (
                 <p className="mt-2 text-sm text-destructive">
                   {t("releases_per_page_error_min")}
                 </p>
@@ -2007,6 +2068,7 @@ export function SettingsForm({
                 onChange={(e) => setParallelRepoFetches(e.target.value)}
                 min={1}
                 max={50}
+                step={1}
                 disabled={!isOnline}
                 className={cn(
                   "mt-2 w-full sm:w-48",
@@ -2014,7 +2076,11 @@ export function SettingsForm({
                     "border-destructive focus-visible:ring-destructive",
                 )}
               />
-              {parallelRepoFetchesError === "too_low" ? (
+              {parallelRepoFetchesError === "invalid" ? (
+                <p className="mt-2 text-sm text-destructive">
+                  {t("integer_error_invalid")}
+                </p>
+              ) : parallelRepoFetchesError === "too_low" ? (
                 <p className="mt-2 text-sm text-destructive">
                   {t("parallel_repo_fetches_error_min")}
                 </p>
@@ -2037,6 +2103,141 @@ export function SettingsForm({
                   {t("parallel_repo_fetches_warning_high")}
                 </p>
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("notification_delivery_settings_title")}</CardTitle>
+            <CardDescription>
+              {t("notification_delivery_settings_description")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div>
+                <Label htmlFor={ids.emailNotificationMode}>
+                  {t("email_notification_mode_label")}
+                </Label>
+                <Select
+                  value={emailNotificationMode}
+                  onValueChange={(value: NotificationMode) =>
+                    setEmailNotificationMode(value)
+                  }
+                  disabled={!isOnline}
+                >
+                  <SelectTrigger
+                    id={ids.emailNotificationMode}
+                    className="mt-2 w-full"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="per_release">
+                      {t("notification_mode_per_release")}
+                    </SelectItem>
+                    <SelectItem value="batch">
+                      {t("notification_mode_batch")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor={ids.appriseNotificationMode}>
+                  {t("apprise_notification_mode_label")}
+                </Label>
+                <Select
+                  value={appriseNotificationMode}
+                  onValueChange={(value: NotificationMode) =>
+                    setAppriseNotificationMode(value)
+                  }
+                  disabled={!isOnline}
+                >
+                  <SelectTrigger
+                    id={ids.appriseNotificationMode}
+                    className="mt-2 w-full"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="per_release">
+                      {t("notification_mode_per_release")}
+                    </SelectItem>
+                    <SelectItem value="batch">
+                      {t("notification_mode_batch")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div>
+                <Label htmlFor={ids.notificationMaxMessagesPerRun}>
+                  {t("notification_max_messages_label")}
+                </Label>
+                <Input
+                  id={ids.notificationMaxMessagesPerRun}
+                  type="number"
+                  value={notificationMaxMessagesPerRun}
+                  onChange={(event) =>
+                    setNotificationMaxMessagesPerRun(event.target.value)
+                  }
+                  min={0}
+                  max={10000}
+                  step={1}
+                  disabled={!isOnline}
+                  className="mt-2 w-full sm:w-48"
+                  aria-invalid={Boolean(notificationMaxMessagesError)}
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("notification_max_messages_hint")}
+                </p>
+                {notificationMaxMessagesError && (
+                  <p className="mt-2 text-xs text-destructive">
+                    {t(
+                      notificationMaxMessagesError === "invalid"
+                        ? "integer_error_invalid"
+                        : notificationMaxMessagesError === "too_low"
+                          ? "notification_max_messages_error_min"
+                          : "notification_max_messages_error_max",
+                    )}
+                  </p>
+                )}
+              </div>
+              <div>
+                <Label htmlFor={ids.notificationDeliveryConcurrency}>
+                  {t("notification_delivery_concurrency_label")}
+                </Label>
+                <Input
+                  id={ids.notificationDeliveryConcurrency}
+                  type="number"
+                  value={notificationDeliveryConcurrency}
+                  onChange={(event) =>
+                    setNotificationDeliveryConcurrency(event.target.value)
+                  }
+                  min={1}
+                  max={50}
+                  step={1}
+                  disabled={!isOnline}
+                  className="mt-2 w-full sm:w-48"
+                  aria-invalid={Boolean(notificationDeliveryConcurrencyError)}
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("notification_delivery_concurrency_hint")}
+                </p>
+                {notificationDeliveryConcurrencyError && (
+                  <p className="mt-2 text-xs text-destructive">
+                    {t(
+                      notificationDeliveryConcurrencyError === "invalid"
+                        ? "integer_error_invalid"
+                        : notificationDeliveryConcurrencyError === "too_low"
+                          ? "notification_delivery_concurrency_error_min"
+                          : "notification_delivery_concurrency_error_max",
+                    )}
+                  </p>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

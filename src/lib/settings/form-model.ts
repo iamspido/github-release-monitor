@@ -9,6 +9,10 @@ import type { Repository } from "@/types";
 
 export type RegexValidationError = "invalid" | null;
 export type RangeValidationError = "too_low" | "too_high" | null;
+export type IntegerValidationError =
+  | Exclude<RangeValidationError, null>
+  | "invalid"
+  | null;
 export type CronValidationError = "invalid" | null;
 
 export { parseCustomPreReleaseMarkers };
@@ -44,12 +48,12 @@ export function validateOptionalIntegerInput(
   value: string | number,
   min: number,
   max: number,
-): RangeValidationError {
+): IntegerValidationError {
   const trimmed = String(value).trim();
   if (!trimmed) return null;
 
-  const parsed = Number.parseInt(trimmed, 10);
-  if (Number.isNaN(parsed)) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed)) return "invalid";
 
   return validateNumberRange(parsed, min, max);
 }

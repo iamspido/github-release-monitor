@@ -73,12 +73,10 @@ export async function waitForRepoLink(
   return link;
 }
 
-export async function waitForRepositoryUpdate(page: Page) {
-  await expect(
-    page.locator(
-      '[data-testid="repository-update-result"][data-result="success"]',
-    ),
-  ).toBeVisible();
+export async function waitForRepositoryUpdate(page: Page, timeoutMs = 15_000) {
+  const result = page.locator('[data-testid="repository-update-result"]');
+  await expect(result).toBeVisible({ timeout: timeoutMs });
+  await expect(result).toHaveAttribute("data-result", "success");
 }
 
 export async function ensureRepositoryFormExpanded(page: Page) {

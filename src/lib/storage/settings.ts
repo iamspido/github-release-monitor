@@ -62,7 +62,11 @@ export function createDefaultSettings(
     includeRegex: undefined,
     excludeRegex: undefined,
     emailIncludeReleaseNotes: true,
+    emailNotificationMode: "per_release",
     appriseIncludeReleaseNotes: true,
+    appriseNotificationMode: "per_release",
+    notificationMaxMessagesPerRun: 20,
+    notificationDeliveryConcurrency: 4,
     appriseMaxCharacters: 1800,
     appriseTags: undefined,
     appriseFormat: "text",
@@ -109,6 +113,7 @@ export function normalizeSettings(value: unknown): AppSettings {
     ...legacyPreReleaseMarkers,
   ]);
   const isAppriseFormat = isOneOf(["text", "markdown", "html"]);
+  const isNotificationMode = isOneOf(["per_release", "batch"]);
 
   assertOptionalField(
     persisted,
@@ -139,6 +144,18 @@ export function normalizeSettings(value: unknown): AppSettings {
     "appriseMaxCharacters",
     isIntegerInRange(0, Number.MAX_SAFE_INTEGER),
     "a non-negative integer",
+  );
+  assertOptionalField(
+    persisted,
+    "notificationMaxMessagesPerRun",
+    isIntegerInRange(0, 10_000),
+    "an integer between 0 and 10000",
+  );
+  assertOptionalField(
+    persisted,
+    "notificationDeliveryConcurrency",
+    isIntegerInRange(1, 50),
+    "an integer between 1 and 50",
   );
   for (const key of [
     "prioritizeNewSecurityReleases",
@@ -216,6 +233,18 @@ export function normalizeSettings(value: unknown): AppSettings {
     "appriseFormat",
     isAppriseFormat,
     "text, markdown, or html",
+  );
+  assertOptionalField(
+    persisted,
+    "emailNotificationMode",
+    isNotificationMode,
+    "per_release or batch",
+  );
+  assertOptionalField(
+    persisted,
+    "appriseNotificationMode",
+    isNotificationMode,
+    "per_release or batch",
   );
 
   const definedPersisted = Object.fromEntries(
