@@ -229,6 +229,59 @@ describe("actions GitLab self-hosted fetcher", () => {
     );
   });
 
+  it("resolves release-note commit references through the GitLab commit API", async () => {
+    process.env.GITLAB_ADDITIONAL_HOSTS = "gitlab.self.test";
+    process.env.GITLAB_ACCESS_TOKENS = "gitlab.self.test=glpat-self";
+    const actions = await import("@/app/actions");
+    const sha = "abcdef1234567890abcdef1234567890abcdef12";
+    const repo: Repository = {
+      id: "gitlab:gitlab.self.test/group/repo",
+      url: "https://gitlab.self.test/group/repo",
+    };
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: [
+            {
+              tag_name: "v1.2.3",
+              name: "v1.2.3",
+              description: "Fix abcdef1",
+              created_at: "2026-01-01T00:00:00Z",
+              released_at: "2026-01-01T00:00:00Z",
+              upcoming_release: false,
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: {
+            id: sha,
+            web_url: `https://gitlab.self.test/group/repo/-/commit/${sha}`,
+          },
+        }),
+      );
+
+    const [result] = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(result.release?.commit_links).toEqual([
+      {
+        ref: "abcdef1",
+        sha,
+        url: `https://gitlab.self.test/group/repo/-/commit/${sha}`,
+      },
+    ]);
+    expect(String(vi.mocked(global.fetch).mock.calls[1][0])).toBe(
+      "https://gitlab.self.test/api/v4/projects/group%2Frepo/repository/commits/abcdef1?stats=false",
+    );
+  });
+
   it("uses GitLab's provider-latest permalink when configured", async () => {
     process.env.GITLAB_ADDITIONAL_HOSTS = "gitlab.self.test";
     process.env.GITLAB_ACCESS_TOKENS = "gitlab.self.test=glpat-self";

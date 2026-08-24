@@ -22,6 +22,8 @@ import {
 } from "@/lib/storage/runtime-validation";
 import type {
   CachedRelease,
+  CommitLink,
+  CommitLinksRetry,
   GithubRelease,
   PendingReleaseNotification,
   Repository,
@@ -46,6 +48,89 @@ const isReleaseSource = isOneOf(["release", "tag"]);
 const isReleaseSelectionStrategy = isOneOf(releaseSelectionStrategies);
 const isNotificationChannel = isOneOf(["email", "apprise"]);
 const isTimeFormat = isOneOf(["12h", "24h"]);
+const repositoryLog = logger.withScope("Repositories");
+const isSafeCommitUrl = (value: string, sha: string): boolean => {
+  try {
+    const url = new URL(value);
+    const path = decodeURIComponent(url.pathname).toLowerCase();
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      url.username === "" &&
+      url.password === "" &&
+      url.search === "" &&
+      url.hash === "" &&
+      (path.endsWith(`/commit/${sha}`) || path.endsWith(`/-/commit/${sha}`))
+    );
+  } catch {
+    return false;
+  }
+};
+const isCommitLink = (value: unknown): value is CommitLink => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const link = value as Record<string, unknown>;
+  return (
+    typeof link.ref === "string" &&
+    /^[0-9a-f]{7,40}$/i.test(link.ref) &&
+    typeof link.sha === "string" &&
+    /^[0-9a-f]{40}$/i.test(link.sha) &&
+    link.sha.toLowerCase().startsWith(link.ref.toLowerCase()) &&
+    typeof link.url === "string" &&
+    isSafeCommitUrl(link.url, link.sha.toLowerCase())
+  );
+};
+const isCommitLinksRetry = (value: unknown): value is CommitLinksRetry => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const retry = value as Record<string, unknown>;
+  return (
+    typeof retry.attempts === "number" &&
+    Number.isInteger(retry.attempts) &&
+    retry.attempts >= 0 &&
+    typeof retry.retry_at === "string" &&
+    Number.isFinite(Date.parse(retry.retry_at)) &&
+    (retry.checked_refs === undefined ||
+      (Array.isArray(retry.checked_refs) &&
+        retry.checked_refs.every(
+          (ref): ref is string =>
+            typeof ref === "string" && /^[0-9a-f]{7,40}$/i.test(ref),
+        ) &&
+        new Set(retry.checked_refs.map((ref) => ref.toLowerCase())).size ===
+          retry.checked_refs.length))
+  );
+};
+
+function sanitizeCommitLinkMetadata(
+  release: Record<string, unknown>,
+  path: string,
+): void {
+  const commitLinksValid =
+    release.commit_links === undefined ||
+    isArrayOf(isCommitLink)(release.commit_links);
+  const resolvedAtValid =
+    release.commit_links_resolved_at === undefined ||
+    (typeof release.commit_links_resolved_at === "string" &&
+      Number.isFinite(Date.parse(release.commit_links_resolved_at)));
+  const retryValid =
+    release.commit_links_retry === undefined ||
+    isCommitLinksRetry(release.commit_links_retry);
+  const stateValid =
+    !(
+      release.commit_links_resolved_at !== undefined &&
+      release.commit_links_retry !== undefined
+    ) &&
+    !(
+      release.commit_links_resolved_at !== undefined &&
+      release.commit_links === undefined
+    );
+
+  if (commitLinksValid && resolvedAtValid && retryValid && stateValid) return;
+
+  delete release.commit_links;
+  delete release.commit_links_resolved_at;
+  delete release.commit_links_retry;
+  repositoryLog.warn(
+    `Discarding invalid derived commit-link metadata at ${path}; it will be rebuilt during a future release check.`,
+  );
+}
 
 function parseCachedRelease(value: unknown, path: string): CachedRelease {
   const release = assertJsonObject(value, path);
@@ -66,6 +151,40 @@ function parseCachedRelease(value: unknown, path: string): CachedRelease {
     isNullable(isString),
     "a string or null",
   );
+  sanitizeCommitLinkMetadata(release, path);
+  assertOptionalField(
+    release,
+    "commit_links",
+    isArrayOf(isCommitLink),
+    "an array of commit links",
+  );
+  assertOptionalField(
+    release,
+    "commit_links_resolved_at",
+    (value): value is string =>
+      typeof value === "string" && Number.isFinite(Date.parse(value)),
+    "a valid commit-link resolution timestamp",
+  );
+  assertOptionalField(
+    release,
+    "commit_links_retry",
+    isCommitLinksRetry,
+    "a commit-link retry state",
+  );
+  if (
+    release.commit_links_resolved_at !== undefined &&
+    release.commit_links_retry !== undefined
+  ) {
+    throw new Error(
+      `${path} cannot contain both commit_links_resolved_at and commit_links_retry.`,
+    );
+  }
+  if (
+    release.commit_links_resolved_at !== undefined &&
+    release.commit_links === undefined
+  ) {
+    throw new Error(`${path}.commit_links_resolved_at requires commit_links.`);
+  }
   assertOptionalField(
     release,
     "published_at",
@@ -92,6 +211,40 @@ function parsePendingRelease(value: unknown, path: string): GithubRelease {
     if (!isNullable(isString)(release[key])) {
       throw new Error(`${path}.${key} must be a string or null.`);
     }
+  }
+  sanitizeCommitLinkMetadata(release, path);
+  assertOptionalField(
+    release,
+    "commit_links",
+    isArrayOf(isCommitLink),
+    "an array of commit links",
+  );
+  assertOptionalField(
+    release,
+    "commit_links_resolved_at",
+    (value): value is string =>
+      typeof value === "string" && Number.isFinite(Date.parse(value)),
+    "a valid commit-link resolution timestamp",
+  );
+  assertOptionalField(
+    release,
+    "commit_links_retry",
+    isCommitLinksRetry,
+    "a commit-link retry state",
+  );
+  if (
+    release.commit_links_resolved_at !== undefined &&
+    release.commit_links_retry !== undefined
+  ) {
+    throw new Error(
+      `${path} cannot contain both commit_links_resolved_at and commit_links_retry.`,
+    );
+  }
+  if (
+    release.commit_links_resolved_at !== undefined &&
+    release.commit_links === undefined
+  ) {
+    throw new Error(`${path}.commit_links_resolved_at requires commit_links.`);
   }
   for (const key of ["prerelease", "draft"] as const) {
     if (!isBoolean(release[key])) {
@@ -473,9 +626,9 @@ export async function getRepositories(): Promise<Repository[]> {
       const { migrated, changed } = migrateRepositoriesIds(data);
 
       if (changed) {
-        logger
-          .withScope("Repositories")
-          .info("Migrating repository ids to provider-prefixed format.");
+        repositoryLog.info(
+          "Migrating repository ids to provider-prefixed format.",
+        );
       }
 
       migrationInFlight = (async () => {

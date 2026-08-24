@@ -1,7 +1,16 @@
 import { getTranslations } from "next-intl/server";
 import { mapWithConcurrency } from "@/lib/concurrency";
-import { discardResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
+import {
+  discardResponseWithTimeout,
+  isUrlWithinBaseUrl,
+} from "@/lib/http/fetch-with-timeout";
 import { buildCodebergAuthChain } from "@/lib/releases/auth-chains";
+import {
+  applyVerifiedCommitLinks,
+  canReuseCommitLinkState,
+  inheritCommitLinkState,
+  resolveCommitLinkCandidates,
+} from "@/lib/releases/commit-links";
 import {
   fetchJsonResponseWithRetryAuthChain,
   isRateLimitedResponse,
@@ -59,6 +68,8 @@ type CodebergTagApi = {
 };
 
 type CodebergCommitApi = {
+  sha?: string | null;
+  html_url?: string | null;
   created?: string | null;
   message?: string | null;
   author?: { date?: string | null } | null;
@@ -69,6 +80,96 @@ type CodebergCommitApi = {
     committer?: { date?: string | null } | null;
   } | null;
 };
+
+function normalizeForgejoCommitUrl(
+  value: string,
+  allowedBaseUrl: string,
+  sha: string,
+): string | null {
+  try {
+    const url = new URL(value);
+    const baseUrl = new URL(allowedBaseUrl);
+    const decodedPath = decodeURIComponent(url.pathname);
+    if (
+      !isUrlWithinBaseUrl(url, baseUrl) ||
+      !decodedPath.endsWith(`/commit/${sha}`)
+    ) {
+      return null;
+    }
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+async function resolveForgejoCommitLinks(args: {
+  allowedRedirectBaseUrl: string | null;
+  apiBaseUrl: string;
+  authToken: string | null;
+  baseUrl: string;
+  candidates: readonly string[];
+  deadline: number;
+  headersWithoutAuth: Record<string, string>;
+  owner: string;
+  providerLabel: "Codeberg" | "Forgejo";
+  repo: string;
+}) {
+  return resolveCommitLinkCandidates({
+    candidates: args.candidates,
+    deadline: args.deadline,
+    resolve: async (ref, deadline) => {
+      const timeoutMs = deadline - Date.now();
+      if (timeoutMs <= 0) return { status: "retry" };
+      try {
+        const chain = buildCodebergAuthChain(
+          args.headersWithoutAuth,
+          args.authToken,
+        );
+        const { response, data } =
+          await fetchJsonResponseWithRetryAuthChain<CodebergCommitApi>(
+            `${args.apiBaseUrl}/git/commits/${encodeURIComponent(ref)}?stat=false&verification=false&files=false`,
+            chain,
+            {
+              allowedRedirectBaseUrl: args.allowedRedirectBaseUrl ?? undefined,
+              deadlineMs: deadline,
+              description: `${args.providerLabel} commit link (${ref}) for ${args.owner}/${args.repo}`,
+              maxAttempts: 1,
+              parseAttempts: 1,
+              timeoutMs,
+            },
+          );
+
+        if (response.status === 404 || response.status === 422) {
+          await discardResponseWithTimeout(response);
+          return { status: "not_found" };
+        }
+        if (!response.ok || !data) {
+          await discardResponseWithTimeout(response);
+          return { status: "retry" };
+        }
+
+        const sha =
+          typeof data.sha === "string" ? data.sha.trim().toLowerCase() : "";
+        const url =
+          typeof data.html_url === "string"
+            ? normalizeForgejoCommitUrl(data.html_url, args.baseUrl, sha)
+            : null;
+        if (!/^[0-9a-f]{40}$/.test(sha) || !sha.startsWith(ref) || !url) {
+          return { status: "retry" };
+        }
+        return { status: "resolved", link: { ref, sha, url } };
+      } catch (error) {
+        log.warn(
+          `Could not resolve ${args.providerLabel} commit link ${ref} for ${args.owner}/${args.repo}.`,
+          error,
+        );
+        return { status: "retry" };
+      }
+    },
+  });
+}
 
 type CodebergRepoApi = {
   has_releases?: boolean | null;
@@ -352,6 +453,7 @@ async function fetchLatestReleaseFromForgejoBase(
         effectiveReleaseSelectionStrategy !== "provider_latest" &&
         repoSettings.etag &&
         repoSettings.latestRelease &&
+        canReuseCommitLinkState(repoSettings.latestRelease) &&
         !isCachedTagFallbackRelease(repoSettings.latestRelease)
       ) {
         currentHeadersWithoutAuth["If-None-Match"] = repoSettings.etag;
@@ -676,6 +778,24 @@ async function fetchLatestReleaseFromForgejoBase(
         t("commit_message_fallback_title"),
       );
     }
+
+    inheritCommitLinkState(latestRelease, repoSettings.latestRelease);
+    await applyVerifiedCommitLinks({
+      release: latestRelease,
+      resolve: (candidates, deadline) =>
+        resolveForgejoCommitLinks({
+          allowedRedirectBaseUrl,
+          apiBaseUrl: API_BASE_URL,
+          authToken,
+          baseUrl,
+          candidates,
+          deadline,
+          headersWithoutAuth,
+          owner,
+          providerLabel,
+          repo,
+        }),
+    });
 
     return releaseSuccessResult(latestRelease, newEtag, fetchedAtTimestamp);
   } catch (error) {

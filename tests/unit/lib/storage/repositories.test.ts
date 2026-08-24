@@ -19,7 +19,15 @@ function createPendingNotification(): PendingReleaseNotification {
       html_url: "https://github.com/owner/repo/releases/tag/v2",
       tag_name: "v2",
       name: "v2",
-      body: "notes",
+      body: "Commit deadbee",
+      commit_links: [
+        {
+          ref: "deadbee",
+          sha: `deadbee${"a".repeat(33)}`,
+          url: `https://github.com/owner/repo/commit/deadbee${"a".repeat(33)}`,
+        },
+      ],
+      commit_links_resolved_at: createdAt,
       created_at: createdAt,
       published_at: createdAt,
       prerelease: false,
@@ -214,6 +222,132 @@ describe("storage/repositories", () => {
       /Failed to write/,
     );
     writeSpy.mockRestore();
+  });
+
+  it("round-trips resolved commit-link metadata and discards invalid derived state", async () => {
+    const { getRepositories, saveRepositories } = await import(
+      "@/lib/storage/repositories"
+    );
+    const resolvedAt = "2026-07-14T00:00:00.000Z";
+    const repository: Repository = {
+      id: "github:owner/repo",
+      url: "https://github.com/owner/repo",
+      latestRelease: {
+        html_url: "https://github.com/owner/repo/releases/tag/v1",
+        tag_name: "v1",
+        name: "v1",
+        body: "Commit deadbee",
+        commit_links: [
+          {
+            ref: "deadbee",
+            sha: `deadbee${"a".repeat(33)}`,
+            url: `https://github.com/owner/repo/commit/deadbee${"a".repeat(33)}`,
+          },
+        ],
+        commit_links_resolved_at: resolvedAt,
+        created_at: resolvedAt,
+        published_at: resolvedAt,
+      },
+    };
+
+    await saveRepositories([repository]);
+    await expect(getRepositories()).resolves.toEqual([repository]);
+
+    const dataFile = path.join(tmpDir, "data", "repositories.json");
+    const invalid = JSON.parse(await fs.readFile(dataFile, "utf8"));
+    delete invalid[0].latestRelease.commit_links;
+    await fs.writeFile(dataFile, JSON.stringify(invalid), "utf8");
+
+    const repositories = await getRepositories();
+    expect(repositories[0].latestRelease).not.toHaveProperty("commit_links");
+    expect(repositories[0].latestRelease).not.toHaveProperty(
+      "commit_links_resolved_at",
+    );
+    expect(repositories[0].latestRelease).not.toHaveProperty(
+      "commit_links_retry",
+    );
+  });
+
+  it("loads legacy nullable commit-link metadata in cached and pending releases", async () => {
+    const dataDir = path.join(tmpDir, "data");
+    await fs.mkdir(dataDir, { recursive: true });
+    const repository: Repository = {
+      id: "github:owner/repo",
+      url: "https://github.com/owner/repo",
+    };
+    repository.latestRelease = {
+      html_url: "https://github.com/owner/repo/releases/tag/v1",
+      tag_name: "v1",
+      name: "v1",
+      body: "Commit deadbee",
+      created_at: "2026-07-14T00:00:00.000Z",
+      published_at: "2026-07-14T00:00:00.000Z",
+    };
+    repository.pendingNotifications = [createPendingNotification()];
+    const rawRepository = repository as unknown as Record<string, unknown>;
+    const rawLatestRelease = rawRepository.latestRelease as Record<
+      string,
+      unknown
+    >;
+    rawLatestRelease.commit_links = null;
+    rawLatestRelease.commit_links_resolved_at = null;
+    const rawPendingRelease = (
+      rawRepository.pendingNotifications as Array<Record<string, unknown>>
+    )[0].release as Record<string, unknown>;
+    rawPendingRelease.commit_links = null;
+
+    await fs.writeFile(
+      path.join(dataDir, "repositories.json"),
+      JSON.stringify([rawRepository]),
+      "utf8",
+    );
+
+    const { getRepositories } = await import("@/lib/storage/repositories");
+    const repositories = await getRepositories();
+
+    expect(repositories[0].latestRelease).not.toHaveProperty("commit_links");
+    expect(repositories[0].latestRelease).not.toHaveProperty(
+      "commit_links_resolved_at",
+    );
+    expect(
+      repositories[0].pendingNotifications?.[0].release,
+    ).not.toHaveProperty("commit_links");
+    expect(repositories[0].pendingNotifications).toHaveLength(1);
+  });
+
+  it("round-trips partial commit-link metadata with retry progress", async () => {
+    const { getRepositories, saveRepositories } = await import(
+      "@/lib/storage/repositories"
+    );
+    const sha = `deadbee${"a".repeat(33)}`;
+    const repository: Repository = {
+      id: "github:owner/repo",
+      url: "https://github.com/owner/repo",
+      latestRelease: {
+        html_url: "https://github.com/owner/repo/releases/tag/v1",
+        tag_name: "v1",
+        name: "v1",
+        body: "Commits deadbee and 1234567",
+        commit_links: [
+          {
+            ref: "deadbee",
+            sha,
+            url: `https://github.com/owner/repo/commit/${sha}`,
+          },
+        ],
+        commit_links_retry: {
+          attempts: 0,
+          retry_at: "2026-07-14T00:15:00.000Z",
+          checked_refs: ["deadbee"],
+        },
+        created_at: "2026-07-14T00:00:00.000Z",
+        published_at: "2026-07-14T00:00:00.000Z",
+      },
+    };
+
+    await saveRepositories([repository]);
+
+    await expect(getRepositories()).resolves.toEqual([repository]);
   });
 
   it("rejects structurally invalid repository data", async () => {

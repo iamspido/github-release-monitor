@@ -5,6 +5,11 @@ import {
 } from "@/lib/http/fetch-with-timeout";
 import { getComprehensiveMarkdownBody } from "@/lib/notifications/test-release-payloads";
 import {
+  applyVerifiedCommitLinks,
+  canReuseCommitLinkState,
+  inheritCommitLinkState,
+} from "@/lib/releases/commit-links";
+import {
   fetchJsonResponseWithRetry,
   fetchWithRetry,
 } from "@/lib/releases/fetch";
@@ -12,6 +17,10 @@ import {
   isCachedTagFallbackRelease,
   resolveEffectiveRepoFilters,
 } from "@/lib/releases/filters";
+import {
+  extractGithubReleaseBodyHtml,
+  resolveGithubCommitLinks,
+} from "@/lib/releases/github-markdown";
 import { parseGithubTagsPage } from "@/lib/releases/github-tags-page";
 import {
   buildFallbackMarkdown,
@@ -34,6 +43,229 @@ type GithubTagCandidate = {
   tag: { name: string; commit: { sha: string } };
   release: GithubRelease;
 };
+
+type GithubReleasePage = {
+  finalUrl: string;
+  html: string;
+};
+
+function getCanonicalGithubRepository(
+  githubUrl: string,
+  fallback: { owner: string; repo: string },
+  expectedSection: "commit" | "releases" | "tags" = "releases",
+): { owner: string; repo: string } {
+  try {
+    const url = new URL(githubUrl);
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (
+      url.protocol === "https:" &&
+      url.hostname === "github.com" &&
+      segments.length >= 3 &&
+      segments[2] === expectedSection
+    ) {
+      return {
+        owner: decodeURIComponent(segments[0]),
+        repo: decodeURIComponent(segments[1]),
+      };
+    }
+  } catch {
+    // Fall back to the configured repository when the release URL is invalid.
+  }
+  return fallback;
+}
+
+function getCanonicalGithubApiRepository(
+  apiUrl: string,
+  fallback: { owner: string; repo: string },
+): { owner: string; repo: string } {
+  try {
+    const url = new URL(apiUrl);
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (
+      url.protocol === "https:" &&
+      url.hostname === "api.github.com" &&
+      segments.length >= 4 &&
+      segments[0] === "repos"
+    ) {
+      return {
+        owner: decodeURIComponent(segments[1]),
+        repo: decodeURIComponent(segments[2]),
+      };
+    }
+  } catch {
+    // Fall back to the configured repository when the API URL is invalid.
+  }
+  return fallback;
+}
+
+async function fetchGithubReleasePageHtml(
+  releaseUrl: string,
+  owner: string,
+  repo: string,
+  timeoutMs: number,
+): Promise<GithubReleasePage | null> {
+  try {
+    const response = await fetchWithRetry(
+      releaseUrl,
+      {
+        headers: {
+          Accept: "text/html",
+          "User-Agent": "GitHubReleaseMonitorApp",
+        },
+        cache: "no-store",
+      },
+      {
+        description: `GitHub release page for ${owner}/${repo}`,
+        allowedRedirectBaseUrl: "https://github.com",
+        maxAttempts: 1,
+        timeoutMs,
+      },
+    );
+    if (!response.ok) {
+      await discardResponseWithTimeout(response);
+      return null;
+    }
+    const finalUrl = response.url || releaseUrl;
+    const html = await consumeResponseWithTimeout(response, (result) =>
+      result.text(),
+    );
+    return { finalUrl, html };
+  } catch (error) {
+    log.warn(`Could not render release page for ${owner}/${repo}.`, error);
+    return null;
+  }
+}
+
+function extractExpectedGithubReleaseBody(
+  page: GithubReleasePage,
+  releaseUrl: string,
+): string | null {
+  try {
+    const expectedUrl = new URL(releaseUrl);
+    const finalUrl = new URL(page.finalUrl);
+    if (
+      finalUrl.origin !== expectedUrl.origin ||
+      finalUrl.pathname.replace(/\/+$/, "") !==
+        expectedUrl.pathname.replace(/\/+$/, "")
+    ) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  return extractGithubReleaseBodyHtml(page.html);
+}
+
+async function fetchGithubMarkdownHtml(args: {
+  body: string;
+  headers: Record<string, string>;
+  owner: string;
+  repo: string;
+  timeoutMs: number;
+}): Promise<string | null> {
+  try {
+    const response = await fetchWithRetry(
+      "https://api.github.com/markdown",
+      {
+        method: "POST",
+        headers: {
+          ...args.headers,
+          Accept: "text/html",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: args.body,
+          mode: "gfm",
+          context: `${args.owner}/${args.repo}`,
+        }),
+        cache: "no-store",
+      },
+      {
+        description: `GitHub Markdown for ${args.owner}/${args.repo}`,
+        maxAttempts: 1,
+        timeoutMs: args.timeoutMs,
+      },
+    );
+    if (!response.ok) {
+      await discardResponseWithTimeout(response);
+      return null;
+    }
+    return consumeResponseWithTimeout(response, (result) => result.text());
+  } catch (error) {
+    log.warn(
+      `Could not resolve GitHub commit references for ${args.owner}/${args.repo}.`,
+      error,
+    );
+    return null;
+  }
+}
+
+async function applyGithubCommitLinks(args: {
+  bodyIsProviderRendered: boolean;
+  headers: Record<string, string>;
+  release: GithubRelease;
+  owner: string;
+  repo: string;
+}): Promise<void> {
+  const { release } = args;
+  const canonicalRepository = getCanonicalGithubRepository(release.html_url, {
+    owner: args.owner,
+    repo: args.repo,
+  });
+  await applyVerifiedCommitLinks({
+    release,
+    resolve: async (_candidates, deadline) => {
+      if (args.bodyIsProviderRendered) {
+        const timeoutMs = deadline - Date.now();
+        if (timeoutMs <= 0) return null;
+        const releasePage = await fetchGithubReleasePageHtml(
+          release.html_url,
+          canonicalRepository.owner,
+          canonicalRepository.repo,
+          timeoutMs,
+        );
+        const releaseBodyHtml = releasePage
+          ? extractExpectedGithubReleaseBody(releasePage, release.html_url)
+          : null;
+        if (releaseBodyHtml !== null) {
+          return {
+            links: resolveGithubCommitLinks(
+              release.body ?? "",
+              releaseBodyHtml,
+              canonicalRepository.owner,
+              canonicalRepository.repo,
+            ),
+            checkedRefs: [..._candidates],
+            complete: true,
+          };
+        }
+      }
+
+      const timeoutMs = deadline - Date.now();
+      if (timeoutMs <= 0) return null;
+      const renderedHtml = await fetchGithubMarkdownHtml({
+        body: release.body ?? "",
+        headers: args.headers,
+        owner: canonicalRepository.owner,
+        repo: canonicalRepository.repo,
+        timeoutMs,
+      });
+      return renderedHtml === null
+        ? null
+        : {
+            links: resolveGithubCommitLinks(
+              release.body ?? "",
+              renderedHtml,
+              canonicalRepository.owner,
+              canonicalRepository.repo,
+            ),
+            checkedRefs: [..._candidates],
+            complete: true,
+          };
+    },
+  });
+}
 
 async function fetchGithubProviderLatestRelease(
   apiBaseUrl: string,
@@ -112,6 +344,11 @@ async function fetchGithubTagCandidatesFromPage(args: {
     const body = await consumeResponseWithTimeout(response, (result) =>
       result.text(),
     );
+    const canonicalRepository = getCanonicalGithubRepository(
+      response.url,
+      { owner: args.owner, repo: args.repo },
+      "tags",
+    );
     const entries = parseGithubTagsPage(body).slice(
       0,
       args.filters.totalReleasesToFetch,
@@ -120,7 +357,7 @@ async function fetchGithubTagCandidatesFromPage(args: {
       tag: { name: entry.name, commit: { sha: entry.commitSha } },
       release: {
         id: 0,
-        html_url: `https://github.com/${args.owner}/${args.repo}/releases/tag/${encodeURIComponent(entry.name)}`,
+        html_url: `https://github.com/${canonicalRepository.owner}/${canonicalRepository.repo}/releases/tag/${encodeURIComponent(entry.name)}`,
         tag_name: entry.name,
         name: `Tag: ${entry.name}`,
         body: "",
@@ -201,8 +438,8 @@ export async function fetchLatestReleaseFromGitHub(
   let providerLatestRelease: GithubRelease | null | undefined;
   let selectedReleaseFromTagScan: GithubRelease | undefined;
 
-  const headers: HeadersInit = {
-    Accept: "application/vnd.github.v3+json",
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
     "User-Agent": "GitHubReleaseMonitorApp",
     "X-GitHub-Api-Version": "2022-11-28",
   };
@@ -247,12 +484,15 @@ export async function fetchLatestReleaseFromGitHub(
       const currentHeaders = { ...headers };
       // A page-one releases ETag cannot validate candidates from later pages
       // or from the separate tags endpoint used by highest-version selection.
+      // Uninitialized commit-link metadata needs a non-conditional response.
+      // Failed enrichment attempts may reuse the ETag until their retry is due.
       if (
         page === 1 &&
         releasePagesToFetch === 1 &&
         effectiveReleaseSelectionStrategy === "newest" &&
         repoSettings.etag &&
         repoSettings.latestRelease &&
+        canReuseCommitLinkState(repoSettings.latestRelease) &&
         !isCachedTagFallbackRelease(repoSettings.latestRelease)
       ) {
         currentHeaders["If-None-Match"] = repoSettings.etag;
@@ -357,6 +597,7 @@ export async function fetchLatestReleaseFromGitHub(
 
       if (!selectedCandidate) {
         const allTags: { name: string; commit: { sha: string } }[] = [];
+        let restTagsRepository = { owner, repo };
         let tagsFetchErrorType: FetchError["type"] | null = null;
         for (let page = 1; page <= pagesToFetch; page++) {
           const tagsOnThisPage = resolvePageSize({
@@ -374,6 +615,11 @@ export async function fetchLatestReleaseFromGitHub(
               { headers, cache: "no-store" },
               { description: `GitHub tags for ${owner}/${repo} page ${page}` },
             );
+
+          restTagsRepository = getCanonicalGithubApiRepository(
+            tagsResponse.url,
+            restTagsRepository,
+          );
 
           if (!tagsResponse.ok) {
             await discardResponseWithTimeout(tagsResponse);
@@ -425,7 +671,7 @@ export async function fetchLatestReleaseFromGitHub(
           tag,
           release: {
             id: 0,
-            html_url: `https://github.com/${owner}/${repo}/releases/tag/${encodeURIComponent(tag.name)}`,
+            html_url: `https://github.com/${restTagsRepository.owner}/${restTagsRepository.repo}/releases/tag/${encodeURIComponent(tag.name)}`,
             tag_name: tag.name,
             name: `Tag: ${tag.name}`,
             body: "",
@@ -516,6 +762,10 @@ export async function fetchLatestReleaseFromGitHub(
           selectedCandidate.release.created_at;
         let publicationDateUnknown =
           selectedCandidate.release.published_at_unknown === true;
+        let tagFallbackRepository = getCanonicalGithubRepository(
+          selectedCandidate.release.html_url,
+          { owner, repo },
+        );
 
         try {
           const { response: refResponse, data: refData } =
@@ -530,6 +780,10 @@ export async function fetchLatestReleaseFromGitHub(
             );
 
           if (refResponse.ok && refData) {
+            tagFallbackRepository = getCanonicalGithubApiRepository(
+              refData.object.url,
+              tagFallbackRepository,
+            );
             // If it's an annotated tag, the object type is 'tag'.
             if (refData.object.type === "tag") {
               const { response: annotatedTagResponse, data: annotatedTagData } =
@@ -567,6 +821,7 @@ export async function fetchLatestReleaseFromGitHub(
             const { response: commitResponse, data: commitData } =
               await fetchJsonResponseWithRetry<{
                 commit: { message: string; committer: { date: string } };
+                html_url?: string;
               }>(
                 `${GITHUB_API_BASE_URL}/commits/${latestTag.commit.sha}`,
                 { headers, cache: "no-store" },
@@ -575,6 +830,11 @@ export async function fetchLatestReleaseFromGitHub(
                 },
               );
             if (commitResponse.ok && commitData) {
+              tagFallbackRepository = getCanonicalGithubRepository(
+                commitData.html_url ?? "",
+                tagFallbackRepository,
+                "commit",
+              );
               bodyContent = buildFallbackMarkdown(
                 t("commit_message_fallback_title"),
                 commitData.commit.message,
@@ -600,6 +860,7 @@ export async function fetchLatestReleaseFromGitHub(
 
         const virtualRelease: GithubRelease = {
           ...selectedCandidate.release,
+          html_url: `https://github.com/${tagFallbackRepository.owner}/${tagFallbackRepository.repo}/releases/tag/${encodeURIComponent(latestTag.name)}`,
           body: bodyContent,
           created_at: publicationDate,
           published_at: publicationDate,
@@ -631,6 +892,8 @@ export async function fetchLatestReleaseFromGitHub(
       );
     }
 
+    let bodyIsProviderRendered = latestRelease.id !== 0;
+
     // This check is for formal releases that have an empty body.
     // The tag fallback already populates the body with a commit message.
     if (
@@ -658,6 +921,7 @@ export async function fetchLatestReleaseFromGitHub(
             t("commit_message_fallback_title"),
             commitData.commit.message,
           );
+          bodyIsProviderRendered = false;
           log.info(
             `Successfully fetched commit message for ${owner}/${repo} tag ${latestRelease.tag_name}.`,
           );
@@ -678,6 +942,15 @@ export async function fetchLatestReleaseFromGitHub(
         );
       }
     }
+
+    inheritCommitLinkState(latestRelease, repoSettings.latestRelease);
+    await applyGithubCommitLinks({
+      bodyIsProviderRendered,
+      headers,
+      release: latestRelease,
+      owner,
+      repo,
+    });
 
     return releaseSuccessResult(
       latestRelease,

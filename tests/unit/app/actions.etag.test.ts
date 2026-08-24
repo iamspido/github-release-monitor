@@ -66,6 +66,7 @@ describe("ETag updates repo on successful fetch", () => {
 
     await actions.checkForNewReleases({ skipCache: true });
     expect(mem.repos[0].etag).toBe('W/"123"');
+    expect(mem.repos[0].latestRelease?.commit_links).toEqual([]);
   });
 
   it("clears stale releases ETag and updates cached tag fallback releases", async () => {

@@ -1284,7 +1284,10 @@ export function ReleaseCard({
                   )}
                 </div>
                 <RepositoryTagBadges tags={repositoryTags} />
-                <ReleaseNotesPreview body={release.body} />
+                <ReleaseNotesPreview
+                  body={release.body}
+                  commitLinks={release.commit_links}
+                />
               </>
             )}
           </div>
@@ -1390,7 +1393,10 @@ export function ReleaseCard({
           </div>
         </CardHeader>
         <CardContent className="grow pt-0 min-w-0">
-          <ReleaseNotesPreview body={release.body} />
+          <ReleaseNotesPreview
+            body={release.body}
+            commitLinks={release.commit_links}
+          />
         </CardContent>
         <CardFooter className="flex flex-col items-stretch gap-3 pt-4">
           <ReleaseActions

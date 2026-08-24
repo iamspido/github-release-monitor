@@ -4,6 +4,12 @@ import {
   discardResponseWithTimeout,
 } from "@/lib/http/fetch-with-timeout";
 import { buildGitlabAuthChain } from "@/lib/releases/auth-chains";
+import {
+  applyVerifiedCommitLinks,
+  canReuseCommitLinkState,
+  inheritCommitLinkState,
+  resolveCommitLinkCandidates,
+} from "@/lib/releases/commit-links";
 import { fetchJsonResponseWithRetryAuthChain } from "@/lib/releases/fetch";
 import {
   isCachedTagFallbackRelease,
@@ -60,11 +66,98 @@ type GitlabTagApi = {
 };
 
 type GitlabCommitApi = {
+  id?: string | null;
+  web_url?: string | null;
   message?: string | null;
   committed_date?: string | null;
   authored_date?: string | null;
   created_at?: string | null;
 };
+
+function normalizeGitlabCommitUrl(
+  value: string,
+  gitlabHost: string,
+  sha: string,
+): string | null {
+  try {
+    const url = new URL(value);
+    const decodedPath = decodeURIComponent(url.pathname);
+    if (
+      url.protocol !== "https:" ||
+      url.hostname.toLowerCase() !== gitlabHost.toLowerCase() ||
+      url.username ||
+      url.password ||
+      !decodedPath.endsWith(`/-/commit/${sha}`)
+    ) {
+      return null;
+    }
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+async function resolveGitlabCommitLinks(args: {
+  apiBaseUrl: string;
+  auth: GitlabAuthConfig | null;
+  candidates: readonly string[];
+  deadline: number;
+  gitlabHost: string;
+  headersWithoutAuth: Record<string, string>;
+  projectPath: string;
+}) {
+  return resolveCommitLinkCandidates({
+    candidates: args.candidates,
+    deadline: args.deadline,
+    resolve: async (ref, deadline) => {
+      const timeoutMs = deadline - Date.now();
+      if (timeoutMs <= 0) return { status: "retry" };
+      try {
+        const chain = buildGitlabAuthChain(args.headersWithoutAuth, args.auth);
+        const { response, data } =
+          await fetchJsonResponseWithRetryAuthChain<GitlabCommitApi>(
+            `${args.apiBaseUrl}/repository/commits/${encodeURIComponent(ref)}?stats=false`,
+            chain,
+            {
+              deadlineMs: deadline,
+              description: `GitLab commit link (${ref}) for ${args.projectPath}`,
+              maxAttempts: 1,
+              parseAttempts: 1,
+              timeoutMs,
+            },
+          );
+
+        if (response.status === 404 || response.status === 422) {
+          await discardResponseWithTimeout(response);
+          return { status: "not_found" };
+        }
+        if (!response.ok || !data) {
+          await discardResponseWithTimeout(response);
+          return { status: "retry" };
+        }
+
+        const sha =
+          typeof data.id === "string" ? data.id.trim().toLowerCase() : "";
+        const url =
+          typeof data.web_url === "string"
+            ? normalizeGitlabCommitUrl(data.web_url, args.gitlabHost, sha)
+            : null;
+        if (!/^[0-9a-f]{40}$/.test(sha) || !sha.startsWith(ref) || !url) {
+          return { status: "retry" };
+        }
+        return { status: "resolved", link: { ref, sha, url } };
+      } catch (error) {
+        log.warn(
+          `Could not resolve GitLab commit link ${ref} for ${args.projectPath}.`,
+          error,
+        );
+        return { status: "retry" };
+      }
+    },
+  });
+}
 
 function hashStringToId(value: string): number {
   let hash = 0;
@@ -274,6 +367,7 @@ export async function fetchLatestReleaseFromGitLab(
         effectiveReleaseSelectionStrategy !== "provider_latest" &&
         repoSettings.etag &&
         repoSettings.latestRelease &&
+        canReuseCommitLinkState(repoSettings.latestRelease) &&
         !isCachedTagFallbackRelease(repoSettings.latestRelease)
       ) {
         currentHeadersWithoutAuth["If-None-Match"] = repoSettings.etag;
@@ -675,6 +769,21 @@ export async function fetchLatestReleaseFromGitLab(
         t("commit_message_fallback_title"),
       );
     }
+
+    inheritCommitLinkState(latestRelease, repoSettings.latestRelease);
+    await applyVerifiedCommitLinks({
+      release: latestRelease,
+      resolve: (candidates, deadline) =>
+        resolveGitlabCommitLinks({
+          apiBaseUrl: GITLAB_API_BASE_URL,
+          auth: gitlabAuth,
+          candidates,
+          deadline,
+          gitlabHost,
+          headersWithoutAuth,
+          projectPath,
+        }),
+    });
 
     return releaseSuccessResult(latestRelease, newEtag, fetchedAtTimestamp);
   } catch (error) {

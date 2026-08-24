@@ -23,6 +23,7 @@ export type FetchRetryContext = {
   initialDelayMs?: number;
   parseAttempts?: number;
   timeoutMs?: number;
+  deadlineMs?: number;
   allowedRedirectBaseUrl?: string;
 };
 
@@ -141,8 +142,20 @@ export async function fetchJsonResponseWithRetryAuthChain<T>(
     const candidate = chain[i];
     const isLast = i === chain.length - 1;
 
+    const remainingMs = context?.deadlineMs
+      ? context.deadlineMs - Date.now()
+      : undefined;
+    if (remainingMs !== undefined && remainingMs <= 0) {
+      throw new Error(`${description} exceeded its shared deadline.`);
+    }
+    const timeoutMs =
+      remainingMs === undefined
+        ? context?.timeoutMs
+        : Math.min(context?.timeoutMs ?? remainingMs, remainingMs);
+
     const result = await fetchJsonResponseWithRetry<T>(url, candidate.options, {
       ...context,
+      timeoutMs,
       description:
         candidate.mode === "none"
           ? description

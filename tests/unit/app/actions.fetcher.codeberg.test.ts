@@ -184,6 +184,60 @@ describe("actions Codeberg fetcher scenarios", () => {
     expect(vi.mocked(global.fetch)).toHaveBeenCalledOnce();
   });
 
+  it("resolves release-note commit references through the Forgejo API", async () => {
+    const actions = await import("@/app/actions");
+    const sha = "abcdef1234567890abcdef1234567890abcdef12";
+    const repo: Repository = {
+      id: "codeberg:o/r",
+      url: "https://codeberg.org/o/r",
+    };
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: [
+            {
+              id: 1,
+              html_url: "https://codeberg.org/o/r/releases/tag/v1.0.0",
+              tag_name: "v1.0.0",
+              name: "v1.0.0",
+              body: "Fix abcdef1",
+              created_at: "2026-01-01T00:00:00Z",
+              published_at: "2026-01-01T00:00:00Z",
+              prerelease: false,
+              draft: false,
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: {
+            sha,
+            html_url: `https://codeberg.org/o/r/commit/${sha}`,
+          },
+        }),
+      );
+
+    const [result] = await actions.getLatestReleasesForRepos(
+      [repo],
+      baseSettings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(result.release?.commit_links).toEqual([
+      {
+        ref: "abcdef1",
+        sha,
+        url: `https://codeberg.org/o/r/commit/${sha}`,
+      },
+    ]);
+    expect(String(vi.mocked(global.fetch).mock.calls[1][0])).toBe(
+      "https://codeberg.org/api/v1/repos/o/r/git/commits/abcdef1?stat=false&verification=false&files=false",
+    );
+  });
+
   it("falls back to tags when no releases", async () => {
     const actions = await import("@/app/actions");
     const commitDate = "2020-02-03T04:05:06.000Z";

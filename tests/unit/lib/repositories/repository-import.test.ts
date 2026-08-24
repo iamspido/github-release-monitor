@@ -122,6 +122,19 @@ describe("repository import metadata", () => {
         created_at: "2026-07-01T10:00:00.000Z",
         name: " Release 1.1 ",
         body: "Notes",
+        commit_links: [
+          {
+            ref: "1234567",
+            sha: "1234567890123456789012345678901234567890",
+            url: "https://github.com/Owner/Repo/commit/1234567890123456789012345678901234567890",
+          },
+          {
+            ref: "abcdefa",
+            sha: "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
+            url: "https://github.com/Owner/Repo/commit/abcdefabcdefabcdefabcdefabcdefabcdefabcd",
+          },
+        ],
+        commit_links_resolved_at: "2026-07-03T09:00:00.000Z",
         published_at: "2026-07-02T10:00:00.000Z",
         published_at_unknown: false,
         fetched_at: "2026-07-03T10:00:00.000Z",
@@ -225,6 +238,40 @@ describe("repository import metadata", () => {
         published_at: null,
       },
     });
+  });
+
+  it("drops derived commit-link metadata from imported releases", () => {
+    const baseRelease = {
+      html_url: "https://github.com/owner/repo/releases/tag/v1.0.0",
+      tag_name: "v1.0.0",
+      created_at: "2026-08-24T10:00:00.000Z",
+      name: "v1.0.0",
+      body: "Commit 1234567",
+      published_at: "2026-08-24T10:00:00.000Z",
+      commit_links_retry: {
+        attempts: 3,
+        retry_at: "2026-08-24T13:00:00.000Z",
+      },
+      commit_links_resolved_at: "2026-08-24T12:00:00.000Z",
+    };
+
+    const latestRelease = parseImportedRepository({
+      url: "https://github.com/owner/repo",
+      latestRelease: {
+        ...baseRelease,
+        commit_links: [
+          {
+            ref: "1234567",
+            sha: "1234567890123456789012345678901234567890",
+            url: "https://github.com/owner/repo/commit/1234567890123456789012345678901234567890",
+          },
+        ],
+      },
+    })?.latestRelease;
+
+    expect(latestRelease).not.toHaveProperty("commit_links");
+    expect(latestRelease).not.toHaveProperty("commit_links_resolved_at");
+    expect(latestRelease).not.toHaveProperty("commit_links_retry");
   });
 
   it("ignores malformed optional metadata instead of importing partial values", () => {

@@ -77,6 +77,9 @@ export type GithubRelease = {
   tag_name: string;
   name: string | null;
   body: string | null;
+  commit_links?: CommitLink[];
+  commit_links_resolved_at?: string;
+  commit_links_retry?: CommitLinksRetry;
   created_at: string;
   published_at: string | null;
   published_at_unknown?: boolean;
@@ -90,11 +93,26 @@ export type CachedRelease = {
   tag_name: string;
   name: string | null;
   body: string | null;
+  commit_links?: CommitLink[];
+  commit_links_resolved_at?: string;
+  commit_links_retry?: CommitLinksRetry;
   created_at: string;
   published_at: string | null;
   published_at_unknown?: boolean;
   fetched_at?: string;
   source?: "release" | "tag";
+};
+
+export type CommitLink = {
+  ref: string;
+  sha: string;
+  url: string;
+};
+
+export type CommitLinksRetry = {
+  attempts: number;
+  retry_at: string;
+  checked_refs?: string[];
 };
 
 export type FetchError = {

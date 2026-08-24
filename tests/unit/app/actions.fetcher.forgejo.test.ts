@@ -98,6 +98,115 @@ describe("actions self-hosted Forgejo fetcher", () => {
     });
   });
 
+  it("resolves release-note commits on a self-hosted base path", async () => {
+    const actions = await import("@/app/actions");
+    const sha = "abcdef1234567890abcdef1234567890abcdef12";
+    const repo: Repository = {
+      id: "forgejo:forgejo.internal.test:3000/code/owner/repo",
+      url: "http://forgejo.internal.test:3000/code/owner/repo",
+    };
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: [
+            {
+              id: 1,
+              html_url:
+                "http://forgejo.internal.test:3000/code/owner/repo/releases/tag/v1.0.0",
+              tag_name: "v1.0.0",
+              name: "v1.0.0",
+              body: "Fix abcdef1",
+              created_at: "2026-01-01T00:00:00Z",
+              published_at: "2026-01-01T00:00:00Z",
+              prerelease: false,
+              draft: false,
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: {
+            sha,
+            html_url: `http://forgejo.internal.test:3000/code/owner/repo/commit/${sha}`,
+          },
+        }),
+      );
+
+    const [result] = await actions.getLatestReleasesForRepos(
+      [repo],
+      settings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(result.release?.commit_links).toEqual([
+      {
+        ref: "abcdef1",
+        sha,
+        url: `http://forgejo.internal.test:3000/code/owner/repo/commit/${sha}`,
+      },
+    ]);
+    expect(String(vi.mocked(global.fetch).mock.calls[1][0])).toBe(
+      "http://forgejo.internal.test:3000/code/api/v1/repos/owner/repo/git/commits/abcdef1?stat=false&verification=false&files=false",
+    );
+  });
+
+  it("accepts commit links below an encoded self-hosted base path", async () => {
+    process.env.FORGEJO_ADDITIONAL_BASE_URLS =
+      "http://forgejo.internal.test:3000/code%20hosting";
+    const actions = await import("@/app/actions");
+    const sha = "abcdef1234567890abcdef1234567890abcdef12";
+    const repo: Repository = {
+      id: "forgejo:forgejo.internal.test:3000/code%20hosting/owner/repo",
+      url: "http://forgejo.internal.test:3000/code%20hosting/owner/repo",
+    };
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: [
+            {
+              id: 1,
+              html_url:
+                "http://forgejo.internal.test:3000/code%20hosting/owner/repo/releases/tag/v1.0.0",
+              tag_name: "v1.0.0",
+              name: "v1.0.0",
+              body: "Fix abcdef1",
+              created_at: "2026-01-01T00:00:00Z",
+              published_at: "2026-01-01T00:00:00Z",
+              prerelease: false,
+              draft: false,
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockFetchResponse({
+          json: {
+            sha,
+            html_url: `http://forgejo.internal.test:3000/code%20hosting/owner/repo/commit/${sha}`,
+          },
+        }),
+      );
+
+    const [result] = await actions.getLatestReleasesForRepos(
+      [repo],
+      settings,
+      "en",
+      { skipCache: true },
+    );
+
+    expect(result.release?.commit_links).toEqual([
+      {
+        ref: "abcdef1",
+        sha,
+        url: `http://forgejo.internal.test:3000/code%20hosting/owner/repo/commit/${sha}`,
+      },
+    ]);
+  });
+
   it("follows release redirects within the configured Forgejo base path", async () => {
     process.env.FORGEJO_ACCESS_TOKENS =
       "http://forgejo.internal.test:3000/code=forgejo-token";
