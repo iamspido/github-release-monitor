@@ -37,8 +37,11 @@ vi.mock("@/lib/releases/gitlab", () => ({
   fetchLatestReleaseFromGitLab: fetcherMocks.gitlab,
 }));
 
+// Codeberg and Forgejo are separate modules since the provider split.
 vi.mock("@/lib/releases/codeberg", () => ({
   fetchLatestReleaseFromCodeberg: fetcherMocks.codeberg,
+}));
+vi.mock("@/lib/releases/forgejo", () => ({
   fetchLatestReleaseFromForgejo: fetcherMocks.forgejo,
 }));
 

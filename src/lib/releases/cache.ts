@@ -1,8 +1,6 @@
 import { unstable_cache } from "next/cache";
-import {
-  fetchLatestReleaseFromCodeberg,
-  fetchLatestReleaseFromForgejo,
-} from "@/lib/releases/codeberg";
+import { fetchLatestReleaseFromCodeberg } from "@/lib/releases/codeberg";
+import { fetchLatestReleaseFromForgejo } from "@/lib/releases/forgejo";
 import { fetchLatestReleaseFromGitHub } from "@/lib/releases/github";
 import { fetchLatestReleaseFromGitLab } from "@/lib/releases/gitlab";
 import type {

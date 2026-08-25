@@ -1,7 +1,7 @@
 import { mapWithConcurrency } from "@/lib/concurrency";
 import { discardResponseWithTimeout } from "@/lib/http/fetch-with-timeout";
 import {
-  buildCodebergAuthChain,
+  buildForgejoAuthChain,
   buildGitlabAuthChain,
 } from "@/lib/releases/auth-chains";
 import {
@@ -124,7 +124,7 @@ async function lookupCodebergCandidate(
       "User-Agent": "GitHubReleaseMonitorApp",
     };
     const codebergToken = normalizeEnvToken(process.env.CODEBERG_ACCESS_TOKEN);
-    const chain = buildCodebergAuthChain(headersWithoutAuth, codebergToken);
+    const chain = buildForgejoAuthChain(headersWithoutAuth, codebergToken);
     const url = `https://codeberg.org/api/v1/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
     const { response, mode } = await fetchResponseWithRetryAuthChain(
       url,
@@ -159,7 +159,7 @@ async function lookupForgejoCandidate(
       Accept: "application/json",
       "User-Agent": "GitHubReleaseMonitorApp",
     };
-    const chain = buildCodebergAuthChain(headersWithoutAuth, token);
+    const chain = buildForgejoAuthChain(headersWithoutAuth, token);
     const url = `${baseUrl}/api/v1/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
     const { response, data, mode } =
       await fetchJsonResponseWithRetryAuthChain<ForgejoRepositoryApi>(
