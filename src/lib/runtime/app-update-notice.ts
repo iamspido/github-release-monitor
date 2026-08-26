@@ -1,4 +1,5 @@
 import { logger } from "@/lib/logger";
+import { compareAppVersions } from "@/lib/runtime/app-version";
 import { scheduleTask } from "@/lib/runtime/task-scheduler";
 import { runApplicationUpdateCheck } from "@/lib/runtime/update-check";
 import { isRestrictedActionAllowed } from "@/lib/server-action-helpers";
@@ -6,70 +7,31 @@ import {
   getSystemStatus,
   updateSystemStatus,
 } from "@/lib/storage/system-status";
-import type { UpdateNotificationState } from "@/types";
+import type { SystemStatus, UpdateNotificationState } from "@/types";
 
-type ParsedVersion = {
-  core: [number, number, number];
-  prerelease: string[];
-};
+function getPendingSecurityVersion(
+  status: SystemStatus,
+  currentVersion: string,
+): string | null {
+  const candidate =
+    status.latestSecurityVersion ??
+    (status.latestReleaseIsSecurity === true
+      ? status.latestKnownVersion
+      : null);
 
-function parseVersion(value: string | null | undefined): ParsedVersion | null {
-  if (!value) return null;
-  const normalized = value.trim().replace(/^v/i, "").replace(/\+.*$/, "");
-  const match = /^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?$/.exec(
-    normalized,
-  );
-  if (!match) return null;
-  return {
-    core: [Number(match[1]), Number(match[2] ?? 0), Number(match[3] ?? 0)],
-    prerelease: match[4]?.split(".") ?? [],
-  };
-}
-
-function compareParsedVersions(a: ParsedVersion, b: ParsedVersion): number {
-  for (let i = 0; i < a.core.length; i += 1) {
-    const segmentA = a.core[i];
-    const segmentB = b.core[i];
-    if (segmentA > segmentB) return 1;
-    if (segmentA < segmentB) return -1;
-  }
-
-  if (a.prerelease.length > 0 && b.prerelease.length === 0) return -1;
-  if (a.prerelease.length === 0 && b.prerelease.length > 0) return 1;
-
-  const length = Math.max(a.prerelease.length, b.prerelease.length);
-  for (let i = 0; i < length; i += 1) {
-    const identifierA = a.prerelease[i];
-    const identifierB = b.prerelease[i];
-    if (identifierA === undefined) return -1;
-    if (identifierB === undefined) return 1;
-    if (identifierA === identifierB) continue;
-
-    const numericA = /^\d+$/.test(identifierA);
-    const numericB = /^\d+$/.test(identifierB);
-    if (numericA && numericB) {
-      return Number(identifierA) > Number(identifierB) ? 1 : -1;
-    }
-    if (numericA !== numericB) return numericA ? -1 : 1;
-    return identifierA > identifierB ? 1 : -1;
-  }
-
-  return 0;
+  return compareAppVersions(candidate, currentVersion) === 1 ? candidate : null;
 }
 
 export async function getUpdateNotificationState(): Promise<UpdateNotificationState> {
   const status = await getSystemStatus();
   const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0";
   const latestVersion = status.latestKnownVersion;
-  const normalizedCurrent = parseVersion(currentVersion);
-  const normalizedLatest = parseVersion(latestVersion);
-
-  let hasUpdate = false;
-
-  if (normalizedCurrent && normalizedLatest) {
-    hasUpdate =
-      compareParsedVersions(normalizedLatest, normalizedCurrent) === 1;
-  }
+  const latestReleaseTitle = status.latestReleaseTitle;
+  const latestSecurityVersion = getPendingSecurityVersion(
+    status,
+    currentVersion,
+  );
+  const hasUpdate = compareAppVersions(latestVersion, currentVersion) === 1;
 
   const isDismissed =
     hasUpdate &&
@@ -78,11 +40,14 @@ export async function getUpdateNotificationState(): Promise<UpdateNotificationSt
 
   return {
     latestVersion,
+    latestReleaseTitle,
+    latestSecurityVersion,
     currentVersion,
     lastCheckedAt: status.lastCheckedAt,
     lastCheckError: status.lastCheckError,
     hasUpdate,
     isDismissed,
+    isSecurityUpdate: hasUpdate && latestSecurityVersion !== null,
     shouldNotify: hasUpdate && !isDismissed,
   };
 }
@@ -96,38 +61,55 @@ export async function getUpdateNotificationStateOrFallback(): Promise<UpdateNoti
       .error("Could not load the optional update notification state.", error);
     return {
       latestVersion: null,
+      latestReleaseTitle: null,
+      latestSecurityVersion: null,
       currentVersion: process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0",
       lastCheckedAt: null,
       lastCheckError: "read_error",
       hasUpdate: false,
       isDismissed: false,
+      isSecurityUpdate: false,
       shouldNotify: false,
     };
   }
 }
 
-export async function dismissUpdateNotificationAction(): Promise<{
+export async function dismissUpdateNotificationAction(
+  expectedVersion: string,
+  expectedSecurityVersion: string | null,
+): Promise<{
   success: boolean;
 }> {
   return scheduleTask("dismissUpdateNotification", async () => {
-    if (!(await isRestrictedActionAllowed())) {
+    if (
+      !expectedVersion ||
+      (expectedSecurityVersion !== null &&
+        typeof expectedSecurityVersion !== "string") ||
+      !(await isRestrictedActionAllowed())
+    ) {
       return { success: false };
     }
 
+    let didDismiss = false;
+    const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0";
     await updateSystemStatus((current) => {
-      const latestVersion = current.latestKnownVersion;
-      if (!latestVersion) {
-        return {
-          ...current,
-          dismissedVersion: null,
-        };
+      const currentSecurityVersion = getPendingSecurityVersion(
+        current,
+        currentVersion,
+      );
+      if (
+        current.latestKnownVersion !== expectedVersion ||
+        currentSecurityVersion !== expectedSecurityVersion
+      ) {
+        return current;
       }
+      didDismiss = true;
       return {
         ...current,
-        dismissedVersion: latestVersion,
+        dismissedVersion: expectedVersion,
       };
     });
-    return { success: true };
+    return { success: didDismiss };
   });
 }
 

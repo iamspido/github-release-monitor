@@ -58,11 +58,14 @@ import type { UpdateNotificationState } from "@/types";
 function getEmptyUpdateNotificationState(): UpdateNotificationState {
   return {
     latestVersion: null,
+    latestReleaseTitle: null,
+    latestSecurityVersion: null,
     currentVersion: process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0",
     lastCheckedAt: null,
     lastCheckError: null,
     hasUpdate: false,
     isDismissed: false,
+    isSecurityUpdate: false,
     shouldNotify: false,
   };
 }

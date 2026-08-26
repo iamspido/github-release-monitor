@@ -145,11 +145,14 @@ function makeNotificationConfig(
 
 const updateNotice: UpdateNotificationState = {
   latestVersion: null,
+  latestReleaseTitle: null,
+  latestSecurityVersion: null,
   currentVersion: "1.0.0",
   lastCheckedAt: null,
   lastCheckError: null,
   hasUpdate: false,
   isDismissed: false,
+  isSecurityUpdate: false,
   shouldNotify: false,
 };
 

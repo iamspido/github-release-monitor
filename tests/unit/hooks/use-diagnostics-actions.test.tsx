@@ -46,11 +46,14 @@ type DiagnosticsController = ReturnType<typeof useDiagnosticsActions>;
 const initialAppriseStatus: AppriseStatus = { status: "not_configured" };
 const initialUpdateNotice: UpdateNotificationState = {
   latestVersion: null,
+  latestReleaseTitle: null,
+  latestSecurityVersion: null,
   currentVersion: "2.3.0",
   lastCheckedAt: null,
   lastCheckError: null,
   hasUpdate: false,
   isDismissed: false,
+  isSecurityUpdate: false,
   shouldNotify: false,
 };
 

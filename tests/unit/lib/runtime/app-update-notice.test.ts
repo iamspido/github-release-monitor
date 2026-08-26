@@ -29,8 +29,10 @@ vi.mock("@/lib/runtime/task-scheduler", () => schedulerMocks);
 function status(overrides = {}) {
   return {
     latestKnownVersion: null,
+    latestReleaseTitle: null,
+    latestReleaseIsSecurity: null,
+    latestSecurityVersion: null,
     lastCheckedAt: null,
-    latestEtag: null,
     dismissedVersion: null,
     lastCheckError: null,
     ...overrides,
@@ -84,6 +86,61 @@ describe("runtime/app-update-notice", () => {
 
     await expect(getUpdateNotificationState()).resolves.toMatchObject({
       hasUpdate: true,
+      shouldNotify: true,
+    });
+  });
+
+  it("uses the security result from the complete release content", async () => {
+    const { getUpdateNotificationState } = await import(
+      "@/lib/runtime/app-update-notice"
+    );
+
+    storageMocks.getSystemStatus.mockResolvedValueOnce(
+      status({
+        latestKnownVersion: "1.2.4",
+        latestReleaseTitle: "Regular maintenance release",
+        latestReleaseIsSecurity: true,
+      }),
+    );
+
+    await expect(getUpdateNotificationState()).resolves.toMatchObject({
+      latestReleaseTitle: "Regular maintenance release",
+      hasUpdate: true,
+      isSecurityUpdate: true,
+    });
+
+    storageMocks.getSystemStatus.mockResolvedValueOnce(
+      status({
+        latestKnownVersion: "1.2.4",
+        latestReleaseTitle: "Security-looking title",
+        latestReleaseIsSecurity: false,
+      }),
+    );
+
+    await expect(getUpdateNotificationState()).resolves.toMatchObject({
+      hasUpdate: true,
+      isSecurityUpdate: false,
+    });
+  });
+
+  it("ignores a cached security version already covered by the installed app", async () => {
+    const { getUpdateNotificationState } = await import(
+      "@/lib/runtime/app-update-notice"
+    );
+    process.env.NEXT_PUBLIC_APP_VERSION = "2.4.0";
+    storageMocks.getSystemStatus.mockResolvedValueOnce(
+      status({
+        latestKnownVersion: "3.0.0",
+        latestReleaseIsSecurity: false,
+        latestSecurityVersion: "2.4.0",
+      }),
+    );
+
+    await expect(getUpdateNotificationState()).resolves.toMatchObject({
+      latestVersion: "3.0.0",
+      latestSecurityVersion: null,
+      hasUpdate: true,
+      isSecurityUpdate: false,
       shouldNotify: true,
     });
   });
@@ -153,11 +210,14 @@ describe("runtime/app-update-notice", () => {
     await expect(getUpdateNotificationState()).rejects.toBe(readError);
     await expect(getUpdateNotificationStateOrFallback()).resolves.toEqual({
       latestVersion: null,
+      latestReleaseTitle: null,
+      latestSecurityVersion: null,
       currentVersion: "1.2.3",
       lastCheckedAt: null,
       lastCheckError: "read_error",
       hasUpdate: false,
       isDismissed: false,
+      isSecurityUpdate: false,
       shouldNotify: false,
     });
   });
@@ -186,42 +246,99 @@ describe("runtime/app-update-notice", () => {
       "@/lib/runtime/app-update-notice"
     );
 
-    await expect(dismissUpdateNotificationAction()).resolves.toEqual({
+    await expect(
+      dismissUpdateNotificationAction("1.2.4", null),
+    ).resolves.toEqual({
       success: false,
     });
     expect(storageMocks.updateSystemStatus).not.toHaveBeenCalled();
   });
 
-  it("stores the latest known version or null when dismissing with authorization", async () => {
+  it("dismisses only the exact version and security state the caller saw", async () => {
     const { dismissUpdateNotificationAction } = await import(
       "@/lib/runtime/app-update-notice"
     );
 
-    storageMocks.getSystemStatus.mockResolvedValueOnce(
-      status({ latestKnownVersion: "1.2.4" }),
+    const matchingStatus = status({ latestKnownVersion: "1.2.4" });
+    storageMocks.updateSystemStatus.mockImplementationOnce(async (updater) =>
+      updater(matchingStatus),
     );
 
-    await expect(dismissUpdateNotificationAction()).resolves.toEqual({
+    await expect(
+      dismissUpdateNotificationAction("1.2.4", null),
+    ).resolves.toEqual({
       success: true,
     });
     expect(storageMocks.updateSystemStatus).toHaveBeenCalledWith(
       expect.any(Function),
     );
     expect(
-      storageMocks.updateSystemStatus.mock.calls[0][0](
-        status({ latestKnownVersion: "1.2.4" }),
-      ),
+      storageMocks.updateSystemStatus.mock.calls[0][0](matchingStatus),
     ).toMatchObject({ dismissedVersion: "1.2.4" });
 
     storageMocks.updateSystemStatus.mockClear();
-    storageMocks.getSystemStatus.mockResolvedValueOnce(status());
+    const newerStatus = status({ latestKnownVersion: "1.2.5" });
+    storageMocks.updateSystemStatus.mockImplementationOnce(async (updater) =>
+      updater(newerStatus),
+    );
 
-    await expect(dismissUpdateNotificationAction()).resolves.toEqual({
-      success: true,
+    await expect(
+      dismissUpdateNotificationAction("1.2.4", null),
+    ).resolves.toEqual({
+      success: false,
     });
     expect(
-      storageMocks.updateSystemStatus.mock.calls[0][0](status()),
-    ).toMatchObject({ dismissedVersion: null });
+      storageMocks.updateSystemStatus.mock.calls[0][0](newerStatus),
+    ).toMatchObject({
+      latestKnownVersion: "1.2.5",
+      dismissedVersion: null,
+    });
+
+    storageMocks.updateSystemStatus.mockClear();
+    const newlySecurityStatus = status({
+      latestKnownVersion: "1.2.4",
+      latestReleaseIsSecurity: true,
+      latestSecurityVersion: "1.2.4",
+    });
+    storageMocks.updateSystemStatus.mockImplementationOnce(async (updater) =>
+      updater(newlySecurityStatus),
+    );
+
+    await expect(
+      dismissUpdateNotificationAction("1.2.4", null),
+    ).resolves.toEqual({
+      success: false,
+    });
+    expect(
+      storageMocks.updateSystemStatus.mock.calls[0][0](newlySecurityStatus),
+    ).toMatchObject({
+      latestKnownVersion: "1.2.4",
+      latestReleaseIsSecurity: true,
+      latestSecurityVersion: "1.2.4",
+      dismissedVersion: null,
+    });
+  });
+
+  it("dismisses using the effective pending security version after an app upgrade", async () => {
+    const { dismissUpdateNotificationAction } = await import(
+      "@/lib/runtime/app-update-notice"
+    );
+    process.env.NEXT_PUBLIC_APP_VERSION = "2.4.0";
+    const staleStatus = status({
+      latestKnownVersion: "3.0.0",
+      latestReleaseIsSecurity: false,
+      latestSecurityVersion: "2.4.0",
+    });
+    storageMocks.updateSystemStatus.mockImplementationOnce(async (updater) =>
+      updater(staleStatus),
+    );
+
+    await expect(
+      dismissUpdateNotificationAction("3.0.0", null),
+    ).resolves.toEqual({ success: true });
+    expect(
+      storageMocks.updateSystemStatus.mock.calls[0][0](staleStatus),
+    ).toMatchObject({ dismissedVersion: "3.0.0" });
   });
 
   it("returns the current notice without triggering checks when unauthorized", async () => {

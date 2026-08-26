@@ -60,8 +60,10 @@ describe("storage/system-status persistence", () => {
     await expect(
       saveSystemStatus({
         latestKnownVersion: null,
+        latestReleaseTitle: null,
+        latestReleaseIsSecurity: null,
+        latestSecurityVersion: null,
         lastCheckedAt: null,
-        latestEtag: null,
         dismissedVersion: null,
         lastCheckError: null,
       }),
@@ -97,8 +99,10 @@ describe("storage/system-status persistence", () => {
 
     await expect(getSystemStatus()).resolves.toEqual({
       latestKnownVersion: "2.4.0",
+      latestReleaseTitle: null,
+      latestReleaseIsSecurity: null,
+      latestSecurityVersion: null,
       lastCheckedAt: null,
-      latestEtag: null,
       dismissedVersion: null,
       lastCheckError: null,
     });
@@ -111,7 +115,6 @@ describe("storage/system-status persistence", () => {
         JSON.stringify({
           latestKnownVersion: null,
           lastCheckedAt: null,
-          latestEtag: null,
           dismissedVersion: null,
           lastCheckError: null,
         }),
@@ -120,7 +123,6 @@ describe("storage/system-status persistence", () => {
         JSON.stringify({
           latestKnownVersion: "2.4.0",
           lastCheckedAt: null,
-          latestEtag: null,
           dismissedVersion: null,
           lastCheckError: null,
         }),
@@ -163,7 +165,6 @@ describe("storage/system-status persistence", () => {
       JSON.stringify({
         latestKnownVersion: null,
         lastCheckedAt: null,
-        latestEtag: null,
         dismissedVersion: null,
         lastCheckError: null,
       }),

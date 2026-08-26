@@ -23,8 +23,10 @@ vi.mock("@/lib/runtime/task-scheduler", () => ({
 
 const defaultStatus = {
   latestKnownVersion: null,
+  latestReleaseTitle: null,
+  latestReleaseIsSecurity: null,
+  latestSecurityVersion: null,
   lastCheckedAt: null,
-  latestEtag: null,
   dismissedVersion: null,
   lastCheckError: null,
 };
@@ -136,8 +138,10 @@ describe("update notification actions", () => {
 
       return {
         latestKnownVersion: "1.2.0",
+        latestReleaseTitle: null,
+        latestReleaseIsSecurity: false,
+        latestSecurityVersion: null,
         lastCheckedAt: "2024-01-01T00:00:00.000Z",
-        latestEtag: null,
         dismissedVersion: null,
         lastCheckError: null,
       };

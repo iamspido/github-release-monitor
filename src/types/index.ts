@@ -357,18 +357,23 @@ export type NotificationSettings = Pick<
 
 export type SystemStatus = {
   latestKnownVersion: string | null;
+  latestReleaseTitle: string | null;
+  latestReleaseIsSecurity: boolean | null;
+  latestSecurityVersion: string | null;
   lastCheckedAt: string | null;
-  latestEtag: string | null;
   dismissedVersion: string | null;
   lastCheckError: string | null;
 };
 
 export type UpdateNotificationState = {
   latestVersion: string | null;
+  latestReleaseTitle: string | null;
+  latestSecurityVersion: string | null;
   currentVersion: string;
   lastCheckedAt: string | null;
   lastCheckError: string | null;
   hasUpdate: boolean;
   isDismissed: boolean;
+  isSecurityUpdate: boolean;
   shouldNotify: boolean;
 };
