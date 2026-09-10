@@ -5,11 +5,9 @@ const { createTransportMock, sendMailMock, state } = vi.hoisted(() => ({
 }));
 
 vi.mock("nodemailer", () => ({
-  default: {
-    createTransport: createTransportMock.mockReturnValue({
-      sendMail: sendMailMock,
-    }),
-  },
+  createTransport: createTransportMock.mockReturnValue({
+    sendMail: sendMailMock,
+  }),
 }));
 
 vi.mock("@/lib/storage/settings", () => ({

@@ -224,7 +224,8 @@
   border-color: #8e918f;
 }
 
-.gsi-material-button-dark:disabled .gsi-material-button-state {
+.gsi-material-button.gsi-material-button-dark:disabled
+  .gsi-material-button-state {
   background-color: #e3e3e31f;
 }
 

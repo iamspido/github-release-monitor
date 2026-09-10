@@ -89,11 +89,9 @@ describe("auth/email HTML rendering", () => {
       default: DatabaseMock,
     }));
     vi.doMock("nodemailer", () => ({
-      default: {
-        createTransport: () => ({
-          sendMail: sendMailMock,
-        }),
-      },
+      createTransport: () => ({
+        sendMail: sendMailMock,
+      }),
     }));
 
     const authModule = await import("@/lib/auth");
@@ -200,9 +198,7 @@ describe("auth/email HTML rendering", () => {
       default: DatabaseMock,
     }));
     vi.doMock("nodemailer", () => ({
-      default: {
-        createTransport: vi.fn(),
-      },
+      createTransport: vi.fn(),
     }));
 
     const authModule = await import("@/lib/auth");

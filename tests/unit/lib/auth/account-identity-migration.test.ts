@@ -33,100 +33,171 @@ function createLegacyDatabase() {
     INSERT INTO account (
       id, accountId, providerId, userId, password, createdAt, updatedAt
     ) VALUES
-      ('credential-row', 'legacy-credential-id', 'credential', 'user-1', 'hash', 1, 1),
+      ('credential-row', 'user-1', 'credential', 'user-1', 'hash', 1, 1),
       ('github-row', 'github-user', 'github', 'user-2', NULL, 1, 1),
       ('google-row', 'google-user', 'google', 'user-3', NULL, 1, 1);
   `);
   return db;
 }
 
+function addObsoleteIssuerSchema(db: ReturnType<typeof createLegacyDatabase>) {
+  db.exec(`
+    CREATE TABLE account_v17_migration (
+      id TEXT PRIMARY KEY,
+      accountId TEXT NOT NULL,
+      providerId TEXT NOT NULL,
+      userId TEXT NOT NULL REFERENCES user(id),
+      password TEXT,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL,
+      issuer TEXT NOT NULL
+    );
+    INSERT INTO account_v17_migration (
+      id, accountId, providerId, userId, password, createdAt, updatedAt, issuer
+    )
+    SELECT
+      id,
+      accountId,
+      providerId,
+      userId,
+      password,
+      createdAt,
+      updatedAt,
+      CASE providerId
+        WHEN 'credential' THEN 'local:credential'
+        WHEN 'github' THEN 'local:oauth:github'
+        WHEN 'google' THEN 'https://accounts.google.com'
+      END
+    FROM account;
+    DROP TABLE account;
+    ALTER TABLE account_v17_migration RENAME TO account;
+    CREATE INDEX account_userId_idx ON account (userId);
+  `);
+  db.exec(
+    "CREATE UNIQUE INDEX account_issuer_accountId_uidx ON account (issuer, accountId)",
+  );
+}
+
+function addNullableIssuerSchema(db: ReturnType<typeof createLegacyDatabase>) {
+  db.exec("ALTER TABLE account ADD COLUMN issuer TEXT");
+  db.prepare("UPDATE account SET issuer = ? WHERE id = ?").run(
+    "custom-issuer",
+    "github-row",
+  );
+  db.exec(
+    "CREATE UNIQUE INDEX account_issuer_accountId_uidx ON account (issuer, accountId)",
+  );
+}
+
+function getAccountColumns(db: ReturnType<typeof createLegacyDatabase>) {
+  return db.prepare("PRAGMA table_info('account')").all() as Array<{
+    name: string;
+  }>;
+}
+
 describe("Better Auth 1.7 account identity migration", () => {
-  it("backfills issuers, preserves schema objects, and is idempotent", () => {
+  it("leaves the restored Better Auth 1.6 account schema unchanged", () => {
     const db = createLegacyDatabase();
+    const schemaBefore = db
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'account'",
+      )
+      .get();
+
+    expect(migrateAuthAccountIdentities(db)).toBe(false);
+    expect(
+      db
+        .prepare(
+          "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'account'",
+        )
+        .get(),
+    ).toEqual(schemaBefore);
+    db.close();
+  });
+
+  it("removes the obsolete required issuer schema without changing account data", () => {
+    const db = createLegacyDatabase();
+    addObsoleteIssuerSchema(db);
+    const accountsBefore = db
+      .prepare(
+        "SELECT id, accountId, providerId, userId, password, createdAt, updatedAt FROM account ORDER BY id",
+      )
+      .all();
 
     expect(migrateAuthAccountIdentities(db)).toBe(true);
-
-    const columns = db.prepare("PRAGMA table_info('account')").all() as Array<{
-      name: string;
-      notnull: number;
-    }>;
-    expect(columns.find((column) => column.name === "issuer")?.notnull).toBe(1);
     expect(
-      db.prepare("SELECT id, accountId, issuer FROM account ORDER BY id").all(),
-    ).toEqual([
-      {
-        id: "credential-row",
-        accountId: "user-1",
-        issuer: "local:credential",
-      },
-      {
-        id: "github-row",
-        accountId: "github-user",
-        issuer: "local:oauth:github",
-      },
-      {
-        id: "google-row",
-        accountId: "google-user",
-        issuer: "https://accounts.google.com",
-      },
-    ]);
-    const indexes = db.prepare("PRAGMA index_list('account')").all() as Array<{
-      name: string;
-      unique: number;
-    }>;
-    expect(indexes).toEqual(
+      getAccountColumns(db).some((column) => column.name === "issuer"),
+    ).toBe(false);
+    expect(
+      db
+        .prepare(
+          "SELECT id, accountId, providerId, userId, password, createdAt, updatedAt FROM account ORDER BY id",
+        )
+        .all(),
+    ).toEqual(accountsBefore);
+    expect(db.prepare("PRAGMA index_list('account')").all()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: "account_userId_idx" }),
-        expect.objectContaining({
-          name: "account_issuer_accountId_uidx",
-          unique: 1,
-        }),
       ]),
     );
+    expect(
+      db
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'account_issuer_accountId_uidx'",
+        )
+        .get(),
+    ).toBeUndefined();
     expect(migrateAuthAccountIdentities(db)).toBe(false);
     db.close();
   });
 
-  it("fails before changing the schema when an issuer identity collides", () => {
+  it("leaves a nullable issuer column and its data unchanged", () => {
     const db = createLegacyDatabase();
-    db.exec(`
-      INSERT INTO user (
-        id, name, email, emailVerified, image, createdAt, updatedAt
-      ) VALUES ('user-4', 'Four', 'four@example.test', 1, NULL, 1, 1);
-      INSERT INTO account (
-        id, accountId, providerId, userId, password, createdAt, updatedAt
-      ) VALUES ('github-duplicate', 'github-user', 'github', 'user-4', NULL, 1, 1);
-    `);
+    addNullableIssuerSchema(db);
 
-    expect(() => migrateAuthAccountIdentities(db)).toThrow(
-      "resolve to the same issuer/accountId pair",
-    );
-    const columns = db.prepare("PRAGMA table_info('account')").all() as Array<{
-      name: string;
-    }>;
-    expect(columns.some((column) => column.name === "issuer")).toBe(false);
+    expect(migrateAuthAccountIdentities(db)).toBe(false);
+    expect(
+      getAccountColumns(db).some((column) => column.name === "issuer"),
+    ).toBe(true);
+    expect(
+      db.prepare("SELECT issuer FROM account WHERE id = 'github-row'").get(),
+    ).toEqual({ issuer: "custom-issuer" });
+    expect(
+      db
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'account_issuer_accountId_uidx'",
+        )
+        .get(),
+    ).toEqual({ 1: 1 });
     db.close();
   });
 
-  it("rejects unknown providers instead of guessing a trusted issuer", () => {
+  it("rechecks the schema after acquiring the write lock", () => {
     const db = createLegacyDatabase();
-    db.exec(`
-      INSERT INTO user (
-        id, name, email, emailVerified, image, createdAt, updatedAt
-      ) VALUES ('user-4', 'Four', 'four@example.test', 1, NULL, 1, 1);
-      INSERT INTO account (
-        id, accountId, providerId, userId, password, createdAt, updatedAt
-      ) VALUES ('unknown-row', 'external-id', 'custom', 'user-4', NULL, 1, 1);
-    `);
+    addObsoleteIssuerSchema(db);
+    const interleavedDb = {
+      exec(sql: string) {
+        if (sql === "BEGIN IMMEDIATE") {
+          db.exec(`
+            DROP INDEX account_issuer_accountId_uidx;
+            ALTER TABLE account DROP COLUMN issuer;
+          `);
+        }
+        return db.exec(sql);
+      },
+      prepare: db.prepare.bind(db),
+    } as unknown as Parameters<typeof migrateAuthAccountIdentities>[0];
 
-    expect(() => migrateAuthAccountIdentities(db)).toThrow(
-      "unsupported providerId 'custom'",
-    );
+    expect(migrateAuthAccountIdentities(interleavedDb)).toBe(false);
+    expect(
+      getAccountColumns(db).some((column) => column.name === "issuer"),
+    ).toBe(false);
     db.close();
   });
 
   it("leaves the schema ready for Better Auth's built-in migrations", async () => {
     const db = createLegacyDatabase();
+    addObsoleteIssuerSchema(db);
     migrateAuthAccountIdentities(db);
 
     const migrations = await getMigrations({
@@ -137,12 +208,8 @@ describe("Better Auth 1.7 account identity migration", () => {
     });
     await expect(migrations.runMigrations()).resolves.toBeUndefined();
     expect(
-      db
-        .prepare(
-          "SELECT count(*) AS count FROM account WHERE issuer IS NULL OR issuer = ''",
-        )
-        .get(),
-    ).toEqual({ count: 0 });
+      getAccountColumns(db).some((column) => column.name === "issuer"),
+    ).toBe(false);
     db.close();
   });
 });

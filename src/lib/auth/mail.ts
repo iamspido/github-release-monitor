@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import { createTransport, type Transporter } from "nodemailer";
 import { defaultLocale, getLocaleMetadata, type Locale } from "@/i18n/config";
 import { getAuthSmtpConfig } from "@/lib/auth/config";
 import { renderPasswordResetEmailHtml } from "@/lib/auth/password-reset-email-html";
@@ -19,7 +19,7 @@ const smtpTlsRejectUnauthorized = smtpConfig.tlsRejectUnauthorized;
 export const authEmailVerificationEnabled = smtpConfig.emailVerificationEnabled;
 export const authEmailDeliveryEnabled = smtpConfig.emailVerificationEnabled;
 
-let authEmailTransporter: nodemailer.Transporter | null = null;
+let authEmailTransporter: Transporter | null = null;
 
 function maskEmailForLog(value: string) {
   const [localPart = "", domain = ""] = value.split("@", 2);
@@ -73,7 +73,7 @@ function getAuthEmailTransporter() {
         }
       : {};
 
-  authEmailTransporter = nodemailer.createTransport({
+  authEmailTransporter = createTransport({
     host: smtpHost,
     port: smtpPort,
     secure: smtpPort === 465,

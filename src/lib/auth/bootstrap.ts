@@ -70,7 +70,7 @@ export async function ensureAuthDatabaseReady() {
   authDatabaseReadyPromise = (async () => {
     log.info("Checking Better Auth database migrations.");
     if (migrateAuthAccountIdentities()) {
-      log.info("Migrated Better Auth account identities for version 1.7.");
+      log.info("Removed the obsolete Better Auth account issuer schema.");
     }
     const migrations = await getMigrations(getBetterAuthConfig());
     if (migrations.toBeCreated.length > 0 || migrations.toBeAdded.length > 0) {
