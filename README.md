@@ -345,6 +345,10 @@ The application will be accessible on `http://localhost:8080`. Note that this se
 
 Follow these steps for a manual setup of the GitHub Release Monitor.
 
+### Prerequisites
+
+Manual builds require Node.js 24 or newer.
+
 ### 1. Clone the Repository
 
 First, clone the project to your local machine:
