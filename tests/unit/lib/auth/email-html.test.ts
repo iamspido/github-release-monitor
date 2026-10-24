@@ -1,3 +1,20 @@
+// better-sqlite3 stand-ins; src/lib/auth/db.ts constructs them with `new`.
+function DatabaseMock() {
+  return {
+    prepare: vi.fn(() => ({
+      all: vi.fn(() => []),
+      get: vi.fn(() => undefined),
+      run: vi.fn(),
+    })),
+  };
+}
+
+const databaseOpenError = new Error("unable to open database file");
+
+function UnopenableDatabaseMock(): never {
+  throw databaseOpenError;
+}
+
 describe("auth/email HTML rendering", () => {
   const env = { ...process.env };
 
@@ -76,15 +93,6 @@ describe("auth/email HTML rendering", () => {
     vi.doMock("@better-auth/passkey", () => ({
       passkey: () => "passkey-plugin",
     }));
-    function DatabaseMock() {
-      return {
-        prepare: vi.fn(() => ({
-          all: vi.fn(() => []),
-          get: vi.fn(() => undefined),
-          run: vi.fn(),
-        })),
-      };
-    }
     vi.doMock("better-sqlite3", () => ({
       default: DatabaseMock,
     }));
@@ -159,7 +167,7 @@ describe("auth/email HTML rendering", () => {
   });
 
   it("opens the auth database lazily and logs an actionable message when it fails", async () => {
-    const error = new Error("unable to open database file");
+    const error = databaseOpenError;
     const logErrorMock = vi.fn();
     const betterAuthMock = vi.fn();
     const scopedLogger = {
@@ -191,11 +199,8 @@ describe("auth/email HTML rendering", () => {
     vi.doMock("@better-auth/passkey", () => ({
       passkey: () => "passkey-plugin",
     }));
-    function DatabaseMock() {
-      throw error;
-    }
     vi.doMock("better-sqlite3", () => ({
-      default: DatabaseMock,
+      default: UnopenableDatabaseMock,
     }));
     vi.doMock("nodemailer", () => ({
       createTransport: vi.fn(),

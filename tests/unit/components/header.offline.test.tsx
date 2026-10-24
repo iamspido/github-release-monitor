@@ -10,6 +10,17 @@ type LinkProps = {
   children?: ReactNode;
 };
 
+// Stand-ins for the per-test vi.doMock factories (doMock is not hoisted)
+const MockLink = ({ href, children }: LinkProps) => (
+  <a href={href}>{children}</a>
+);
+const MockLogo = () => createElement("div", { "data-testid": "logo" });
+const MockOfflineBanner = () =>
+  createElement("div", { "data-testid": "offline-banner" });
+const MockUpdateNoticeBanner = () => null;
+const MockMobileMenu = () =>
+  createElement("button", { type: "button" }, "Menu");
+
 // We'll mock network status and import Header dynamically per test
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => {
@@ -58,22 +69,21 @@ describe("Header logout disabled offline", () => {
       useLocale: () => "en",
     }));
     vi.doMock("@/i18n/navigation", () => ({
-      Link: ({ href, children }: LinkProps) => <a href={href}>{children}</a>,
+      Link: MockLink,
       usePathname: () => "/",
       useRouter: () => ({ push: vi.fn() }),
     }));
     vi.doMock("@/components/logo", () => ({
-      Logo: () => createElement("div", { "data-testid": "logo" }),
+      Logo: MockLogo,
     }));
     vi.doMock("@/components/offline-banner", () => ({
-      OfflineBanner: () =>
-        createElement("div", { "data-testid": "offline-banner" }),
+      OfflineBanner: MockOfflineBanner,
     }));
     vi.doMock("@/components/update-notice-banner", () => ({
-      UpdateNoticeBanner: () => null,
+      UpdateNoticeBanner: MockUpdateNoticeBanner,
     }));
     vi.doMock("@/components/mobile-menu", () => ({
-      MobileMenu: () => createElement("button", { type: "button" }, "Menu"),
+      MobileMenu: MockMobileMenu,
     }));
     const { Header } = await import("@/components/header");
     const div = document.createElement("div");

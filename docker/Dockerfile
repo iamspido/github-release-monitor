@@ -109,7 +109,7 @@ RUN node --test .github/actions/star-history/index.test.js >/tmp/star-history-te
  || (cat /tmp/star-history-tests.log; exit 1)
 
 # E2E Stage (Playwright)
-FROM mcr.microsoft.com/playwright:v1.63.0-resolute AS e2e
+FROM mcr.microsoft.com/playwright:v1.64.1-resolute AS e2e
 
 WORKDIR /app
 

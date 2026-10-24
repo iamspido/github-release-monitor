@@ -3,6 +3,16 @@ import { flushSync } from "react-dom";
 import ReactDOM from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 
+// The hook is imported after vi.doMock(), so the harness receives it as a prop.
+function TestHarness({
+  useServerActionStaleReload,
+}: {
+  useServerActionStaleReload: () => void;
+}) {
+  useServerActionStaleReload();
+  return null;
+}
+
 describe("useServerActionStaleReload", () => {
   function setup() {
     const div = document.createElement("div");
@@ -33,15 +43,14 @@ describe("useServerActionStaleReload", () => {
       "@/hooks/use-server-action-stale-reload"
     );
 
-    function TestHarness() {
-      useServerActionStaleReload();
-      return null;
-    }
-
     const { root, cleanup } = setup();
     try {
       flushSync(() => {
-        root.render(<TestHarness />);
+        root.render(
+          <TestHarness
+            useServerActionStaleReload={useServerActionStaleReload}
+          />,
+        );
       });
 
       const rejectedPromise = Promise.reject(new Error("boom"));

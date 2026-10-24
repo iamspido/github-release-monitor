@@ -73,9 +73,11 @@ test("localized login with next does not trigger global error boundary", async (
   await page.locator('button[type="submit"]').first().click();
 
   await expect(page).toHaveURL(/\/de\/?$/);
-  const pageText = await page.locator("body").innerText();
-  expect(pageText).not.toContain("Something went wrong");
-  expect(pageText).toContain("Überwachte Repositories");
+  // toContainText() skips <script> content, so the message catalog serialized
+  // into the RSC payload cannot satisfy these checks.
+  const body = page.locator("body");
+  await expect(body).not.toContainText("Something went wrong");
+  await expect(body).toContainText("Überwachte Repositories");
   await ensureAppLocale(page, "en");
   expect(authErrors).toEqual([]);
 });

@@ -4,6 +4,25 @@ import { act } from "react";
 import ReactDOM from "react-dom/client";
 import { RepositoryTagPicker } from "@/components/repository-tag-picker";
 
+function Harness({ onTagSelect }: { onTagSelect: (tag: string) => boolean }) {
+  const [value, setValue] = React.useState("");
+  return (
+    <RepositoryTagPicker
+      id="repository-tags"
+      options={["infra", "media"]}
+      selectedTags={[]}
+      value={value}
+      onValueChange={setValue}
+      onTagSelect={onTagSelect}
+      onCreateTag={() => false}
+      onInputBlur={() => {}}
+      placeholder="Tags"
+      listboxLabel="Existing tags"
+      createOptionLabel={(tag) => `Add ${tag}`}
+    />
+  );
+}
+
 describe("RepositoryTagPicker", () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -36,26 +55,7 @@ describe("RepositoryTagPicker", () => {
   }: {
     onTagSelect?: (tag: string) => boolean;
   } = {}) {
-    function Harness() {
-      const [value, setValue] = React.useState("");
-      return (
-        <RepositoryTagPicker
-          id="repository-tags"
-          options={["infra", "media"]}
-          selectedTags={[]}
-          value={value}
-          onValueChange={setValue}
-          onTagSelect={onTagSelect}
-          onCreateTag={() => false}
-          onInputBlur={() => {}}
-          placeholder="Tags"
-          listboxLabel="Existing tags"
-          createOptionLabel={(tag) => `Add ${tag}`}
-        />
-      );
-    }
-
-    act(() => root.render(<Harness />));
+    act(() => root.render(<Harness onTagSelect={onTagSelect} />));
     const input = container.querySelector<HTMLInputElement>("input");
     if (!input) throw new Error("Tag picker input was not rendered.");
     return input;
