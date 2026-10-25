@@ -525,6 +525,7 @@
     "toast_error_title": "Error",
     "toast_error_not_found": "Repository not found to update.",
     "toast_error_generic": "Could not save settings.",
+    "regex_error_invalid": "Invalid regular expression.",
     "release_channel_error_at_least_one": "At least one release type must be selected when overriding global settings.",
     "reset_all_button_text": "Reset All Settings",
     "reset_all_dialog_title": "Reset all individual settings?",

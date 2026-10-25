@@ -3,7 +3,11 @@ import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { resolveEffectiveReleaseSelectionStrategy } from "@/lib/releases/selection";
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
-import { parseImportedRepository } from "@/lib/repositories/repository-import";
+import {
+  findImportedPatternProblem,
+  type ImportedPatternProblem,
+  parseImportedRepository,
+} from "@/lib/repositories/repository-import";
 import { refreshMultipleRepositoriesAction } from "@/lib/repositories/repository-refresh-actions";
 import { normalizeRepositoryTags } from "@/lib/repositories/tags";
 import { trackBackgroundTask } from "@/lib/runtime/background-tasks";
@@ -16,7 +20,7 @@ import {
 import { setJobStatus } from "@/lib/storage/jobs";
 import { getRepositories, saveRepositories } from "@/lib/storage/repositories";
 import { getSettings } from "@/lib/storage/settings";
-import type { Repository } from "@/types";
+import type { Locale, Repository } from "@/types";
 
 export async function addRepositoriesAction(
   _prevState: unknown,
@@ -127,6 +131,28 @@ export async function addRepositoriesAction(
   });
 }
 
+async function importedPatternProblemMessage(
+  locale: Locale,
+  problem: ImportedPatternProblem,
+): Promise<string> {
+  if (problem.field !== "version") {
+    const tSettings = await getTranslations({
+      locale,
+      namespace: "SettingsForm",
+    });
+    return tSettings("regex_error_invalid");
+  }
+  const tRepoSettings = await getTranslations({
+    locale,
+    namespace: "RepoSettingsDialog",
+  });
+  return tRepoSettings(
+    problem.error === "missing_version_group"
+      ? "version_tag_pattern_error_missing_version_group"
+      : "version_tag_pattern_error_invalid",
+  );
+}
+
 export async function importRepositoriesAction(
   importedData: Repository[],
   selectedTags: readonly string[] = [],
@@ -153,10 +179,24 @@ export async function importRepositoriesAction(
       const currentRepoIds = new Set(currentRepos.map((repo) => repo.id));
       const currentReposMap = new Map(currentRepos.map((r) => [r.id, r]));
 
-      const validImportedRepos = importedData.flatMap((repo) => {
+      const validImportedRepos: Repository[] = [];
+      for (const repo of importedData) {
         const parsed = parseImportedRepository(repo);
-        return parsed ? [parsed] : [];
-      });
+        if (!parsed) continue;
+        // A refused pattern refuses the whole import before anything is
+        // written: dropping a filter would let every release through.
+        const problem = findImportedPatternProblem(
+          repo,
+          currentReposMap.get(parsed.id),
+        );
+        if (problem) {
+          return {
+            success: false,
+            message: `${await importedPatternProblemMessage(locale, problem)} ${parsed.url}`,
+          };
+        }
+        validImportedRepos.push(parsed);
+      }
 
       let addedCount = 0;
       let updatedCount = 0;

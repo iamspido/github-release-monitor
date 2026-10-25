@@ -24,6 +24,7 @@ import {
   hasSettingsSnapshotDrift,
   type IntegerValidationError,
   isCacheIntervalInvalid,
+  keepsStoredPattern,
   parseCustomPreReleaseMarkers,
   type RangeValidationError,
   validateCronInput,
@@ -571,6 +572,20 @@ export function useSettingsFormController({
       notificationMaxMessagesPerRun,
       notificationDeliveryConcurrency,
     ].some((value) => value === "");
+  // A refused pattern left as saved keeps its field error but does not block
+  // saving, since the server keeps it unchanged.
+  const savedSettings = lastSavedSettingsRef.current;
+  const blocksUnlessStored = (
+    error: unknown,
+    key: "includeRegex" | "excludeRegex",
+  ) =>
+    Boolean(error) && !keepsStoredPattern(newSettings[key], savedSettings[key]);
+  const securityPatternsBlock =
+    Boolean(customSecurityPatternsError) &&
+    getInvalidCustomSecurityPattern(
+      newSettings.customSecurityPatterns,
+      savedSettings.customSecurityPatterns,
+    ) !== null;
   const hasValidationErrors = Boolean(
     hasEmptyFields ||
       intervalError ||
@@ -579,10 +594,10 @@ export function useSettingsFormController({
       parallelRepoFetchesError ||
       notificationMaxMessagesError ||
       notificationDeliveryConcurrencyError ||
-      includeRegexError ||
-      excludeRegexError ||
+      blocksUnlessStored(includeRegexError, "includeRegex") ||
+      blocksUnlessStored(excludeRegexError, "excludeRegex") ||
       securityHighlightCustomColorError ||
-      customSecurityPatternsError ||
+      securityPatternsBlock ||
       invalidCustomPreReleaseMarkers.length > 0 ||
       cronError,
   );

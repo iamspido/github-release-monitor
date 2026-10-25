@@ -525,6 +525,7 @@
     "toast_error_title": "Kesalahan",
     "toast_error_not_found": "Repositori yang akan diperbarui tidak ditemukan.",
     "toast_error_generic": "Tidak dapat menyimpan pengaturan.",
+    "regex_error_invalid": "Ekspresi reguler tidak valid.",
     "release_channel_error_at_least_one": "Minimal satu jenis rilis harus dipilih saat menimpa pengaturan global.",
     "reset_all_button_text": "Atur Ulang Semua Pengaturan",
     "reset_all_dialog_title": "Atur ulang semua pengaturan individual?",

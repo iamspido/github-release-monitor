@@ -525,6 +525,7 @@
     "toast_error_title": "Błąd",
     "toast_error_not_found": "Nie znaleziono repozytorium do zaktualizowania.",
     "toast_error_generic": "Nie udało się zapisać ustawień.",
+    "regex_error_invalid": "Nieprawidłowe wyrażenie regularne.",
     "release_channel_error_at_least_one": "Podczas zastępowania ustawień globalnych należy wybrać co najmniej jeden typ wydania.",
     "reset_all_button_text": "Resetuj wszystkie ustawienia",
     "reset_all_dialog_title": "Zresetować wszystkie ustawienia indywidualne?",

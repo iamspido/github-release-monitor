@@ -18,7 +18,10 @@ import {
   getGlobalReleaseCacheInvalidationChanges,
   shouldInvalidateReleaseCache,
 } from "@/lib/settings/change-detection";
-import { validateRegexInput } from "@/lib/settings/form-model";
+import {
+  keepsStoredPattern,
+  validateRegexInput,
+} from "@/lib/settings/form-model";
 import { normalizeSettings } from "@/lib/storage/settings";
 import type { AppSettings } from "@/types";
 
@@ -82,12 +85,16 @@ export function prepareSettingsUpdate(
     };
   }
 
-  const hasInvalidReleaseRegex = [
-    newSettings.includeRegex,
-    newSettings.excludeRegex,
-  ].some(
-    (value) => typeof value === "string" && validateRegexInput(value) !== null,
-  );
+  // A pattern left as stored is not checked again, so a stored pattern the
+  // engine refuses never holds back another setting.
+  const hasInvalidReleaseRegex = (["includeRegex", "excludeRegex"] as const)
+    .filter(
+      (key) => !keepsStoredPattern(newSettings[key], currentSettings[key]),
+    )
+    .some((key) => {
+      const value = newSettings[key];
+      return typeof value === "string" && validateRegexInput(value) !== null;
+    });
   if (hasInvalidReleaseRegex) {
     return {
       ok: false,
@@ -95,7 +102,12 @@ export function prepareSettingsUpdate(
       locale: newSettings.locale,
     };
   }
-  if (getInvalidCustomSecurityPattern(newSettings.customSecurityPatterns)) {
+  if (
+    getInvalidCustomSecurityPattern(
+      newSettings.customSecurityPatterns,
+      currentSettings.customSecurityPatterns,
+    )
+  ) {
     return {
       ok: false,
       errorKey: "security_patterns_error_invalid",

@@ -1,5 +1,5 @@
 import {
-  createSecurityReleaseMatcher,
+  getSecurityReleaseMatcher,
   type SecurityReleaseDetectionOptions,
 } from "@/lib/security-release";
 import type {
@@ -141,9 +141,18 @@ export function sortEnrichedReleases(
   securityReleaseOptions: SecurityReleaseDetectionOptions = {},
 ): EnrichedRelease[] {
   const normalizedSortOrder = normalizeReleaseSortOrder(sortOrder);
-  const matchesSecurityRelease = prioritizeNewSecurityReleases
-    ? createSecurityReleaseMatcher(securityReleaseOptions)
-    : null;
+  // Evaluated once per release before the sort, not in every comparison.
+  const newSecurityReleases = new Set<EnrichedRelease>();
+  if (prioritizeNewSecurityReleases) {
+    const matchesSecurityRelease = getSecurityReleaseMatcher(
+      securityReleaseOptions,
+    );
+    for (const item of releases) {
+      if (item.isNew && matchesSecurityRelease(item.release)) {
+        newSecurityReleases.add(item);
+      }
+    }
+  }
 
   return [...releases].sort((a, b) => {
     const aIsPinned = a.repoSettings?.isPinned === true;
@@ -153,15 +162,10 @@ export function sortEnrichedReleases(
       return aIsPinned ? -1 : 1;
     }
 
-    if (matchesSecurityRelease) {
-      const aIsNewSecurityRelease =
-        Boolean(a.isNew) && matchesSecurityRelease(a.release);
-      const bIsNewSecurityRelease =
-        Boolean(b.isNew) && matchesSecurityRelease(b.release);
-
-      if (aIsNewSecurityRelease !== bIsNewSecurityRelease) {
-        return aIsNewSecurityRelease ? -1 : 1;
-      }
+    const aIsNewSecurityRelease = newSecurityReleases.has(a);
+    const bIsNewSecurityRelease = newSecurityReleases.has(b);
+    if (aIsNewSecurityRelease !== bIsNewSecurityRelease) {
+      return aIsNewSecurityRelease ? -1 : 1;
     }
 
     switch (normalizedSortOrder) {

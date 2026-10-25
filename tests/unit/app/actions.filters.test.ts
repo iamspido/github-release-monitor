@@ -79,7 +79,7 @@ describe("filters: include/exclude/channels/subchannels", () => {
     expect(enriched[0].release?.tag_name).toBe("v1");
   });
 
-  it("invalid regex is ignored (no throw)", async () => {
+  it("a stored invalid include filter lets no release through (no throw)", async () => {
     const repo: Repository = {
       id: "o/r",
       url: "https://github.com/o/r",
@@ -108,7 +108,8 @@ describe("filters: include/exclude/channels/subchannels", () => {
       "en",
       { skipCache: true },
     );
-    expect(enriched[0].release?.tag_name).toBe("v1");
+    expect(enriched[0].release).toBeUndefined();
+    expect(enriched[0].error?.type).toBe("no_matching_releases");
   });
 
   it("prerelease by tag name matches only configured subchannels", async () => {

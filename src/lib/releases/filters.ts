@@ -2,7 +2,15 @@ import {
   getValidCustomPreReleaseMarkers,
   normalizePreReleaseMarkerText,
 } from "@/lib/releases/pre-release-markers";
+import { compileVersionTagPattern } from "@/lib/releases/version-tag-pattern";
 import { log } from "@/lib/server-action-helpers";
+import {
+  compileUntrustedPattern,
+  MAX_PATTERN_TAG_NAME_LENGTH,
+  type UntrustedPattern,
+  type UntrustedPatternError,
+  UntrustedPatternEvaluationError,
+} from "@/lib/untrusted-pattern";
 import type {
   AppSettings,
   CachedRelease,
@@ -19,6 +27,10 @@ const preReleaseMatcherCache = new Map<
 >();
 const maxCachedPreReleaseMatchers = 100;
 const builtInPreReleaseMarkerSet = new Set<string>(allPreReleaseTypes);
+
+export function isPatternEvaluableTagName(tagName: string): boolean {
+  return tagName.length <= MAX_PATTERN_TAG_NAME_LENGTH;
+}
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -198,15 +210,22 @@ export type EffectiveRepoFilters = ReturnType<
 type ReleaseMatcher = (release: GithubRelease) => boolean;
 
 function compileOptionalRegex(pattern: string | undefined): {
-  regex?: RegExp;
-  error?: unknown;
+  regex?: UntrustedPattern;
+  error?: UntrustedPatternError;
 } {
   if (!pattern) return {};
+  const compiled = compileUntrustedPattern(pattern, "i");
+  return compiled.error
+    ? { error: compiled.error }
+    : { regex: compiled.pattern };
+}
 
+function evaluatePattern<T>(evaluate: () => T): T | null {
   try {
-    return { regex: new RegExp(pattern, "i") };
+    return evaluate();
   } catch (error) {
-    return { error };
+    if (error instanceof UntrustedPatternEvaluationError) return null;
+    throw error;
   }
 }
 
@@ -245,41 +264,44 @@ export function createEffectiveReleaseMatcher(
   const matchesCustomPreReleaseMarker = createPreReleaseMatcher(
     filters.effectiveCustomPreReleaseMarkers,
   );
-  let versionTagPattern: RegExp | undefined;
-  if (
-    filters.effectiveReleaseSelectionStrategy === "highest_version" &&
-    filters.versionTagPattern
-  ) {
-    try {
-      versionTagPattern = new RegExp(filters.versionTagPattern);
-    } catch {
-      versionTagPattern = undefined;
+  const versionTagPattern =
+    filters.effectiveReleaseSelectionStrategy === "highest_version"
+      ? compileVersionTagPattern(filters.versionTagPattern)
+      : null;
+  // An unusable filter fails closed rather than letting every release through.
+  let unusable = exclude.error ?? include.error;
+  let unusableLogged = false;
+  const rejectAsUnusable = (reason: UntrustedPatternError) => {
+    unusable = reason;
+    if (!unusableLogged) {
+      unusableLogged = true;
+      log.error(
+        `Unusable regex filter for repo ${repoIdForLog} (${reason}). No release matches.`,
+      );
     }
-  }
-  const loggedRegexErrors = new Set<unknown>();
-
-  const logRegexErrorOnce = (error: unknown) => {
-    if (loggedRegexErrors.has(error)) return;
-    loggedRegexErrors.add(error);
-    log.error(
-      `Invalid regex for repo ${repoIdForLog}. Regex filters will be ignored. Error:`,
-      error,
-    );
+    return false;
   };
 
   return (release) => {
-    if (exclude.error) {
-      logRegexErrorOnce(exclude.error);
-    } else if (exclude.regex?.test(release.tag_name)) {
-      return false;
+    if (unusable) return rejectAsUnusable(unusable);
+    // With a filter set, a tag name too long to evaluate never passes.
+    const evaluable = isPatternEvaluableTagName(release.tag_name);
+    const { regex: excludeRegex } = exclude;
+    if (excludeRegex) {
+      if (!evaluable) return false;
+      const excluded = evaluatePattern(() =>
+        excludeRegex.test(release.tag_name),
+      );
+      if (excluded === null) return rejectAsUnusable("unsupported");
+      if (excluded) return false;
     }
-
-    if (!exclude.error) {
-      if (include.error) {
-        logRegexErrorOnce(include.error);
-      } else if (include.regex) {
-        return include.regex.test(release.tag_name);
-      }
+    const { regex: includeRegex } = include;
+    if (includeRegex) {
+      if (!evaluable) return false;
+      const included = evaluatePattern(() =>
+        includeRegex.test(release.tag_name),
+      );
+      return included === null ? rejectAsUnusable("unsupported") : included;
     }
 
     if (release.draft) {
@@ -290,8 +312,11 @@ export function createEffectiveReleaseMatcher(
       return filters.effectiveReleaseChannels.includes("stable");
     }
 
-    const extractedVersion = versionTagPattern?.exec(release.tag_name)?.groups
-      ?.version;
+    const extractedVersion =
+      evaluable && versionTagPattern
+        ? evaluatePattern(() => versionTagPattern.groups(release.tag_name))
+            ?.version
+        : undefined;
     const versionForChannelClassification = (
       extractedVersion ?? release.tag_name
     ).trim();

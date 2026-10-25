@@ -525,6 +525,7 @@
     "toast_error_title": "שגיאה",
     "toast_error_not_found": "המאגר לעדכון לא נמצא.",
     "toast_error_generic": "לא ניתן לשמור את ההגדרות.",
+    "regex_error_invalid": "הביטוי הרגולרי אינו תקין.",
     "release_channel_error_at_least_one": "בעת החלפת ההגדרות הכלליות יש לבחור לפחות סוג גרסה אחד.",
     "reset_all_button_text": "איפוס כל ההגדרות",
     "reset_all_dialog_title": "לאפס את כל ההגדרות הפרטניות?",

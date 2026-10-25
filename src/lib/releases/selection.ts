@@ -1,13 +1,18 @@
 import type { EffectiveRepoFilters } from "@/lib/releases/filters";
 import {
   createEffectiveReleaseMatcher,
+  isPatternEvaluableTagName,
   isPreReleaseByTagName,
 } from "@/lib/releases/filters";
 import {
   type ParsedVersion,
   parseComparableVersion,
 } from "@/lib/releases/version";
-import { validateVersionTagPattern } from "@/lib/releases/version-tag-pattern";
+import { compileVersionTagPattern } from "@/lib/releases/version-tag-pattern";
+import {
+  type UntrustedPattern,
+  UntrustedPatternEvaluationError,
+} from "@/lib/untrusted-pattern";
 import type {
   FetchError,
   GithubRelease,
@@ -211,17 +216,18 @@ function selectActiveVersionFamily(
 
 function parseConfiguredVersion(
   release: GithubRelease,
-  pattern: RegExp,
+  pattern: UntrustedPattern,
   customPreReleaseMarkers: readonly string[] = [],
 ): VersionedRelease | null {
-  const match = pattern.exec(release.tag_name);
-  const versionValue = match?.groups?.version;
+  if (!isPatternEvaluableTagName(release.tag_name)) return null;
+  const groups = pattern.groups(release.tag_name);
+  const versionValue = groups?.version;
   if (!versionValue) return null;
 
   const version = parseComparableVersion(versionValue, customPreReleaseMarkers);
   if (!version) return null;
 
-  const revisionValue = match.groups?.revision;
+  const revisionValue = groups.revision;
   if (revisionValue !== undefined && !/^\d+$/.test(revisionValue)) return null;
 
   return {
@@ -242,10 +248,18 @@ function parseConfiguredVersion(
 
 function getConfiguredVersionPattern(
   versionTagPattern: string | undefined,
-): RegExp | null {
-  const pattern = versionTagPattern?.trim();
-  if (!pattern || validateVersionTagPattern(pattern)) return null;
-  return new RegExp(pattern);
+): UntrustedPattern | null {
+  return compileVersionTagPattern(versionTagPattern);
+}
+
+// An engine failure makes the pattern unusable, never a partial selection.
+function withConfiguredVersionPattern<T>(evaluate: () => T, unusable: T): T {
+  try {
+    return evaluate();
+  } catch (error) {
+    if (error instanceof UntrustedPatternEvaluationError) return unusable;
+    throw error;
+  }
 }
 
 export function hasComparableVersionTag(
@@ -257,8 +271,12 @@ export function hasComparableVersionTag(
   const pattern = getConfiguredVersionPattern(versionTagPattern);
   if (hasConfiguredPattern && !pattern) return false;
   return pattern
-    ? releases.some((release) =>
-        parseConfiguredVersion(release, pattern, customPreReleaseMarkers),
+    ? withConfiguredVersionPattern(
+        () =>
+          releases.some((release) =>
+            parseConfiguredVersion(release, pattern, customPreReleaseMarkers),
+          ),
+        false,
       )
     : releases.some((release) =>
         parseComparableVersion(release.tag_name, customPreReleaseMarkers),
@@ -290,35 +308,40 @@ function selectHighestVersion(
   const hasConfiguredPattern = Boolean(versionTagPattern?.trim());
   const configuredPattern = getConfiguredVersionPattern(versionTagPattern);
   if (hasConfiguredPattern && !configuredPattern) return null;
-  const versioned = releases.flatMap((release) => {
-    if (hasConfiguredPattern && configuredPattern) {
-      const candidate = parseConfiguredVersion(
-        release,
-        configuredPattern,
-        customPreReleaseMarkers,
-      );
-      return candidate ? [candidate] : [];
-    }
-    const version = parseComparableVersion(
-      release.tag_name,
-      customPreReleaseMarkers,
-    );
-    return version
-      ? [
-          {
+  const versioned = withConfiguredVersionPattern<VersionedRelease[] | null>(
+    () =>
+      releases.flatMap((release): VersionedRelease[] => {
+        if (hasConfiguredPattern && configuredPattern) {
+          const candidate = parseConfiguredVersion(
             release,
-            version,
-            revision: version.revision,
-            isProductionSuffix: isProductionSuffix(
-              release,
-              version,
-              release.tag_name,
-              customPreReleaseMarkers,
-            ),
-          },
-        ]
-      : [];
-  });
+            configuredPattern,
+            customPreReleaseMarkers,
+          );
+          return candidate ? [candidate] : [];
+        }
+        const version = parseComparableVersion(
+          release.tag_name,
+          customPreReleaseMarkers,
+        );
+        return version
+          ? [
+              {
+                release,
+                version,
+                revision: version.revision,
+                isProductionSuffix: isProductionSuffix(
+                  release,
+                  version,
+                  release.tag_name,
+                  customPreReleaseMarkers,
+                ),
+              },
+            ]
+          : [];
+      }),
+    null,
+  );
+  if (versioned === null) return null;
 
   if (versioned.length === 0) {
     return hasConfiguredPattern ? null : selectNewestKnownRelease(releases);

@@ -525,6 +525,7 @@
     "toast_error_title": "خطأ",
     "toast_error_not_found": "لم يتم العثور على المستودع للتحديث.",
     "toast_error_generic": "لا يمكن حفظ الإعدادات.",
+    "regex_error_invalid": "تعبير عادي غير صالح.",
     "release_channel_error_at_least_one": "يجب تحديد نوع إصدار واحد على الأقل عند تجاوز الإعدادات العامة.",
     "reset_all_button_text": "إعادة ضبط جميع الإعدادات",
     "reset_all_dialog_title": "هل تريد إعادة ضبط كافة الإعدادات الفردية؟",

@@ -525,6 +525,7 @@
     "toast_error_title": "Erreur",
     "toast_error_not_found": "Dépôt à mettre à jour introuvable.",
     "toast_error_generic": "Impossible d’enregistrer les paramètres.",
+    "regex_error_invalid": "Expression régulière non valide.",
     "release_channel_error_at_least_one": "Au moins un type de version doit être sélectionné lors du remplacement des paramètres globaux.",
     "reset_all_button_text": "Réinitialiser tous les paramètres",
     "reset_all_dialog_title": "Réinitialiser tous les paramètres individuels ?",

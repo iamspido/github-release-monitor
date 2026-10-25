@@ -525,6 +525,7 @@
     "toast_error_title": "त्रुटि",
     "toast_error_not_found": "अपडेट करने के लिए रिपॉज़िटरी नहीं मिली।",
     "toast_error_generic": "सेटिंग्स सहेजी नहीं जा सकीं।",
+    "regex_error_invalid": "अमान्य रेगुलर एक्सप्रेशन।",
     "release_channel_error_at_least_one": "वैश्विक सेटिंग्स ओवरराइड करते समय कम से कम एक रिलीज़ प्रकार चुना जाना चाहिए।",
     "reset_all_button_text": "सभी सेटिंग्स रीसेट करें",
     "reset_all_dialog_title": "सभी व्यक्तिगत सेटिंग्स रीसेट करें?",

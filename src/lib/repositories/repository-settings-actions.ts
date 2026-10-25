@@ -29,7 +29,10 @@ import {
   getRepositoryReleaseCacheInvalidationChanges,
   shouldInvalidateReleaseCache,
 } from "@/lib/settings/change-detection";
-import { validateRegexInput } from "@/lib/settings/form-model";
+import {
+  keepsStoredPattern,
+  validateRegexInput,
+} from "@/lib/settings/form-model";
 import { getRepositories, saveRepositories } from "@/lib/storage/repositories";
 import { getSettings } from "@/lib/storage/settings";
 import type { Repository } from "@/types";
@@ -85,8 +88,15 @@ export async function updateRepositorySettingsAction(
         : undefined;
       const newVersionTagPattern =
         settings.versionTagPattern?.trim() || undefined;
-      const versionTagPatternError =
-        validateVersionTagPattern(newVersionTagPattern);
+      const versionTagPatternChanged = !keepsStoredPattern(
+        newVersionTagPattern,
+        existing.versionTagPattern,
+      );
+      // The dialog sends its whole draft. A pattern left as stored is not
+      // checked again, so it never holds back the other settings.
+      const versionTagPatternError = versionTagPatternChanged
+        ? validateVersionTagPattern(newVersionTagPattern)
+        : null;
       if (versionTagPatternError) {
         return {
           success: false,
@@ -97,9 +107,6 @@ export async function updateRepositorySettingsAction(
           ),
         };
       }
-      const versionTagPatternChanged =
-        (existing.versionTagPattern?.trim() || undefined) !==
-        newVersionTagPattern;
       const releaseSelectionOverrideChanged =
         existing.releaseSelectionStrategy !== newReleaseSelectionStrategy;
       let effectiveReleaseSelectionChanged = false;
@@ -160,8 +167,12 @@ export async function updateRepositorySettingsAction(
           ? undefined
           : normalizeCustomPreReleaseMarkers(settings.customPreReleaseMarkers);
       if (
-        (newInclude && validateRegexInput(newInclude)) ||
-        (newExclude && validateRegexInput(newExclude))
+        (newInclude &&
+          !keepsStoredPattern(newInclude, existing.includeRegex) &&
+          validateRegexInput(newInclude)) ||
+        (newExclude &&
+          !keepsStoredPattern(newExclude, existing.excludeRegex) &&
+          validateRegexInput(newExclude))
       ) {
         return { success: false, error: t("regex_error_invalid") };
       }

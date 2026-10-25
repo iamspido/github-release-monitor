@@ -521,6 +521,7 @@
     "toast_error_title": "Error",
     "toast_error_not_found": "No se encontró el repositorio que actualizar.",
     "toast_error_generic": "No se pudo guardar la configuración.",
+    "regex_error_invalid": "Expresión regular no válida.",
     "release_channel_error_at_least_one": "Debe seleccionarse al menos un tipo de versión al sustituir la configuración global.",
     "reset_all_button_text": "Restablecer toda la configuración",
     "reset_all_dialog_title": "¿Restablecer toda la configuración individual?",

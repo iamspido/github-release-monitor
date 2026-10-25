@@ -525,6 +525,7 @@
     "toast_error_title": "Fout",
     "toast_error_not_found": "De bij te werken repository is niet gevonden.",
     "toast_error_generic": "De instellingen konden niet worden opgeslagen.",
+    "regex_error_invalid": "Ongeldige reguliere expressie.",
     "release_channel_error_at_least_one": "Er moet minimaal één releasetype zijn geselecteerd wanneer algemene instellingen worden overschreven.",
     "reset_all_button_text": "Alle instellingen herstellen",
     "reset_all_dialog_title": "Alle individuele instellingen herstellen?",

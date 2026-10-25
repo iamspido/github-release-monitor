@@ -4,10 +4,19 @@ import {
   migrateLegacyPreReleaseConfiguration,
   normalizeCustomPreReleaseMarkers,
 } from "@/lib/releases/pre-release-markers";
-import { validateVersionTagPattern } from "@/lib/releases/version-tag-pattern";
+import {
+  type VersionTagPatternValidationError,
+  validateVersionTagPattern,
+} from "@/lib/releases/version-tag-pattern";
 import { normalizeRepositoryDisplayName } from "@/lib/repositories/display-name";
 import { parseSupportedRepoUrl } from "@/lib/repositories/providers";
 import { normalizeRepositoryTags } from "@/lib/repositories/tags";
+import { keepsStoredPattern } from "@/lib/settings/form-model";
+import {
+  normalizePatternInput,
+  regexFilterError,
+  type UntrustedPatternError,
+} from "@/lib/untrusted-pattern";
 import type {
   AppriseFormat,
   CachedRelease,
@@ -111,6 +120,41 @@ function readEnumArray<T extends string>(
   return Array.isArray(value) && value.every((entry) => allowed.has(entry as T))
     ? [...value]
     : undefined;
+}
+
+export type ImportedPatternProblem =
+  | { field: "include" | "exclude"; error: UntrustedPatternError }
+  | {
+      field: "version";
+      error: Exclude<VersionTagPatternValidationError, null>;
+    };
+
+/** The first pattern the save refuses, skipping one kept as stored. */
+export function findImportedPatternProblem(
+  value: unknown,
+  stored?: Pick<
+    Repository,
+    "includeRegex" | "excludeRegex" | "versionTagPattern"
+  >,
+): ImportedPatternProblem | null {
+  if (!isRecord(value)) return null;
+  const toCheck = (
+    key: "includeRegex" | "excludeRegex" | "versionTagPattern",
+  ): string | undefined => {
+    const imported = readOptionalString(value, key);
+    return stored && keepsStoredPattern(imported, stored[key])
+      ? undefined
+      : imported;
+  };
+  for (const [key, field] of [
+    ["includeRegex", "include"],
+    ["excludeRegex", "exclude"],
+  ] as const) {
+    const error = regexFilterError(toCheck(key));
+    if (error) return { field, error };
+  }
+  const versionError = validateVersionTagPattern(toCheck("versionTagPattern"));
+  return versionError ? { field: "version", error: versionError } : null;
 }
 
 /**
@@ -231,14 +275,14 @@ export function parseImportedRepository(value: unknown): Repository | null {
   if (backgroundCheckCron !== undefined) {
     repository.backgroundCheckCron = backgroundCheckCron;
   }
-  for (const key of [
-    "lastBackgroundCheckAt",
-    "includeRegex",
-    "excludeRegex",
-    "appriseTags",
-  ] as const) {
+  for (const key of ["lastBackgroundCheckAt", "appriseTags"] as const) {
     const field = readOptionalString(value, key);
     if (field !== undefined) repository[key] = field;
+  }
+  // Trimmed as the save stores them, so a filter of spaces clears a stored one.
+  for (const key of ["includeRegex", "excludeRegex"] as const) {
+    const field = readOptionalString(value, key);
+    if (field !== undefined) repository[key] = normalizePatternInput(field);
   }
   if (appriseFormats.has(value.appriseFormat as AppriseFormat)) {
     repository.appriseFormat = value.appriseFormat as AppriseFormat;

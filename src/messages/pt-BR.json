@@ -525,6 +525,7 @@
     "toast_error_title": "Erro",
     "toast_error_not_found": "Repositório a atualizar não encontrado.",
     "toast_error_generic": "Não foi possível salvar as configurações.",
+    "regex_error_invalid": "Expressão regular inválida.",
     "release_channel_error_at_least_one": "Pelo menos um tipo de lançamento deve ser selecionado ao substituir as configurações globais.",
     "reset_all_button_text": "Redefinir todas as configurações",
     "reset_all_dialog_title": "Redefinir todas as configurações individuais?",

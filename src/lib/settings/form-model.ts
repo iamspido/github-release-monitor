@@ -5,6 +5,10 @@ import {
 } from "@/lib/releases/pre-release-markers";
 import { areArraysEqualIgnoringOrder } from "@/lib/settings/change-detection";
 import { isValidFiveFieldCron } from "@/lib/settings/schedule-fields";
+import {
+  normalizePatternInput,
+  regexFilterError,
+} from "@/lib/untrusted-pattern";
 import type { Repository } from "@/types";
 
 export type RegexValidationError = "invalid" | null;
@@ -24,14 +28,15 @@ export function validateCustomPreReleaseMarkersInput(value: string): string[] {
 }
 
 export function validateRegexInput(value: string): RegexValidationError {
-  if (!value.trim()) return null;
+  return regexFilterError(value) ? "invalid" : null;
+}
 
-  try {
-    new RegExp(value);
-    return null;
-  } catch {
-    return "invalid";
-  }
+/** Compares both as the save stores them: trimmed, and empty as none. */
+export function keepsStoredPattern(
+  next: string | null | undefined,
+  stored: string | null | undefined,
+): boolean {
+  return normalizePatternInput(next) === normalizePatternInput(stored);
 }
 
 export function validateNumberRange(

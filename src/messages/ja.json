@@ -525,6 +525,7 @@
     "toast_error_title": "エラー",
     "toast_error_not_found": "更新するリポジトリが見つかりません。",
     "toast_error_generic": "設定を保存できませんでした。",
+    "regex_error_invalid": "正規表現が無効です。",
     "release_channel_error_at_least_one": "グローバル設定を上書きする場合、少なくとも1つのリリース種別を選択してください。",
     "reset_all_button_text": "すべての設定をリセット",
     "reset_all_dialog_title": "すべての個別設定をリセットしますか？",

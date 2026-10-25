@@ -1,3 +1,10 @@
+import {
+  compileUntrustedLiteral,
+  compileUntrustedPattern,
+  MAX_UNTRUSTED_PATTERN_LENGTH,
+  type UntrustedPattern,
+  UntrustedPatternEvaluationError,
+} from "@/lib/untrusted-pattern";
 import type {
   CachedRelease,
   GithubRelease,
@@ -36,34 +43,42 @@ const maxCachedSecurityMatchers = 100;
 
 const hexColorPattern = /^#[0-9a-f]{6}$/i;
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function parseRegexLiteral(value: string) {
   const match = value.match(/^\/(.+)\/([a-z]*)$/i);
   if (!match) return null;
   return { pattern: match[1], flags: match[2] };
 }
 
+function customSecurityLines(customSecurityPatterns?: string | null) {
+  return (
+    customSecurityPatterns
+      ?.split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean) ?? []
+  );
+}
+
+function compileCustomSecurityLine(line: string) {
+  const literal = parseRegexLiteral(line);
+  return literal
+    ? compileUntrustedPattern(literal.pattern, literal.flags, {
+        discardGroups: true,
+      })
+    : compileUntrustedLiteral(line);
+}
+
+/** The first unusable line that is not already `stored`, or null. */
 export function getInvalidCustomSecurityPattern(
   customSecurityPatterns?: string | null,
+  stored?: string | null,
 ): string | null {
-  const lines = customSecurityPatterns
-    ?.split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (!lines?.length) return null;
-
-  for (const line of lines) {
-    const literal = parseRegexLiteral(line);
-    if (!literal) continue;
-    try {
-      new RegExp(literal.pattern, literal.flags);
-    } catch {
-      return line;
-    }
+  const storedLines = new Set(customSecurityLines(stored));
+  for (const line of customSecurityLines(customSecurityPatterns)) {
+    if (storedLines.has(line)) continue;
+    const unusable = parseRegexLiteral(line)
+      ? compileCustomSecurityLine(line).error !== undefined
+      : line.length > MAX_UNTRUSTED_PATTERN_LENGTH;
+    if (unusable) return line;
   }
 
   return null;
@@ -71,37 +86,33 @@ export function getInvalidCustomSecurityPattern(
 
 function getCustomSecurityReleasePatterns(
   customSecurityPatterns?: string | null,
-) {
-  const lines = customSecurityPatterns
-    ?.split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (!lines?.length) return [];
-
-  return lines.flatMap((line) => {
-    const literal = parseRegexLiteral(line);
-    try {
-      if (literal) {
-        return [new RegExp(literal.pattern, literal.flags)];
-      }
-      return [new RegExp(escapeRegExp(line), "i")];
-    } catch {
-      return [];
-    }
+): UntrustedPattern[] {
+  return customSecurityLines(customSecurityPatterns).flatMap((line) => {
+    const { pattern } = compileCustomSecurityLine(line);
+    return pattern ? [pattern] : [];
   });
 }
 
 export function createSecurityReleaseMatcher(
   options: SecurityReleaseDetectionOptions = {},
 ): (release: SecurityReleaseInput) => boolean {
-  const patterns =
+  const builtInPatterns =
     options.includeDefaultSecurityPatterns === false
       ? []
-      : [...securityReleasePatterns];
-  patterns.push(
-    ...getCustomSecurityReleasePatterns(options.customSecurityPatterns),
+      : securityReleasePatterns;
+  let customPatterns = getCustomSecurityReleasePatterns(
+    options.customSecurityPatterns,
   );
+
+  const matchesCustomPattern = (pattern: UntrustedPattern, text: string) => {
+    try {
+      return pattern.test(text);
+    } catch (error) {
+      if (!(error instanceof UntrustedPatternEvaluationError)) throw error;
+      customPatterns = customPatterns.filter((other) => other !== pattern);
+      return false;
+    }
+  };
 
   return (release) => {
     if (!release) return false;
@@ -110,10 +121,12 @@ export function createSecurityReleaseMatcher(
       .filter(Boolean)
       .join("\n");
 
-    return patterns.some((pattern) => {
-      pattern.lastIndex = 0;
-      return pattern.test(searchableText);
-    });
+    return (
+      builtInPatterns.some((pattern) => pattern.test(searchableText)) ||
+      customPatterns.some((pattern) =>
+        matchesCustomPattern(pattern, searchableText),
+      )
+    );
   };
 }
 
@@ -137,10 +150,9 @@ export function isValidSecurityHighlightCustomColor(value: string): boolean {
   return hexColorPattern.test(value);
 }
 
-export function isSecurityRelease(
-  release: SecurityReleaseInput,
+export function getSecurityReleaseMatcher(
   options: SecurityReleaseDetectionOptions = {},
-): boolean {
+): ReturnType<typeof createSecurityReleaseMatcher> {
   const cacheKey = JSON.stringify([
     options.includeDefaultSecurityPatterns !== false,
     options.customSecurityPatterns ?? "",
@@ -154,5 +166,12 @@ export function isSecurityRelease(
     }
     securityMatcherCache.set(cacheKey, matcher);
   }
-  return matcher(release);
+  return matcher;
+}
+
+export function isSecurityRelease(
+  release: SecurityReleaseInput,
+  options: SecurityReleaseDetectionOptions = {},
+): boolean {
+  return getSecurityReleaseMatcher(options)(release);
 }

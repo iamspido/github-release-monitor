@@ -24,6 +24,7 @@ import {
   areSettingsSnapshotsEqual,
   hasRefreshSensitiveRepoSettingChanges,
   hasSettingsSnapshotDrift,
+  keepsStoredPattern,
 } from "@/lib/settings/form-model";
 import {
   shouldSelectAllPreReleaseSubChannels,
@@ -393,6 +394,27 @@ export function useRepoSettingsDialogController({
     null,
   );
 
+  // A refused pattern left as stored keeps its field error but blocks neither
+  // autosave nor closing, since the server keeps it unchanged.
+  const storedSettings = prevSettingsRef.current;
+  const blocksUnlessStored = (
+    error: unknown,
+    key: "includeRegex" | "excludeRegex" | "versionTagPattern",
+  ) =>
+    Boolean(error) &&
+    !keepsStoredPattern(newSettings[key], storedSettings[key]);
+  const includeRegexBlocks = blocksUnlessStored(
+    includeRegexError,
+    "includeRegex",
+  );
+  const excludeRegexBlocks = blocksUnlessStored(
+    excludeRegexError,
+    "excludeRegex",
+  );
+  const versionTagPatternBlocks = blocksUnlessStored(
+    versionTagPatternError,
+    "versionTagPattern",
+  );
   const hasNonTagValidationErrors = Boolean(
     hasDisplayNameError ||
       hasEmptyIntervalFields ||
@@ -401,9 +423,9 @@ export function useRepoSettingsDialogController({
       intervalError ||
       isCacheInvalid ||
       cronError ||
-      includeRegexError ||
-      excludeRegexError ||
-      versionTagPatternError ||
+      includeRegexBlocks ||
+      excludeRegexBlocks ||
+      versionTagPatternBlocks ||
       invalidCustomPreReleaseMarkers.length > 0,
   );
   const hasValidationErrors = Boolean(
@@ -684,13 +706,13 @@ export function useRepoSettingsDialogController({
                     ? cronPreset === "custom"
                       ? cronExpressionId
                       : cronHourId
-                    : includeRegexError
+                    : includeRegexBlocks
                       ? includeRegexId
-                      : excludeRegexError
+                      : excludeRegexBlocks
                         ? excludeRegexId
                         : invalidCustomPreReleaseMarkers.length > 0
                           ? customPreReleaseMarkersId
-                          : versionTagPatternError
+                          : versionTagPatternBlocks
                             ? versionTagPatternId
                             : null;
     if (!targetId) return;

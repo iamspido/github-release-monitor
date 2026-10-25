@@ -525,6 +525,7 @@
     "toast_error_title": "오류",
     "toast_error_not_found": "업데이트할 저장소를 찾을 수 없습니다.",
     "toast_error_generic": "설정을 저장할 수 없습니다.",
+    "regex_error_invalid": "정규식이 올바르지 않습니다.",
     "release_channel_error_at_least_one": "전역 설정을 재정의할 때 릴리스 유형을 하나 이상 선택해야 합니다.",
     "reset_all_button_text": "모든 설정 초기화",
     "reset_all_dialog_title": "모든 개별 설정을 초기화할까요?",

@@ -525,6 +525,7 @@
     "toast_error_title": "Hata",
     "toast_error_not_found": "Güncellenecek depo bulunamadı.",
     "toast_error_generic": "Ayarlar kaydedilemedi.",
+    "regex_error_invalid": "Geçersiz düzenli ifade.",
     "release_channel_error_at_least_one": "Genel ayarlar geçersiz kılınırken en az bir sürüm türü seçilmelidir.",
     "reset_all_button_text": "Tüm Ayarları Sıfırla",
     "reset_all_dialog_title": "Tüm bireysel ayarlar sıfırlansın mı?",

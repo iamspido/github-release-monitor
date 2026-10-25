@@ -525,6 +525,7 @@
     "toast_error_title": "Errore",
     "toast_error_not_found": "Repository da aggiornare non trovato.",
     "toast_error_generic": "Impossibile salvare le impostazioni.",
+    "regex_error_invalid": "Espressione regolare non valida.",
     "release_channel_error_at_least_one": "Quando si sovrascrivono le impostazioni globali, deve essere selezionato almeno un tipo di release.",
     "reset_all_button_text": "Ripristina tutte le impostazioni",
     "reset_all_dialog_title": "Ripristinare tutte le impostazioni individuali?",

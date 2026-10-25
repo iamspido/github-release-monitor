@@ -525,6 +525,7 @@
     "toast_error_title": "Lỗi",
     "toast_error_not_found": "Không tìm thấy kho lưu trữ để cập nhật.",
     "toast_error_generic": "Không thể lưu cài đặt.",
+    "regex_error_invalid": "Biểu thức chính quy không hợp lệ.",
     "release_channel_error_at_least_one": "Phải chọn ít nhất một loại bản phát hành khi ghi đè cài đặt toàn cục.",
     "reset_all_button_text": "Đặt lại tất cả cài đặt",
     "reset_all_dialog_title": "Đặt lại tất cả cài đặt riêng?",

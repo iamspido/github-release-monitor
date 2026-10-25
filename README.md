@@ -12,7 +12,7 @@ A powerful, self-hostable application to automatically monitor GitHub, GitLab, C
 - **Flexible Release Filtering**:
     - **Global Settings**: Define application-wide rules for which release types (stable, pre-release, draft) to monitor.
     - **Per-Repository Overrides**: Customize filtering rules for individual repositories.
-    - **Regex-Powered Precision**: Use "Include" and "Exclude" regular expression patterns for fine-grained control over release tags. The "Include" pattern overrides the standard channel filters, giving you ultimate control.
+    - **Regex-Powered Precision**: Use "Include" and "Exclude" regular expression patterns for fine-grained control over release tags. The "Include" pattern overrides the standard channel filters, giving you ultimate control. Patterns run on a linear-time engine (RE2), so lookarounds, backreferences and patterns longer than 512 characters are not supported. A filter saved by an earlier version that is no longer supported is marked in the settings and lets no release through until you change it.
     - **Pre-release Granularity**: Select specific pre-release tags to watch (e.g., `alpha`, `beta`, `rc`).
 - **Modern & Responsive UI**:
     - Clean, intuitive interface built with ShadCN UI and Tailwind CSS.
@@ -22,7 +22,7 @@ A powerful, self-hostable application to automatically monitor GitHub, GitLab, C
   Brazilian Portuguese, Indonesian, Hindi, Simplified Chinese, Japanese,
   Korean, Turkish, Vietnamese, Italian, Polish, Ukrainian, Dutch, Russian,
   Hebrew, and Arabic out of the box, including right-to-left layout.
-- **Data Management**: Easily import or export your list of monitored repositories via JSON.
+- **Data Management**: Easily import or export your list of monitored repositories via JSON. An import containing a pattern that is no longer supported is refused.
 - **System Diagnostics**: A built-in test page to verify GitHub API connectivity and notification service (SMTP, Apprise) configuration.
 - **Secure Authentication**: Protects the application with Better Auth, SQLite-backed users/sessions, and one-time bootstrap setup.
 
