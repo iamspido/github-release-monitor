@@ -650,6 +650,7 @@
     "error_step_up_failed": "पहचान की पुष्टि विफल।",
     "error_totp_required": "OTP कोड दर्ज करें।",
     "error_totp_invalid": "OTP कोड अमान्य है।",
+    "error_too_many_attempts": "पुष्टि के बहुत अधिक विफल प्रयास। कृपया बाद में फिर प्रयास करें।",
     "error_reveal_failed": "गोपनीय मान दिखाया नहीं जा सका।",
     "notification_card_title": "आरंभ-से-अंत सूचना परीक्षण",
     "notification_card_description": "वर्चुअल रिपॉज़िटरी से पहचान से लेकर भेजने तक पूरी सूचना प्रक्रिया का परीक्षण करें।",

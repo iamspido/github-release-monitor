@@ -650,6 +650,7 @@
     "error_step_up_failed": "אישור הזהות נכשל.",
     "error_totp_required": "הזינו קוד OTP.",
     "error_totp_invalid": "קוד ה-OTP אינו תקין.",
+    "error_too_many_attempts": "יותר מדי ניסיונות אישור נכשלו. נסו שוב מאוחר יותר.",
     "error_reveal_failed": "לא ניתן לחשוף את הערך הסודי.",
     "notification_card_title": "בדיקת התראות מקצה לקצה",
     "notification_card_description": "בדקו את כל תהליך ההתראות, מהזיהוי ועד השליחה, באמצעות מאגר וירטואלי.",

@@ -436,6 +436,8 @@ AUTH_SECRET=your_super_secret_better_auth_key_here
 
 Version 2.x retains the previous trusted-header behavior for logging and login limits when `AUTH_TRUST_PROXY_HEADERS` is unset. Password-reset IP limits use proxy client-address headers only when this option is explicitly `true`; otherwise, they fall back to a hashed account identifier. Configure the option explicitly so a future major upgrade does not change the deployment's general client-address handling unexpectedly.
 
+Failed logins are also counted per entered email address or username across all client addresses: after four times `AUTH_MAX_LOGIN_ATTEMPTS` failures within the window, signing in with it is locked for `AUTH_LOGIN_LOCKOUT_SECONDS`, even with the correct password.
+
 #### **Protocol (HTTP/HTTPS)**
 
 This variable controls whether the application runs in secure (HTTPS) or insecure (HTTP) mode. It affects session cookies and security headers.
@@ -801,7 +803,7 @@ Here is a complete list of all environment variables used by the application.
 | `AUTHENTICATION_METHOD` | Authentication mode: `Basic`, `AllowUnauthenticated`, or `External`. `External` should only be used behind another auth layer. | No | `Basic` |
 | `AUTH_LOGIN_LOCKOUT_SECONDS` | Lockout duration (seconds) after too many failed login attempts.                                   | No                     | `900`                      |
 | `AUTH_LOGIN_WINDOW_SECONDS` | Time window (seconds) used to count failed login attempts.                                          | No                     | `900`                      |
-| `AUTH_MAX_LOGIN_ATTEMPTS` | Maximum failed login attempts before a temporary lockout is applied.                                 | No                     | `5`                        |
+| `AUTH_MAX_LOGIN_ATTEMPTS` | Maximum failed login attempts per client address before a temporary lockout is applied. Failed attempts per email address or username are also limited to four times this value. | No                     | `5`                        |
 | `AUTH_TRUST_PROXY_HEADERS` | Trusts `X-Forwarded-For`/`X-Real-IP` for per-client login limits and, only when explicitly `true`, password-reset IP limits. Without explicit trust, password resets use a hashed account-identifier limit instead. Set to `true` only behind a proxy that overwrites these headers; use `false` for direct exposure. Version 2.x preserves the general trusted-header behavior when unset; the next major will default to `false`. | No | `true` (2.x compatibility; explicit `true` required for reset IP limits) |
 | `AUTH_TRUSTED_PROXY_HOPS` | Number of trusted proxy entries counted from the right side of `X-Forwarded-For` (1-10).                | No                     | `1`                        |
 | `AUTH_ENABLE_SIGNUP`  | Enables self-service signup when set to `true`. Keep `false` for single-user mode.                     | No                     | `false`                    |

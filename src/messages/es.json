@@ -646,6 +646,7 @@
     "error_step_up_failed": "La confirmación de identidad falló.",
     "error_totp_required": "Introduce un código OTP.",
     "error_totp_invalid": "El código OTP no es válido.",
+    "error_too_many_attempts": "Demasiados intentos de confirmación fallidos. Inténtalo de nuevo más tarde.",
     "error_reveal_failed": "No se pudo mostrar el valor secreto.",
     "notification_card_title": "Prueba de notificación integral",
     "notification_card_description": "Prueba todo el proceso de notificación, desde la detección hasta el envío, con un repositorio virtual.",

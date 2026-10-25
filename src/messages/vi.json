@@ -650,6 +650,7 @@
     "error_step_up_failed": "Xác nhận danh tính thất bại.",
     "error_totp_required": "Nhập mã OTP.",
     "error_totp_invalid": "Mã OTP không hợp lệ.",
+    "error_too_many_attempts": "Quá nhiều lần xác nhận thất bại. Vui lòng thử lại sau.",
     "error_reveal_failed": "Không thể hiển thị giá trị bí mật.",
     "notification_card_title": "Kiểm tra thông báo đầu cuối",
     "notification_card_description": "Kiểm tra toàn bộ quy trình thông báo, từ phát hiện đến gửi đi, bằng một kho lưu trữ ảo.",

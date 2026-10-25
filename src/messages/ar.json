@@ -650,6 +650,7 @@
     "error_step_up_failed": "فشل تأكيد الهوية.",
     "error_totp_required": "أدخل رمز OTP.",
     "error_totp_invalid": "رمز OTP غير صالح.",
+    "error_too_many_attempts": "عدد كبير جدًا من محاولات التأكيد الفاشلة. يرجى المحاولة مرة أخرى في وقت لاحق.",
     "error_reveal_failed": "لا يمكن الكشف عن القيمة السرية.",
     "notification_card_title": "اختبار الإخطار من النهاية إلى النهاية",
     "notification_card_description": "اختبر مسار الإشعارات بالكامل، بدءًا من الكشف وحتى الإرسال، باستخدام مستودع افتراضي.",

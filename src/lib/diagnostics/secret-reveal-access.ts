@@ -1,5 +1,9 @@
 import { headers } from "next/headers";
 import { getCurrentAuthAccess } from "@/lib/auth/access";
+import {
+  pruneFailedLoginState,
+  reserveLoginAttempt,
+} from "@/lib/auth/login-rate-limit";
 import { getClientIpFromHeaders } from "@/lib/auth/request-context";
 import { consumeSecretRevealStepUpNonce } from "@/lib/diagnostics/secret-reveal-nonce-store";
 import {
@@ -13,6 +17,8 @@ import {
 import { logger } from "@/lib/logger";
 
 const log = logger.withScope("Diagnostics");
+
+const STEP_UP_RATE_LIMIT_KEY_PREFIX = "step-up:";
 
 export type SecretRevealMethodAvailability = {
   password: boolean;
@@ -32,6 +38,7 @@ export type RevealDiagnosticSecretErrorKey =
   | "error_step_up_failed"
   | "error_totp_required"
   | "error_totp_invalid"
+  | "error_too_many_attempts"
   | "error_reveal_failed";
 
 export async function verifyDiagnosticRevealAccess(
@@ -90,34 +97,59 @@ export async function verifyDiagnosticRevealAccess(
     return { success: false, errorKey: "error_step_up_required" };
   }
 
-  try {
-    const email =
-      typeof session?.user?.email === "string"
-        ? session.user.email.trim().toLowerCase()
-        : "";
-    if (!email) {
-      log.warn(
-        `Rejected ${envKey} reveal from ip='${clientIp}' because no authenticated email was available.`,
-      );
-      return { success: false, errorKey: "error_auth_required" };
-    }
+  const email =
+    typeof session?.user?.email === "string"
+      ? session.user.email.trim().toLowerCase()
+      : "";
+  if (!email) {
+    log.warn(
+      `Rejected ${envKey} reveal from ip='${clientIp}' because no authenticated email was available.`,
+    );
+    return { success: false, errorKey: "error_auth_required" };
+  }
 
+  // The current-password check uses the login lockout with one bucket per user,
+  // so a session holder cannot guess the password without limit (CWE-307).
+  pruneFailedLoginState(Date.now());
+  const admission = await reserveLoginAttempt(
+    `${STEP_UP_RATE_LIMIT_KEY_PREFIX}${userId}`,
+  );
+  if (!admission.reservation) {
+    log.warn(
+      `Rejected ${envKey} reveal for user='${userId}' from ip='${clientIp}' due to active current-password lockout (${admission.lockoutRemainingSeconds}s remaining).`,
+    );
+    return { success: false, errorKey: "error_too_many_attempts" };
+  }
+  const attempt = admission.reservation;
+  try {
     const signInResponse = await auth.api.signInEmail({
       headers: headerStore,
       body: { email, password: currentPassword },
       asResponse: true,
     });
     if (!signInResponse.ok) {
+      const failedAttempt = attempt.fail();
+      const lockoutNote = failedAttempt.lockoutTriggered
+        ? `; lockout activated for ${failedAttempt.lockoutRemainingSeconds}s after ${failedAttempt.failures}/${failedAttempt.limit} failed attempts`
+        : "";
       log.warn(
-        `Rejected ${envKey} reveal for user='${userId}' from ip='${clientIp}' due to invalid current password.`,
+        `Rejected ${envKey} reveal for user='${userId}' from ip='${clientIp}' due to invalid current password${lockoutNote}.`,
       );
-      return { success: false, errorKey: "error_current_password_invalid" };
+      return {
+        success: false,
+        errorKey: failedAttempt.lockoutTriggered
+          ? "error_too_many_attempts"
+          : "error_current_password_invalid",
+      };
     }
 
+    attempt.succeed();
     return { success: true, clientIp, userId };
   } catch (error) {
     log.error(`Failed ${envKey} reveal from ip='${clientIp}'.`, error);
     return { success: false, errorKey: "error_reveal_failed" };
+  } finally {
+    attempt.release();
   }
 }
 

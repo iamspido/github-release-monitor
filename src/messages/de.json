@@ -650,6 +650,7 @@
     "error_step_up_failed": "Die erneute Bestätigung ist fehlgeschlagen.",
     "error_totp_required": "Geben Sie einen OTP-Code ein.",
     "error_totp_invalid": "Der OTP-Code ist ungültig.",
+    "error_too_many_attempts": "Zu viele fehlgeschlagene Bestätigungsversuche. Bitte versuchen Sie es später erneut.",
     "error_reveal_failed": "Der geheime Wert konnte nicht angezeigt werden.",
     "notification_card_title": "End-to-End-Benachrichtigungstest",
     "notification_card_description": "Testen Sie den gesamten Benachrichtigungsprozess, von der Erkennung bis zum Versand, mithilfe eines virtuellen Repositorys.",

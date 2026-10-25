@@ -650,6 +650,7 @@
     "error_step_up_failed": "Identity confirmation failed.",
     "error_totp_required": "Enter an OTP code.",
     "error_totp_invalid": "The OTP code is invalid.",
+    "error_too_many_attempts": "Too many failed confirmation attempts. Please try again later.",
     "error_reveal_failed": "Could not reveal the secret value.",
     "notification_card_title": "End-to-End Notification Test",
     "notification_card_description": "Test the entire notification pipeline, from detection to dispatch, using a virtual repository.",

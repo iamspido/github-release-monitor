@@ -650,6 +650,7 @@
     "error_step_up_failed": "Identiteitsbevestiging mislukt.",
     "error_totp_required": "Voer een OTP-code in.",
     "error_totp_invalid": "De OTP-code is ongeldig.",
+    "error_too_many_attempts": "Te veel mislukte bevestigingspogingen. Probeer het later opnieuw.",
     "error_reveal_failed": "De geheime waarde kon niet worden getoond.",
     "notification_card_title": "End-to-endmeldingstest",
     "notification_card_description": "Test met een virtuele repository de volledige meldingsketen, van detectie tot verzending.",

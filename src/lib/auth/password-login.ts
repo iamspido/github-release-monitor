@@ -1,13 +1,11 @@
 import { auth, ensureAuthDatabaseReady } from "@/lib/auth";
 import {
   clearExpiredLoginLockout,
-  clearFailedLoginAttempts,
   getFailedLoginFailures,
-  getLoginLockoutRemainingSeconds,
-  isLoginRateLimited,
+  type LoginAttemptReservation,
   logFailedLoginAttempt,
   pruneFailedLoginState,
-  registerFailedLoginAttempt,
+  reserveLoginAttempt,
 } from "@/lib/auth/login-rate-limit";
 import {
   getLoginIdentifierLogLabel,
@@ -44,9 +42,13 @@ export async function authenticatePassword(input: {
   identifier: string;
   password: string;
 }): Promise<PasswordLoginResult> {
-  const { identifier, password } = input;
-  const { rateLimitKey, accountRateLimitKey, clientIp } =
-    getLoginRequestContext(input.headers, identifier);
+  const { identifier } = input;
+  const {
+    rateLimitKey,
+    accountRateLimitKey,
+    accountWideRateLimitKey,
+    clientIp,
+  } = getLoginRequestContext(input.headers, identifier);
   const identifierLabel = getLoginIdentifierLogLabel(identifier);
   const now = Date.now();
   const methodLabel = isLikelyEmail(identifier) ? "email" : "username";
@@ -56,6 +58,15 @@ export async function authenticatePassword(input: {
     `Password login attempt started for ${identifierLabel} from ip='${clientIp}' using ${methodLabel}.`,
   );
 
+  // Empty input is refused uncounted: booking it would lock an identifier or
+  // address for free and fill the lockout store.
+  if (!identifier.trim() || !input.password) {
+    log.warn(
+      `Failed password login attempt for ${identifierLabel} from ip='${clientIp}' (invalid input); refused without a check and not counted.`,
+    );
+    return { ok: false, errorKey: "error_invalid_credentials", status: 400 };
+  }
+
   const expiredLockout = clearExpiredLoginLockout(rateLimitKey, now);
   if (expiredLockout.wasCleared) {
     log.info(
@@ -64,25 +75,53 @@ export async function authenticatePassword(input: {
   }
   pruneFailedLoginState(now);
 
-  if (isLoginRateLimited(rateLimitKey, now)) {
-    const remainingSeconds = getLoginLockoutRemainingSeconds(rateLimitKey, now);
+  const admission = await reserveLoginAttempt(rateLimitKey);
+  if (!admission.reservation) {
     log.warn(
-      `Blocked password login attempt for ${identifierLabel} from ip='${clientIp}' due to active lockout (${remainingSeconds}s remaining).`,
+      `Blocked password login attempt for ${identifierLabel} from ip='${clientIp}' due to active lockout (${admission.lockoutRemainingSeconds}s remaining).`,
     );
     return { ok: false, errorKey: "error_too_many_attempts", status: 429 };
   }
-
-  if (!identifier || !password) {
-    const failedAttempt = registerFailedLoginAttempt(rateLimitKey, now);
-    logFailedLoginAttempt({
-      identifier,
+  const attempt = admission.reservation;
+  try {
+    return await checkPassword({
+      ...input,
+      attempt,
+      // A valid account may clear its own failure history, but not the shared
+      // IP bucket that protects other accounts from credential spraying.
+      accountRateLimitKeys: [
+        accountRateLimitKey,
+        accountWideRateLimitKey,
+      ].filter((key): key is string => key !== null),
       clientIp,
-      reason: "invalid_input",
-      result: failedAttempt,
-      prefix: "password",
+      identifierLabel,
+      methodLabel,
     });
-    return { ok: false, errorKey: "error_invalid_credentials", status: 400 };
+  } finally {
+    attempt.release();
   }
+}
+
+async function checkPassword(input: {
+  headers: Headers;
+  identifier: string;
+  password: string;
+  attempt: LoginAttemptReservation;
+  accountRateLimitKeys: readonly string[];
+  clientIp: string;
+  identifierLabel: string;
+  methodLabel: "email" | "username";
+}): Promise<PasswordLoginResult> {
+  const {
+    identifier,
+    password,
+    attempt,
+    accountRateLimitKeys,
+    clientIp,
+    identifierLabel,
+    methodLabel,
+  } = input;
+  const log = logger.withScope("Auth");
 
   await ensureAuthDatabaseReady();
   const response =
@@ -103,7 +142,7 @@ export async function authenticatePassword(input: {
   );
 
   if (!response.ok) {
-    const failedAttempt = registerFailedLoginAttempt(rateLimitKey, now);
+    const failedAttempt = attempt.fail();
     log.warn(
       `Password login rejected for ${identifierLabel} from ip='${clientIp}' with status=${response.status}.`,
     );
@@ -124,14 +163,8 @@ export async function authenticatePassword(input: {
   }
 
   const requiresTwoFactor = await hasTwoFactorRedirectFlag(response);
-  const previousFailures = accountRateLimitKey
-    ? getFailedLoginFailures(accountRateLimitKey)
-    : 0;
-  // A valid account may clear its own failure history, but must not erase the
-  // shared IP bucket that protects other accounts from credential spraying.
-  if (accountRateLimitKey) {
-    clearFailedLoginAttempts(accountRateLimitKey);
-  }
+  const previousFailures = getFailedLoginFailures(accountRateLimitKeys);
+  attempt.succeed(accountRateLimitKeys);
 
   if (requiresTwoFactor) {
     log.info(

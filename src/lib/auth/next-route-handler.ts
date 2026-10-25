@@ -62,6 +62,14 @@ const setupHandler = toNextJsHandler(setupAuth);
 const log = logger.withScope("AuthApi");
 
 type AuthRouteMethod = "GET" | "POST";
+
+// Password sign-in goes only through `/api/login/password` and its lockout.
+// Better Auth's own endpoints would check passwords without it (CWE-307).
+const APP_ONLY_PASSWORD_SIGN_IN_ACTIONS: ReadonlySet<string> = new Set([
+  "sign-in/email",
+  "sign-in/username",
+]);
+
 type AuthUserState = ReturnType<typeof hasAnyAuthUser>;
 type SocialIntent = ReturnType<typeof readSocialLoginIntentFromRequest>;
 type SetupSocialContext = ReturnType<typeof readSetupSocialContextFromRequest>;
@@ -627,6 +635,13 @@ export async function handleAuthRouteRequest(
   if (setupGuardResponse) return setupGuardResponse;
 
   logAuthRouteStart(method, state);
+
+  if (APP_ONLY_PASSWORD_SIGN_IN_ACTIONS.has(state.action)) {
+    log.warn(
+      `Blocked direct password sign-in ${method} /api/auth/${state.action} from ip='${state.clientIp}' because password sign-in is only available through the application login.`,
+    );
+    return new Response("Not Found", { status: 404 });
+  }
 
   if (state.socialIntentGuardActive) {
     const guardResponse = await guardSocialIntent({

@@ -2,7 +2,10 @@ import {
   type LoginAttemptState,
   loginRateLimitStore,
 } from "@/lib/auth/login-rate-limit-store";
-import { getLoginIdentifierLogLabel } from "@/lib/auth/request-context";
+import {
+  ACCOUNT_RATE_LIMIT_KEY_PREFIX,
+  getLoginIdentifierLogLabel,
+} from "@/lib/auth/request-context";
 import { logger } from "@/lib/logger";
 
 export {
@@ -13,14 +16,18 @@ export {
 export type FailedLoginAttemptResult = {
   lockoutTriggered: boolean;
   failures: number;
+  limit: number;
   attemptsRemaining: number;
   lockoutRemainingSeconds: number;
 };
 
-export type FailedLoginAttemptReason = "invalid_input" | "invalid_credentials";
+export type FailedLoginAttemptReason = "invalid_credentials";
 export type LoginRateLimitKey = string | readonly string[];
 
 const DEFAULT_LOGIN_ATTEMPTS = 5;
+// The bucket an identifier shares across all client addresses locks at this
+// multiple of the limit (20 by default) and counts failures per window too.
+const ACCOUNT_LOGIN_ATTEMPTS_FACTOR = 4;
 const DEFAULT_ATTEMPT_WINDOW_SECONDS = 15 * 60;
 const DEFAULT_LOCKOUT_SECONDS = 15 * 60;
 const LOGIN_STATE_PRUNE_INTERVAL_MS = 60_000;
@@ -48,6 +55,8 @@ const loginAttemptLimit = parseBoundedIntegerEnv(
   1,
   20,
 );
+const accountLoginAttemptLimit =
+  loginAttemptLimit * ACCOUNT_LOGIN_ATTEMPTS_FACTOR;
 const loginAttemptWindowMs =
   parseBoundedIntegerEnv(
     "AUTH_LOGIN_WINDOW_SECONDS",
@@ -77,6 +86,12 @@ function setFailedLoginState(key: string, state: LoginAttemptState): void {
 
 function normalizeKeys(key: LoginRateLimitKey): readonly string[] {
   return typeof key === "string" ? [key] : key;
+}
+
+function getLoginAttemptLimit(key: string): number {
+  return key.startsWith(ACCOUNT_RATE_LIMIT_KEY_PREFIX)
+    ? accountLoginAttemptLimit
+    : loginAttemptLimit;
 }
 
 function isSingleLoginRateLimited(key: string, now: number): boolean {
@@ -124,48 +139,32 @@ function registerSingleFailedLoginAttempt(
   key: string,
   now: number,
 ): FailedLoginAttemptResult {
+  const limit = getLoginAttemptLimit(key);
   const existing = getFailedLoginState(key);
-  if (!existing || now - existing.firstFailedAt > loginAttemptWindowMs) {
-    const failures = 1;
-    const lockedUntil =
-      failures >= loginAttemptLimit ? now + loginLockoutMs : 0;
-    const lockoutTriggered = lockedUntil > now;
-    const attemptsRemaining = Math.max(loginAttemptLimit - failures, 0);
-    setFailedLoginState(key, {
-      failures,
-      firstFailedAt: now,
-      lastFailedAt: now,
-      lockedUntil,
-    });
-    return {
-      lockoutTriggered,
-      failures,
-      attemptsRemaining,
-      lockoutRemainingSeconds: lockoutTriggered
-        ? Math.ceil((lockedUntil - now) / 1_000)
-        : 0,
-    };
-  }
-
-  const failures = existing.failures + 1;
+  // An already locked key triggers nothing again: one log line per lockout.
+  const wasLocked = (existing?.lockedUntil ?? 0) > now;
+  const current =
+    existing && now - existing.firstFailedAt <= loginAttemptWindowMs
+      ? existing
+      : null;
+  const failures = (current?.failures ?? 0) + 1;
   const lockedUntil =
-    failures >= loginAttemptLimit ? now + loginLockoutMs : existing.lockedUntil;
-  const lockoutTriggered = lockedUntil > now;
-  const attemptsRemaining = Math.max(loginAttemptLimit - failures, 0);
-  const lockoutRemainingSeconds = lockoutTriggered
-    ? Math.ceil((lockedUntil - now) / 1_000)
-    : 0;
+    failures >= limit ? now + loginLockoutMs : (current?.lockedUntil ?? 0);
+  const lockoutTriggered = lockedUntil > now && !wasLocked;
   setFailedLoginState(key, {
     failures,
-    firstFailedAt: existing.firstFailedAt,
+    firstFailedAt: current?.firstFailedAt ?? now,
     lastFailedAt: now,
     lockedUntil,
   });
   return {
     lockoutTriggered,
     failures,
-    attemptsRemaining,
-    lockoutRemainingSeconds,
+    limit,
+    attemptsRemaining: Math.max(limit - failures, 0),
+    lockoutRemainingSeconds: lockoutTriggered
+      ? Math.ceil((lockedUntil - now) / 1_000)
+      : 0,
   };
 }
 
@@ -180,23 +179,18 @@ export function registerFailedLoginAttempt(
     return {
       lockoutTriggered: false,
       failures: 1,
+      limit: loginAttemptLimit,
       attemptsRemaining: Math.max(loginAttemptLimit - 1, 0),
       lockoutRemainingSeconds: 0,
     };
   }
-  return results.reduce((mostRestrictive, result) => ({
-    lockoutTriggered:
-      mostRestrictive.lockoutTriggered || result.lockoutTriggered,
-    failures: Math.max(mostRestrictive.failures, result.failures),
-    attemptsRemaining: Math.min(
-      mostRestrictive.attemptsRemaining,
-      result.attemptsRemaining,
-    ),
-    lockoutRemainingSeconds: Math.max(
-      mostRestrictive.lockoutRemainingSeconds,
-      result.lockoutRemainingSeconds,
-    ),
-  }));
+  // One bucket with its own limit, so a log line never mixes two buckets.
+  return (
+    results.find((result) => result.lockoutTriggered) ??
+    results.reduce((closest, result) =>
+      result.attemptsRemaining < closest.attemptsRemaining ? result : closest,
+    )
+  );
 }
 
 export function clearFailedLoginAttempts(key: LoginRateLimitKey): void {
@@ -234,6 +228,111 @@ export function clearExpiredLoginLockout(
   return { wasCleared, failures };
 }
 
+// Attempts are reserved before the password check so that concurrent ones
+// cannot all pass the lockout read before a failure is booked (CWE-307).
+
+declare global {
+  var _authLoginAttemptsInFlight: Map<string, number> | undefined;
+  var _authLoginAttemptWaiters: Set<() => void> | undefined;
+}
+
+global._authLoginAttemptsInFlight ??= new Map<string, number>();
+global._authLoginAttemptWaiters ??= new Set<() => void>();
+const attemptsInFlight = global._authLoginAttemptsInFlight;
+const attemptWaiters = global._authLoginAttemptWaiters;
+
+/** Exactly one end applies: `release` after another is a no-op for `finally`,
+ * while `fail` or `succeed` after another throws. */
+export type LoginAttemptReservation = {
+  fail: () => FailedLoginAttemptResult;
+  succeed: (cleared?: LoginRateLimitKey) => void;
+  release: () => void;
+};
+
+export type LoginAttemptAdmission =
+  | { reservation: LoginAttemptReservation; lockoutRemainingSeconds?: never }
+  | { reservation: null; lockoutRemainingSeconds: number };
+
+function isLockedByAttemptsInFlight(key: string, now: number): boolean {
+  const inFlight = attemptsInFlight.get(key) ?? 0;
+  if (inFlight === 0) return false;
+  const state = getFailedLoginState(key);
+  const failures =
+    state && now - state.firstFailedAt <= loginAttemptWindowMs
+      ? state.failures
+      : 0;
+  return failures + inFlight >= getLoginAttemptLimit(key);
+}
+
+function wakeAttemptWaiters(): void {
+  const waiting = [...attemptWaiters];
+  attemptWaiters.clear();
+  for (const wake of waiting) wake();
+}
+
+/** Waits while the attempts in flight could still lock the key. */
+export async function reserveLoginAttempt(
+  key: LoginRateLimitKey,
+): Promise<LoginAttemptAdmission> {
+  const keys = normalizeKeys(key);
+  for (;;) {
+    const now = Date.now();
+    if (isLoginRateLimited(keys, now)) {
+      return {
+        reservation: null,
+        lockoutRemainingSeconds: getLoginLockoutRemainingSeconds(keys, now),
+      };
+    }
+    if (!keys.some((candidate) => isLockedByAttemptsInFlight(candidate, now))) {
+      break;
+    }
+    await new Promise<void>((resolve) => {
+      attemptWaiters.add(resolve);
+    });
+  }
+  for (const candidate of keys) {
+    attemptsInFlight.set(candidate, (attemptsInFlight.get(candidate) ?? 0) + 1);
+  }
+  let open = true;
+  const end = () => {
+    open = false;
+    for (const candidate of keys) {
+      const left = (attemptsInFlight.get(candidate) ?? 1) - 1;
+      if (left > 0) attemptsInFlight.set(candidate, left);
+      else attemptsInFlight.delete(candidate);
+    }
+    wakeAttemptWaiters();
+  };
+  const assertOpen = (name: "fail" | "succeed") => {
+    if (!open) {
+      throw new Error(
+        `Login attempt reservation already ended; ${name}() must not follow another end.`,
+      );
+    }
+  };
+  return {
+    reservation: {
+      fail: () => {
+        assertOpen("fail");
+        const result = registerFailedLoginAttempt(keys, Date.now());
+        end();
+        return result;
+      },
+      succeed: (cleared = keys) => {
+        assertOpen("succeed");
+        clearFailedLoginAttempts(cleared);
+        end();
+      },
+      release: () => {
+        if (open) end();
+      },
+    },
+  };
+}
+
+const failedLoginAttemptReasonLabels: Record<FailedLoginAttemptReason, string> =
+  { invalid_credentials: "invalid credentials" };
+
 export function logFailedLoginAttempt(args: {
   identifier: string;
   clientIp: string;
@@ -241,8 +340,7 @@ export function logFailedLoginAttempt(args: {
   result: FailedLoginAttemptResult;
   prefix?: string;
 }): void {
-  const reasonLabel =
-    args.reason === "invalid_input" ? "invalid input" : "invalid credentials";
+  const reasonLabel = failedLoginAttemptReasonLabels[args.reason];
   const prefix = args.prefix ? `${args.prefix} ` : "";
   const identifierLabel = getLoginIdentifierLogLabel(args.identifier);
 
@@ -250,7 +348,7 @@ export function logFailedLoginAttempt(args: {
     logger
       .withScope("Auth")
       .warn(
-        `Failed ${prefix}login attempt for ${identifierLabel} from ip='${args.clientIp}' (${reasonLabel}); lockout activated for ${args.result.lockoutRemainingSeconds}s after ${args.result.failures}/${loginAttemptLimit} failed attempts.`,
+        `Failed ${prefix}login attempt for ${identifierLabel} from ip='${args.clientIp}' (${reasonLabel}); lockout activated for ${args.result.lockoutRemainingSeconds}s after ${args.result.failures}/${args.result.limit} failed attempts.`,
       );
     return;
   }
@@ -258,6 +356,6 @@ export function logFailedLoginAttempt(args: {
   logger
     .withScope("Auth")
     .warn(
-      `Failed ${prefix}login attempt for ${identifierLabel} from ip='${args.clientIp}' (${reasonLabel}); attempts=${args.result.failures}/${loginAttemptLimit}, remaining_before_lockout=${args.result.attemptsRemaining}.`,
+      `Failed ${prefix}login attempt for ${identifierLabel} from ip='${args.clientIp}' (${reasonLabel}); attempts=${args.result.failures}/${args.result.limit}, remaining_before_lockout=${args.result.attemptsRemaining}.`,
     );
 }

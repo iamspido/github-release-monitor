@@ -650,6 +650,7 @@
     "error_step_up_failed": "Potwierdzenie tożsamości nie powiodło się.",
     "error_totp_required": "Wprowadź kod OTP.",
     "error_totp_invalid": "Kod OTP jest nieprawidłowy.",
+    "error_too_many_attempts": "Zbyt wiele nieudanych prób potwierdzenia. Spróbuj ponownie później.",
     "error_reveal_failed": "Nie udało się wyświetlić wartości poufnej.",
     "notification_card_title": "Kompleksowy test powiadomień",
     "notification_card_description": "Przetestuj cały proces powiadamiania, od wykrycia po wysłanie, za pomocą wirtualnego repozytorium.",

@@ -650,6 +650,7 @@
     "error_step_up_failed": "Konfirmasi identitas gagal.",
     "error_totp_required": "Masukkan kode OTP.",
     "error_totp_invalid": "Kode OTP tidak valid.",
+    "error_too_many_attempts": "Terlalu banyak percobaan konfirmasi yang gagal. Coba lagi nanti.",
     "error_reveal_failed": "Tidak dapat menampilkan nilai rahasia.",
     "notification_card_title": "Pengujian Notifikasi Menyeluruh",
     "notification_card_description": "Uji seluruh alur notifikasi, dari deteksi hingga pengiriman, menggunakan repositori virtual.",

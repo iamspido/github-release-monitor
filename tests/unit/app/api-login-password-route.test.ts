@@ -27,6 +27,10 @@ describe("api/login/password route", () => {
     (globalThis as Record<string, unknown>)._authLoginAttempts = undefined;
     (globalThis as Record<string, unknown>)._authLoginOverflowAttempts =
       undefined;
+    (globalThis as Record<string, unknown>)._authLoginAttemptsInFlight =
+      undefined;
+    (globalThis as Record<string, unknown>)._authLoginAttemptWaiters =
+      undefined;
     signInEmailMock.mockReset();
     signInUsernameMock.mockReset();
     ensureAuthDatabaseReadyMock.mockReset();

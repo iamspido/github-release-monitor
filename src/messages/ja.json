@@ -650,6 +650,7 @@
     "error_step_up_failed": "本人確認に失敗しました。",
     "error_totp_required": "OTP コードを入力してください。",
     "error_totp_invalid": "OTP コードが無効です。",
+    "error_too_many_attempts": "確認の失敗回数が多すぎます。しばらくしてからもう一度お試しください。",
     "error_reveal_failed": "機密情報を表示できませんでした。",
     "notification_card_title": "エンドツーエンド通知テスト",
     "notification_card_description": "ダミーリポジトリを使用して、検出から送信までの通知フロー全体をテストします。",

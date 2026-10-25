@@ -650,6 +650,7 @@
     "error_step_up_failed": "身份确认失败。",
     "error_totp_required": "请输入 OTP 代码。",
     "error_totp_invalid": "OTP 代码无效。",
+    "error_too_many_attempts": "确认失败次数过多。请稍后重试。",
     "error_reveal_failed": "无法显示机密值。",
     "notification_card_title": "端到端通知测试",
     "notification_card_description": "使用虚拟仓库测试从检测到发送的整个通知流程。",

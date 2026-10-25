@@ -51,6 +51,13 @@ describe("revealMailPasswordActionImpl", () => {
 
   beforeEach(() => {
     vi.resetModules();
+    (globalThis as Record<string, unknown>)._authLoginAttempts = undefined;
+    (globalThis as Record<string, unknown>)._authLoginOverflowAttempts =
+      undefined;
+    (globalThis as Record<string, unknown>)._authLoginAttemptsInFlight =
+      undefined;
+    (globalThis as Record<string, unknown>)._authLoginAttemptWaiters =
+      undefined;
     process.env = {
       ...env,
       BETTER_AUTH_SECRET: "x".repeat(64),

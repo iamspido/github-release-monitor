@@ -650,6 +650,7 @@
     "error_step_up_failed": "Conferma dell'identità non riuscita.",
     "error_totp_required": "Inserisci un codice OTP.",
     "error_totp_invalid": "Il codice OTP non è valido.",
+    "error_too_many_attempts": "Troppi tentativi di conferma non riusciti. Riprova più tardi.",
     "error_reveal_failed": "Impossibile mostrare il valore segreto.",
     "notification_card_title": "Test completo delle notifiche",
     "notification_card_description": "Testa l'intera pipeline di notifica, dal rilevamento all'invio, usando un repository virtuale.",

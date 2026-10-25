@@ -650,6 +650,7 @@
     "error_step_up_failed": "신원 확인에 실패했습니다.",
     "error_totp_required": "OTP 코드를 입력하세요.",
     "error_totp_invalid": "OTP 코드가 올바르지 않습니다.",
+    "error_too_many_attempts": "확인 시도가 너무 많이 실패했습니다. 나중에 다시 시도하세요.",
     "error_reveal_failed": "비밀 값을 표시할 수 없습니다.",
     "notification_card_title": "엔드투엔드 알림 테스트",
     "notification_card_description": "가상 저장소를 사용하여 감지부터 전송까지 전체 알림 파이프라인을 테스트합니다.",

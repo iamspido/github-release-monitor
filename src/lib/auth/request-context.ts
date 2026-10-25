@@ -60,40 +60,50 @@ export function getExplicitlyTrustedClientIpFromRequest(
   return getClientIpFromRequest(request);
 }
 
+export const ACCOUNT_RATE_LIMIT_KEY_PREFIX = "account:";
+
+// Hashes the whole value: a shared prefix must not share buckets (CWE-307).
+function hashLoginIdentifier(identifier: string): string {
+  return createHash("sha256")
+    .update(identifier.trim().toLowerCase() || "unknown")
+    .digest("hex");
+}
+
 export function getLoginRequestContext(
   headerStore: Headers,
   identifier: string,
 ): {
   rateLimitKey: readonly string[];
   accountRateLimitKey: string | null;
+  accountWideRateLimitKey: string;
   clientIp: string;
 } {
   const ip = getClientIpFromHeaders(headerStore);
-  const normalizedIdentifier = identifier.trim().toLowerCase().slice(0, 128);
-  const identifierHash = createHash("sha256")
-    .update(normalizedIdentifier || "unknown")
-    .digest("hex");
-  const clientKey = ip === "unknown" ? null : `ip:${ip}`;
-  const accountRateLimitKey =
-    ip === "unknown"
-      ? `identifier:${identifierHash}`
-      : `ip-identifier:${ip}:${identifierHash}`;
+  const identifierHash = hashLoginIdentifier(identifier);
+  // Clients may choose or omit their address, so an entered identifier also has
+  // a bucket for all addresses (CWE-307), keyed by input not account (CWE-204).
+  const accountWideRateLimitKey = `${ACCOUNT_RATE_LIMIT_KEY_PREFIX}${identifierHash}`;
+  if (ip === "unknown") {
+    // Requests without an address share this bucket at the per-address limit.
+    const accountRateLimitKey = `identifier:${identifierHash}`;
+    return {
+      rateLimitKey: [accountRateLimitKey, accountWideRateLimitKey],
+      accountRateLimitKey,
+      accountWideRateLimitKey,
+      clientIp: ip,
+    };
+  }
+  const accountRateLimitKey = `ip-identifier:${ip}:${identifierHash}`;
   return {
-    rateLimitKey: clientKey
-      ? [clientKey, accountRateLimitKey]
-      : [accountRateLimitKey],
+    rateLimitKey: [`ip:${ip}`, accountRateLimitKey, accountWideRateLimitKey],
     accountRateLimitKey,
+    accountWideRateLimitKey,
     clientIp: ip,
   };
 }
 
 export function getLoginIdentifierLogLabel(identifier: string): string {
-  const normalized = identifier.trim().toLowerCase() || "unknown";
-  const hash = createHash("sha256")
-    .update(normalized)
-    .digest("hex")
-    .slice(0, 12);
-  return `identifier_hash='${hash}'`;
+  return `identifier_hash='${hashLoginIdentifier(identifier).slice(0, 12)}'`;
 }
 
 export function isLikelyEmail(value: string): boolean {

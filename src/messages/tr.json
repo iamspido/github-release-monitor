@@ -650,6 +650,7 @@
     "error_step_up_failed": "Kimlik doğrulaması başarısız.",
     "error_totp_required": "Bir OTP kodu girin.",
     "error_totp_invalid": "OTP kodu geçersiz.",
+    "error_too_many_attempts": "Çok fazla başarısız doğrulama denemesi. Lütfen daha sonra tekrar deneyin.",
     "error_reveal_failed": "Gizli değer gösterilemedi.",
     "notification_card_title": "Uçtan Uca Bildirim Testi",
     "notification_card_description": "Sanal bir depo kullanarak algılamadan gönderime kadar tüm bildirim hattını test edin.",

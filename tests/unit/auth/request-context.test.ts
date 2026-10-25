@@ -72,7 +72,7 @@ describe("auth request context", () => {
     );
     const logLabel = getLoginIdentifierLogLabel(identifier);
 
-    expect(context.rateLimitKey).toHaveLength(2);
+    expect(context.rateLimitKey).toHaveLength(3);
     expect(context.rateLimitKey).toContain(context.accountRateLimitKey);
     expect(context.rateLimitKey.join(":")).not.toContain(identifier);
     expect(logLabel).not.toContain(identifier);
@@ -93,6 +93,120 @@ describe("auth request context", () => {
     expect(first.accountRateLimitKey).not.toBe(second.accountRateLimitKey);
   });
 
+  it("shares one account-wide bucket for an identifier across spoofed client addresses", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    delete process.env.AUTH_TRUST_PROXY_HEADERS;
+    const first = getLoginRequestContext(
+      new Headers({ "x-forwarded-for": "198.51.100.20" }),
+      "user@example.test",
+    );
+    const second = getLoginRequestContext(
+      new Headers({ "x-forwarded-for": "203.0.113.99" }),
+      " User@Example.test ",
+    );
+    const otherAccount = getLoginRequestContext(
+      new Headers({ "x-forwarded-for": "198.51.100.20" }),
+      "other@example.test",
+    );
+
+    const shared = first.rateLimitKey.filter((key) =>
+      second.rateLimitKey.includes(key),
+    );
+
+    expect(shared).toEqual([expect.stringMatching(/^account:[a-f0-9]{64}$/)]);
+    expect(otherAccount.rateLimitKey).not.toContain(shared[0]);
+  });
+
+  it("keys long identifiers by their whole value, so two that share their first 128 characters share no account bucket", () => {
+    process.env.AUTH_TRUST_PROXY_HEADERS = "true";
+    const sharedStart = `member@${"a".repeat(60)}.${"b".repeat(60)}`;
+    const first = `${sharedStart}.first.test`;
+    const second = `${sharedStart}.second.test`;
+    const fromAddress = (identifier: string) =>
+      getLoginRequestContext(
+        new Headers({ "x-real-ip": "198.51.100.20" }),
+        identifier,
+      );
+    const withoutAddress = (identifier: string) =>
+      getLoginRequestContext(new Headers(), identifier);
+    const shared = (a: readonly string[], b: readonly string[]) =>
+      a.filter((key) => b.includes(key));
+    const hashOf = (key: string) => key.slice(key.lastIndexOf(":") + 1);
+
+    expect({
+      sharedStartLength: sharedStart.length,
+      sharedFromAddress: shared(
+        fromAddress(first).rateLimitKey,
+        fromAddress(second).rateLimitKey,
+      ),
+      sharedWithoutAddress: shared(
+        withoutAddress(first).rateLimitKey,
+        withoutAddress(second).rateLimitKey,
+      ),
+      sameIdentifierInOtherCase: {
+        fromAddress: fromAddress(` ${first.toUpperCase()} `).rateLimitKey,
+        withoutAddress: withoutAddress(` ${first.toUpperCase()} `).rateLimitKey,
+      },
+      logLabelsNameTheirBuckets: [first, second].map(
+        (identifier) =>
+          getLoginIdentifierLogLabel(identifier) ===
+          `identifier_hash='${hashOf(
+            fromAddress(identifier).accountWideRateLimitKey,
+          ).slice(0, 12)}'`,
+      ),
+    }).toEqual({
+      sharedStartLength: 128,
+      sharedFromAddress: ["ip:198.51.100.20"],
+      sharedWithoutAddress: [],
+      sameIdentifierInOtherCase: {
+        fromAddress: fromAddress(first).rateLimitKey,
+        withoutAddress: withoutAddress(first).rateLimitKey,
+      },
+      logLabelsNameTheirBuckets: [true, true],
+    });
+  });
+
+  it.each([
+    ["unset", undefined],
+    ["true", "true"],
+    ["false", "false"],
+  ] as const)(
+    "with AUTH_TRUST_PROXY_HEADERS %s, a request without a client address shares the account-wide bucket of its identifier and keeps its identifier bucket",
+    (_trust, trust) => {
+      vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      process.env.AUTH_TRUST_PROXY_HEADERS = "true";
+      const withAddress = getLoginRequestContext(
+        new Headers({ "x-forwarded-for": "198.51.100.20" }),
+        "user@example.test",
+      );
+      if (trust === undefined) delete process.env.AUTH_TRUST_PROXY_HEADERS;
+      else process.env.AUTH_TRUST_PROXY_HEADERS = trust;
+
+      const withoutAddress = getLoginRequestContext(
+        new Headers(),
+        " User@Example.test ",
+      );
+
+      expect({
+        clientIp: withoutAddress.clientIp,
+        rateLimitKey: withoutAddress.rateLimitKey,
+        accountRateLimitKey: withoutAddress.accountRateLimitKey,
+        accountWideRateLimitKey: withoutAddress.accountWideRateLimitKey,
+      }).toEqual({
+        clientIp: "unknown",
+        rateLimitKey: [
+          expect.stringMatching(/^identifier:[a-f0-9]{64}$/),
+          withAddress.accountWideRateLimitKey,
+        ],
+        accountRateLimitKey: withoutAddress.rateLimitKey[0],
+        accountWideRateLimitKey: withAddress.accountWideRateLimitKey,
+      });
+      expect(withAddress.accountWideRateLimitKey).toMatch(
+        /^account:[a-f0-9]{64}$/,
+      );
+    },
+  );
+
   it("uses a stable identifier hash when no trusted client IP is available", () => {
     process.env.AUTH_TRUST_PROXY_HEADERS = "false";
 
@@ -105,7 +219,7 @@ describe("auth request context", () => {
       "user@example.test",
     );
 
-    expect(context.rateLimitKey).toHaveLength(1);
+    expect(context.rateLimitKey).toHaveLength(2);
     expect(context.accountRateLimitKey).toMatch(/^identifier:[a-f0-9]{64}$/);
     expect(context.rateLimitKey.join(":")).not.toContain("test-browser");
     expect(context.rateLimitKey.join(":")).not.toContain("user@example.test");

@@ -650,6 +650,7 @@
     "error_step_up_failed": "Échec de la confirmation de l’identité.",
     "error_totp_required": "Saisissez un code OTP.",
     "error_totp_invalid": "Le code OTP n’est pas valide.",
+    "error_too_many_attempts": "Trop de tentatives de confirmation ont échoué. Réessayez plus tard.",
     "error_reveal_failed": "Impossible d’afficher la valeur secrète.",
     "notification_card_title": "Test de notification de bout en bout",
     "notification_card_description": "Testez l’ensemble du processus de notification, de la détection à l’envoi, à l’aide d’un dépôt virtuel.",
