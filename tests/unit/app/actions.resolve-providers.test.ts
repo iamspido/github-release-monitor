@@ -280,7 +280,51 @@ describe("resolveRepoProvidersAction", () => {
     expect(headerRecord(fetchCallHeaders(forgejoCall)).Authorization).toBe(
       "token forgejo-token",
     );
-    expect(forgejoCall[1]).toMatchObject({ redirect: "manual" });
+  });
+
+  it("refuses a Forgejo lookup redirect outside the configured base path", async () => {
+    process.env.FORGEJO_ADDITIONAL_BASE_URLS =
+      "http://forgejo.internal.test:3000/code";
+    process.env.FORGEJO_ACCESS_TOKENS =
+      "http://forgejo.internal.test:3000/code=forgejo-token";
+    const actions = await import("@/app/actions");
+    vi.mocked(global.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (
+        url === "http://forgejo.internal.test:3000/code/api/v1/repos/owner/repo"
+      ) {
+        return mockFetchResponse({
+          status: 302,
+          headers: { location: "/other/api/v1/repos/owner/repo" },
+        });
+      }
+      return mockFetchResponse(
+        url.startsWith("http://forgejo.internal.test:3000/other/")
+          ? {
+              status: 200,
+              json: {
+                name: "repo",
+                full_name: "owner/repo",
+                owner: { login: "owner" },
+              },
+            }
+          : { status: 404 },
+      );
+    });
+
+    const result = await actions.resolveRepoProvidersAction("owner/repo");
+
+    expect(result.candidates.map(({ provider }) => provider)).not.toContain(
+      "forgejo",
+    );
+    expect(
+      vi
+        .mocked(global.fetch)
+        .mock.calls.map((call) => String(call[0]))
+        .filter((url) => url.startsWith("http://forgejo.internal.test:3000/")),
+    ).toEqual([
+      "http://forgejo.internal.test:3000/code/api/v1/repos/owner/repo",
+    ]);
   });
 
   it("checks multiple Forgejo instances with bounded parallelism", async () => {

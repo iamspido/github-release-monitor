@@ -154,9 +154,39 @@ describe("fetchWithTimeout", () => {
       "https://forgejo.example.test/code/api/repos/owner/repo/releases",
     );
     expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
-      redirect: "manual",
       headers: { Authorization: "token secret" },
     });
+  });
+
+  it("checks every hop of a redirect chain against the allowed base path", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { location: "/code/api/v1/users/me" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { location: "/other/api/v1/users/me" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchWithAllowedRedirects(
+        "https://forgejo.example.test/code/api/v1/user",
+        { headers: { Authorization: "token secret" } },
+        "https://forgejo.example.test/code",
+      ),
+    ).rejects.toBeInstanceOf(OutboundRedirectError);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://forgejo.example.test/code/api/v1/user",
+      "https://forgejo.example.test/code/api/v1/users/me",
+    ]);
   });
 
   it("shares one timeout budget across the complete redirect chain", async () => {

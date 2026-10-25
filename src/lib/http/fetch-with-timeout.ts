@@ -90,7 +90,10 @@ export async function fetchWithTimeout(
   }
 
   try {
-    response = await fetch(url, { ...options, signal: controller.signal });
+    response = await fetchFollowingRedirects(url, {
+      ...options,
+      signal: controller.signal,
+    });
     if (response.body) {
       responseTimeouts.set(response, { cleanup });
     } else {
@@ -104,6 +107,103 @@ export async function fetchWithTimeout(
 }
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_FOLLOWED_REDIRECTS = 20;
+const CROSS_ORIGIN_REDIRECT_HEADERS = new Set([
+  "accept",
+  "accept-encoding",
+  "accept-language",
+  "user-agent",
+]);
+
+// Another origin receives only the allow-listed headers. A dropped header
+// stays dropped, also when the chain returns to the first origin.
+function redirectRequestHeaders(
+  from: URL,
+  to: URL,
+  headers: HeadersInit | undefined,
+): HeadersInit | undefined {
+  if (from.origin !== "null" && from.origin === to.origin) return headers;
+  const kept = new Headers();
+  for (const [name, value] of new Headers(headers)) {
+    if (CROSS_ORIGIN_REDIRECT_HEADERS.has(name)) kept.set(name, value);
+  }
+  return kept;
+}
+
+// Header values arrive byte by byte. Like the platform, read a raw
+// non-ASCII Location as UTF-8.
+function decodeRedirectLocation(location: string): string {
+  return /^[\x20-\x7e]*$/.test(location)
+    ? location
+    : Buffer.from(location, "latin1").toString("utf8");
+}
+
+// The platform drops only authorization and cookie headers on a cross-origin
+// redirect, so custom credential headers such as PRIVATE-TOKEN would follow.
+async function fetchFollowingRedirects(
+  url: string,
+  options: RequestInit,
+): Promise<Response> {
+  const method = (options.method ?? "GET").toUpperCase();
+  if (
+    (options.redirect ?? "follow") !== "follow" ||
+    (method !== "GET" && method !== "HEAD")
+  ) {
+    return fetch(url, options);
+  }
+
+  let currentUrl = url;
+  let headers = options.headers;
+  for (let redirectCount = 0; ; redirectCount += 1) {
+    const response = await fetch(currentUrl, {
+      ...options,
+      headers,
+      redirect: "manual",
+    });
+    const location = response.headers.get("location");
+    if (!REDIRECT_STATUSES.has(response.status) || !location) {
+      if (redirectCount > 0) {
+        Object.defineProperties(response, {
+          url: { value: currentUrl },
+          redirected: { value: true },
+        });
+      }
+      return response;
+    }
+
+    await discardResponseWithTimeout(response);
+    const fromUrl = new URL(currentUrl);
+    let redirectUrl: URL;
+    try {
+      redirectUrl = new URL(decodeRedirectLocation(location), fromUrl);
+    } catch {
+      throw new OutboundRedirectError(
+        "Outbound response contained an invalid redirect location.",
+      );
+    }
+    if (redirectUrl.protocol !== "http:" && redirectUrl.protocol !== "https:") {
+      throw new OutboundRedirectError(
+        "Outbound redirect target is not an HTTP or HTTPS URL.",
+      );
+    }
+    // fetch would reject it with a TypeError that repeats the credentials.
+    if (redirectUrl.username || redirectUrl.password) {
+      throw new OutboundRedirectError(
+        "Outbound redirect target contains credentials.",
+      );
+    }
+    if (redirectCount >= MAX_FOLLOWED_REDIRECTS) {
+      throw new OutboundRedirectError(
+        "Outbound request exceeded the allowed redirect count.",
+      );
+    }
+
+    redirectUrl.hash = "";
+    headers = redirectRequestHeaders(fromUrl, redirectUrl, headers);
+    currentUrl = redirectUrl.href;
+  }
+}
+
 const DEFAULT_MAX_ALLOWED_REDIRECTS = 5;
 
 function canonicalizeBoundaryPathname(pathname: string): string | null {

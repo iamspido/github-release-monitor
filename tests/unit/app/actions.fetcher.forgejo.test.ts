@@ -93,9 +93,6 @@ describe("actions self-hosted Forgejo fetcher", () => {
       headerRecord(fetchCallHeaders(vi.mocked(global.fetch).mock.calls[1]))
         .Authorization,
     ).toBe("Bearer forgejo-token");
-    expect(vi.mocked(global.fetch).mock.calls[0]?.[1]).toMatchObject({
-      redirect: "manual",
-    });
   });
 
   it("resolves release-note commits on a self-hosted base path", async () => {
@@ -288,6 +285,149 @@ describe("actions self-hosted Forgejo fetcher", () => {
     expect(result).toMatchObject({ error: { type: "api_error" } });
     expect(vi.mocked(global.fetch)).toHaveBeenCalledOnce();
   });
+
+  it.each<{
+    request: string;
+    strategy?: Repository["releaseSelectionStrategy"];
+    redirected: string[];
+    requested: string;
+    answers: Record<string, Parameters<typeof mockFetchResponse>[0]>;
+  }>([
+    {
+      request: "provider-latest release",
+      strategy: "provider_latest",
+      redirected: ["/releases/latest"],
+      requested: "/releases/latest",
+      answers: {
+        "/releases/latest": {
+          json: {
+            id: 5,
+            tag_name: "v5.0.0",
+            name: "v5.0.0",
+            body: "latest",
+            created_at: "2026-05-01T00:00:00Z",
+            published_at: "2026-05-01T00:00:00Z",
+          },
+        },
+      },
+    },
+    {
+      request: "repository probe",
+      redirected: [""],
+      requested: "",
+      answers: { "/releases": { status: 404 }, "": { json: {} } },
+    },
+    {
+      request: "tag pages",
+      redirected: ["/tags"],
+      requested: "/tags?limit=30&page=1",
+      answers: {
+        "/releases": { json: [] },
+        "/tags": {
+          json: [
+            {
+              name: "v2.0.0",
+              commit: { sha: "abc123", created: "2026-02-03T04:05:06Z" },
+            },
+          ],
+        },
+      },
+    },
+    {
+      request: "commit metadata",
+      redirected: ["/commits/abc123", "/git/commits/abc123"],
+      requested: "/commits/abc123",
+      answers: {
+        "/releases": { json: [] },
+        "/tags": { json: [{ name: "v2.0.0", commit: { sha: "abc123" } }] },
+        "/commits/abc123": {
+          json: { message: "notes", created: "2026-02-03T04:05:06Z" },
+        },
+        "/git/commits/abc123": {
+          json: { message: "notes", created: "2026-02-03T04:05:06Z" },
+        },
+      },
+    },
+    {
+      request: "commit link",
+      redirected: ["/git/commits/abcdef1"],
+      requested:
+        "/git/commits/abcdef1?stat=false&verification=false&files=false",
+      answers: {
+        "/releases": {
+          json: [
+            {
+              id: 1,
+              tag_name: "v1.0.0",
+              name: "v1.0.0",
+              body: "Fix abcdef1",
+              created_at: "2026-01-01T00:00:00Z",
+              published_at: "2026-01-01T00:00:00Z",
+              prerelease: false,
+              draft: false,
+            },
+          ],
+        },
+        "/git/commits/abcdef1": {
+          json: {
+            sha: "abcdef1234567890abcdef1234567890abcdef12",
+            html_url:
+              "http://forgejo.internal.test:3000/code/owner/repo/commit/abcdef1234567890abcdef1234567890abcdef12",
+          },
+        },
+      },
+    },
+  ])(
+    "refuses a redirect outside the configured Forgejo base path for the $request",
+    async ({ strategy, redirected, requested, answers }) => {
+      process.env.FORGEJO_ACCESS_TOKENS =
+        "http://forgejo.internal.test:3000/code=forgejo-token";
+      const actions = await import("@/app/actions");
+      const apiPath = "/code/api/v1/repos/owner/repo";
+      const outsidePath = "/other/api/v1/repos/owner/repo";
+      vi.mocked(global.fetch).mockImplementation(async (input) => {
+        const url = new URL(String(input));
+        if (url.pathname.startsWith(outsidePath)) {
+          return mockFetchResponse(
+            answers[url.pathname.slice(outsidePath.length)] ?? { status: 404 },
+          );
+        }
+        const path = url.pathname.slice(apiPath.length);
+        if (redirected.includes(path)) {
+          return mockFetchResponse({
+            status: 302,
+            headers: { location: `${outsidePath}${path}${url.search}` },
+          });
+        }
+        return mockFetchResponse(answers[path] ?? { status: 404 });
+      });
+
+      await actions.getLatestReleasesForRepos(
+        [
+          {
+            id: "forgejo:forgejo.internal.test:3000/code/owner/repo",
+            url: "http://forgejo.internal.test:3000/code/owner/repo",
+            releaseSelectionStrategy: strategy,
+          },
+        ],
+        settings,
+        "en",
+        { skipCache: true },
+      );
+
+      const urls = vi
+        .mocked(global.fetch)
+        .mock.calls.map((call) => String(call[0]));
+      expect(urls).toContain(
+        `http://forgejo.internal.test:3000${apiPath}${requested}`,
+      );
+      expect(
+        urls.filter(
+          (url) => !url.startsWith("http://forgejo.internal.test:3000/code/"),
+        ),
+      ).toEqual([]);
+    },
+  );
 
   it("falls back from a disabled releases endpoint to tags and both commit endpoints", async () => {
     const actions = await import("@/app/actions");
