@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
+import { isLikelyEmail } from "@/lib/email-address";
 import {
   discardResponseWithTimeout,
   fetchWithTimeout,
@@ -169,7 +170,7 @@ export async function sendTestEmailAction(customEmail: string): Promise<{
     };
   }
 
-  if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+  if (trimmedEmail && !isLikelyEmail(trimmedEmail)) {
     return {
       success: false,
       error: t("invalid_email_format"),

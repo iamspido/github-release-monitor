@@ -106,9 +106,7 @@ export function getLoginIdentifierLogLabel(identifier: string): string {
   return `identifier_hash='${hashLoginIdentifier(identifier).slice(0, 12)}'`;
 }
 
-export function isLikelyEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
+export { isLikelyEmail } from "@/lib/email-address";
 
 export function toSafeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
