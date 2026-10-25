@@ -13,8 +13,9 @@ import { updateSystemStatus } from "@/lib/storage/system-status";
 import type { SystemStatus } from "@/types";
 
 const log = logger.withScope("UpdateCheck");
+// By numeric ID, so the check does not depend on the repository name.
 const GITHUB_RELEASES_API =
-  "https://api.github.com/repos/iamspido/github-release-monitor/releases";
+  "https://api.github.com/repositories/1019206136/releases";
 const RELEASES_PER_PAGE = 100;
 const MAX_RELEASE_PAGES = 5;
 

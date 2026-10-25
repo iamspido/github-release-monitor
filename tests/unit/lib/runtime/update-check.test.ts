@@ -46,6 +46,27 @@ function release(
   };
 }
 
+const REPOSITORY_ID_RELEASES_API =
+  "https://api.github.com/repositories/1019206136/releases";
+
+function releasesPage(page: number) {
+  return `${REPOSITORY_ID_RELEASES_API}?per_page=100&page=${page}`;
+}
+
+function releaseList(releases: ReturnType<typeof release>[]) {
+  return new Response(JSON.stringify(releases), { status: 200 });
+}
+
+function stubReleasePages(pages: Record<string, () => Response>) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const page = pages[String(input)];
+    if (!page) throw new Error(`Unexpected request: ${String(input)}`);
+    return page();
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return () => fetchMock.mock.calls.map(([input]) => String(input));
+}
+
 describe("runtime/update-check", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -110,7 +131,7 @@ describe("runtime/update-check", () => {
     const result = await runApplicationUpdateCheck("2.0.0");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.github.com/repos/iamspido/github-release-monitor/releases?per_page=100&page=1",
+      releasesPage(1),
       expect.objectContaining({ cache: "no-store" }),
     );
     expect(result).toEqual({
@@ -351,6 +372,60 @@ describe("runtime/update-check", () => {
       "Update check failed with exception:",
       expect.any(Error),
     );
+  });
+
+  it("asks the repository by its numeric id for every page", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) =>
+      release({ tag_name: `v2.6.1-rc.${index + 1}`, prerelease: true }),
+    );
+    const requestedUrls = stubReleasePages({
+      [releasesPage(1)]: () => releaseList(firstPage),
+      [releasesPage(2)]: () => releaseList([release({ tag_name: "v2.6.1" })]),
+    });
+    const { updateSystemStatus } = await import("@/lib/storage/system-status");
+    vi.mocked(updateSystemStatus).mockImplementation(async (updater) =>
+      updater(status()),
+    );
+
+    const { runApplicationUpdateCheck } = await import(
+      "@/lib/runtime/update-check"
+    );
+    const result = await runApplicationUpdateCheck("2.6.0");
+
+    expect(result.latestKnownVersion).toBe("v2.6.1");
+    expect(result.lastCheckError).toBeNull();
+    expect(requestedUrls()).toEqual([releasesPage(1), releasesPage(2)]);
+  });
+
+  it("reports a 404 from the repository id without asking another address", async () => {
+    const requestedUrls = stubReleasePages({
+      [releasesPage(1)]: () =>
+        new Response(JSON.stringify({ message: "Not Found" }), {
+          status: 404,
+          statusText: "Not Found",
+        }),
+    });
+    const { updateSystemStatus } = await import("@/lib/storage/system-status");
+    const previousStatus = status({ latestKnownVersion: "v2.6.1" });
+    vi.mocked(updateSystemStatus).mockImplementation(async (updater) =>
+      updater(previousStatus),
+    );
+
+    const { runApplicationUpdateCheck } = await import(
+      "@/lib/runtime/update-check"
+    );
+    const result = await runApplicationUpdateCheck("2.6.1");
+
+    expect(result).toEqual({
+      ...previousStatus,
+      lastCheckedAt: "2026-08-25T00:00:00.000Z",
+      lastCheckError: "404 Not Found",
+    });
+    expect(scopedLogger.warn).toHaveBeenCalledOnce();
+    expect(scopedLogger.warn).toHaveBeenCalledWith(
+      "Update check failed with HTTP error: 404 Not Found",
+    );
+    expect(requestedUrls()).toEqual([releasesPage(1)]);
   });
 
   it("serializes complete update checks", async () => {
