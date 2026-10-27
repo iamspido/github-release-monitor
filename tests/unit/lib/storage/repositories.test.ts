@@ -208,9 +208,9 @@ describe("storage/repositories", () => {
 
     await expect(getRepositories()).rejects.toBeInstanceOf(SyntaxError);
 
-    // Mock fs.writeFile to fail
-    const writeSpy = vi
-      .spyOn(fs, "writeFile")
+    // The store writes through a temporary file. Make opening it fail.
+    const openSpy = vi
+      .spyOn(fs, "open")
       .mockRejectedValueOnce(
         Object.assign(new Error("EACCES"), { code: "EACCES" }),
       );
@@ -221,7 +221,7 @@ describe("storage/repositories", () => {
     await expect(saveRepositories([repository])).rejects.toThrow(
       /Failed to write/,
     );
-    writeSpy.mockRestore();
+    openSpy.mockRestore();
   });
 
   it("round-trips resolved commit-link metadata and discards invalid derived state", async () => {

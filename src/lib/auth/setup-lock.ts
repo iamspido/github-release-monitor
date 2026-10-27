@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { isNodeErrorWithCode } from "@/lib/node-error";
 
 const dataDirPath = path.join(process.cwd(), "data");
 const authSetupLockPath = path.join(dataDirPath, "auth-setup.lock");
@@ -33,23 +34,12 @@ type AuthSetupBootstrapLockPayload = {
   source: string;
 };
 
-function isNodeErrorWithCode(
-  error: unknown,
-): error is NodeJS.ErrnoException & { code: string } {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof (error as { code?: unknown }).code === "string"
-  );
-}
-
 export async function isAuthSetupLocked() {
   try {
     await fs.access(authSetupLockPath);
     return true;
   } catch (error) {
-    if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+    if (isNodeErrorWithCode(error, "ENOENT")) {
       return false;
     }
     throw error;
@@ -76,7 +66,7 @@ export async function writeAuthSetupLock(payload: {
     });
     return "created" as const;
   } catch (error) {
-    if (isNodeErrorWithCode(error) && error.code === "EEXIST") {
+    if (isNodeErrorWithCode(error, "EEXIST")) {
       return "already_exists" as const;
     }
     throw error;
@@ -87,7 +77,7 @@ async function removeAuthSetupBootstrapLock() {
   try {
     await fs.unlink(authSetupBootstrapLockPath);
   } catch (error) {
-    if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+    if (isNodeErrorWithCode(error, "ENOENT")) {
       return;
     }
     throw error;
@@ -98,7 +88,7 @@ async function releaseAuthSetupBootstrapGateClaim(claimPath: string) {
   try {
     await fs.rmdir(claimPath);
   } catch (error) {
-    if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+    if (isNodeErrorWithCode(error, "ENOENT")) {
       return;
     }
     throw error;
@@ -136,7 +126,7 @@ async function tryAcquireAuthSetupBootstrapGate() {
         const stats = await fs.stat(candidatePath);
         isStale = Date.now() - stats.mtimeMs > authSetupBootstrapGateStaleMs;
       } catch (error) {
-        if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+        if (isNodeErrorWithCode(error, "ENOENT")) {
           continue;
         }
         throw error;
@@ -210,7 +200,7 @@ async function tryWriteAuthSetupBootstrapLock(source: string, ownerId: string) {
     );
     return true;
   } catch (error) {
-    if (isNodeErrorWithCode(error) && error.code === "EEXIST") {
+    if (isNodeErrorWithCode(error, "EEXIST")) {
       return false;
     }
     throw error;
@@ -225,7 +215,7 @@ async function releaseOwnedAuthSetupBootstrapLock(ownerId: string) {
       const raw = await fs.readFile(authSetupBootstrapLockPath, "utf8");
       currentLock = JSON.parse(raw) as Partial<AuthSetupBootstrapLockPayload>;
     } catch (error) {
-      if (isNodeErrorWithCode(error) && error.code === "ENOENT") {
+      if (isNodeErrorWithCode(error, "ENOENT")) {
         return;
       }
       throw error;

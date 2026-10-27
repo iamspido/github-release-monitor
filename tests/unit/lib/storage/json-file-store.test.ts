@@ -1,3 +1,4 @@
+import { promises as fsPromises } from "node:fs";
 import {
   mkdir,
   mkdtemp,
@@ -8,6 +9,10 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import {
+  DATA_TEMP_FILE_PATTERN,
+  SETTINGS_FILE_NAME,
+} from "@/lib/storage/data-file-names";
 import { JsonFileStore } from "@/lib/storage/json-file-store";
 
 type TestValue = {
@@ -65,6 +70,25 @@ describe("storage/JsonFileStore", () => {
       `${JSON.stringify({ value: "next" }, null, 2)}\n`,
     );
     await expect(readdir(tempDir)).resolves.toEqual(["store.json"]);
+  });
+
+  it("names its temporary files so the start cleanup recognizes them", async () => {
+    filePath = path.join(tempDir, SETTINGS_FILE_NAME);
+    const store = createStore();
+    const renameSpy = vi.spyOn(fsPromises, "rename");
+    try {
+      await store.write({ value: "next" });
+
+      // One rename creates the default file, one replaces it.
+      expect(renameSpy).toHaveBeenCalledTimes(2);
+      for (const [fromPath, toPath] of renameSpy.mock.calls) {
+        expect(toPath).toBe(filePath);
+        expect(path.dirname(String(fromPath))).toBe(tempDir);
+        expect(path.basename(String(fromPath))).toMatch(DATA_TEMP_FILE_PATTERN);
+      }
+    } finally {
+      renameSpy.mockRestore();
+    }
   });
 
   it("validates the serialized value before replacing existing data", async () => {

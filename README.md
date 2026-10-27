@@ -200,6 +200,7 @@ Navigate to the `example/` directory. You will need to configure the environment
    # Defaults: development=debug, production=warn (if unset)
    # Failed logins and active lockouts are logged at WARN.
    # Successful logins and lockout expiry (access unblocked) are logged at INFO.
+   # Leftover temporary data files that a start removes are logged at INFO.
    LOG_LEVEL=info
    ```
 
@@ -274,6 +275,7 @@ For further customization of the SMTP relay, please refer to the official docume
 ### 3. Prepare Data Directory
 The application stores its configuration and data in a `./data` directory. For Docker, this directory on your host machine must have the correct permissions so that the application process inside the container can write to it.
 This is required for both repository/settings data and Better Auth state: the container writes `/app/data/auth.db` for users/sessions and `/app/data/auth-setup.lock` after the initial account has been created. If `/app/data` is not mounted or is not writable by UID/GID `1001`, the container can fail during startup.
+At every start of a release version, the application also records its version in `/app/data/grm-version.json`. A later upgrade reads this file to check which release last ran on the data, so keep it with the other files in the data directory.
 
 Create the directory and set the appropriate ownership before starting the containers:
 ```bash

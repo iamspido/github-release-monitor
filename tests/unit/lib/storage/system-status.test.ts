@@ -5,6 +5,9 @@ const fsMock = {
   access: vi.fn(),
   writeFile: vi.fn(),
   readFile: vi.fn(),
+  open: vi.fn(),
+  rename: vi.fn(),
+  rm: vi.fn(),
 };
 
 vi.mock("fs", () => ({
@@ -28,6 +31,15 @@ describe("storage/system-status persistence", () => {
     fsMock.access.mockResolvedValue(undefined);
     fsMock.writeFile.mockResolvedValue(undefined);
     fsMock.readFile.mockResolvedValue("{}");
+    // Stores write through a file handle, flush it and rename the temporary
+    // file. The handle's writeFile is the content write the tests control.
+    fsMock.open.mockImplementation(async () => ({
+      writeFile: (...args: unknown[]) => fsMock.writeFile(...args),
+      sync: async () => {},
+      close: async () => {},
+    }));
+    fsMock.rename.mockResolvedValue(undefined);
+    fsMock.rm.mockResolvedValue(undefined);
   });
 
   afterEach(() => {

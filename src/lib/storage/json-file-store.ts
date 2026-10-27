@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
 import type { Stats } from "node:fs";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { logger } from "@/lib/logger";
+import { isNodeErrorWithCode } from "@/lib/node-error";
+import { writeFileAtomically } from "@/lib/storage/atomic-write";
 
 type JsonFileStoreOptions<T> = {
   filePath: string;
@@ -105,39 +106,10 @@ export class JsonFileStore<T> {
 
   private async writeRaw(value: T): Promise<void> {
     const fileContent = `${JSON.stringify(value, null, 2)}\n`;
-    const tempPath = path.join(
-      this.dataDirPath,
-      `.${path.basename(this.options.filePath)}.${process.pid}.${randomUUID()}.tmp`,
-    );
-    if (typeof fs.rename !== "function") {
-      await fs.writeFile(this.options.filePath, fileContent, "utf8");
-      return;
-    }
-    try {
-      await fs.writeFile(tempPath, fileContent, "utf8");
-      await fs.rename(tempPath, this.options.filePath);
-    } catch (error) {
-      try {
-        await fs.rm(tempPath, { force: true });
-      } catch (cleanupError) {
-        this.log.warn(
-          `Failed to remove temporary data file at ${tempPath}:`,
-          cleanupError,
-        );
-      }
-      throw error;
-    }
+    await writeFileAtomically(this.options.filePath, fileContent, this.log);
   }
 
   private get fileName(): string {
     return path.basename(this.options.filePath);
   }
-}
-
-function isNodeErrorWithCode(error: unknown, code: string): boolean {
-  return (
-    error instanceof Error &&
-    "code" in error &&
-    (error as NodeJS.ErrnoException).code === code
-  );
 }

@@ -10,6 +10,9 @@ const fsMock = {
   writeFile: vi.fn(),
   readFile: vi.fn(),
   stat: vi.fn(),
+  open: vi.fn(),
+  rename: vi.fn(),
+  rm: vi.fn(),
 };
 
 const loggerMock = vi.hoisted(() => ({
@@ -39,6 +42,15 @@ describe("storage/settings failure scenarios", () => {
     fsMock.writeFile.mockResolvedValue(undefined);
     fsMock.readFile.mockResolvedValue("{}");
     fsMock.stat.mockResolvedValue({ mtimeMs: 1 } satisfies StatResult);
+    // Stores write through a file handle, flush it and rename the temporary
+    // file. The handle's writeFile is the content write the tests control.
+    fsMock.open.mockImplementation(async () => ({
+      writeFile: (...args: unknown[]) => fsMock.writeFile(...args),
+      sync: async () => {},
+      close: async () => {},
+    }));
+    fsMock.rename.mockResolvedValue(undefined);
+    fsMock.rm.mockResolvedValue(undefined);
   });
 
   afterEach(() => {

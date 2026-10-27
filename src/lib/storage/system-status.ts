@@ -1,4 +1,5 @@
 import path from "node:path";
+import { SYSTEM_STATUS_FILE_NAME } from "@/lib/storage/data-file-names";
 import { JsonFileStore } from "@/lib/storage/json-file-store";
 import {
   assertJsonObject,
@@ -9,7 +10,7 @@ import {
 } from "@/lib/storage/runtime-validation";
 import type { SystemStatus } from "@/types";
 
-const dataFilePath = path.join(process.cwd(), "data", "system-status.json");
+const dataFilePath = path.join(process.cwd(), "data", SYSTEM_STATUS_FILE_NAME);
 
 const defaultStatus: SystemStatus = {
   latestKnownVersion: null,

@@ -18,6 +18,7 @@ import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
 } from "@/lib/password-policy";
+import { SETTINGS_FILE_NAME } from "@/lib/storage/data-file-names";
 import { isUsernamePolicyValid } from "@/lib/username-policy";
 
 const EXIT_INPUT = 2;
@@ -144,7 +145,7 @@ function rejectUnsupportedOptions(
 
 async function getConfiguredLocale() {
   try {
-    const settingsPath = path.join(process.cwd(), "data", "settings.json");
+    const settingsPath = path.join(process.cwd(), "data", SETTINGS_FILE_NAME);
     const payload = JSON.parse(await fs.readFile(settingsPath, "utf8")) as {
       locale?: unknown;
     };

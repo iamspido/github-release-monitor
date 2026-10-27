@@ -16,6 +16,7 @@ import {
   defaultSecurityHighlightColorPreset,
   defaultSecurityHighlightCustomColor,
 } from "@/lib/security-release";
+import { SETTINGS_FILE_NAME } from "@/lib/storage/data-file-names";
 import { JsonFileStore } from "@/lib/storage/json-file-store";
 import {
   assertJsonObject,
@@ -29,7 +30,7 @@ import {
 import type { AppSettings, Locale } from "@/types";
 import { allPreReleaseTypes, defaultProviderSortOrder } from "@/types";
 
-const dataFilePath = path.join(process.cwd(), "data", "settings.json");
+const dataFilePath = path.join(process.cwd(), "data", SETTINGS_FILE_NAME);
 
 export function createDefaultSettings(
   env: Partial<NodeJS.ProcessEnv> = process.env,

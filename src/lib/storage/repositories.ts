@@ -1,12 +1,13 @@
 import path from "node:path";
 import { logger } from "@/lib/logger";
+import { REPOSITORIES_FILE_NAME } from "@/lib/storage/data-file-names";
 import { JsonFileStore } from "@/lib/storage/json-file-store";
 import { parseRepository } from "@/lib/storage/repository-parser";
 import type { Repository } from "@/types";
 
 // Resolve the path to the data file.
 // Using process.cwd() ensures the path is correct whether running in dev or prod.
-const dataFilePath = path.join(process.cwd(), "data", "repositories.json");
+const dataFilePath = path.join(process.cwd(), "data", REPOSITORIES_FILE_NAME);
 const repositoryLog = logger.withScope("Repositories");
 const isPrefixedRepoId = (repoId: string) =>
   /^[^/]+:(?:[^/]+\/)+[^/]+$/i.test(repoId);
